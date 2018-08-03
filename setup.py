@@ -12,7 +12,11 @@ setup(
         'expertise'
     ],
     install_requires=[
-        'openreview-py'
+        'openreview-py',
+        'numpy',
+        'pandas',
+        'nltk',
+        'gensim'
     ],
     zip_safe=False
 )
