@@ -13,6 +13,7 @@ if __name__ == '__main__':
     parser.add_argument('score_file', help='name of the score file')
     parser.add_argument('submission_records_dir', help='directory with .jsonl files representing submission records')
     parser.add_argument('reviewer_records_dir', help='directory with .jsonl files representing reviewer "archives" (series of records representing their expertise)')
+    parser.add_argument('--num_processes', required=False, default=4, help='number of parallel processes to run')
     parser.add_argument('--baseurl', help="openreview base url")
     parser.add_argument('--username')
     parser.add_argument('--password')
@@ -84,7 +85,7 @@ if __name__ == '__main__':
     print('starting pool on {} pairs at {}'.format(len(paper_reviewer_pairs), start_time))
     # start 4 worker processes
     with open(args.score_file, open_type) as f:
-        pool = mp.Pool(processes=4)
+        pool = mp.Pool(processes=int(args.num_processes))
         for result in pool.imap(get_best_score_pool, paper_reviewer_pairs):
             f.write('{}\n'.format(result))
 
