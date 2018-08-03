@@ -37,7 +37,7 @@ if __name__ == '__main__':
             reviewer_content_by_id[reviewer_id] = contents
 
     print('fitting model')
-
+    start_training_datetime = datetime.now()
     model = tfidf.Model()
     model_name = 'tfidf'
 
@@ -46,6 +46,8 @@ if __name__ == '__main__':
         all_content = itertools.chain([content for content in content_list], all_content)
 
     model.fit(all_content)
+    print('finished training in {}'.format(datetime.now() - start_training_datetime))
+
 
     def get_best_score_pool(paper_reviewer):
         paper_id, reviewer_id = paper_reviewer
@@ -80,12 +82,12 @@ if __name__ == '__main__':
             if (paper.id, reviewer_id) not in existing_cells:
                 paper_reviewer_pairs.append((paper.id, reviewer_id))
 
-    start_time = datetime.now()
-    print('starting pool on {} pairs at {}'.format(len(paper_reviewer_pairs), start_time))
+    start_worker_pool = datetime.now()
+    print('starting pool on {} pairs at {}'.format(len(paper_reviewer_pairs), start_worker_pool))
     # start 4 worker processes
     with open(args.score_file, open_type) as f:
         pool = mp.Pool(processes=int(args.num_processes))
         for result in pool.imap(get_best_score_pool, paper_reviewer_pairs):
             f.write('{}\n'.format(result))
 
-    print('finished job in {}'.format(datetime.now() - start_time))
+    print('finished job in {}'.format(datetime.now() - start_worker_pool))
