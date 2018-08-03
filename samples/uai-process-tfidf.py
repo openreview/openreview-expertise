@@ -62,12 +62,10 @@ if __name__ == '__main__':
 
         return (paper_id, reviewer_id, best_score)
 
-
-    start_time = datetime.now()
-
     open_type = 'w'
     existing_cells = []
     if os.path.isfile(args.score_file):
+        print('reading scores')
         open_type = 'a'
         with open(args.score_file) as f:
             lines = f.readlines()
@@ -82,6 +80,7 @@ if __name__ == '__main__':
             if (paper.id, reviewer_id) not in existing_cells:
                 paper_reviewer_pairs.append((paper.id, reviewer_id))
 
+    start_time = datetime.now()
     print('starting pool on {} pairs at {}'.format(len(paper_reviewer_pairs), start_time))
     # start 4 worker processes
     with open(args.score_file, open_type) as f:
