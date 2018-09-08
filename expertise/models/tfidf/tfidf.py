@@ -12,7 +12,7 @@ from gensim import corpora
 from .. import model_utils
 
 def preprocess_content(content):
-    text = model_utils.content_to_text(content, fields=['title', 'abstract', 'fulltext'])
+    text = model_utils.content_to_text(content)
     tokens = model_utils.extract_candidate_chunks(text)
     return tokens
 
@@ -97,7 +97,7 @@ class Model():
         paper_tokens = self.preprocess_content(paper_content)
         paper_bow = [(t[0], t[1]) for t in self.tfidf_dictionary.doc2bow(paper_tokens)]
 
-        reviewer_tokens = self.preprocess_content(reviewer_text)
+        reviewer_tokens = self.preprocess_content(archive_content)
         reviewer_bow = [(t[0], t[1]) for t in self.tfidf_dictionary.doc2bow(reviewer_tokens)]
 
         forum_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf_model[paper_bow]})
