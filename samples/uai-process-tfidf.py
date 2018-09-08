@@ -1,3 +1,9 @@
+'''
+A file for processing ("training") the TF-IDF model
+
+
+'''
+
 import openreview
 import os, sys
 import json
@@ -53,9 +59,12 @@ if __name__ == '__main__':
         paper_id, reviewer_id = paper_reviewer
         best_score = 0.0
 
-        paper_text = model_utils.content_to_text(paper_content_by_id[paper_id])
+        paper_text = model_utils.content_to_text(
+            paper_content_by_id[paper_id],
+            fields=['title', 'abstract', 'fulltext'])
 
-        reviewer_text_list = [model_utils.content_to_text(c) for c in reviewer_content_by_id[reviewer_id]]
+        reviewer_text_list = [model_utils.content_to_text(
+            c, fields=['title','abstract','fulltext']) for c in reviewer_content_by_id[reviewer_id]]
 
         for reviewer_text in reviewer_text_list:
             score = model.score(reviewer_text, paper_text)
