@@ -42,9 +42,14 @@ if __name__ == '__main__':
             contents = [json.loads(r.replace('\n',''))['content'] for r in f.readlines()]
             reviewer_content_by_id[reviewer_id] = contents
 
+    def preprocess_content(content):
+        text = model_utils.content_to_text(content, fields=['title', 'abstract', 'fulltext'])
+        tokens = model_utils.extract_candidate_chunks(text)
+        return tokens
+
     print('fitting model')
     start_training_datetime = datetime.now()
-    model = tfidf.Model()
+    model = tfidf.Model(preprocess_content=preprocess_content)
     model_name = 'tfidf'
 
     all_content = paper_content_by_id.values()
@@ -59,15 +64,8 @@ if __name__ == '__main__':
         paper_id, reviewer_id = paper_reviewer
         best_score = 0.0
 
-        paper_text = model_utils.content_to_text(
-            paper_content_by_id[paper_id],
-            fields=['title', 'abstract', 'fulltext'])
-
-        reviewer_text_list = [model_utils.content_to_text(
-            c, fields=['title','abstract','fulltext']) for c in reviewer_content_by_id[reviewer_id]]
-
-        for reviewer_text in reviewer_text_list:
-            score = model.score(reviewer_text, paper_text)
+        for reviewer_content in reviewer_content_by_id[reviewer_id]:
+            score = model.score(reviewer_content, paper_content_by_id[paper_id])
             if score > best_score:
                 best_score = score
 

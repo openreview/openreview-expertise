@@ -11,9 +11,13 @@ from gensim import corpora
 
 from .. import model_utils
 
+def preprocess_content(content):
+    text = model_utils.content_to_text(content)
+    tokens = model_utils.extract_candidate_chunks(text)
+    return tokens
+
 class Model():
-    def __init__(self, params=None):
-        self.chunker = model_utils.extract_candidate_chunks
+    def __init__(self, preprocess_content=preprocess_content):
 
         self.tfidf_dictionary = corpora.Dictionary()
 
@@ -25,9 +29,7 @@ class Model():
         # a dictionary keyed on forum IDs, containing a BOW representation of the paper (P)
         #self.bow_by_paperid = defaultdict(Counter)
 
-        if params:
-            for k, v in params.iteritems():
-                print(k, v)
+        self.preprocess_content = preprocess_content
 
     def fit(self, training_data):
         """
@@ -42,7 +44,10 @@ class Model():
 
         """
         for paper_content in training_data:
-            tokens = self.preprocess_content(paper_content, self.tfidf_dictionary)
+
+            tokens = self.preprocess_content(paper_content)
+            self.tfidf_dictionary.add_documents([tokens])
+
             self.document_tokens += [tokens]
 
         # get the BOW representation for every document and put it in corpus_bows
@@ -84,15 +89,15 @@ class Model():
 
     #     return sum([forum_vector[k] * reviewer_vector[k] for k in forum_vector])
 
-    def score(self, archive_text, paper_text):
+    def score(self, archive_content, paper_content):
         """
         Returns a score from 0.0 to 1.0, representing the degree of fit between the paper and the reviewer
 
         """
-        paper_tokens = self.chunker(paper_text)
+        paper_tokens = self.preprocess_content(paper_content)
         paper_bow = [(t[0], t[1]) for t in self.tfidf_dictionary.doc2bow(paper_tokens)]
 
-        reviewer_tokens = self.chunker(archive_text)
+        reviewer_tokens = self.preprocess_content(archive_content)
         reviewer_bow = [(t[0], t[1]) for t in self.tfidf_dictionary.doc2bow(reviewer_tokens)]
 
         forum_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf_model[paper_bow]})
@@ -100,10 +105,4 @@ class Model():
 
         return sum([forum_vector[k] * reviewer_vector[k] for k in forum_vector])
 
-
-    def preprocess_content(self, content, dictionary):
-        all_text = model_utils.content_to_text(content)
-        tokens = self.chunker(all_text)
-        dictionary.add_documents([tokens])
-        return tokens
 
