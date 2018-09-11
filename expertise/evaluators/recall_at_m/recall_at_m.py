@@ -22,12 +22,38 @@ class Evaluator():
 
     """
 
-    def __init__(self, bids_by_forum):
+    def __init__(self, bids_by_forum, m=50):
         # datapath = os.path.join(os.path.dirname(__file__), '../samples/uai_data')
         # self.data = utils.load_obj(datapath)
         # self.bids_by_forum = self.data['bids_by_forum']
         self.bids_by_forum = bids_by_forum
-        self.m_values = range(250)
+        self.m_values = range(m)
+
+    def recall_at_m(self, ranked_signatures, forum, m):
+        '''
+        Among the top M users in the model's rank list,
+        what percentage of all high bidders are included?
+
+        '''
+
+        positive_bids = self.get_pos_bids_for_forum(forum)
+        positive_signatures = [bid['signature'] for bid in positive_bids]
+
+        if not positive_signatures:
+            # what value should be returned if there are no positives?
+            return 1.0
+        else:
+            all_bids = self.get_all_bids_for_forum(forum)
+            bid_signatures = [bid['signature'] for bid in all_bids]
+
+            # only rank the reviewers who made a bid of some kind
+            # filtered_ranked_signatures = [r for r in ranked_signatures if r in bid_signatures]
+            # topM = filtered_ranked_signatures[:m]
+            topM = ranked_signatures[:m]
+
+            positive_signatures_from_topM = [r for r in positive_signatures if r in topM]
+
+            return float(len(positive_signatures_from_topM))/float(len(positive_signatures))
 
     def evaluate(self, ranklists):
         """
@@ -44,22 +70,11 @@ class Evaluator():
             score is needed, return the score in an array by itself.
         """
 
-        return self.evaluate_against_individual_queries(ranklists)
-
-    def evaluate_against_individual_queries(self, ranklists):
-        """ Evaluate using individual query ranks"""
         for forum, rank_list in ranklists:
-            rank_list = [rank.split(";")[0] for rank in rank_list]
+            ranked_signatures = [rank.split(";")[0] for rank in rank_list]
             scores = []
             for m in self.m_values:
-                topM = rank_list[:m]
-                positive_labels = ['I want to review', 'I can review']
-                positive_bids = self.get_pos_bids_for_forum(forum)
-                pos_bids_from_topM = [bid for bid in positive_bids if bid["signature"] in topM]
-                if float(len(positive_bids)) > 0:
-                    scores.append(float(len(pos_bids_from_topM))/float(len(positive_bids)))
-                else:
-                    scores.append(0.0)
+                scores.append(self.recall_at_m(ranked_signatures, forum, m))
             yield forum, scores
 
     def get_all_bids_for_forum(self, forum_id):
