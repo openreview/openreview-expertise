@@ -12,6 +12,8 @@ import multiprocessing as mp
 import random
 from datetime import datetime
 from expertise.models import tfidf, model_utils
+from gensim.parsing.porter import PorterStemmer
+from gensim.parsing.preprocessing import preprocess_string
 import argparse
 
 if __name__ == '__main__':
@@ -42,9 +44,10 @@ if __name__ == '__main__':
             contents = [json.loads(r.replace('\n',''))['content'] for r in f.readlines()]
             reviewer_content_by_id[reviewer_id] = contents
 
+    # stemmer = PorterStemmer()
     def preprocess_content(content):
         text = model_utils.content_to_text(content, fields=['title', 'abstract', 'fulltext'])
-        tokens = model_utils.extract_candidate_chunks(text)
+        tokens = preprocess_string(text)
         return tokens
 
     print('fitting model')
