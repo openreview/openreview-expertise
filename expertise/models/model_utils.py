@@ -5,6 +5,25 @@ import itertools
 import string
 import nltk
 
+def read_scores(file):
+    '''
+    Reads a file with scores for paper-reviewer pairs
+    '''
+    score_matrix = {}
+    with open(file) as f:
+        lines = [line.replace('\n','') for line in f.readlines()]
+
+    for line in lines:
+        note_id, reviewer_id, score = eval(line)
+        if note_id not in score_matrix:
+            score_matrix[note_id] = {}
+        if reviewer_id not in score_matrix[note_id]:
+            score_matrix[note_id][reviewer_id] = float(score)
+        else:
+            raise('pair already seen ', note_id, reviewer_id, score)
+
+    return score_matrix
+
 def matrix_to_ranklists(score_matrix):
     '''
     Converts score_matrix, a dict keyed on [paper_id] and [reviewer_id], into
