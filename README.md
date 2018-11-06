@@ -6,7 +6,7 @@ A key part of good paper-reviewer matching is having a good model of affinity be
 
 Open a screen with `screen`
 
-Open a zsh shell on a CPU node with 24 cores and 120G of memory:
+Open a zsh shell on a CPU node with 24 cores and 120G of memory (N,.=:
 
 `srun --pty --mem=120G --mincpus=24 --partition=cpu /bin/zsh`
 
