@@ -27,8 +27,6 @@ if __name__ == '__main__':
     parser.add_argument('--password')
     args = parser.parse_args()
 
-    client = openreview.Client(baseurl=args.baseurl, username=args.username, password=args.password)
-
     paper_ids = []
     reviewer_ids = []
 
