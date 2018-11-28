@@ -25,7 +25,7 @@ def setup_model(config_path):
 
     dataset = Dataset(config.dataset)
 
-    model.setup_model(setup_path, config, dataset)
+    model.setup(setup_path, config, dataset)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
