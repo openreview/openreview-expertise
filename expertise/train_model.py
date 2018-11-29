@@ -25,7 +25,7 @@ def train_model(config_path):
 
     dataset = Dataset(config.dataset)
 
-    model.train_model(config_path)
+    model.train(config_path)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

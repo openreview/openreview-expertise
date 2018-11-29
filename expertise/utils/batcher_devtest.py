@@ -67,7 +67,7 @@ class DevTestBatcher(object):
         with codecs.open(self.filename,'r','UTF-8') as fin:
             for line in fin:
                 if counter % self.batch_size == 0 and counter > 0:
-                    print(len(batch_queries))
+                    # print(len(batch_queries))
                     if len(batch_queries) > 0:
                         yield np.asarray(batch_queries),\
                               np.asarray(batch_query_lengths),\
@@ -88,16 +88,9 @@ class DevTestBatcher(object):
 
                 split = line.rstrip().split("\t")
 
-                if len(split) < 3:
-                    print(split)
                 query_string = split[0]
                 target_string = split[1]
 
-                print("next in dev test batch")
-                print(query_string)
-                print(target_string)
-                print(len(batch_queries))
-                print(len(batch_targets))
                 if query_string in self.submission_keyphrases and target_string in self.reviewer_keyphrases:
                     if len(self.submission_keyphrases[query_string]) > 0 and len(self.reviewer_keyphrases[target_string]) > 0:
                         if self.config.model_name not in ['TPMS', 'TFIDF', 'Random']:
@@ -110,10 +103,8 @@ class DevTestBatcher(object):
                             num_oov_current = count_dict[1]
                         else:
                             num_oov_current = 0
-                        print("num_oov_current: {}".format(num_oov_current))
+
                         num_oov += num_oov_current
-                        print(query_vec)
-                        print(query_string)
                         batch_queries.append(query_vec)
                         batch_query_lengths.append(query_len)
                         batch_query_strings.append(query_string)
@@ -129,14 +120,9 @@ class DevTestBatcher(object):
                             num_oov_current = count_dict[1]
                         else:
                             num_oov_current = 0
-                        print("num_oov_current: {}".format(num_oov_current))
+
                         num_oov += num_oov_current
-                        print(target_vec)
-                        print(target_string)
-
                         label = int(split[2])
-                        print(label)
-
 
                         batch_targets.append(target_vec)
                         batch_target_lengths.append(target_len)
@@ -145,9 +131,7 @@ class DevTestBatcher(object):
                         batch_labels.append(label)
 
                         counter += 1
-        print("total oov: {}".format(num_oov))
-        print("out of loop")
-        print(len(batch_queries))
+
         if len(batch_queries) >= 1:
             yield np.asarray(batch_queries), \
                   np.asarray(batch_query_lengths), \

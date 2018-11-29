@@ -88,54 +88,58 @@ def build_labels(dataset):
 
     return pos_and_neg_signatures_by_forum
 
+def dump_pkl(filepath, data):
+    with open(filepath, 'wb') as f:
+        f.write(pickle.dumps(data))
+
+def dump_csv(filepath, data):
+    '''
+    Writes .csv files in a specific format preferred by some IESL students:
+    tab-delimited columns, with keyphrases separated by spaces.
+    '''
+    with open(filepath, 'w') as f:
+        writer = csv.writer(f, delimiter='\t')
+        for target, pos, neg in data:
+            row = []
+            for source in [target, pos, neg]:
+                if type(source) == list:
+                    row_source = ' '.join(source)
+                elif type(source) in [str, int]:
+                    row_source = source
+                else:
+                    raise TypeError('incompatible source type', type(source))
+                row.append(row_source)
+
+            writer.writerow(row)
+
 def setup(setup_path, config, dataset):
 
     '''
     Processes the dataset and any other information needed by this model.
-
-    Must return a binary representing each data structure in an iterable object.
-
     '''
-
-    def dump_pkl(filename, data):
-        filepath = os.path.join(setup_path, filename)
-        with open(filepath, 'wb') as f:
-            f.write(pickle.dumps(data))
-
-    def dump_csv(filename, data):
-        '''
-        Writes .csv files in a specific format preferred by some IESL students:
-        tab-delimited columns, with keyphrases separated by spaces.
-        '''
-        filepath = os.path.join(setup_path, filename)
-        with open(filepath, 'w') as f:
-            writer = csv.writer(f, delimiter='\t')
-            for target, pos, neg in data:
-                row = []
-                for source in [target, pos, neg]:
-                    if type(source) == list:
-                        row_source = ' '.join(source)
-                    elif type(source) in [str, int]:
-                        row_source = source
-                    else:
-                        raise TypeError('incompatible source type', type(source))
-                    row.append(row_source)
-
-                writer.writerow(row)
-
-    labels_by_forum = build_labels(dataset)
-    dump_pkl('labels.pkl', labels_by_forum)
 
     keyphrases = importlib.import_module(config.keyphrases).keyphrases
 
+    # write train/dev/test labels to pickle file
+    labels_by_forum = build_labels(dataset)
+    labels_path = os.path.join(setup_path, 'labels.pkl')
+    dump_pkl(labels_path, labels_by_forum)
+
+    # write keyphrases for submissions to pickle file
     kps_by_submission = {file_id: kps for file_id, kps in keyphrases(
         dataset.submission_records_path)}
-    dump_pkl('submission_kps.pkl', kps_by_submission),
 
+    submission_kps_path = os.path.join(setup_path, 'submission_kps.pkl')
+    dump_pkl(submission_kps_path, kps_by_submission),
+
+    # write keyphrases for reviewer archives to pickle file
     kps_by_reviewer = {file_id: kps for file_id, kps in keyphrases(
         dataset.reviewer_archives_path)}
-    dump_pkl('reviewer_kps.pkl', kps_by_reviewer)
 
+    reviewer_kps_path = os.path.join(setup_path, 'reviewer_kps.pkl')
+    dump_pkl(reviewer_kps_path, kps_by_reviewer)
+
+    # define vocab and update it with keyphrases, then write to pickle file
     vocab = Vocab(max_num_keyphrases = config.max_num_keyphrases)
 
     for kps in kps_by_submission.values():
@@ -152,7 +156,7 @@ def setup(setup_path, config, dataset):
     dev_set = eval_data(dev_set_ids, labels_by_forum)
     test_set = eval_data(test_set_ids, labels_by_forum)
 
-    dump_csv('train_set.tsv', train_set)
-    dump_csv('dev_set.tsv', dev_set)
-    dump_csv('test_set.tsv', test_set)
+    dump_csv(os.path.join(setup_path, 'train_set.tsv'), train_set)
+    dump_csv(os.path.join(setup_path, 'dev_set.tsv'), dev_set)
+    dump_csv(os.path.join(setup_path, 'test_set.tsv'), test_set)
 

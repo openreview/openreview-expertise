@@ -9,7 +9,6 @@ import json
 import nltk
 import re
 
-
 def strip_nonalpha(text):
     '''
     lowercases words
@@ -179,16 +178,13 @@ def row_wise_dot(tensor1, tensor2):
     return torch.sum(tensor1 * tensor2, dim=1,keepdim=True)
 
 def __filter_json(the_dict):
-    print("__filter_json")
-    print(the_dict)
     res = {}
     for k in the_dict.keys():
-        print("k : {} \t {} \t {}".format(k, the_dict[k], type(the_dict[k])))
         if type(the_dict[k]) is str or type(the_dict[k]) is float or type(the_dict[k]) is int or type(the_dict[k]) is list:
             res[k] = the_dict[k]
         elif type(the_dict[k]) is dict:
             res[k] = __filter_json(the_dict[k])
-    print("res: {} ".format(res))
+
     return res
 
 def save_dict_to_json(the_dict,the_file):

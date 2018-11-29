@@ -35,8 +35,8 @@ def generate_predictions(model, batcher, outfilename):
         batch_queries, batch_query_lengths, batch_query_strings,\
         batch_targets, batch_target_lengths, batch_target_strings,\
         batch_labels, batch_size = batch
-        print(batch_query_strings)
-        print(batch_target_strings)
+        # print(batch_query_strings)
+        # print(batch_target_strings)
 
         score_types = ['tpms_scores', 'random_scores', 'tfidf_scores']
         if any([ hasattr(model, s) for s in score_types ]):
@@ -92,6 +92,7 @@ def train(config_path):
     submission_kps_file = os.path.join(setup_path, 'submission_kps.pkl')
     reviewer_kps_file = os.path.join(setup_path, 'reviewer_kps.pkl')
     train_set_file = os.path.join(setup_path, 'train_set.tsv')
+    train_sample_file = os.path.join(setup_path, 'train_samples.tsv')
     dev_set_file = os.path.join(setup_path, 'dev_set.tsv')
 
     with open(vocab_file, 'rb') as f:
@@ -114,7 +115,7 @@ def train(config_path):
     torch.manual_seed(config.random_seed)
 
     # Set up batcher
-    batcher = Batcher(config, vocab, train_set_file)
+    batcher = Batcher(config, vocab, train_set_file, train_sample_file)
 
     model = centroid.Model(config, vocab)
 
@@ -134,13 +135,11 @@ def train(config_path):
     for counter, (source, pos, neg, source_len, pos_len, neg_len) in enumerate(batcher.get_next_batch()):
         print('num_batches: {}'.format(counter))
         optimizer.zero_grad()
-
         loss = model.compute_loss(source, pos, neg, source_len, pos_len, neg_len)
         print('now backward pass')
         loss.backward()
         # torch.nn.utils.clip_grad_norm(model.parameters(), config.clip)
         optimizer.step()
-
 
         # Question: is this if block just for monitoring?
         if counter % 100 == 0:
@@ -165,8 +164,8 @@ def train(config_path):
             prediction_filename = os.path.join(dev_predictions_path, 'dev.predictions.{}.tsv').format(counter)
             with open(prediction_filename, 'w') as f:
                 writer = csv.writer(f, delimiter='\t')
-                for source, target, label, score in generate_predictions(model, dev_batcher, prediction_filename):
-                    writer.writerow([source, target, label, score])
+                for pred_source, target, label, score in generate_predictions(model, dev_batcher, prediction_filename):
+                    writer.writerow([pred_source, target, label, score])
 
             map_score = float(eval_map_file(prediction_filename))
             hits_at_1 = float(eval_hits_at_k_file(prediction_filename, 1))

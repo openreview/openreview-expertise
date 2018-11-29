@@ -78,12 +78,9 @@ class Model(torch.nn.Module):
             # Get the phrases
             summed_emb = np.zeros((keyword_lists.shape[0], D))
             for idx, author_kps in enumerate(keyword_lists):
-                print(idx)
-                print(author_kps)
                 embeddings = np.zeros((len(author_kps), D))
                 for phr_idx, phrase in enumerate(author_kps):
                     if phrase:
-                        print(self.vocab.id2item[phrase])
                         embeddings[phr_idx, :] = self.cached_ft.get_word_vector(self.vocab.id2item[phrase])
                     else:
                         embeddings[phr_idx, :] = np.zeros((D,))
@@ -92,27 +89,16 @@ class Model(torch.nn.Module):
             return torch.from_numpy(averaged)
 
         else:
-            print('Using embeddings trained on bids')
             kw_indices = torch.from_numpy(keyword_lists).long()
             kw_lengths = torch.from_numpy(keyword_lengths)
-            # print(kw_lengths)
             if self.config.use_cuda:
                 kw_indices = kw_indices.cuda()
                 kw_lengths = kw_lengths.cuda()
             # B by L by d
             embeddings = self.embedding(kw_indices)
-            if kw_indices.size()[0] == 0:
-                print("kw_indices: {}".format(kw_indices))
-            print("kw_indices: {}".format(kw_indices))
             kw_lengths[kw_lengths == 0] = 1
-            print("kw_lengths: {}".format(kw_lengths))
-            print(kw_indices.size())
-            print(embeddings.size())
-            print("embeddings: {}".format(embeddings))
             summed_emb = torch.sum(embeddings, dim=1)
-            print("summed_emb: {}".format(summed_emb))
             averaged = torch.div(summed_emb, kw_lengths.float())
-            print("averaged: {}".format(averaged))
             return averaged
 
     def embed_dev(self, keyword_lists, keyword_lengths, print_embed=False, batch_size=None):
@@ -137,5 +123,5 @@ class Model(torch.nn.Module):
             target_embed = self.embed_dev(batch_targets, batch_target_lengths,batch_size=batch_size)
         scores = row_wise_dot(source_embed, target_embed)
         scores[scores != scores] = 0
-        print("scores: {}".format(scores))
+
         return scores

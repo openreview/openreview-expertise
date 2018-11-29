@@ -16,18 +16,32 @@ limitations under the License.
 import numpy as np
 import codecs #utf-8
 import time
+import csv
+import sys, os
+import random
+import ast
+
+csv.field_size_limit(sys.maxsize)
 
 class Batcher(object):
-    def __init__(self, config, vocab, input_file,
+    def __init__(self, config, vocab, input_file, samples_file=None,
                 num_batches=False, shuffle=True, triplet=True):
 
         self.config = config
         self.vocab = vocab
 
-        self.batch_size = config.batch_size
+        # input_file is the (potentially ordered) training set.
         self.input_file = input_file
 
+        # data_dir is the location where the (potentially randomized) batch data
+        # should be written.
+
+        # samples_file is the file name of the (potentially randomized) batch data.
+        self.samples_file = samples_file
+
+        self.batch_size = config.batch_size
         self.shuffle = shuffle
+
         # self.return_one_epoch = return_one_epoch
         self.start_index = 0
         self.triplet = triplet
@@ -41,56 +55,94 @@ class Batcher(object):
             self.load_data = self.load_data_triplet
             self.shuffle_data = self.shuffle_data_triplet
             self.get_next_batch = self.get_next_batch_triplet
+            self.write_data = self.write_data_triplet
 
-        # deprecated
         if not self.triplet:
-            self.load_data = self.load_data_pairwise
-            self.shuffle_data = self.shuffle_data_pairwise
-            self.get_next_batch = self.get_next_batch_pairwise
+            # deprecated.
+            pass
+            # self.load_data = self.load_data_pairwise
+            # self.shuffle_data = self.shuffle_data_pairwise
+            # self.get_next_batch = self.get_next_batch_pairwise
 
-        self.load_data()
-        self.num_examples = len(self.sources)
-        if self.shuffle:
-            self.shuffle_data()
+        if not samples_file:
+            self.samples_file = os.path.join(os.path.dirname(self.input_file), 'train_samples.tsv')
+            print('loading data')
+            self.load_data()
+            print('writing data')
+            self.write_data()
+            self.num_examples = len(self.sources)
+            if self.shuffle:
+                print('shuffling data')
+                self.shuffle_data()
+        else:
+            line_count = 0
+            with open(samples_file) as f:
+                for line in f.readlines():
+                    line_count += 1
+            self.num_examples = line_count
 
     def reset(self):
         self.start_index = 0
 
-    def get_next_batch_triplet(self):
-        """
-        returns the next batch
-        TODO(rajarshd): move the if-check outside the loop, so that conditioned is not checked every time. the conditions are suppose to be immutable.
-        """
-        #print "get_next_batch", self.input_file
+    def get_next_batch_triplet(self, delimiter='\t'):
+        with open(self.samples_file) as f:
+            reader = csv.reader(f, delimiter=delimiter)
 
-        batch_finished = False
+            source_batch = []
+            positives_batch = []
+            negatives_batch = []
+            source_lens_batch = []
+            pos_lens_batch = []
+            neg_lens_batch = []
 
-        while not batch_finished:
+            self.start_index = 0
 
-            # if the start index indicates that we're in the last batch, we're done.
-            if self.start_index > self.num_examples - min(self.batch_size, self.num_examples):
-                batch_finished = True
+            for row in reader:
+                sample = [ast.literal_eval(item) for item in row]
 
-                # self.start_index = 0
-                # if self.shuffle:
-                #     self.shuffle_data_triplet()
-            else:
-                num_data_returned = min(self.batch_size, self.num_examples - self.start_index)
-                assert num_data_returned > 0
-                end_index = self.start_index + num_data_returned
+                source_batch.append(sample[0])
+                positives_batch.append(sample[1])
+                negatives_batch.append(sample[2])
+                source_lens_batch.append(sample[3])
+                pos_lens_batch.append(sample[4])
+                neg_lens_batch.append(sample[5])
 
-                sample = (
-                    self.sources[self.start_index:end_index],
-                    self.positives[self.start_index:end_index],
-                    self.negatives[self.start_index:end_index],
-                    self.source_lens[self.start_index:end_index],
-                    self.pos_lens[self.start_index:end_index],
-                    self.neg_lens[self.start_index:end_index]
-                )
+                self.start_index += 1
 
-                yield sample
+                if self.start_index % self.batch_size == 0 or self.start_index == self.num_examples:
+                    batch = (
+                        np.asarray(source_batch),
+                        np.asarray(positives_batch),
+                        np.asarray(negatives_batch),
+                        np.asarray(source_lens_batch, dtype=np.float32),
+                        np.asarray(pos_lens_batch, dtype=np.float32),
+                        np.asarray(neg_lens_batch, dtype=np.float32)
+                    )
 
-                self.start_index = end_index
+                    yield batch
+
+                    source_batch = []
+                    positives_batch = []
+                    negatives_batch = []
+                    source_lens_batch = []
+                    pos_lens_batch = []
+                    neg_lens_batch = []
+
+
+    def write_data_triplet(self, delimiter='\t'):
+        print('writing data triplet to {}'.format(self.samples_file))
+        with open(self.samples_file, 'w') as f:
+
+            writer = csv.writer(f, delimiter=delimiter)
+            for sample in zip(
+                self.sources.tolist(),
+                self.positives.tolist(),
+                self.negatives.tolist(),
+                self.source_lens.tolist(),
+                self.pos_lens.tolist(),
+                self.neg_lens.tolist()
+            ):
+                writer.writerow(sample)
 
     def shuffle_data_triplet(self):
         """
@@ -109,41 +161,34 @@ class Batcher(object):
             data = data[perm]
 
     def load_data_triplet(self, delimiter='\t'):
-        with open(self.input_file) as inp:
+
+        with open(self.input_file) as f:
             sources = []
             sources_lengths = []
             positives = []
             pos_lengths = []
             negatives = []
             neg_lengths = []
-
-            for line_number, line in enumerate(inp):
-
+            ct = -1
+            for line in f:
+                ct += 1
                 line = line.strip()
-                try:
-                    source, positive, negative = line.split(delimiter)
-
-                    sources.append(np.asarray(self.vocab.to_ints(source)))
-                    sources_lengths.append([min(self.config.max_num_keyphrases,len(source)) ])
-
-                    positives.append(np.asarray(self.vocab.to_ints(positive)))
-                    pos_lengths.append([min(self.config.max_num_keyphrases,len(positive)) ])
-
-                    negatives.append(np.asarray(self.vocab.to_ints(negative)))
-                    neg_lengths.append([min(self.config.max_num_keyphrases,len(negative)) ])
-
-                except ValueError as e:
-                    print('line', line)
-                    print(e, '[text: {}], [line number: {}]'.format(
-                        line, line_number))
-
+                split = line.split(delimiter) #source, pos, negative
+                if len(split) < 3:
+                    print('could not split into three', len(split), ct)
+                else:
+                    sources.append(np.asarray(self.vocab.to_ints(split[0])))
+                    sources_lengths.append([min(self.config.max_num_keyphrases,len(split[0])) ])
+                    positives.append(np.asarray(self.vocab.to_ints(split[1])))
+                    pos_lengths.append([min(self.config.max_num_keyphrases,len(split[1])) ])
+                    negatives.append(np.asarray(self.vocab.to_ints(split[2])))
+                    neg_lengths.append([min(self.config.max_num_keyphrases,len(split[2])) ])
             self.sources = np.asarray(sources)
             self.positives = np.asarray(positives)
             self.negatives = np.asarray(negatives)
             self.source_lens = np.asarray(sources_lengths, dtype=np.float32)
             self.pos_lens = np.asarray(pos_lengths, dtype=np.float32)
             self.neg_lens = np.asarray(neg_lengths, dtype=np.float32)
-
             print("length of data", len(sources))
 
     def get_next_batch_pairwise(self):
