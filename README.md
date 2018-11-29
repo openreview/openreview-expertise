@@ -19,20 +19,20 @@ The experimenter starts by creating an experiment directory (e.g. `/exp_1`), and
 All other attributes in the config file are specific to the type of model and experiment being run.
 
 ### Setup
-To setup a model, run `openreview.expertise.setup_model` with the path to your configuration file as an argument:
+To setup a model, run `expertise.setup_model` with the path to your configuration file as an argument:
 
 ```
-python -m openreview.expertise.setup_model /samples/sample_experiment/config.json
+python -m expertise.setup_model /samples/sample_experiment/config.json
 ```
 
-`openreview.expertise.setup_model` imports the model specified in the configuration and passes this configuration and the dataset into the model's `setup` function. `openreview.expertise.setup_model` will then create a directory, `/setup`, in the experiment directory. The model's `setup` function is expected to store files needed for training to the `/setup` directory. The contents of `/setup` are specific to each model.
+`expertise.setup_model` imports the model specified in the configuration and passes this configuration and the dataset into the model's `setup` function. `expertise.setup_model` will then create a directory, `/setup`, in the experiment directory. The model's `setup` function is expected to store files needed for training to the `/setup` directory. The contents of `/setup` are specific to each model.
 
 ### Training
 writes out all the files that are needed to run Model.train() and Model.evaluate().
 The contents of /setup are specific to each model. models should know how to use them.
 
 ```
-python -m openreview.expertise.train_model /samples/sample_experiment/config.json
+python -m expertise.train_model /samples/sample_experiment/config.json
 ```
 
 
