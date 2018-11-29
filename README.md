@@ -1,15 +1,40 @@
-## Expertise modeling for OpenReview
+# Paper-reviewer affinity modeling for OpenReview
 
-A key part of good paper-reviewer matching is having a good model of affinity between papers and reviewers. This repository holds code and tools for generating affinity scores between papers and reviewers.
+A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
 
-### Tips for training models on the cluster with Slurm:
+## Experiment Workflow
 
-Open a screen with `screen`
+This section describes the steps to setup, train, and evaluate an affinity model in this pipeline.
 
-Open a zsh shell on a CPU node with 24 cores and 120G of memory (N,.=:
+### Configuration
+The experimenter starts by creating an experiment directory (e.g. `/exp_1`), and a configuration file inside that directory. Config files should be formatted as JSON and must include the following attributes:
 
-`srun --pty --mem=120G --mincpus=24 --partition=cpu /bin/zsh`
+1) `name`: a string that identifies the experiment (avoid using spaces in this field).
+2) `dataset`: a string representing the directory where the dataset is located.
+3) `model`: a string that specifies the model module to be trained (from `expertise.models`).
+4) `keyphrases` a string that specifices the keyphrases module to be used (from `expertise.preprocessors`).
 
-Train your model (e.g. `python train-my-model.py`)
+(See `/samples/sample_experiment/config.json` for an example)
 
-Escape the screen with ctrl + a + d
+All other attributes in the config file are specific to the type of model and experiment being run.
+
+### Setup
+To setup a model, run `expertise.setup_model` with the path to your configuration file as an argument:
+
+```
+python -m expertise.setup_model /samples/sample_experiment/config.json
+```
+
+`expertise.setup_model` imports the model specified in the configuration and passes this configuration and the dataset into the model's `setup` function. `expertise.setup_model` will then create a directory, `/setup`, in the experiment directory. The model's `setup` function is expected to store files needed for training to the `/setup` directory. The contents of `/setup` are specific to each model.
+
+### Training
+writes out all the files that are needed to run Model.train() and Model.evaluate().
+The contents of /setup are specific to each model. models should know how to use them.
+
+```
+python -m expertise.train_model /samples/sample_experiment/config.json
+```
+
+
+
+
