@@ -55,22 +55,17 @@ def eval_data(eval_set_ids, labels_by_forum):
             yield (forum_id, reviewer, 0)
 
 def build_labels(dataset):
-    all_bids = []
-    with open(dataset.reviewer_bids_file) as f:
-        for line in f.readlines():
-            all_bids.append(openreview.Tag.from_json(json.loads(line.replace('\n',''))))
-
     binned_bids = {val: [] for val in dataset.bid_values}
 
     positive_labels = dataset.positive_bid_values
 
     users_w_bids = set()
-    for bid in all_bids:
+    for bid in dataset.bids():
         binned_bids[bid.tag].append(bid)
         users_w_bids.update(bid.signatures)
 
     bids_by_forum = defaultdict(list)
-    for bid in all_bids:
+    for bid in dataset.bids():
         bids_by_forum[bid.forum].append(bid)
 
     pos_and_neg_signatures_by_forum = {}
@@ -126,16 +121,17 @@ def setup(setup_path, config, dataset):
     labels_path = os.path.join(setup_path, 'labels.pkl')
     dump_pkl(labels_path, labels_by_forum)
 
-    # write keyphrases for submissions to pickle file
-    kps_by_submission = {file_id: kps for file_id, kps in keyphrases(
-        dataset.submission_records_path)}
+    kps_by_submission = defaultdict(list)
+    for file_id, text in dataset.submission_records():
+        kps_by_submission[file_id].extend(keyphrases(text))
 
     submission_kps_path = os.path.join(setup_path, 'submission_kps.pkl')
     dump_pkl(submission_kps_path, kps_by_submission),
 
     # write keyphrases for reviewer archives to pickle file
-    kps_by_reviewer = {file_id: kps for file_id, kps in keyphrases(
-        dataset.reviewer_archives_path)}
+    kps_by_reviewer = defaultdict(list)
+    for file_id, text in dataset.reviewer_archives():
+        kps_by_reviewer[file_id].extend(keyphrases(text))
 
     reviewer_kps_path = os.path.join(setup_path, 'reviewer_kps.pkl')
     dump_pkl(reviewer_kps_path, kps_by_reviewer)

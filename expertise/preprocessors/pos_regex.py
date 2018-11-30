@@ -7,7 +7,16 @@ import nltk
 
 from .. import utils
 
-def keyphrases(data_dir):
+def keyphrases(text):
+    '''
+    keyphrases should accept one argument, text, which is a string.
+
+    returns a list of normalized keyphrases.
+    '''
+    return extract_candidate_chunks(text)
+
+# Deprecated
+def read_keyphrases(data_dir):
     '''
     Given a directory containing reviewer archives or submissions,
     generate a dict keyed on signatures whose values are sets of keyphrases.
@@ -15,31 +24,29 @@ def keyphrases(data_dir):
     The input directory should contain .jsonl files. Files representing
     reviewer archives should be [...] TODO: Finish this.
     '''
+    print('function deprecated')
+    # for filename in os.listdir(data_dir):
+    #     filepath = os.path.join(data_dir, filename)
 
-    reviewer_or_submission_keyphrases = {}
+    #     file_id = filename.replace('.jsonl', '')
+    #     print(file_id)
 
-    for filename in os.listdir(data_dir):
-        filepath = os.path.join(data_dir, filename)
+    #     keyphrases = []
 
-        file_id = filename.replace('.jsonl', '')
-        print(file_id)
+    #     with open(filepath) as f:
+    #         for line in f.readlines():
+    #             if line.endswith('\n'):
+    #                 line = line[:-1]
 
-        keyphrases = []
+    #             record = json.loads(line)
+    #             content = record['content']
 
-        with open(filepath) as f:
-            for line in f.readlines():
-                if line.endswith('\n'):
-                    line = line[:-1]
+    #             record_text_unfiltered = utils.content_to_text(content, fields=['title', 'abstract', 'fulltext'])
+    #             record_text_filtered = utils.strip_nonalpha(record_text_unfiltered)
 
-                record = json.loads(line)
-                content = record['content']
+    #             keyphrases.extend(extract_candidate_chunks(record_text_filtered))
 
-                record_text_unfiltered = utils.content_to_text(content, fields=['title', 'abstract', 'fulltext'])
-                record_text_filtered = utils.strip_nonalpha(record_text_unfiltered)
-
-                keyphrases.extend(extract_candidate_chunks(record_text_filtered))
-
-        yield file_id, keyphrases
+    #     yield file_id, keyphrases
 
 def preprocess(text, mode='chunks', stemmer=None):
     if mode=='chunks':

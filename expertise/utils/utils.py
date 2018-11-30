@@ -9,6 +9,14 @@ import json
 import nltk
 import re
 
+def jsonl_reader(jsonl_file):
+    '''
+    Utility function for lazily reading a .jsonl file.
+    '''
+    with open(jsonl_file) as f:
+        for line in f.readlines():
+            yield json.loads(line.replace('\n',''))
+
 def strip_nonalpha(text):
     '''
     lowercases words
