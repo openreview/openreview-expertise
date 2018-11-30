@@ -175,7 +175,7 @@ def file_lines(filename):
             yield line.decode(codec)
 
 def row_wise_dot(tensor1, tensor2):
-    return torch.sum(tensor1 * tensor2, dim=1,keepdim=True)
+    return torch.sum(tensor1 * tensor2, dim=1, keepdim=True)
 
 def __filter_json(the_dict):
     res = {}

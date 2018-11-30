@@ -61,8 +61,8 @@ def load(filename):
     current_block_name = ""
     current_block_scores = []
     current_block_labels = []
-    with open(filename,'r') as fin:
-        for line in fin:
+    with open(filename) as f:
+        for line in f:
             splt = line.strip().split("\t")
             if len(splt) != 4:
                 print(splt)
@@ -83,8 +83,8 @@ def load(filename):
     return result_labels,result_scores
 
 def eval_map_file(filename):
-    list_of_list_of_labels,list_of_list_of_scores = load(filename)
-    return eval_map(list_of_list_of_labels,list_of_list_of_scores)
+    list_of_list_of_labels, list_of_list_of_scores = load(filename)
+    return eval_map(list_of_list_of_labels, list_of_list_of_scores)
 
 
 if __name__ == "__main__":
