@@ -6,6 +6,7 @@ import pickle
 import expertise
 from expertise import preprocessors
 from expertise.utils.vocab import Vocab
+from expertise.utils.batcher import Batcher
 
 import itertools
 import math
@@ -148,7 +149,8 @@ def setup(setup_path, config, dataset):
     for kps in kps_by_reviewer.values():
         vocab.load_items(kps)
 
-    dump_pkl('vocab.pkl', vocab)
+    vocab_file_path = os.path.join(setup_path, 'vocab.pkl')
+    dump_pkl(vocab_file_path, vocab)
 
     train_set_ids, dev_set_ids, test_set_ids = get_train_dev_test_ids(labels_by_forum)
 
@@ -156,7 +158,12 @@ def setup(setup_path, config, dataset):
     dev_set = eval_data(dev_set_ids, labels_by_forum)
     test_set = eval_data(test_set_ids, labels_by_forum)
 
-    dump_csv(os.path.join(setup_path, 'train_set.tsv'), train_set)
+    train_set_file = os.path.join(setup_path, 'train_set.tsv')
+    train_samples_file = os.path.join(setup_path, 'train_samples.tsv')
+    dump_csv(train_set_file, train_set)
     dump_csv(os.path.join(setup_path, 'dev_set.tsv'), dev_set)
     dump_csv(os.path.join(setup_path, 'test_set.tsv'), test_set)
+
+    batcher = Batcher(config, vocab, input_file=train_set_file)
+    batcher.dump_csv(train_samples_file)
 
