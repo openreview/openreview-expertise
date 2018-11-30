@@ -9,15 +9,9 @@ from collections import Counter
 from gensim.models.tfidfmodel import TfidfModel
 from gensim import corpora
 
-from .. import model_utils
-
-def preprocess_content(content):
-    text = model_utils.content_to_text(content)
-    tokens = model_utils.extract_candidate_chunks(text)
-    return tokens
 
 class Model():
-    def __init__(self, preprocess_content=preprocess_content):
+    def __init__(self):
 
         self.tfidf_dictionary = corpora.Dictionary()
 
@@ -29,30 +23,27 @@ class Model():
         # a dictionary keyed on forum IDs, containing a BOW representation of the paper (P)
         #self.bow_by_paperid = defaultdict(Counter)
 
-        self.preprocess_content = preprocess_content
-
-    def fit(self, training_data):
+    def fit(self, keyphrases):
         """
-        Fit the model to the data.
+        Fit the TFIDF model
 
-        Arguments
-            @training_data: an iterator yielding training data.
-            Must yield tuples in the format (<paper id>, <paper content>).
+        keyphrases should be a list of lists, where each inner list is a list of keyphrases.
 
-        Returns
-            None
+        e.g.
 
+        keyphrases = [
+            ['deep_learning', 'natural_language_processing'],
+            ['neural_imaging', 'fmri', 'functional_magnetic_resonance']
+        ]
         """
-        for paper_content in training_data:
-
-            tokens = self.preprocess_content(paper_content)
+        for tokens in keyphrases:
             self.tfidf_dictionary.add_documents([tokens])
-
             self.document_tokens += [tokens]
 
         # get the BOW representation for every document and put it in corpus_bows
         self.corpus_bows = [self.tfidf_dictionary.doc2bow(doc) for doc in self.document_tokens]
 
+        # print(self.corpus_bows)
         # generate a TF-IDF model based on the entire corpus's BOW representations
         self.tfidf_model = TfidfModel(self.corpus_bows)
 
@@ -76,18 +67,6 @@ class Model():
         rank_list = [signature for signature, score in sorted(scores, key=lambda x: x[1], reverse=True)]
 
         return rank_list
-
-    # def score(self, signature, paperid):
-    #     """
-    #     Returns a score from 0.0 to 1.0, representing the degree of fit between the paper and the reviewer
-
-    #     """
-    #     paper_bow = [(id, count) for id, count in self.bow_by_paperid[paperid].iteritems()]
-    #     reviewer_bow = [(id,count) for id,count in self.bow_by_signature[signature].iteritems()]
-    #     forum_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf_model[paper_bow]})
-    #     reviewer_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf_model[reviewer_bow]})
-
-    #     return sum([forum_vector[k] * reviewer_vector[k] for k in forum_vector])
 
     def score(self, archive_content, paper_content):
         """

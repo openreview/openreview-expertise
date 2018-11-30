@@ -8,6 +8,14 @@ import torch
 import json
 import nltk
 import re
+import pickle
+
+def dump_pkl(filepath, data):
+    '''
+    dump an object to a pickle file
+    '''
+    with open(filepath, 'wb') as f:
+        f.write(pickle.dumps(data))
 
 def jsonl_reader(jsonl_file):
     '''
