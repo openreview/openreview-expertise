@@ -71,15 +71,6 @@ def train(config_path):
     :return:
     """
 
-    # now = datetime.datetime.now()
-    # timestamp = "{:04d}-{:02d}-{:02d}-{:02d}-{:02d}-{:02d}".format(
-    #     now.year,
-    #     now.month,
-    #     now.day,
-    #     now.hour,
-    #     now.minute,
-    #     now.second)
-
     config_path = os.path.abspath(config_path)
     experiment_path = os.path.dirname(config_path)
 

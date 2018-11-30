@@ -28,6 +28,8 @@ class Dataset(object):
         self.test_set_path = os.path.join(
             directory, 'test_set.tsv')
 
+        # TODO: Important! Need to make sure that different bid values get handled properly
+        # across different kinds of datasets.
         self.bid_values = [
             'I want to review',
             'I can review',

@@ -7,6 +7,7 @@ import expertise
 from expertise import preprocessors
 from expertise.utils.vocab import Vocab
 from expertise.utils.batcher import Batcher
+from expertise.utils import dump_pkl
 
 import itertools
 import math
@@ -83,10 +84,6 @@ def build_labels(dataset):
 
 
     return pos_and_neg_signatures_by_forum
-
-def dump_pkl(filepath, data):
-    with open(filepath, 'wb') as f:
-        f.write(pickle.dumps(data))
 
 def dump_csv(filepath, data):
     '''
