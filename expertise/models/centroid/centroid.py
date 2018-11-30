@@ -108,12 +108,13 @@ class Model(torch.nn.Module):
         """
         return self.embed(keyword_lists, keyword_lengths)
 
-    def score_dev_test_batch(
-        self,batch_queries,
+    def score_dev_test_batch(self,
+        batch_queries,
         batch_query_lengths,
         batch_targets,
         batch_target_lengths,
-        batch_size):
+        batch_size
+        ):
 
         if batch_size == self.config.dev_batch_size:
             source_embed = self.embed_dev(batch_queries, batch_query_lengths)
@@ -121,7 +122,10 @@ class Model(torch.nn.Module):
         else:
             source_embed = self.embed_dev(batch_queries, batch_query_lengths,batch_size=batch_size)
             target_embed = self.embed_dev(batch_targets, batch_target_lengths,batch_size=batch_size)
+
         scores = row_wise_dot(source_embed, target_embed)
+
+        # what is this?
         scores[scores != scores] = 0
 
         return scores

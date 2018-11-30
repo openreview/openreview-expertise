@@ -92,7 +92,14 @@ def train(config_path):
     submission_kps_file = os.path.join(setup_path, 'submission_kps.pkl')
     reviewer_kps_file = os.path.join(setup_path, 'reviewer_kps.pkl')
     train_set_file = os.path.join(setup_path, 'train_set.tsv')
+
+    '''
+    This train_sample_file is a string
+    '''
     train_sample_file = os.path.join(setup_path, 'train_samples.tsv')
+    if not os.exists(train_sample_file):
+        train_sample_file = None
+
     dev_set_file = os.path.join(setup_path, 'dev_set.tsv')
 
     with open(vocab_file, 'rb') as f:
@@ -115,7 +122,7 @@ def train(config_path):
     torch.manual_seed(config.random_seed)
 
     # Set up batcher
-    batcher = Batcher(config, vocab, train_set_file, train_sample_file)
+    batcher = Batcher(config, vocab, samples_file=train_sample_file)
 
     model = centroid.Model(config, vocab)
 

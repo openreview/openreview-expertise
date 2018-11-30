@@ -6,6 +6,7 @@ import pickle
 import expertise
 from expertise import preprocessors
 from expertise.utils.vocab import Vocab
+from expertise.utils.batcher import Batcher
 
 import itertools
 import math
@@ -54,22 +55,17 @@ def eval_data(eval_set_ids, labels_by_forum):
             yield (forum_id, reviewer, 0)
 
 def build_labels(dataset):
-    all_bids = []
-    with open(dataset.reviewer_bids_file) as f:
-        for line in f.readlines():
-            all_bids.append(openreview.Tag.from_json(json.loads(line.replace('\n',''))))
-
     binned_bids = {val: [] for val in dataset.bid_values}
 
     positive_labels = dataset.positive_bid_values
 
     users_w_bids = set()
-    for bid in all_bids:
+    for bid in dataset.bids():
         binned_bids[bid.tag].append(bid)
         users_w_bids.update(bid.signatures)
 
     bids_by_forum = defaultdict(list)
-    for bid in all_bids:
+    for bid in dataset.bids():
         bids_by_forum[bid.forum].append(bid)
 
     pos_and_neg_signatures_by_forum = {}
@@ -125,16 +121,17 @@ def setup(setup_path, config, dataset):
     labels_path = os.path.join(setup_path, 'labels.pkl')
     dump_pkl(labels_path, labels_by_forum)
 
-    # write keyphrases for submissions to pickle file
-    kps_by_submission = {file_id: kps for file_id, kps in keyphrases(
-        dataset.submission_records_path)}
+    kps_by_submission = defaultdict(list)
+    for file_id, text in dataset.submission_records():
+        kps_by_submission[file_id].extend(keyphrases(text))
 
     submission_kps_path = os.path.join(setup_path, 'submission_kps.pkl')
     dump_pkl(submission_kps_path, kps_by_submission),
 
     # write keyphrases for reviewer archives to pickle file
-    kps_by_reviewer = {file_id: kps for file_id, kps in keyphrases(
-        dataset.reviewer_archives_path)}
+    kps_by_reviewer = defaultdict(list)
+    for file_id, text in dataset.reviewer_archives():
+        kps_by_reviewer[file_id].extend(keyphrases(text))
 
     reviewer_kps_path = os.path.join(setup_path, 'reviewer_kps.pkl')
     dump_pkl(reviewer_kps_path, kps_by_reviewer)
@@ -148,7 +145,8 @@ def setup(setup_path, config, dataset):
     for kps in kps_by_reviewer.values():
         vocab.load_items(kps)
 
-    dump_pkl('vocab.pkl', vocab)
+    vocab_file_path = os.path.join(setup_path, 'vocab.pkl')
+    dump_pkl(vocab_file_path, vocab)
 
     train_set_ids, dev_set_ids, test_set_ids = get_train_dev_test_ids(labels_by_forum)
 
@@ -156,7 +154,12 @@ def setup(setup_path, config, dataset):
     dev_set = eval_data(dev_set_ids, labels_by_forum)
     test_set = eval_data(test_set_ids, labels_by_forum)
 
-    dump_csv(os.path.join(setup_path, 'train_set.tsv'), train_set)
+    train_set_file = os.path.join(setup_path, 'train_set.tsv')
+    train_samples_file = os.path.join(setup_path, 'train_samples.tsv')
+    dump_csv(train_set_file, train_set)
     dump_csv(os.path.join(setup_path, 'dev_set.tsv'), dev_set)
     dump_csv(os.path.join(setup_path, 'test_set.tsv'), test_set)
+
+    batcher = Batcher(config, vocab, input_file=train_set_file)
+    batcher.dump_csv(train_samples_file)
 

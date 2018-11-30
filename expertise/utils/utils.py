@@ -9,6 +9,14 @@ import json
 import nltk
 import re
 
+def jsonl_reader(jsonl_file):
+    '''
+    Utility function for lazily reading a .jsonl file.
+    '''
+    with open(jsonl_file) as f:
+        for line in f.readlines():
+            yield json.loads(line.replace('\n',''))
+
 def strip_nonalpha(text):
     '''
     lowercases words
@@ -175,7 +183,7 @@ def file_lines(filename):
             yield line.decode(codec)
 
 def row_wise_dot(tensor1, tensor2):
-    return torch.sum(tensor1 * tensor2, dim=1,keepdim=True)
+    return torch.sum(tensor1 * tensor2, dim=1, keepdim=True)
 
 def __filter_json(the_dict):
     res = {}

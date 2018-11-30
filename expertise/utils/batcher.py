@@ -14,7 +14,6 @@ limitations under the License.
 """
 
 import numpy as np
-import codecs #utf-8
 import time
 import csv
 import sys, os
@@ -24,38 +23,15 @@ import ast
 csv.field_size_limit(sys.maxsize)
 
 class Batcher(object):
-    def __init__(self, config, vocab, input_file, samples_file=None,
+    def __init__(self, config, vocab, input_file=None, samples_file=None,
                 num_batches=False, shuffle=True, triplet=True):
 
-        self.config = config
-        self.vocab = vocab
-
-        # input_file is the (potentially ordered) training set.
-        self.input_file = input_file
-
-        # data_dir is the location where the (potentially randomized) batch data
-        # should be written.
-
-        # samples_file is the file name of the (potentially randomized) batch data.
-        self.samples_file = samples_file
-
-        self.batch_size = config.batch_size
-        self.shuffle = shuffle
-
-        # self.return_one_epoch = return_one_epoch
-        self.start_index = 0
         self.triplet = triplet
-        self.source_lens = None
-        self.pos_lens = None
-        self.neg_lens = None
-        self.targ_lens = None
-
         if self.triplet:
-            print('triplet')
             self.load_data = self.load_data_triplet
             self.shuffle_data = self.shuffle_data_triplet
-            self.get_next_batch = self.get_next_batch_triplet
             self.write_data = self.write_data_triplet
+            self.get_next_batch = self.get_next_batch_triplet
 
         if not self.triplet:
             # deprecated.
@@ -64,22 +40,51 @@ class Batcher(object):
             # self.shuffle_data = self.shuffle_data_pairwise
             # self.get_next_batch = self.get_next_batch_pairwise
 
-        if not samples_file:
-            self.samples_file = os.path.join(os.path.dirname(self.input_file), 'train_samples.tsv')
-            print('loading data')
-            self.load_data()
-            print('writing data')
-            self.write_data()
-            self.num_examples = len(self.sources)
-            if self.shuffle:
-                print('shuffling data')
-                self.shuffle_data()
-        else:
-            line_count = 0
-            with open(samples_file) as f:
-                for line in f.readlines():
-                    line_count += 1
-            self.num_examples = line_count
+        self.config = config
+        self.vocab = vocab
+
+        # input_file is the (potentially ordered) training set.
+        self.input_file = input_file
+
+        if self.input_file:
+            print('attempting to load data')
+            self.load_data(self.input_file)
+
+        # data_dir is the location where the (potentially randomized) batch data
+        # should be written.
+
+        # samples_file is the file name of the (potentially randomized) batch data.
+        self.samples_file = samples_file
+        # if self.samples_file:
+        #     self.dump_csv(self.samples_file)
+
+        self.batch_size = config.batch_size
+        self.shuffle = shuffle
+
+        # self.return_one_epoch = return_one_epoch
+        # self.start_index = 0
+        # self.source_lens = None
+        # self.pos_lens = None
+        # self.neg_lens = None
+        # self.targ_lens = None
+
+
+
+
+    def dump_csv(self, samples_file, delimiter='\t', shuffle=True):
+        '''
+        Dumps (and shuffles) the data loaded in this batcher.
+        '''
+
+        self.samples_file = samples_file
+
+        if shuffle:
+            print('shuffling data')
+            self.shuffle_data()
+
+        print('writing data')
+        self.write_data()
+
 
     def reset(self):
         self.start_index = 0
@@ -157,39 +162,44 @@ class Batcher(object):
             self.source_lens,
             self.pos_lens,
             self.neg_lens]:
-
+            print('type(data)',type(data))
             data = data[perm]
 
-    def load_data_triplet(self, delimiter='\t'):
+    def load_data_triplet(self, input_file, delimiter='\t'):
+        if not self.input_file:
+            self.input_file = input_file
 
-        with open(self.input_file) as f:
+        with open(input_file) as f:
+            reader = csv.reader(f, delimiter=delimiter)
+
             sources = []
             sources_lengths = []
             positives = []
             pos_lengths = []
             negatives = []
             neg_lengths = []
-            ct = -1
-            for line in f:
-                ct += 1
-                line = line.strip()
-                split = line.split(delimiter) #source, pos, negative
-                if len(split) < 3:
-                    print('could not split into three', len(split), ct)
+
+            for ct, line in enumerate(reader):
+                if len(line) < 3:
+
+                    # TODO: log this error somewhere (don't print it!)
+                    pass
                 else:
-                    sources.append(np.asarray(self.vocab.to_ints(split[0])))
-                    sources_lengths.append([min(self.config.max_num_keyphrases,len(split[0])) ])
-                    positives.append(np.asarray(self.vocab.to_ints(split[1])))
-                    pos_lengths.append([min(self.config.max_num_keyphrases,len(split[1])) ])
-                    negatives.append(np.asarray(self.vocab.to_ints(split[2])))
-                    neg_lengths.append([min(self.config.max_num_keyphrases,len(split[2])) ])
+                    sources.append(np.asarray(self.vocab.to_ints(line[0])))
+                    sources_lengths.append([min(self.config.max_num_keyphrases,len(line[0])) ])
+                    positives.append(np.asarray(self.vocab.to_ints(line[1])))
+                    pos_lengths.append([min(self.config.max_num_keyphrases,len(line[1])) ])
+                    negatives.append(np.asarray(self.vocab.to_ints(line[2])))
+                    neg_lengths.append([min(self.config.max_num_keyphrases,len(line[2])) ])
             self.sources = np.asarray(sources)
             self.positives = np.asarray(positives)
             self.negatives = np.asarray(negatives)
             self.source_lens = np.asarray(sources_lengths, dtype=np.float32)
             self.pos_lens = np.asarray(pos_lengths, dtype=np.float32)
             self.neg_lens = np.asarray(neg_lengths, dtype=np.float32)
-            print("length of data", len(sources))
+
+            self.num_examples = len(self.sources)
+            print("length of data", self.num_examples)
 
     def get_next_batch_pairwise(self):
         """
