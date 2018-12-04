@@ -16,6 +16,8 @@ limitations under the License.
 import sys
 import numpy as np
 
+from .. import utils
+
 def eval_hits_at_k(list_of_list_of_labels,
                    list_of_list_of_scores,
                    k=10,
@@ -77,32 +79,34 @@ def load(filename):
     :param filename: Filename to load.
     :return: list_of_list_of_labels, list_of_list_of_scores
     """
-    result_labels = []
-    result_scores = []
-    current_block_name = ""
-    current_block_scores = []
-    current_block_labels = []
-    with open(filename,'r') as fin:
-        for line in fin:
-            splt = line.strip().split("\t")
-            block_name = splt[0]
-            block_example = splt[1]
-            example_label = int(splt[2])
-            example_score = float(splt[3])
-            if block_name != current_block_name and current_block_name != "":
-                result_labels.append(current_block_labels)
-                result_scores.append(current_block_scores)
-                current_block_labels = []
-                current_block_scores = []
-            current_block_labels.append(example_label)
-            current_block_scores.append(example_score)
-            current_block_name = block_name
-    result_labels.append(current_block_labels)
-    result_scores.append(current_block_scores)
-    return result_labels,result_scores
+    print('function deprecated')
+
+    # result_labels = []
+    # result_scores = []
+    # current_block_name = ""
+    # current_block_scores = []
+    # current_block_labels = []
+    # with open(filename,'r') as fin:
+    #     for line in fin:
+    #         splt = line.strip().split("\t")
+    #         block_name = splt[0]
+    #         block_example = splt[1]
+    #         example_label = int(splt[2])
+    #         example_score = float(splt[3])
+    #         if block_name != current_block_name and current_block_name != "":
+    #             result_labels.append(current_block_labels)
+    #             result_scores.append(current_block_scores)
+    #             current_block_labels = []
+    #             current_block_scores = []
+    #         current_block_labels.append(example_label)
+    #         current_block_scores.append(example_score)
+    #         current_block_name = block_name
+    # result_labels.append(current_block_labels)
+    # result_scores.append(current_block_scores)
+    # return result_labels,result_scores
 
 def eval_hits_at_k_file(filename,k=2,oracle=False):
-    list_of_list_of_labels,list_of_list_of_scores = load(filename)
+    list_of_list_of_labels,list_of_list_of_scores = utils.load_jsonl(filename)
     return eval_hits_at_k(list_of_list_of_labels,list_of_list_of_scores,k=k,oracle=oracle)
 
 

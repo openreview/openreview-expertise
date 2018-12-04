@@ -13,84 +13,78 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from collections import defaultdict
+
 import numpy as np
 import time
 import csv
 import sys, os
 import random
 import ast
+from . import utils
 
 csv.field_size_limit(sys.maxsize)
 
 class Batcher(object):
-    def __init__(self, config, vocab, input_file=None, samples_file=None,
-                num_batches=False, shuffle=True, triplet=True):
-
+    def __init__(self, input_file, triplet=False):
+        self.data = []
+        self.num_examples = 0
         self.triplet = triplet
-        if self.triplet:
-            self.load_data = self.load_data_triplet
-            self.shuffle_data = self.shuffle_data_triplet
-            self.write_data = self.write_data_triplet
-            self.get_next_batch = self.get_next_batch_triplet
-
-        if not self.triplet:
-            # deprecated.
-            pass
-            # self.load_data = self.load_data_pairwise
-            # self.shuffle_data = self.shuffle_data_pairwise
-            # self.get_next_batch = self.get_next_batch_pairwise
-
-        self.config = config
-        self.vocab = vocab
-
-        # input_file is the (potentially ordered) training set.
         self.input_file = input_file
 
-        if self.input_file:
-            print('attempting to load data')
-            self.load_data(self.input_file)
-
-        # data_dir is the location where the (potentially randomized) batch data
-        # should be written.
-
-        # samples_file is the file name of the (potentially randomized) batch data.
-        self.samples_file = samples_file
-        # if self.samples_file:
-        #     self.dump_csv(self.samples_file)
-
-        self.batch_size = config.batch_size
-        self.shuffle = shuffle
-
-        # self.return_one_epoch = return_one_epoch
-        # self.start_index = 0
-        # self.source_lens = None
-        # self.pos_lens = None
-        # self.neg_lens = None
-        # self.targ_lens = None
-
-
-
-
-    def dump_csv(self, samples_file, delimiter='\t', shuffle=True):
-        '''
-        Dumps (and shuffles) the data loaded in this batcher.
-        '''
-
-        self.samples_file = samples_file
-
-        if shuffle:
-            print('shuffling data')
-            self.shuffle_data()
-
-        print('writing data')
-        self.write_data()
-
+        self.load_data(self.input_file)
 
     def reset(self):
         self.start_index = 0
 
-    def get_next_batch_triplet(self, delimiter='\t'):
-        with open(self.samples_file) as f:
+    def shuffle_data(self):
+        # perm = np.random.permutation(self.num_examples)
+        print('shuffling {} lines via the following permutation'.format(self.num_examples))
+        # data_array = np.asarray(self.data)
+        # shuffled_data_array = data_array[perm]
+        # self.data = shuffled_data_array.tolist()
+        self.data = np.random.permutation(self.data).tolist()
+        return self.data
+
+    def load_data(self, input_file, delimiter='\t'):
+        print('loading data')
+        self.input_file = input_file
+
+        self.data = []
+
+        with open(input_file) as f:
+            if any(input_file.endswith(ext) for ext in ['.tsv','.csv']):
+                reader = csv.reader(f, delimiter=delimiter)
+
+                for line in reader:
+                    for column_index, item in enumerate(line):
+                        self.data[column_index].append(item)
+
+                    self.num_examples += 1
+
+            if input_file.endswith('.jsonl'):
+                for data_dict in utils.jsonl_reader(input_file):
+                    self.data.append(data_dict)
+
+        self.num_examples = len(self.data)
+
+    def batches(self, batch_size, delimiter='\t'):
+        batch = []
+        self.start_index = 0
+        for data in utils.jsonl_reader(self.input_file):
+            batch.append(data)
+            self.start_index += 1
+            if self.start_index % batch_size == 0 or self.start_index == self.num_examples:
+                yield batch
+
+                batch = []
+
+
+    # deprecated
+    def batches_triplet(self, batch_size, delimiter='\t'):
+        print('function deprecated')
+        """
+        with open(self.input_file) as f:
             reader = csv.reader(f, delimiter=delimiter)
 
             source_batch = []
@@ -114,7 +108,7 @@ class Batcher(object):
 
                 self.start_index += 1
 
-                if self.start_index % self.batch_size == 0 or self.start_index == self.num_examples:
+                if self.start_index % batch_size == 0 or self.start_index == self.num_examples:
                     batch = (
                         np.asarray(source_batch),
                         np.asarray(positives_batch),
@@ -133,10 +127,14 @@ class Batcher(object):
                     pos_lens_batch = []
                     neg_lens_batch = []
 
+        """
 
+    # function deprecated
     def write_data_triplet(self, delimiter='\t'):
-        print('writing data triplet to {}'.format(self.samples_file))
-        with open(self.samples_file, 'w') as f:
+        print('function deprecated')
+        '''
+        print('writing data triplet to {}'.format(self.input_file))
+        with open(self.input_file, 'w') as f:
 
             writer = csv.writer(f, delimiter=delimiter)
             for sample in zip(
@@ -148,8 +146,12 @@ class Batcher(object):
                 self.neg_lens.tolist()
             ):
                 writer.writerow(sample)
+        '''
 
+    # function deprecated
     def shuffle_data_triplet(self):
+        print('function deprecated')
+        '''
         """
         Shuffles maintaining the same order.
         """
@@ -162,10 +164,16 @@ class Batcher(object):
             self.source_lens,
             self.pos_lens,
             self.neg_lens]:
-            print('type(data)',type(data))
+
             data = data[perm]
+        '''
+
+    # function deprecated
 
     def load_data_triplet(self, input_file, delimiter='\t'):
+        print('function deprecated')
+
+        '''
         if not self.input_file:
             self.input_file = input_file
 
@@ -181,7 +189,6 @@ class Batcher(object):
 
             for ct, line in enumerate(reader):
                 if len(line) < 3:
-
                     # TODO: log this error somewhere (don't print it!)
                     pass
                 else:
@@ -191,6 +198,7 @@ class Batcher(object):
                     pos_lengths.append([min(self.config.max_num_keyphrases,len(line[1])) ])
                     negatives.append(np.asarray(self.vocab.to_ints(line[2])))
                     neg_lengths.append([min(self.config.max_num_keyphrases,len(line[2])) ])
+
             self.sources = np.asarray(sources)
             self.positives = np.asarray(positives)
             self.negatives = np.asarray(negatives)
@@ -200,6 +208,7 @@ class Batcher(object):
 
             self.num_examples = len(self.sources)
             print("length of data", self.num_examples)
+        '''
 
     def get_next_batch_pairwise(self):
         """

@@ -86,23 +86,28 @@ class Vocab(object):
 
         self.count_by_item.update(vocab_items)
 
-    def to_ints(self, string):
-        arr = []
-        for c in list(string.split(" ")):
-            arr.append(self.index_by_item.get(c,self.OOV_INDEX))
-        if len(arr) > self.max_num_keyphrases:
-            return np.asarray(arr[0:self.max_num_keyphrases])
-        while len(arr) < self.max_num_keyphrases:
-            arr += [0]
-        return np.asarray(arr)
+    def to_ints(self, kp_list, padding=True):
+        kp_indices = []
 
+        for kp in kp_list[:self.max_num_keyphrases]:
+            kp_indices.append(self.index_by_item.get(kp, self.OOV_INDEX))
+
+        if padding and self.max_num_keyphrases > len(kp_indices):
+            padding_length = self.max_num_keyphrases - len(kp_indices)
+            padding = [0] * padding_length
+            kp_indices.extend(padding)
+
+        return kp_indices
+
+    # deprecated
     def to_ints_no_pad(self,string):
-        arr = []
-        for c in list(string.split(" ")):
-            arr.append(self.index_by_item.get(c,self.OOV_INDEX))
-        if len(arr) > self.max_num_keyphrases:
-            return np.asarray(arr[0:self.max_num_keyphrases])
-        return np.asarray(arr)
+        print('function deprecated')
+        # arr = []
+        # for c in list(string.split(" ")):
+        #     arr.append(self.index_by_item.get(c,self.OOV_INDEX))
+        # if len(arr) > self.max_num_keyphrases:
+        #     return np.asarray(arr[0:self.max_num_keyphrases])
+        # return np.asarray(arr)
 
     def to_string(self,list_ints):
         stri = ""

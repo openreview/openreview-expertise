@@ -9,6 +9,18 @@ import json
 import nltk
 import re
 import pickle
+import csv
+from collections import defaultdict
+
+def dump_csv(filepath, data):
+    '''
+    Writes .csv files in a specific format preferred by some IESL students:
+    tab-delimited columns, with keyphrases separated by spaces.
+    '''
+    with open(filepath, 'w') as f:
+        writer = csv.writer(f, delimiter='\t')
+        for line in data:
+            writer.writerow(line)
 
 def dump_pkl(filepath, data):
     '''
@@ -17,6 +29,15 @@ def dump_pkl(filepath, data):
     with open(filepath, 'wb') as f:
         f.write(pickle.dumps(data))
 
+def dump_jsonl(filepath, data):
+    with open(filepath, 'w') as f:
+        for data_dict in data:
+            f.write(json.dumps(data_dict) + '\n')
+
+def dump_json(filepath, data_dict):
+    with open(filepath, 'w') as f:
+        json.dump(data_dict, f)
+
 def jsonl_reader(jsonl_file):
     '''
     Utility function for lazily reading a .jsonl file.
@@ -24,6 +45,38 @@ def jsonl_reader(jsonl_file):
     with open(jsonl_file) as f:
         for line in f.readlines():
             yield json.loads(line.replace('\n',''))
+
+def load_labels(filename):
+    '''
+    '''
+    labels_by_forum = defaultdict(dict)
+    scores_by_forum = defaultdict(dict)
+
+    for data in jsonl_reader(filename):
+        forum = data['source_id']
+        reviewer = data['target_id']
+        label = data['label']
+        score = data['score']
+        labels_by_forum[forum][reviewer] = int(label)
+        scores_by_forum[forum][reviewer] = float(score)
+
+
+    result_labels = []
+    result_scores = []
+
+    for forum, labels_by_reviewer in labels_by_forum.items():
+        scores_by_reviewer = scores_by_forum[forum]
+
+        reviewer_scores = list(scores_by_reviewer.items())
+        reviewer_labels = list(labels_by_reviewer.items())
+
+        sorted_labels = [label for _, label in sorted(reviewer_labels)]
+        sorted_scores = [score for _, score in sorted(reviewer_scores)]
+
+        result_labels.append(sorted_labels)
+        result_scores.append(sorted_scores)
+
+    return result_labels, result_scores
 
 def strip_nonalpha(text):
     '''

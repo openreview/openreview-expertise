@@ -6,7 +6,9 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss
 from torch.autograd import Variable
-from expertise.utils import row_wise_dot
+from expertise import utils
+
+from expertise.evaluators.mean_avg_precision import eval_map
 
 class Model(torch.nn.Module):
     def __init__(self, config, vocab):
@@ -41,6 +43,7 @@ class Model(torch.nn.Module):
         :param neg_len: lengths of negatives
         :return:
         """
+
         # B by dim
         source_embed = self.embed(query, query_len)
         # B by dim
@@ -48,12 +51,12 @@ class Model(torch.nn.Module):
         # B by dim
         neg_embed = self.embed(neg_result, neg_len)
         loss = self.loss(
-            row_wise_dot(source_embed , pos_embed )
-            - row_wise_dot(source_embed , neg_embed ),
+            utils.row_wise_dot(source_embed , pos_embed )
+            - utils.row_wise_dot(source_embed , neg_embed ),
             self.ones)
         return loss
 
-    def score_pair(self,source, target, source_len, target_len):
+    def score_pair(self, source, target, source_len, target_len):
         """
 
         :param source: Batchsize by Max_String_Length
@@ -62,7 +65,7 @@ class Model(torch.nn.Module):
         """
         source_embed = self.embed_dev(source, source_len)
         target_embed = self.embed_dev(target, target_len)
-        scores = row_wise_dot(source_embed, target_embed)
+        scores = utils.row_wise_dot(source_embed, target_embed)
         return scores
 
     def embed(self, keyword_lists, keyword_lengths):
@@ -120,12 +123,123 @@ class Model(torch.nn.Module):
             source_embed = self.embed_dev(batch_queries, batch_query_lengths)
             target_embed = self.embed_dev(batch_targets, batch_target_lengths)
         else:
-            source_embed = self.embed_dev(batch_queries, batch_query_lengths,batch_size=batch_size)
-            target_embed = self.embed_dev(batch_targets, batch_target_lengths,batch_size=batch_size)
+            source_embed = self.embed_dev(batch_queries, batch_query_lengths, batch_size=batch_size)
+            target_embed = self.embed_dev(batch_targets, batch_target_lengths, batch_size=batch_size)
 
-        scores = row_wise_dot(source_embed, target_embed)
+        scores = utils.row_wise_dot(source_embed, target_embed)
 
         # what is this?
         scores[scores != scores] = 0
 
         return scores
+
+
+def generate_predictions(config, model, batcher):
+    """
+    Use the model to make predictions on the data in the batcher
+
+    :param model: Model to use to score reviewer-paper pairs
+    :param batcher: Batcher containing data to evaluate (a DevTestBatcher)
+    :return:
+    """
+
+    for idx, batch in enumerate(batcher.batches(batch_size=config.dev_batch_size)):
+        if idx % 100 == 0:
+            print('Predicted {} batches'.format(idx))
+
+        batch_queries = []
+        batch_query_lengths = []
+        batch_query_ids = []
+        batch_targets = []
+        batch_target_lengths = []
+        batch_target_ids = []
+        batch_labels = []
+        batch_size = len(batch)
+
+        for data in batch:
+            # append a positive sample
+            batch_queries.append(data['source'])
+            batch_query_lengths.append(data['source_length'])
+            batch_query_ids.append(data['source_id'])
+            batch_targets.append(data['positive'])
+            batch_target_lengths.append(data['positive_length'])
+            batch_target_ids.append(data['positive_id'])
+            batch_labels.append(1)
+
+            # append a negative sample
+            batch_queries.append(data['source'])
+            batch_query_lengths.append(data['source_length'])
+            batch_query_ids.append(data['source_id'])
+            batch_targets.append(data['negative'])
+            batch_target_lengths.append(data['negative_length'])
+            batch_target_ids.append(data['negative_id'])
+            batch_labels.append(0)
+
+        scores = model.score_dev_test_batch(
+            np.asarray(batch_queries),
+            np.asarray(batch_query_lengths),
+            np.asarray(batch_targets),
+            np.asarray(batch_target_lengths),
+            np.asarray(batch_size)
+        )
+
+        if type(batch_labels) is not list:
+            batch_labels = batch_labels.tolist()
+
+        if type(scores) is not list:
+            scores = list(scores.cpu().data.numpy().squeeze())
+
+        for source, source_id, target, target_id, label, score in zip(
+            batch_queries,
+            batch_query_ids,
+            batch_targets,
+            batch_target_ids,
+            batch_labels,
+            scores
+            ):
+
+            prediction = {
+                'source': source,
+                'source_id': source_id,
+                'target': target,
+                'target_id': target_id,
+                'label': label,
+                'score': float(score)
+            }
+
+            yield prediction
+
+def load_jsonl(filename):
+
+    labels_by_forum = defaultdict(dict)
+    scores_by_forum = defaultdict(dict)
+
+    for data in utils.jsonl_reader(filename):
+        forum = data['source_id']
+        reviewer = data['target_id']
+        label = data['label']
+        score = data['score']
+        labels_by_forum[forum][reviewer] = label
+        scores_by_forum[forum][reviewer] = score
+
+
+    result_labels = []
+    result_scores = []
+
+    for forum, labels_by_reviewer in labels_by_forum.items():
+        scores_by_reviewer = scores_by_forum[forum]
+
+        reviewer_scores = list(scores_by_reviewer.items())
+        reviewer_labels = list(labels_by_reviewer.items())
+
+        sorted_labels = [label for _, label in sorted(reviewer_labels)]
+        sorted_scores = [score for _, score in sorted(reviewer_scores)]
+
+        result_labels.append(sorted_labels)
+        result_scores.append(sorted_scores)
+
+    return result_labels, result_scores
+
+def eval_map_file(filename):
+    list_of_list_of_labels, list_of_list_of_scores = utils.load_jsonl(filename)
+    return eval_map(list_of_list_of_labels, list_of_list_of_scores)

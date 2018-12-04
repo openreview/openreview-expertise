@@ -11,21 +11,24 @@ import os
 from expertise.utils.config import Config
 from expertise.utils.dataset import Dataset
 
-current_path = os.path.abspath(os.path.dirname(__file__))
-
 def train_model(config_path):
     config_path = os.path.abspath(config_path)
     experiment_path = os.path.dirname(config_path)
 
-    config = Config(filename=config_path)
+    config = Config(config_path)
 
     model = importlib.import_module(config.model)
 
     setup_path = os.path.join(experiment_path, 'setup')
+    assert os.path.isdir(setup_path), 'you must run expertise.setup_model first'
+
+    train_path = os.path.join(experiment_path, 'train')
+    if not os.path.isdir(train_path):
+        os.mkdir(train_path)
 
     dataset = Dataset(config.dataset)
 
-    model.train(config_path)
+    model.train(config)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
