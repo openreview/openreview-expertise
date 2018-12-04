@@ -4,6 +4,7 @@ import pickle
 
 import torch
 import torch.optim as optim
+import numpy as np
 
 from expertise.models import centroid
 
@@ -11,10 +12,6 @@ from expertise.utils import save_dict_to_json
 from expertise.utils.vocab import Vocab
 from expertise.utils.batcher import Batcher
 from expertise.utils.config import Config
-
-from expertise.evaluators.hits_at_k import eval_hits_at_k_file
-from expertise.evaluators.mean_avg_precision import eval_map_file
-import numpy as np
 
 current_path = os.path.abspath(os.path.dirname(__file__))
 
@@ -96,11 +93,11 @@ def train(config):
                 'dev_predictions/dev.predictions.{}.jsonl'.format(counter))
 
             print('prediction filename', prediction_filename)
-            map_score = float(eval_map_file(prediction_filename))
-            hits_at_1 = float(eval_hits_at_k_file(prediction_filename, 1))
-            hits_at_3 = float(eval_hits_at_k_file(prediction_filename, 3))
-            hits_at_5 = float(eval_hits_at_k_file(prediction_filename, 5))
-            hits_at_10 = float(eval_hits_at_k_file(prediction_filename, 10))
+            map_score = float(centroid.eval_map_file(prediction_filename))
+            hits_at_1 = float(centroid.eval_hits_at_k_file(prediction_filename, 1))
+            hits_at_3 = float(centroid.eval_hits_at_k_file(prediction_filename, 3))
+            hits_at_5 = float(centroid.eval_hits_at_k_file(prediction_filename, 5))
+            hits_at_10 = float(centroid.eval_hits_at_k_file(prediction_filename, 10))
 
             score_lines = [
                 [config.name, counter, text, data] for text, data in [

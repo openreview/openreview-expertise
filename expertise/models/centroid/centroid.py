@@ -9,6 +9,7 @@ from torch.autograd import Variable
 from expertise import utils
 
 from expertise.evaluators.mean_avg_precision import eval_map
+from expertise.evaluators.hits_at_k import eval_hits_at_k
 
 class Model(torch.nn.Module):
     def __init__(self, config, vocab):
@@ -241,5 +242,10 @@ def load_jsonl(filename):
     return result_labels, result_scores
 
 def eval_map_file(filename):
-    list_of_list_of_labels, list_of_list_of_scores = utils.load_jsonl(filename)
+    list_of_list_of_labels, list_of_list_of_scores = utils.load_labels(filename)
     return eval_map(list_of_list_of_labels, list_of_list_of_scores)
+
+def eval_hits_at_k_file(filename,k=2,oracle=False):
+    list_of_list_of_labels,list_of_list_of_scores = utils.load_labels(filename)
+    return eval_hits_at_k(list_of_list_of_labels,list_of_list_of_scores,k=k,oracle=oracle)
+

@@ -105,11 +105,6 @@ def load(filename):
     # result_scores.append(current_block_scores)
     # return result_labels,result_scores
 
-def eval_hits_at_k_file(filename,k=2,oracle=False):
-    list_of_list_of_labels,list_of_list_of_scores = utils.load_jsonl(filename)
-    return eval_hits_at_k(list_of_list_of_labels,list_of_list_of_scores,k=k,oracle=oracle)
-
-
 if __name__ == "__main__":
     """
         Usage: filename [k=1] [oracle=False]
