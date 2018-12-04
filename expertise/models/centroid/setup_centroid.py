@@ -7,7 +7,10 @@ import expertise
 from expertise import preprocessors
 from expertise.utils.vocab import Vocab
 from expertise.utils.batcher import Batcher
-from expertise.utils import dump_pkl
+from expertise.utils.dataset import Dataset
+import expertise.utils as utils
+
+import numpy as np
 
 import itertools
 import math
@@ -15,47 +18,58 @@ import random
 
 import importlib
 
-def get_train_dev_test_ids(labels_by_forum):
+def split_ids(ids):
     '''
     TODO: is "forums" an appropriate variable name? will it always be a forum ID?
     '''
     random.seed(a=3577057385653016827)
 
-    forums = sorted(labels_by_forum.keys())
+    forums = sorted(ids)
     random.shuffle(forums)
 
     idxs = (math.floor(0.6 * len(forums)), math.floor(0.7 * len(forums)))
 
     train_set_ids = forums[:idxs[0]]
-    train_set_ids = {f : sigs for f, sigs in labels_by_forum.items() if f in train_set_ids}
+    # train_set_ids = {f : sigs for f, sigs in ids.items() if f in train_set_ids}
     dev_set_ids = forums[idxs[0]:idxs[1]]
     test_set_ids = forums[idxs[1]:]
 
     return train_set_ids, dev_set_ids, test_set_ids
 
-def training_data(train_set_ids, labels_by_forum, reviewer_kps, submission_kps):
+def format_data(train_set_ids, bids_by_forum, reviewer_kps, submission_kps, max_num_keyphrases=None):
+    formatted_data = []
     for forum_id in train_set_ids:
         if forum_id in submission_kps:
-            print('forum_id', forum_id)
-            forum_kps = [kp for kp in submission_kps[forum_id]]
-            forum_pos_signatures = sorted(labels_by_forum[forum_id]['pos'])
-            forum_neg_signatures = sorted(labels_by_forum[forum_id]['neg'])
-            print('forum_pos_signatures',forum_pos_signatures)
-            print('forum_neg_signatures',forum_neg_signatures)
+
+            forum_kps = [kp for kp in submission_kps[forum_id]][:max_num_keyphrases]
+            forum_pos_signatures = sorted(bids_by_forum[forum_id]['positive'])
+            forum_neg_signatures = sorted(bids_by_forum[forum_id]['negative'])
+
             pos_neg_pairs = itertools.product(forum_pos_signatures, forum_neg_signatures)
             for pos, neg in pos_neg_pairs:
                 if pos in reviewer_kps and neg in reviewer_kps:
-                    yield (forum_kps, reviewer_kps[pos], reviewer_kps[neg])
+                    # yield (forum_kps, reviewer_kps[pos], reviewer_kps[neg])
+                    data = {
+                        'source': forum_kps[:max_num_keyphrases],
+                        'source_id': forum_id,
+                        'positive': reviewer_kps[pos][:max_num_keyphrases],
+                        'positive_id': pos,
+                        'negative': reviewer_kps[neg][:max_num_keyphrases],
+                        'negative_id': neg
+                    }
 
-def eval_data(eval_set_ids, labels_by_forum):
+                    formatted_data.append(data)
+    return formatted_data
+
+def format_labels(eval_set_ids, bids_by_forum):
     for forum_id in eval_set_ids:
-        for reviewer in labels_by_forum[forum_id]['pos']:
-            yield (forum_id, reviewer, 1)
+        for reviewer in bids_by_forum[forum_id]['positive']:
+            yield {'source_id': forum_id, 'target_id': reviewer, 'label': 1}
 
-        for reviewer in labels_by_forum[forum_id]['neg']:
-            yield (forum_id, reviewer, 0)
+        for reviewer in bids_by_forum[forum_id]['negative']:
+            yield {'source_id': forum_id, 'target_id': reviewer, 'label': 0}
 
-def build_labels(dataset):
+def get_bids_by_forum(dataset):
     binned_bids = {val: [] for val in dataset.bid_values}
 
     positive_labels = dataset.positive_bid_values
@@ -79,84 +93,124 @@ def build_labels(dataset):
         pos_bids = [bid for bid in forum_bids_flat if bid["bid"] in positive_labels]
         pos_signatures = [bid['signature'] for bid in pos_bids]
         pos_and_neg_signatures_by_forum[forum_id] = {}
-        pos_and_neg_signatures_by_forum[forum_id]['pos'] = pos_signatures
-        pos_and_neg_signatures_by_forum[forum_id]['neg'] = neg_signatures
+        pos_and_neg_signatures_by_forum[forum_id]['positive'] = pos_signatures
+        pos_and_neg_signatures_by_forum[forum_id]['negative'] = neg_signatures
 
 
     return pos_and_neg_signatures_by_forum
 
-def dump_csv(filepath, data):
+def data_to_sample(data, vocab, max_num_keyphrases=10):
     '''
-    Writes .csv files in a specific format preferred by some IESL students:
-    tab-delimited columns, with keyphrases separated by spaces.
-    '''
-    with open(filepath, 'w') as f:
-        writer = csv.writer(f, delimiter='\t')
-        for target, pos, neg in data:
-            row = []
-            for source in [target, pos, neg]:
-                if type(source) == list:
-                    row_source = ' '.join(source)
-                elif type(source) in [str, int]:
-                    row_source = source
-                else:
-                    raise TypeError('incompatible source type', type(source))
-                row.append(row_source)
+    Converts one line of the training data into a training sample.
 
-            writer.writerow(row)
+    Training samples consist of the following:
 
-def setup(setup_path, config, dataset):
+    source:
+        a numpy array containing integers. Each integer corresponds to
+        a token in the vocabulary. This array of tokens represents the
+        source text.
+    source_length:
+        a list containing one element, an integer, which is the number
+        of keyphrases in 'source'.
+    positive:
+        ...
+    positive_length:
+        Similar to "source_length", but applies to the "positive" list.
+    negative:
+        ...
+    negative_length:
+        Similar to "source_length", but applies to the "negative" list.
 
-    '''
-    Processes the dataset and any other information needed by this model.
     '''
 
+
+    source = vocab.to_ints(data['source'])
+    source_length = [min(max_num_keyphrases, len(source))]
+    positive = vocab.to_ints(data['positive'])
+    positive_length = [min(max_num_keyphrases, len(positive))]
+    negative = vocab.to_ints(data['negative'])
+    negative_length = [min(max_num_keyphrases, len(negative))]
+
+    sample = {
+        'source': source,
+        'source_length': source_length,
+        'source_id': data['source_id'],
+        'positive': positive,
+        'positive_length': positive_length,
+        'positive_id': data['positive_id'],
+        'negative': negative,
+        'negative_length': negative_length,
+        'negative_id': data['negative_id']
+    }
+
+    return sample
+
+def setup(config):
+
+    '''
+    First define the dataset, vocabulary, and keyphrase extractor
+    '''
+    dataset = Dataset(config.dataset)
+    vocab = Vocab(max_num_keyphrases = config.max_num_keyphrases)
     keyphrases = importlib.import_module(config.keyphrases).keyphrases
 
-    # write train/dev/test labels to pickle file
-    labels_by_forum = build_labels(dataset)
-    labels_path = os.path.join(setup_path, 'labels.pkl')
-    dump_pkl(labels_path, labels_by_forum)
+    bids_by_forum = get_bids_by_forum(dataset)
 
     kps_by_submission = defaultdict(list)
     for file_id, text in dataset.submission_records():
-        kps_by_submission[file_id].extend(keyphrases(text))
+        kp_list = keyphrases(text)
+        kps_by_submission[file_id].extend(kp_list)
+        vocab.load_items(kp_list)
 
-    submission_kps_path = os.path.join(setup_path, 'submission_kps.pkl')
-    dump_pkl(submission_kps_path, kps_by_submission),
-
-    # write keyphrases for reviewer archives to pickle file
     kps_by_reviewer = defaultdict(list)
     for file_id, text in dataset.reviewer_archives():
-        kps_by_reviewer[file_id].extend(keyphrases(text))
+        kp_list = keyphrases(text)
+        kps_by_reviewer[file_id].extend(kp_list)
+        vocab.load_items(kp_list)
 
-    reviewer_kps_path = os.path.join(setup_path, 'reviewer_kps.pkl')
-    dump_pkl(reviewer_kps_path, kps_by_reviewer)
+    config.setup_save(vocab, 'vocab.pkl')
 
-    # define vocab and update it with keyphrases, then write to pickle file
-    vocab = Vocab(max_num_keyphrases = config.max_num_keyphrases)
+    train_set_ids, dev_set_ids, test_set_ids = split_ids(list(bids_by_forum.keys()))
 
-    for kps in kps_by_submission.values():
-        vocab.load_items(kps)
+    train_set = format_data(
+        train_set_ids,
+        bids_by_forum,
+        kps_by_reviewer,
+        kps_by_submission)
 
-    for kps in kps_by_reviewer.values():
-        vocab.load_items(kps)
+    dev_set = format_data(
+        dev_set_ids,
+        bids_by_forum,
+        kps_by_reviewer,
+        kps_by_submission,
+        max_num_keyphrases=10)
 
-    vocab_file_path = os.path.join(setup_path, 'vocab.pkl')
-    dump_pkl(vocab_file_path, vocab)
+    test_set = format_data(
+        test_set_ids,
+        bids_by_forum,
+        kps_by_reviewer,
+        kps_by_submission,
+        max_num_keyphrases=10)
 
-    train_set_ids, dev_set_ids, test_set_ids = get_train_dev_test_ids(labels_by_forum)
+    dev_labels = format_labels(dev_set_ids, bids_by_forum)
+    dev_labels_file = config.setup_save(dev_labels, 'dev_labels.jsonl')
 
-    train_set = training_data(train_set_ids, labels_by_forum, kps_by_reviewer, kps_by_submission)
-    dev_set = eval_data(dev_set_ids, labels_by_forum)
-    test_set = eval_data(test_set_ids, labels_by_forum)
+    test_labels = format_labels(test_set_ids, bids_by_forum)
+    test_labels_file = config.setup_save(test_labels, 'test_labels.jsonl')
 
-    train_set_file = os.path.join(setup_path, 'train_set.tsv')
-    train_samples_file = os.path.join(setup_path, 'train_samples.tsv')
-    dump_csv(train_set_file, train_set)
-    dump_csv(os.path.join(setup_path, 'dev_set.tsv'), dev_set)
-    dump_csv(os.path.join(setup_path, 'test_set.tsv'), test_set)
+    train_set_file = config.setup_save(train_set, 'train_set.jsonl')
+    dev_set_file = config.setup_save(dev_set, 'dev_set.jsonl')
+    test_set_file = config.setup_save(test_set, 'test_set.jsonl')
 
-    batcher = Batcher(config, vocab, input_file=train_set_file)
-    batcher.dump_csv(train_samples_file)
+    train_set_permuted = np.random.permutation(list(utils.jsonl_reader(train_set_file)))
+    train_samples = (data_to_sample(data, vocab) for data in train_set_permuted)
+    config.setup_save(train_samples, 'train_samples_permuted.jsonl')
+
+    # dev_set_permuted = np.random.permutation(list(utils.jsonl_reader(dev_set_file)))
+    dev_samples = (data_to_sample(data, vocab) for data in dev_set)
+    config.setup_save(dev_samples, 'dev_samples.jsonl')
+
+    # test_set_permuted = np.random.permutation(list(utils.jsonl_reader(test_set_file)))
+    test_samples = (data_to_sample(data, vocab) for data in test_set)
+    config.setup_save(test_samples, 'test_samples.jsonl')
 

@@ -6,6 +6,11 @@ import openreview
 from . import utils
 
 class Dataset(object):
+    '''
+    A class representing an OpenReview paper-reviewer affinity dataset.
+
+    '''
+
     def __init__(self, directory):
 
         assert os.path.isdir(directory), 'Directory does not exist.'

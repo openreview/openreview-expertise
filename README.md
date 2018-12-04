@@ -12,7 +12,6 @@ The experimenter starts by creating an experiment directory (e.g. `/exp_1`), and
 1) `name`: a string that identifies the experiment (avoid using spaces in this field).
 2) `dataset`: a string representing the directory where the dataset is located.
 3) `model`: a string that specifies the model module to be trained (from `expertise.models`).
-4) `keyphrases` a string that specifices the keyphrases module to be used (from `expertise.preprocessors`).
 
 (See `/samples/sample_experiment/config.json` for an example)
 

@@ -9,13 +9,12 @@ import importlib
 import os
 
 from expertise.utils.config import Config
-from expertise.utils.dataset import Dataset
 
 def setup_model(config_path):
     config_path = os.path.abspath(config_path)
     experiment_path = os.path.dirname(config_path)
 
-    config = Config(filename=config_path)
+    config = Config(config_path)
 
     model = importlib.import_module(config.model)
 
@@ -23,9 +22,7 @@ def setup_model(config_path):
     if not os.path.isdir(setup_path):
         os.mkdir(setup_path)
 
-    dataset = Dataset(config.dataset)
-
-    model.setup(setup_path, config, dataset)
+    model.setup(config)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
