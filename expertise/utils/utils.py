@@ -11,6 +11,7 @@ import re
 import pickle
 import csv
 from collections import defaultdict
+import math, random
 
 def dump_csv(filepath, data):
     '''
@@ -46,6 +47,33 @@ def jsonl_reader(jsonl_file):
         for line in f.readlines():
             yield json.loads(line.replace('\n',''))
 
+def holdouts(full_list):
+    '''
+    Given a list of items, returns a list of tuples.
+
+    Each tuple contains two items:
+        the "holdout": one of the items in the full list
+        the "remainder": the rest of the items in the full list
+
+    This function returns a list of these tuples. This list should
+        have the same length as the input.
+
+    >>> full_list = ['a','b','c']
+    >>> holdouts(full_list)
+    [
+        ('a', ['b', 'c']),
+        ('b', ['a', 'c']),
+        ('c', ['a', 'b'])
+    ]
+
+    '''
+    holdouts_list = []
+    for index, item in enumerate(full_list):
+        holdout = item
+        remainder = full_list[:index] + full_list[index+1:]
+        holdouts_list.append((holdout, remainder))
+    return holdouts_list
+
 def load_labels(filename):
     '''
     '''
@@ -77,6 +105,82 @@ def load_labels(filename):
         result_scores.append(sorted_scores)
 
     return result_labels, result_scores
+
+def get_bids_by_forum(dataset):
+    binned_bids = {val: [] for val in dataset.bid_values}
+
+    positive_labels = dataset.positive_bid_values
+
+    users_w_bids = set()
+    for bid in dataset.bids():
+        binned_bids[bid.tag].append(bid)
+        users_w_bids.update(bid.signatures)
+
+    bids_by_forum = defaultdict(list)
+    for bid in dataset.bids():
+        bids_by_forum[bid.forum].append(bid)
+
+    pos_and_neg_signatures_by_forum = {}
+
+    # Get pos bids for forum
+    for forum_id, forum_bids in bids_by_forum.items():
+        forum_bids_flat = [{"signature": bid.signatures[0], "bid": bid.tag} for bid in forum_bids]
+        neg_bids = [bid for bid in forum_bids_flat if bid["bid"] not in positive_labels]
+        neg_signatures = [bid['signature'] for bid in neg_bids]
+        pos_bids = [bid for bid in forum_bids_flat if bid["bid"] in positive_labels]
+        pos_signatures = [bid['signature'] for bid in pos_bids]
+        pos_and_neg_signatures_by_forum[forum_id] = {}
+        pos_and_neg_signatures_by_forum[forum_id]['positive'] = pos_signatures
+        pos_and_neg_signatures_by_forum[forum_id]['negative'] = neg_signatures
+
+    return pos_and_neg_signatures_by_forum
+
+def format_bid_labels(eval_set_ids, bids_by_forum):
+    for forum_id in eval_set_ids:
+        for reviewer in bids_by_forum[forum_id]['positive']:
+            yield {'source_id': forum_id, 'target_id': reviewer, 'label': 1}
+
+        for reviewer in bids_by_forum[forum_id]['negative']:
+            yield {'source_id': forum_id, 'target_id': reviewer, 'label': 0}
+
+def split_ids(ids):
+    random.seed(a=3577057385653016827)
+
+    forums = sorted(ids)
+    random.shuffle(forums)
+
+    idxs = (math.floor(0.6 * len(forums)), math.floor(0.7 * len(forums)))
+
+    train_set_ids = forums[:idxs[0]]
+    dev_set_ids = forums[idxs[0]:idxs[1]]
+    test_set_ids = forums[idxs[1]:]
+
+    return train_set_ids, dev_set_ids, test_set_ids
+
+def format_bid_data(train_set_ids, bids_by_forum, reviewer_kps, submission_kps, max_num_keyphrases=None):
+    formatted_data = []
+    for forum_id in train_set_ids:
+        if forum_id in submission_kps:
+
+            forum_kps = [kp for kp in submission_kps[forum_id]][:max_num_keyphrases]
+            forum_pos_signatures = sorted(bids_by_forum[forum_id]['positive'])
+            forum_neg_signatures = sorted(bids_by_forum[forum_id]['negative'])
+
+            pos_neg_pairs = itertools.product(forum_pos_signatures, forum_neg_signatures)
+            for pos, neg in pos_neg_pairs:
+                if pos in reviewer_kps and neg in reviewer_kps:
+                    data = {
+                        'source': forum_kps[:max_num_keyphrases],
+                        'source_id': forum_id,
+                        'positive': reviewer_kps[pos][:max_num_keyphrases],
+                        'positive_id': pos,
+                        'negative': reviewer_kps[neg][:max_num_keyphrases],
+                        'negative_id': neg
+                    }
+
+                    formatted_data.append(data)
+    return formatted_data
+
 
 def strip_nonalpha(text):
     '''

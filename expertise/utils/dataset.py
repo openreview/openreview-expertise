@@ -61,7 +61,7 @@ class Dataset(object):
                 record_text_unfiltered = utils.content_to_text(content, fields=['title', 'abstract', 'fulltext'])
                 record_text_filtered = utils.strip_nonalpha(record_text_unfiltered)
 
-            yield file_id, record_text_unfiltered
+                yield file_id, record_text_unfiltered
 
     def submission_records(self):
         for submission_id, submission_text in self._read_json_records(self.submission_records_path):
