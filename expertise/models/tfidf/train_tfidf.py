@@ -6,18 +6,12 @@ from expertise.utils import dump_pkl
 from datetime import datetime
 import pickle
 
-def train(config_path):
-    config_path = os.path.abspath(config_path)
-    experiment_path = os.path.dirname(config_path)
+def train(config):
+    experiment_dir = os.path.abspath(config.experiment_dir)
+    setup_dir = os.path.join(experiment_dir, 'setup')
 
-    config = Config(filename=config_path)
-    setup_path = os.path.join(experiment_path, 'setup')
-
-    assert os.path.isdir(setup_path), 'setup directory must exist'
-
-    submission_kps_file = os.path.join(setup_path, 'submission_kps.pkl')
-    reviewer_kps_file = os.path.join(setup_path, 'reviewer_kps.pkl')
-
+    submission_kps_file = os.path.join(setup_dir, 'submission_kps.pkl')
+    reviewer_kps_file = os.path.join(setup_dir, 'reviewer_kps.pkl')
 
     print('fitting model')
     start_training_datetime = datetime.now()
@@ -32,14 +26,13 @@ def train(config_path):
     	reviewer_kps = (kp_list for kp_list in kps_by_reviewer_id.values())
 
     all_content = itertools.chain(submission_kps, reviewer_kps)
-
     model.fit(all_content)
     print('finished training in {}'.format(datetime.now() - start_training_datetime))
 
-    train_path = os.path.join(experiment_path, 'train')
-    if not os.path.isdir(train_path):
-        os.mkdir(train_path)
+    train_dir = os.path.join(experiment_dir, 'train')
+    if not os.path.isdir(train_dir):
+        os.mkdir(train_dir)
 
-    model_out_path = os.path.join(train_path, 'model.pkl')
+    model_out_path = os.path.join(train_dir, 'model.pkl')
 
     dump_pkl(model_out_path, model)

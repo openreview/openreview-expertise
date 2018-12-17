@@ -9,6 +9,8 @@ from collections import Counter
 from gensim.models.tfidfmodel import TfidfModel
 from gensim import corpora
 
+from expertise.preprocessors import pos_regex
+
 
 class Model():
     def __init__(self):
@@ -22,6 +24,8 @@ class Model():
 
         # a dictionary keyed on forum IDs, containing a BOW representation of the paper (P)
         #self.bow_by_paperid = defaultdict(Counter)
+
+        self.preprocess_content = pos_regex.extract_candidate_words
 
     def fit(self, keyphrases):
         """
