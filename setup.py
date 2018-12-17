@@ -16,7 +16,8 @@ setup(
         'numpy',
         'pandas',
         'nltk',
-        'gensim'
+        'gensim',
+        'torch'
     ],
     zip_safe=False
 )
