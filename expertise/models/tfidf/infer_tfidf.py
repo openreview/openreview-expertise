@@ -18,7 +18,7 @@ def get_best_score_pool(payload):
 
     return (paper_id, reviewer_id, best_score)
 
-def infer(config, num_processes=4):
+def infer(config):
     experiment_dir = os.path.abspath(config.experiment_dir)
 
     infer_dir = os.path.join(experiment_dir, 'infer')
@@ -78,7 +78,7 @@ def infer(config, num_processes=4):
     print('starting pool on {} pairs at {}'.format(len(multiprocessing_payloads), start_worker_pool))
     # start 4 worker processes
     with open(score_file_path, file_mode) as f:
-        pool = mp.Pool(processes=int(num_processes))
+        pool = mp.Pool(processes=int(config.num_processes))
         for result in pool.imap(get_best_score_pool, multiprocessing_payloads):
             f.write(','.join([str(r) for r in result]) + '\n')
 
