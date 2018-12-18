@@ -199,10 +199,11 @@ def generate_predictions(config, model, batcher):
             scores
             ):
 
+            # temporarily commenting out "source" and "target" because I think they are not needed.
             prediction = {
-                'source': source,
+                # 'source': source,
                 'source_id': source_id,
-                'target': target,
+                # 'target': target,
                 'target_id': target_id,
                 'label': label,
                 'score': float(score)
@@ -245,7 +246,7 @@ def eval_map_file(filename):
     list_of_list_of_labels, list_of_list_of_scores = utils.load_labels(filename)
     return eval_map(list_of_list_of_labels, list_of_list_of_scores)
 
-def eval_hits_at_k_file(filename,k=2,oracle=False):
+def eval_hits_at_k_file(filename, k=2, oracle=False):
     list_of_list_of_labels,list_of_list_of_scores = utils.load_labels(filename)
-    return eval_hits_at_k(list_of_list_of_labels,list_of_list_of_scores,k=k,oracle=oracle)
+    return eval_hits_at_k(list_of_list_of_labels, list_of_list_of_scores, k=k,oracle=oracle)
 
