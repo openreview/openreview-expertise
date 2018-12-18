@@ -22,7 +22,12 @@ class Dataset(object):
             'High',
             'Neutral',
             'Low',
-            'Very Low'
+            'Very Low',
+            'No Bid'
+        ],
+        positive_bid_values=[
+            'Very High',
+            'High'
         ]):
 
         assert directory and os.path.isdir(directory), 'Directory <{}> does not exist.'.format(directory)
@@ -49,7 +54,7 @@ class Dataset(object):
         # across different kinds of datasets.
         self.bid_values = bid_values
 
-        self.positive_bid_values = ["I want to review", "I can review"]
+        self.positive_bid_values = positive_bid_values
 
     def bids(self):
         for json_line in utils.jsonl_reader(self.reviewer_bids_file):

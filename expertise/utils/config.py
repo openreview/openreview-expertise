@@ -13,6 +13,7 @@ class Config(object):
         self.setup_dir = os.path.join(self.experiment_dir, 'setup')
         self.train_dir = os.path.join(self.experiment_dir, 'train')
         self.test_dir = os.path.join(self.experiment_dir, 'test')
+        self.infer_dir = os.path.join(self.experiment_dir, 'infer')
 
         # self.learning_rate = 0.0001
         # self.l2penalty = 10.0
@@ -104,7 +105,7 @@ class Config(object):
         dump_file(filepath, data)
         self.path_by_filename[filename] = filepath
 
-        self.save_config()
+        # self.save_config()
 
         return self.path_by_filename[filename]
 
@@ -117,5 +118,11 @@ class Config(object):
     def test_save(self, data, filename, delimiter='\t'):
         return self.__save(self.test_dir, data, filename, delimiter)
 
+    def infer_save(self, data, filename, delimiter='\t'):
+        return self.__save(self.infer_dir, data, filename, delimiter)
+
     def setup_path(self, filename):
         return os.path.join(self.setup_dir, filename)
+
+    def test_path(self, filename):
+        return os.path.join(self.test_dir, filename)
