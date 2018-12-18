@@ -80,6 +80,7 @@ class Model(torch.nn.Module):
         Keep this here for now.
         '''
         if False:
+            pass
         # if self.cached_ft:
         #     print('Using fasttext pretrained embeddings')
         #     D = self.cached_ft.get_dimension()
@@ -95,7 +96,6 @@ class Model(torch.nn.Module):
         #         summed_emb[idx, :] = np.sum(embeddings, axis=0)
         #     averaged = summed_emb / keyword_lengths
         #     return torch.from_numpy(averaged)
-
         else:
             kw_indices = torch.from_numpy(keyword_lists).long()
             kw_lengths = torch.from_numpy(keyword_lengths)
