@@ -1,6 +1,6 @@
 import numpy as np
 
-import fastText as ft
+# import fastText as ft
 
 import torch
 import torch.nn as nn
@@ -18,10 +18,10 @@ class Model(torch.nn.Module):
         self.config = config
         self.vocab = vocab
 
-        if self.config.fasttext:
-            self.cached_ft = ft.load_model(self.config.fasttext)
-        else:
-            self.cached_ft = None
+        # if self.config.fasttext:
+        #     self.cached_ft = ft.load_model(self.config.fasttext)
+        # else:
+        #     self.cached_ft = None
 
         # Keyword embeddings
         self.embedding = nn.Embedding(len(vocab)+1, config.embedding_dim, padding_idx=0)
