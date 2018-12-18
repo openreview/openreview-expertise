@@ -1,5 +1,5 @@
 import os
-import csv
+import csv, json
 from collections import defaultdict
 from expertise import utils
 from expertise.utils.config import Config
@@ -16,7 +16,12 @@ def get_best_score_pool(payload):
         if score > best_score:
             best_score = score
 
-    return (paper_id, reviewer_id, best_score)
+    result = {
+        'source_id': paper_id,
+        'target_id': reviewer_id,
+        'score': best_score
+    }
+    return result
 
 def infer(config):
     experiment_dir = os.path.abspath(config.experiment_dir)
@@ -80,6 +85,6 @@ def infer(config):
     with open(score_file_path, file_mode) as f:
         pool = mp.Pool(processes=int(config.num_processes))
         for result in pool.imap(get_best_score_pool, multiprocessing_payloads):
-            f.write(','.join([str(r) for r in result]) + '\n')
+            f.write(json.dumps(result) + '\n')
 
     print('finished job in {}'.format(datetime.now() - start_worker_pool))
