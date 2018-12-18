@@ -76,21 +76,25 @@ class Model(torch.nn.Module):
         :return: batch_size by embedding dim
         """
 
-        if self.cached_ft:
-            print('Using fasttext pretrained embeddings')
-            D = self.cached_ft.get_dimension()
-            # Get the phrases
-            summed_emb = np.zeros((keyword_lists.shape[0], D))
-            for idx, author_kps in enumerate(keyword_lists):
-                embeddings = np.zeros((len(author_kps), D))
-                for phr_idx, phrase in enumerate(author_kps):
-                    if phrase:
-                        embeddings[phr_idx, :] = self.cached_ft.get_word_vector(self.vocab.id2item[phrase])
-                    else:
-                        embeddings[phr_idx, :] = np.zeros((D,))
-                summed_emb[idx, :] = np.sum(embeddings, axis=0)
-            averaged = summed_emb / keyword_lengths
-            return torch.from_numpy(averaged)
+        '''
+        Keep this here for now.
+        '''
+        if False:
+        # if self.cached_ft:
+        #     print('Using fasttext pretrained embeddings')
+        #     D = self.cached_ft.get_dimension()
+        #     # Get the phrases
+        #     summed_emb = np.zeros((keyword_lists.shape[0], D))
+        #     for idx, author_kps in enumerate(keyword_lists):
+        #         embeddings = np.zeros((len(author_kps), D))
+        #         for phr_idx, phrase in enumerate(author_kps):
+        #             if phrase:
+        #                 embeddings[phr_idx, :] = self.cached_ft.get_word_vector(self.vocab.id2item[phrase])
+        #             else:
+        #                 embeddings[phr_idx, :] = np.zeros((D,))
+        #         summed_emb[idx, :] = np.sum(embeddings, axis=0)
+        #     averaged = summed_emb / keyword_lengths
+        #     return torch.from_numpy(averaged)
 
         else:
             kw_indices = torch.from_numpy(keyword_lists).long()
