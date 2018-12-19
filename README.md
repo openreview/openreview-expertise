@@ -57,7 +57,7 @@ example:
 ```
 
 ### Configuration
-Models are driven by a configuration JSON file, usually located in a directory containing the model's outputs. Configurations are expected to have the following properties:
+Models are driven by a configuration JSON file, usually located in an "experiment directory". Configurations are expected to have the following properties:
 
 1) `name`: a string that identifies the experiment (avoid using spaces in this field).
 2) `experiment_dir`: a string that identifies the experiment's location
