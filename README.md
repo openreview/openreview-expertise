@@ -24,38 +24,34 @@ There are four stages of the workflow:
 
 `(1) Setup --> (2) Train --> (3) Infer --> (4) Test`
 
-Each model (in `expertise.models`) is expected to implement functions for each of these stages. Models will usually output intermediate files after each stage for use in the next stage(s).
+Each model in `expertise.models` is expected to implement functions for each of these stages. Models will usually output intermediate files after each stage for use in the next stage(s).
 
-The framework doesn't enforce any of the suggested stages; they're provided for organizational guidance only. Models (in `expertise.models`) are responsible for managing their own inputs and outputs at each stage, and the behavior at each stage is model-specific. The following guidelines are provided to maintain general organization:
+The framework doesn't enforce any of the suggested stages; they're provided for organizational guidance only. The behavior at each stage is model-specific, and models are responsible for managing their own inputs and outputs at each stage. The following guidelines are provided to maintain general organization:
 
 **Setup**:
-```
 Performs any necessary preprocessing on the dataset.
-
+```
 example:
-	python -m expertise.setup_model config.json
+python -m expertise.setup_model config.json
 ```
 
 **Train**:
-```
 Trains the model, if applicable.
-
+```
 example:
-	python -m expertise.train_model config.json
+python -m expertise.train_model config.json
 ```
 
 **Infer**:
-```
 Produces scores for every paper-reviewer pair in the dataset. The output of this stage can be used by the OpenReview Matching System.
-
+```
 example:
-	python -m expertise.infer_model config.json
+python -m expertise.infer_model config.json
 ```
 
 **Test**:
-```
 Evaluates the performance of the model. Can be performed either on the inferred scores on the entire dataset or on a selected testing subset.
-
+```
 example:
 	python -m expertise.test_model config.json
 ```
