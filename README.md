@@ -10,6 +10,12 @@ Clone this repository and install the package using pip as follows:
 pip install <location of this repository>
 ```
 
+If you plan to actively develop models, it's best to install the package in "edit" mode, so that you don't need to reinstall the package every time you make changes:
+
+```
+pip install -e <location of this repository>
+```
+
 The framework requires a valid OpenReview Dataset (see Dataset section below). Contact Michael for access to datasets.
 
 ### Workflow
