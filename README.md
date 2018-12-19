@@ -53,7 +53,7 @@ python -m expertise.infer_model config.json
 Evaluates the performance of the model. Can be performed either on the inferred scores on the entire dataset or on a selected testing subset.
 ```
 example:
-	python -m expertise.test_model config.json
+python -m expertise.test_model config.json
 ```
 
 ## Configuration
