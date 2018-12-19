@@ -28,28 +28,28 @@ Each model in `expertise.models` is expected to implement functions for each of 
 
 The framework doesn't enforce any of the suggested stages; they're provided for organizational guidance only. The behavior at each stage is model-specific, and models are responsible for managing their own inputs and outputs at each stage. The following guidelines are provided to maintain general organization:
 
-**Setup**:
+### Setup
 Performs any necessary preprocessing on the dataset.
 ```
 example:
 python -m expertise.setup_model config.json
 ```
 
-**Train**:
+### Train
 Trains the model, if applicable.
 ```
 example:
 python -m expertise.train_model config.json
 ```
 
-**Infer**:
+### Infer
 Produces scores for every paper-reviewer pair in the dataset. The output of this stage can be used by the OpenReview Matching System.
 ```
 example:
 python -m expertise.infer_model config.json
 ```
 
-**Test**:
+### Test
 Evaluates the performance of the model. Can be performed either on the inferred scores on the entire dataset or on a selected testing subset.
 ```
 example:
