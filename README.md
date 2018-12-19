@@ -2,7 +2,7 @@
 
 A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
 
-### Installation & Getting Started
+## Installation & Getting Started
 
 Clone this repository and install the package using pip as follows:
 
@@ -18,7 +18,7 @@ pip install -e <location of this repository>
 
 The framework requires a valid OpenReview Dataset (see Dataset section below). Contact Michael for access to datasets.
 
-### Workflow
+## Workflow
 
 There are four stages of the workflow:
 
@@ -56,7 +56,7 @@ example:
 	python -m expertise.test_model config.json
 ```
 
-### Configuration
+## Configuration
 Models are driven by a configuration JSON file, usually located in an "experiment directory". Configurations are expected to have the following properties:
 
 1) `name`: a string that identifies the experiment (avoid using spaces in this field).
@@ -84,7 +84,7 @@ All other attributes in the config file are specific to the type of model and ex
 
 All of the workflow stages expect this configuration file as input.
 
-### Datasets
+## Datasets
 
 The framework expects datasets to adhere to a specific format. Each dataset directory should be structured as follows:
 
@@ -110,7 +110,7 @@ Submissions are one-line .jsonl files containing the paper's content field. Arch
 
 Some datasets differ slightly in terms of the format of the data; these should be accounted for in the experiment's configuration.
 
-For example: some older conferences use a bidding format that differs from the default "Very High" to "Very Low" scale. This can be parameterized in the `config.json` file (e.g.) as follows:
+**For example**: some older conferences use a bidding format that differs from the default "Very High" to "Very Low" scale. This can be parameterized in the `config.json` file (e.g.) as follows:
 
 ```
 {
