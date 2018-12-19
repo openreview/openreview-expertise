@@ -20,9 +20,10 @@ import numpy as np
 from .. import utils
 
 def eval_map(list_of_list_of_labels, list_of_list_of_scores, randomize=True):
-    """Compute Mean Average Precision
+    '''
+    Compute Mean Average Precision
 
-    Given a two lists with one element per test example compute the
+    Given two lists with one element per test example, compute the
     mean average precision score.
 
     The i^th element of each list is an array of scores or labels corresponding
@@ -31,7 +32,7 @@ def eval_map(list_of_list_of_labels, list_of_list_of_scores, randomize=True):
     :param list_of_list_of_labels: Binary relevance labels. One list per example.
     :param list_of_list_of_scores: Predicted relevance scores. One list per example.
     :return: the mean average precision
-    """
+    '''
 
     assert len(list_of_list_of_labels) == len(list_of_list_of_scores)
     avg_precision_scores = []

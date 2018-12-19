@@ -1,6 +1,6 @@
 import numpy as np
 
-import fastText as ft
+# import fastText as ft
 
 import torch
 import torch.nn as nn
@@ -18,10 +18,10 @@ class Model(torch.nn.Module):
         self.config = config
         self.vocab = vocab
 
-        if self.config.fasttext:
-            self.cached_ft = ft.load_model(self.config.fasttext)
-        else:
-            self.cached_ft = None
+        # if self.config.fasttext:
+        #     self.cached_ft = ft.load_model(self.config.fasttext)
+        # else:
+        #     self.cached_ft = None
 
         # Keyword embeddings
         self.embedding = nn.Embedding(len(vocab)+1, config.embedding_dim, padding_idx=0)
@@ -76,22 +76,26 @@ class Model(torch.nn.Module):
         :return: batch_size by embedding dim
         """
 
-        if self.cached_ft:
-            print('Using fasttext pretrained embeddings')
-            D = self.cached_ft.get_dimension()
-            # Get the phrases
-            summed_emb = np.zeros((keyword_lists.shape[0], D))
-            for idx, author_kps in enumerate(keyword_lists):
-                embeddings = np.zeros((len(author_kps), D))
-                for phr_idx, phrase in enumerate(author_kps):
-                    if phrase:
-                        embeddings[phr_idx, :] = self.cached_ft.get_word_vector(self.vocab.id2item[phrase])
-                    else:
-                        embeddings[phr_idx, :] = np.zeros((D,))
-                summed_emb[idx, :] = np.sum(embeddings, axis=0)
-            averaged = summed_emb / keyword_lengths
-            return torch.from_numpy(averaged)
-
+        '''
+        Keep this here for now.
+        '''
+        if False:
+            pass
+        # if self.cached_ft:
+        #     print('Using fasttext pretrained embeddings')
+        #     D = self.cached_ft.get_dimension()
+        #     # Get the phrases
+        #     summed_emb = np.zeros((keyword_lists.shape[0], D))
+        #     for idx, author_kps in enumerate(keyword_lists):
+        #         embeddings = np.zeros((len(author_kps), D))
+        #         for phr_idx, phrase in enumerate(author_kps):
+        #             if phrase:
+        #                 embeddings[phr_idx, :] = self.cached_ft.get_word_vector(self.vocab.id2item[phrase])
+        #             else:
+        #                 embeddings[phr_idx, :] = np.zeros((D,))
+        #         summed_emb[idx, :] = np.sum(embeddings, axis=0)
+        #     averaged = summed_emb / keyword_lengths
+        #     return torch.from_numpy(averaged)
         else:
             kw_indices = torch.from_numpy(keyword_lists).long()
             kw_lengths = torch.from_numpy(keyword_lengths)
@@ -199,10 +203,11 @@ def generate_predictions(config, model, batcher):
             scores
             ):
 
+            # temporarily commenting out "source" and "target" because I think they are not needed.
             prediction = {
-                'source': source,
+                # 'source': source,
                 'source_id': source_id,
-                'target': target,
+                # 'target': target,
                 'target_id': target_id,
                 'label': label,
                 'score': float(score)
@@ -245,7 +250,7 @@ def eval_map_file(filename):
     list_of_list_of_labels, list_of_list_of_scores = utils.load_labels(filename)
     return eval_map(list_of_list_of_labels, list_of_list_of_scores)
 
-def eval_hits_at_k_file(filename,k=2,oracle=False):
+def eval_hits_at_k_file(filename, k=2, oracle=False):
     list_of_list_of_labels,list_of_list_of_scores = utils.load_labels(filename)
-    return eval_hits_at_k(list_of_list_of_labels,list_of_list_of_scores,k=k,oracle=oracle)
+    return eval_hits_at_k(list_of_list_of_labels, list_of_list_of_scores, k=k,oracle=oracle)
 

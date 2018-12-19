@@ -150,20 +150,20 @@ def setup(config):
     '''
     First define the dataset, vocabulary, and keyphrase extractor
     '''
-    dataset = Dataset(config.dataset)
+    dataset = Dataset(**config.dataset)
     vocab = Vocab(max_num_keyphrases = config.max_num_keyphrases)
     keyphrases = importlib.import_module(config.keyphrases).keyphrases
 
     bids_by_forum = get_bids_by_forum(dataset)
 
     kps_by_submission = defaultdict(list)
-    for file_id, text in dataset.submission_records():
+    for file_id, text in dataset.submissions():
         kp_list = keyphrases(text)
         kps_by_submission[file_id].extend(kp_list)
         vocab.load_items(kp_list)
 
     kps_by_reviewer = defaultdict(list)
-    for file_id, text in dataset.reviewer_archives():
+    for file_id, text in dataset.archives():
         kp_list = keyphrases(text)
         kps_by_reviewer[file_id].extend(kp_list)
         vocab.load_items(kp_list)

@@ -2,38 +2,134 @@
 
 A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
 
-## Experiment Workflow
+## Installation & Getting Started
 
-This section describes the steps to setup, train, and evaluate an affinity model in this pipeline.
+Clone this repository and install the package using pip as follows:
 
-### Configuration
-The experimenter starts by creating an experiment directory (e.g. `/exp_1`), and a configuration file inside that directory. Config files should be formatted as JSON and must include the following attributes:
+```
+pip install <location of this repository>
+```
 
-1) `name`: a string that identifies the experiment (avoid using spaces in this field).
-2) `dataset`: a string representing the directory where the dataset is located.
-3) `model`: a string that specifies the model module to be trained (from `expertise.models`).
+If you plan to actively develop models, it's best to install the package in "edit" mode, so that you don't need to reinstall the package every time you make changes:
 
-(See `/samples/sample_experiment/config.json` for an example)
+```
+pip install -e <location of this repository>
+```
 
-All other attributes in the config file are specific to the type of model and experiment being run.
+The framework requires a valid OpenReview Dataset (see Dataset section below). Contact Michael for access to datasets.
+
+## Workflow
+
+There are four stages of the workflow:
+
+`(1) Setup --> (2) Train --> (3) Infer --> (4) Test`
+
+Each model in `expertise.models` is expected to implement functions for each of these stages. Models will usually output intermediate files after each stage for use in the next stage(s).
+
+The framework doesn't enforce any of the suggested stages; they're provided for organizational guidance only. The behavior at each stage is model-specific, and models are responsible for managing their own inputs and outputs at each stage. The following guidelines are provided to maintain general organization:
 
 ### Setup
-To setup a model, run `expertise.setup_model` with the path to your configuration file as an argument:
-
+Performs any necessary preprocessing on the dataset.
 ```
-python -m expertise.setup_model /samples/sample_experiment/config.json
-```
-
-`expertise.setup_model` imports the model specified in the configuration and passes this configuration and the dataset into the model's `setup` function. `expertise.setup_model` will then create a directory, `/setup`, in the experiment directory. The model's `setup` function is expected to store files needed for training to the `/setup` directory. The contents of `/setup` are specific to each model.
-
-### Training
-writes out all the files that are needed to run Model.train() and Model.evaluate().
-The contents of /setup are specific to each model. models should know how to use them.
-
-```
-python -m expertise.train_model /samples/sample_experiment/config.json
+example:
+python -m expertise.setup_model config.json
 ```
 
+### Train
+Trains the model, if applicable.
+```
+example:
+python -m expertise.train_model config.json
+```
 
+### Infer
+Produces scores for every paper-reviewer pair in the dataset. The output of this stage can be used by the OpenReview Matching System.
+```
+example:
+python -m expertise.infer_model config.json
+```
 
+### Test
+Evaluates the performance of the model. Can be performed either on the inferred scores on the entire dataset or on a selected testing subset.
+```
+example:
+python -m expertise.test_model config.json
+```
+
+## Configuration
+Models are driven by a configuration JSON file, usually located in an "experiment directory". Configurations are expected to have the following properties:
+
+1) `name`: a string that identifies the experiment (avoid using spaces in this field).
+2) `experiment_dir`: a string that identifies the experiment's location
+3) `dataset`: a string representing the directory where the dataset is located.
+4) `model`: a string that specifies the model module to be trained (from `expertise.models`).
+
+All other attributes in the config file are specific to the type of model and experiment being run. The example below shows what a configuration for the TF-IDF model could look like:
+
+```
+{
+    "name": "midl19-tfidf",
+    "dataset": {
+        "directory": "/path/to/midl19/dataset"
+    },
+    "experiment_dir": "/path/to/midl19/experiment",
+    "model": "expertise.models.tfidf",
+    "keyphrases": "expertise.preprocessors.pos_regex",
+    "max_num_keyphrases": 10,
+    "min_count_for_vocab": 1,
+    "num_processes": 4,
+    "random_seed": 2524
+}
+```
+
+All of the workflow stages expect this configuration file as input.
+
+## Datasets
+
+The framework expects datasets to adhere to a specific format. Each dataset directory should be structured as follows:
+
+```
+dataset-name/
+	archives/
+		~User_Id1.jsonl 		# user's tilde IDs
+		~User_Id2.jsonl
+		...
+	submissions/
+		aBc123XyZ.jsonl 		# paper IDs
+		ZYx321Abc.jsonl
+		...
+	extras/
+		bids.jsonl
+		(other dataset-specific files)
+		...
+	README.md
+
+```
+
+Submissions are one-line .jsonl files containing the paper's content field. Archives are .jsonl files with any number of lines, where each line contains the content field of a paper authored by that user.
+
+Some datasets differ slightly in terms of the format of the data; these should be accounted for in the experiment's configuration.
+
+**For example**: some older conferences use a bidding format that differs from the default "Very High" to "Very Low" scale. This can be parameterized in the `config.json` file (e.g.) as follows:
+
+```
+{
+    "name": "uai18-tfidf",
+    "dataset": {
+        "directory": "/path/to/uai18/dataset",
+        "bid_values": [
+            "I want to review",
+            "I can review",
+            "I can probably review but am not an expert",
+            "I cannot review",
+            "No bid"
+        ],
+        "positive_bid_values": ["I want to review", "I can review"]
+    },
+    ...
+}
+
+```
+
+See `expertise.utils.dataset` for implementation details.
 

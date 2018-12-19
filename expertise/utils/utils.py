@@ -30,6 +30,13 @@ def dump_pkl(filepath, data):
     with open(filepath, 'wb') as f:
         f.write(pickle.dumps(data))
 
+def load_pkl(filepath):
+    '''
+    load an object from a pickle file
+    '''
+    with open(filepath, 'rb') as f:
+        return pickle.load(f)
+
 def dump_jsonl(filepath, data):
     with open(filepath, 'w') as f:
         for data_dict in data:
@@ -157,8 +164,19 @@ def split_ids(ids):
 
     return train_set_ids, dev_set_ids, test_set_ids
 
-def format_bid_data(train_set_ids, bids_by_forum, reviewer_kps, submission_kps, max_num_keyphrases=None):
-    formatted_data = []
+def format_data_bids(train_set_ids, bids_by_forum, reviewer_kps, submission_kps, max_num_keyphrases=None):
+    '''
+    Formats bid data into source/positive/negative triplets.
+    (This function is written specifically to handle keyphrase-based data.)
+
+    "source" represents the paper being compared against.
+    "positive" represents a paper authored by a reviewer who bid highly on
+        the source paper.
+    "negative" represents a paper authored by a reviewer who bid lowly on
+        the source paper.
+
+    '''
+
     for forum_id in train_set_ids:
         if forum_id in submission_kps:
 
@@ -178,8 +196,56 @@ def format_bid_data(train_set_ids, bids_by_forum, reviewer_kps, submission_kps, 
                         'negative_id': neg
                     }
 
-                    formatted_data.append(data)
-    return formatted_data
+                    yield data
+
+def format_data_heldout_authors(kp_lists_by_reviewer, kps_by_reviewer):
+    '''
+    Formats reviewer data into source/positive/negative triplets.
+    (This function is written specifically to handle keyphrase-based data.)
+
+    "source" represents the paper being compared against.
+    "positive" represents another paper written by the author that wrote
+        the source paper.
+    "negative" represents a paper written by an author that did not write
+        the source paper.
+    '''
+
+    for source_reviewer, reviewer_kp_lists in kp_lists_by_reviewer.items():
+        print('processing source reviewer',source_reviewer)
+        '''
+        kp_lists_by_reviewer is a dict, keyed on reviewer ID, where each value is a list of lists.
+            each outer list corresponds to that reviewer's papers.
+            each inner list contains the keyphrases for that paper.
+
+        kps_by_reviewer is a dict, also keyed on reviewer_id, where each value is a list of all
+            keyphrases for the reviewer.
+        '''
+
+        negative_reviewers = [n for n in kps_by_reviewer if n != source_reviewer]
+
+        for source_kps, remainder_kp_lists in holdouts(reviewer_kp_lists):
+            '''
+            source_kps is a list of keyphrases representing one of the source_reviewer's papers.
+            remainder_kp_lists is a list of lists representing the other papers.
+            '''
+
+            # positive_kps = [kp for kp_list in remainder_kp_lists for kp in kp_list]
+            for positive_kps in remainder_kp_lists:
+
+                # pick a random reviewer (who is not the same as the source/positive reviewer)
+                negative_reviewer = random.sample(negative_reviewers, 1)[0]
+                negative_kps = kps_by_reviewer[negative_reviewer]
+
+                data = {
+                    'source': source_kps,
+                    'source_id': source_reviewer,
+                    'positive': positive_kps,
+                    'positive_id': source_reviewer,
+                    'negative': negative_kps,
+                    'negative_id': negative_reviewer
+                }
+
+                yield data
 
 
 def strip_nonalpha(text):
@@ -256,7 +322,7 @@ def matrix_to_ranklists(score_matrix):
 
     return ranklists
 
-def content_to_text(content, fields=['title', 'abstract', 'pdftext']):
+def content_to_text(content, fields=['title', 'abstract', 'fulltext']):
     '''
     Given a dict "content", such as the content field in an OpenReview record,
     return a string that is the concatenation of the fields in "fields".

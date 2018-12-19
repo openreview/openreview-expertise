@@ -24,10 +24,8 @@ def eval_hits_at_k(list_of_list_of_labels,
                    randomize=True,
                    oracle=False,
                    ):
-    """Compute Hits at K
-
-    Given a two lists with one element per test example compute the
-    mean average precision score.
+    '''
+    Compute Hits at K
 
     The i^th element of each list is an array of scores or labels corresponding
     to the i^th training example.
@@ -40,7 +38,8 @@ def eval_hits_at_k(list_of_list_of_labels,
     :param randomize: whether to randomize the ordering
     :param oracle: break ties using the labels
     :return: the mean average precision
-    """
+    '''
+
     np.random.seed(19)
     assert len(list_of_list_of_labels) == len(list_of_list_of_scores)
     aps = []
@@ -50,17 +49,16 @@ def eval_hits_at_k(list_of_list_of_labels,
             list_of_list_of_labels[i] = list(np.asarray(list_of_list_of_labels[i])[perm])
             list_of_list_of_scores[i] = list(np.asarray(list_of_list_of_scores[i])[perm])
         if oracle:
-            zpd = zip(list_of_list_of_scores[i],list_of_list_of_labels[i])
-            sorted_zpd =sorted(zpd, reverse=True)
+            zpd = zip(list_of_list_of_scores[i], list_of_list_of_labels[i])
+            sorted_zpd =sorted(zpd, key=lambda x: x[1], reverse=True)
             list_of_list_of_labels[i] = [x[1] for x in sorted_zpd]
             list_of_list_of_scores[i] = [x[0] for x in sorted_zpd]
         else:
-            zpd = zip(list_of_list_of_scores[i],list_of_list_of_labels[i])
-            sorted_zpd =sorted(zpd, key=lambda x: x[0], reverse=True)
+            zpd = zip(list_of_list_of_scores[i], list_of_list_of_labels[i])
+            sorted_zpd = sorted(zpd, key=lambda x: x[0], reverse=True)
             list_of_list_of_labels[i] = [x[1] for x in sorted_zpd]
             list_of_list_of_scores[i] = [x[0] for x in sorted_zpd]
-        # print("Labels: {}".format(list_of_list_of_labels[i]))
-        # print("Scores: {}".format(list_of_list_of_scores[i]))
+
         labels_topk = list_of_list_of_labels[i][0:k]
         # print("labels_topk: {}".format(labels_topk))
         if sum(list_of_list_of_labels[i]) > 0:

@@ -18,6 +18,11 @@ current_path = os.path.abspath(os.path.dirname(__file__))
 #def train(setup_path, train_path, config, dataset):
 def train(config):
 
+    for train_subdir in ['dev_scores', 'dev_predictions']:
+        train_subdir_path = os.path.join(config.train_dir, train_subdir)
+        if not os.path.exists(train_subdir_path):
+            os.mkdir(train_subdir_path)
+
     vocab = config.setup_load('vocab.pkl')
 
     torch.manual_seed(config.random_seed)

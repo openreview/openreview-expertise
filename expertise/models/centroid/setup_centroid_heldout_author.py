@@ -18,43 +18,6 @@ import random
 
 import importlib
 
-def format_training_data(kp_lists_by_reviewer, kps_by_reviewer):
-    for source_reviewer, reviewer_kp_lists in kp_lists_by_reviewer.items():
-        print('processing source reviewer',source_reviewer)
-        '''
-        kp_lists_by_reviewer is a dict, keyed on reviewer ID, where each value is a list of lists.
-            each outer list corresponds to that reviewer's papers.
-            each inner list contains the keyphrases for that paper.
-
-        kps_by_reviewer is a dict, also keyed on reviewer_id, where each value is a list of all
-            keyphrases for the reviewer.
-        '''
-
-        negative_reviewers = [n for n in kps_by_reviewer if n != source_reviewer]
-
-        for source_kps, remainder_kp_lists in utils.holdouts(reviewer_kp_lists):
-            '''
-            source_kps is a list of keyphrases representing one of the source_reviewer's papers.
-            remainder_kp_lists is a list of lists representing the other papers.
-            '''
-
-            positive_kps = [kp for kp_list in remainder_kp_lists for kp in kp_list]
-
-            # pick a random reviewer (who is not the same as the source/positive reviewer)
-            negative_reviewer = random.sample(negative_reviewers, 1)[0]
-            negative_kps = kps_by_reviewer[negative_reviewer]
-
-            data = {
-                'source': source_kps,
-                'source_id': source_reviewer,
-                'positive': positive_kps,
-                'positive_id': source_reviewer,
-                'negative': negative_kps,
-                'negative_id': negative_reviewer
-            }
-
-            yield data
-
 def data_to_sample(data, vocab, max_num_keyphrases=10):
     '''
     Converts one line of the training data into a training sample.
@@ -130,7 +93,7 @@ def setup(config):
 
     train_set_ids, dev_set_ids, test_set_ids = utils.split_ids(list(kps_by_submission.keys()))
 
-    train_set = format_training_data(kp_lists_by_reviewer, kps_by_reviewer)
+    train_set = utils.format_data_heldout_authors(kp_lists_by_reviewer, kps_by_reviewer)
 
     train_set_file = config.setup_save(train_set, 'train_set.jsonl')
 
