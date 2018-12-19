@@ -108,5 +108,28 @@ dataset-name/
 
 Submissions are one-line .jsonl files containing the paper's content field. Archives are .jsonl files with any number of lines, where each line contains the content field of a paper authored by that user.
 
+Some datasets differ slightly in terms of the format of the data; these should be accounted for in the experiment's configuration.
+
+For example: some older conferences use a bidding format that differs from the default "Very High" to "Very Low" scale. This can be parameterized in the `config.json` file (e.g.) as follows:
+
+```
+{
+    "name": "uai18-tfidf",
+    "dataset": {
+        "directory": "/path/to/uai18/dataset",
+        "bid_values": [
+            "I want to review",
+            "I can review",
+            "I can probably review but am not an expert",
+            "I cannot review",
+            "No bid"
+        ],
+        "positive_bid_values": ["I want to review", "I can review"]
+    },
+    ...
+}
+
+```
+
 See `expertise.utils.dataset` for implementation details.
 
