@@ -87,7 +87,7 @@ if __name__ == '__main__':
         os.mkdir(piles_directory)
 
     if args.build:
-        build_piles(args.inputfile, piles_directory, num_piles)
+        build_piles(args.inputfile, piles_directory, args.num_piles)
 
     if args.integrate:
         integrate_piles(piles_directory, args.outputfile)
