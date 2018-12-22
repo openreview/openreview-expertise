@@ -55,15 +55,16 @@ def integrate_piles(piles_directory, outfile):
 
     for file in os.listdir(piles_directory):
         filepath = os.path.join(piles_directory, file)
-        print('filepath', filepath)
+        # print('filepath', filepath)
         lines = list(utils.jsonl_reader(filepath))
 
-        print('shuffling {}'.format(filepath))
+        # print('shuffling {}'.format(filepath))
         random.shuffle(lines)
-        print('done shuffling {}'.format(filepath))
+        # print('done shuffling {}'.format(filepath))
 
-        for line in lines:
-            outfile_pointer.write(json.dumps(line) + '\n')
+        # for line in lines:
+        #     outfile_pointer.write(json.dumps(line) + '\n')
+        # outfile_pointer.flush()
         print('wrote {} to {}'.format(filepath, outfile))
 
     outfile_pointer.close()
