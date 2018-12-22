@@ -61,13 +61,11 @@ def integrate_piles(piles_directory, outfile):
 
     '''
 
-    outfile_pointer = open(outfile, 'w')
+    with open(outfile, 'w') as outfile_pointer:
+        for file in os.listdir(piles_directory):
+            filepath = os.path.join(piles_directory, file)
+            shuffle_and_write(filepath, outfile_pointer)
 
-    for file in os.listdir(piles_directory):
-        filepath = os.path.join(piles_directory, file)
-        shuffle_and_write(filepath, outfile_pointer)
-
-    outfile_pointer.close()
 
 def main(inputfile, piles_directory, outputfile, num_piles):
     build_piles(inputfile, piles_directory, num_piles)
