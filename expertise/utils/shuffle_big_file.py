@@ -13,7 +13,7 @@ from . import utils
 
 def lazy_reader(filepath):
     with open(filepath) as f:
-        for line in f.readlines():
+        for line in f:
             yield line
 
 def build_piles(big_file_path, piles_directory, num_piles):

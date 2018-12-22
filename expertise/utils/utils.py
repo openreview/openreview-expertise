@@ -51,7 +51,7 @@ def jsonl_reader(jsonl_file):
     Utility function for lazily reading a .jsonl file.
     '''
     with open(jsonl_file) as f:
-        for line in f.readlines():
+        for line in f:
             yield json.loads(line.rstrip())
 
 def holdouts(full_list):
