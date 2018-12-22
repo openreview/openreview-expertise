@@ -42,16 +42,14 @@ def build_piles(big_file_path, piles_directory, num_piles):
         fp.close()
 
 def shuffle_and_write(filepath, outfile_pointer):
-    # print('filepath', filepath)
+    print('shuffling', filepath)
     lines = list(utils.jsonl_reader(filepath))
 
-    # print('shuffling {}'.format(filepath))
     random.shuffle(lines)
-    # print('done shuffling {}'.format(filepath))
 
-    # for line in lines:
-    #     outfile_pointer.write(json.dumps(line) + '\n')
-    # outfile_pointer.flush()
+    for line in lines:
+        outfile_pointer.write(json.dumps(line) + '\n')
+    outfile_pointer.flush()
     print('wrote {}'.format(filepath))
 
 def integrate_piles(piles_directory, outfile):
