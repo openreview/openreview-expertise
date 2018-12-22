@@ -8,50 +8,7 @@ from expertise.utils.vocab import Vocab
 from expertise.utils.batcher import Batcher
 from expertise.utils.dataset import Dataset
 import expertise.utils as utils
-
-
-def data_to_sample(data, vocab, max_num_keyphrases=10):
-    '''
-    Converts one line of the training data into a training sample.
-
-    Training samples consist of the following:
-
-    source:
-        a numpy array containing integers. Each integer corresponds to
-        a token in the vocabulary. This array of tokens represents the
-        source text.
-    source_length:
-        a list containing one element, an integer, which is the number
-        of keyphrases in 'source'.
-    positive:
-        ...
-    positive_length:
-        Similar to "source_length", but applies to the "positive" list.
-    negative:
-        ...
-    negative_length:
-        Similar to "source_length", but applies to the "negative" list.
-
-    '''
-
-    source = vocab.to_ints(data['source'])
-    source_length = [min(max_num_keyphrases, len(source))]
-    positive = vocab.to_ints(data['positive'])
-    positive_length = [min(max_num_keyphrases, len(positive))]
-    negative = vocab.to_ints(data['negative'])
-    negative_length = [min(max_num_keyphrases, len(negative))]
-    sample = {
-        'source': source,
-        'source_length': source_length,
-        'source_id': data['source_id'],
-        'positive': positive,
-        'positive_length': positive_length,
-        'positive_id': data['positive_id'],
-        'negative': negative,
-        'negative_length': negative_length,
-        'negative_id': data['negative_id']
-    }
-    return sample
+from expertise.utils.data_to_sample import data_to_sample
 
 def setup(config):
     '''
