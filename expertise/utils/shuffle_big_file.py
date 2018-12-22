@@ -52,7 +52,7 @@ def shuffle_and_write(filepath, outfile_pointer):
     # for line in lines:
     #     outfile_pointer.write(json.dumps(line) + '\n')
     # outfile_pointer.flush()
-    print('wrote {} to {}'.format(filepath))
+    print('wrote {}'.format(filepath))
 
 def integrate_piles(piles_directory, outfile):
     '''
