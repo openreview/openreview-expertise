@@ -27,13 +27,11 @@ def build_piles(big_file_path, piles_directory, num_piles):
     '''
 
     fp_by_index = {}
-    files_by_index = {}
 
     for pile_index in range(num_piles):
         pile_label = str(pile_index).zfill(len(str(num_piles)))
         pile_path = os.path.join(piles_directory, 'pile{}.jsonl'.format(pile_label))
         fp_by_index[pile_index] = open(pile_path, 'w')
-        files_by_index[pile_index] = pile_path
 
     print('reading from big file')
     for line in tqdm(lazy_reader(big_file_path)):
@@ -43,9 +41,8 @@ def build_piles(big_file_path, piles_directory, num_piles):
     for pile_index, fp in fp_by_index.items():
         fp.close()
 
-    return files_by_index
 
-def integrate_piles(files_by_index, outfile):
+def integrate_piles(piles_directory, outfile):
     '''
     Second pass (perhaps done lazily):
     for j = 0, ..., M - 1 do
@@ -56,7 +53,9 @@ def integrate_piles(files_by_index, outfile):
 
     outfile_pointer = open(outfile, 'w')
 
-    for index, filepath in files_by_index.items():
+    for file in os.listdir(piles_directory):
+        filepath = os.path.join(piles_directory, file)
+        print('filepath', filepath)
         lines = list(utils.jsonl_reader(filepath))
 
         print('shuffling {}'.format(filepath))
@@ -70,14 +69,16 @@ def integrate_piles(files_by_index, outfile):
     outfile_pointer.close()
 
 def main(inputfile, piles_directory, outputfile, num_piles):
-    files_by_index = build_piles(inputfile, piles_directory, num_piles)
-    integrate_piles(files_by_index, outputfile)
+    build_piles(inputfile, piles_directory, num_piles)
+    integrate_piles(piles_directory, outputfile)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('inputfile')
     parser.add_argument('outputfile')
     parser.add_argument('--num_piles', type=int, default=20)
+    parser.add_argument('--build', action='store_true')
+    parser.add_argument('--integrate', action='store_true')
     args = parser.parse_args()
 
     filedir = os.path.dirname(os.path.abspath(args.inputfile))
@@ -85,4 +86,8 @@ if __name__ == '__main__':
     if not os.path.isdir(piles_directory):
         os.mkdir(piles_directory)
 
-    main(args.inputfile, piles_directory, args.outputfile, args.num_piles)
+    if args.build:
+        build_piles(args.inputfile, piles_directory, num_piles)
+
+    if args.integrate:
+        integrate_piles(piles_directory, args.outputfile)
