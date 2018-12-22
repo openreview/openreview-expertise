@@ -52,7 +52,7 @@ def jsonl_reader(jsonl_file):
     '''
     with open(jsonl_file) as f:
         for line in f.readlines():
-            yield json.loads(line.replace('\n',''))
+            yield json.loads(line.rstrip())
 
 def holdouts(full_list):
     '''
