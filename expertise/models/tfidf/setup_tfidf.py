@@ -19,7 +19,7 @@ def setup(config):
     # formerly "paper_content_by_id"
 
     kps_by_submission = defaultdict(list)
-    for file_id, text in dataset.submission_records():
+    for file_id, text in dataset.submissions():
         kps_by_submission[file_id].extend(keyphrases(text))
 
     submission_kps_path = os.path.join(setup_dir, 'submission_kps.pkl')
@@ -28,7 +28,7 @@ def setup(config):
     # write keyphrases for reviewer archives to pickle file
     # formerly "reviewer_content_by_id"
     kps_by_reviewer = defaultdict(list)
-    for file_id, text in dataset.reviewer_archives():
+    for file_id, text in dataset.archives():
         kps_by_reviewer[file_id].extend(keyphrases(text))
 
     reviewer_kps_path = os.path.join(setup_dir, 'reviewer_kps.pkl')

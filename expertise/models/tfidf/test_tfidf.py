@@ -14,7 +14,7 @@ def test(config):
         label = 1 if bid.tag in dataset.positive_bid_values else 0
         labels_by_reviewer_by_forum[bid.forum][bid.signatures[0]] = label
 
-    inferred_scores_path = os.path.join(config.infer_dir, 'scores.jsonl')
+    inferred_scores_path = os.path.join(config.infer_dir, config.name + '-scores.jsonl')
 
     labeled_data_list = []
     for data in utils.jsonl_reader(inferred_scores_path):

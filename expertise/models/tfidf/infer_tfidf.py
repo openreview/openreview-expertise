@@ -7,21 +7,12 @@ from expertise.utils.dataset import Dataset
 from datetime import datetime
 import multiprocessing as mp
 
-def get_best_score_pool(payload):
-    paper_id, reviewer_id, paper_text, reviewer_archives, model = payload
-    best_score = 0.0
+from gensim.corpora.textcorpus import TextCorpus
+from gensim.similarities.docsim import SparseMatrixSimilarity
 
-    for reviewer_text in reviewer_archives:
-        score = model.score(reviewer_text, paper_text)
-        if score > best_score:
-            best_score = score
+import numpy as np
 
-    result = {
-        'source_id': paper_id,
-        'target_id': reviewer_id,
-        'score': best_score
-    }
-    return result
+
 
 def infer(config):
     experiment_dir = os.path.abspath(config.experiment_dir)
@@ -35,56 +26,50 @@ def infer(config):
 
     dataset = Dataset(**config.dataset)
 
-    paper_ids = set()
+    paper_ids = []
     reviewer_ids = set()
-
-    paper_text_by_id = {}
-    for paper_id, paper_text in dataset.submissions():
-        paper_text_by_id[paper_id] = paper_text
-        paper_ids.update([paper_id])
-
-    reviewer_text_by_id = defaultdict(list)
-    for reviewer_id, reviewer_text in dataset.archives():
-        reviewer_text_by_id[reviewer_id].append(reviewer_text)
-        reviewer_ids.update([reviewer_id])
 
     print('loading model')
     model = utils.load_pkl(os.path.join(train_dir, 'model.pkl'))
 
+    paper_texts = []
+    for paper_id, paper_text in dataset.submissions():
+        print(paper_id)
+        paper_tokens = model.preprocess_content(paper_text)
+        paper_bow = [(t[0], t[1]) for t in model.tfidf_model[model.tfidf_dictionary.doc2bow(paper_tokens)]]
+        paper_texts.append(paper_bow)
+        paper_ids.append(paper_id)
+
+    #print(paper_texts)
+    #print(len(model.tfidf_dictionary.keys()))
+
+    index = SparseMatrixSimilarity(paper_texts, num_features=len(model.tfidf_dictionary.keys()))
+    print('papers are preprocessed')
+
+    reviewer_text_by_id = defaultdict(list)
+    for reviewer_id, reviewer_text in dataset.archives():
+        print(reviewer_id)
+        reviewer_tokens = model.preprocess_content(reviewer_text)
+        reviewer_bow = [(t[0], t[1]) for t in model.tfidf_model[model.tfidf_dictionary.doc2bow(reviewer_tokens)]]
+        reviewer_text_by_id[reviewer_id].append(reviewer_bow)
+        reviewer_ids.update([reviewer_id])
+
+    print('reviewers are preprocessed')
+
     # appends new scores to an existing file, if possible
-    file_mode = 'w'
-    existing_cells = []
     score_file_path = os.path.join(infer_dir, config.name + '-scores.txt')
 
-    if os.path.isfile(score_file_path):
-        print('reading scores')
-        file_mode = 'a'
-        with open(score_file_path) as f:
-            reader = csv.reader(f)
-            for row in reader:
-                existing_paper_reviewer = (row[0], row[1])
-                existing_cells.append(existing_paper_reviewer)
+    with open(score_file_path, 'w') as f:
+        for rev_id, reviewer_bows in reviewer_text_by_id.items():
+            print('writing {}'.format(rev_id))
+            scores = index[reviewer_bows]
+            best_scores = np.amax(scores, axis=0)
 
-    multiprocessing_payloads = []
-    for paper_id in paper_ids:
-        for reviewer_id in reviewer_ids:
-            if (paper_id, reviewer_id) not in existing_cells:
-                multiprocessing_payloads.append(
-                    (
-                        paper_id,
-                        reviewer_id,
-                        paper_text_by_id[paper_id],
-                        reviewer_text_by_id[reviewer_id],
-                        model
-                    )
-                )
-
-    start_worker_pool = datetime.now()
-    print('starting pool on {} pairs at {}'.format(len(multiprocessing_payloads), start_worker_pool))
-    # start 4 worker processes
-    with open(score_file_path, file_mode) as f:
-        pool = mp.Pool(processes=int(config.num_processes))
-        for result in pool.imap(get_best_score_pool, multiprocessing_payloads):
-            f.write(json.dumps(result) + '\n')
-
-    print('finished job in {}'.format(datetime.now() - start_worker_pool))
+            print(best_scores)
+            for idx, paper_id in enumerate(paper_ids):
+                result = {
+                    'source_id': paper_id,
+                    'target_id': rev_id,
+                    'score': float(best_scores[idx])
+                }
+                f.write(json.dumps(result) + '\n')
