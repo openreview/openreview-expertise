@@ -66,12 +66,12 @@ def setup(config):
     dev_set_file = config.setup_save(dev_set, 'dev_set.jsonl')
     test_set_file = config.setup_save(test_set, 'test_set.jsonl')
 
-    train_set_permuted = np.random.permutation(list(utils.jsonl_reader(train_set_file)))
-    train_samples = (data_to_sample(data, vocab) for data in train_set_permuted)
+    # for very large datasets, the training data should be shuffled in advance.
+    # (you can use /expertise/utils/shuffle_big_file.py to do this)
+    train_samples = (data_to_sample(data, vocab) for data in utils.jsonl_reader(train_set_file))
     config.setup_save(train_samples, 'train_samples_permuted.jsonl')
 
     # dev_set_permuted = np.random.permutation(list(utils.jsonl_reader(dev_set_file)))
-
     dev_samples = (data_to_sample(data, vocab) for data in utils.jsonl_reader(dev_set_file))
     config.setup_save(dev_samples, 'dev_samples.jsonl')
 

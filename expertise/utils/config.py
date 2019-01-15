@@ -59,7 +59,6 @@ class Config(object):
         return json.dumps(res)
 
     def save_config(self):
-        print('saving config')
         with open(self.config_file_path, 'w') as f:
             json.dump(self.__dict__, f, sort_keys=True,
                 indent=4, separators=(',', ': '))

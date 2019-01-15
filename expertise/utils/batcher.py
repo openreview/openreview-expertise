@@ -47,7 +47,6 @@ class Batcher(object):
         return self.data
 
     def load_data(self, input_file, delimiter='\t'):
-        print('loading data')
         self.input_file = input_file
 
         self.data = []
