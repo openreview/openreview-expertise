@@ -66,11 +66,6 @@ def integrate_piles(piles_directory, outfile):
             filepath = os.path.join(piles_directory, file)
             shuffle_and_write(filepath, outfile_pointer)
 
-
-def main(inputfile, piles_directory, outputfile, num_piles):
-    build_piles(inputfile, piles_directory, num_piles)
-    integrate_piles(piles_directory, outputfile)
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('inputfile')
