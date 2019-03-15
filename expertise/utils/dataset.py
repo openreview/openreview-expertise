@@ -50,6 +50,10 @@ class Dataset(object):
         self.test_set_path = os.path.join(
             directory, 'test_set.tsv')
 
+        self.num_submissions = len(list(self._read_json_records(self.submission_records_path)))
+
+        self.num_archives = len(list(self._read_json_records(self.archives_path)))
+
         # TODO: Important! Need to make sure that different bid values get handled properly
         # across different kinds of datasets.
         self.bid_values = bid_values
