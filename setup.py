@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='openreview-expertise',
     version='0.0',
-    description='OpenReview importers',
+    description='OpenReview paper-reviewer affinity modeling',
     url='https://github.com/iesl/openreview-evidence',
     author='Michael Spector',
     author_email='spector@cs.umass.edu',
@@ -17,7 +17,10 @@ setup(
         'pandas',
         'nltk',
         'gensim',
-        'torch'
+        'torch',
+        'cloudpickle',
+        'scikit-learn',
+        'tqdm'
     ],
     zip_safe=False
 )

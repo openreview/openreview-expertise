@@ -3,6 +3,7 @@ import importlib
 from collections import defaultdict
 from expertise.utils import dump_pkl
 from expertise.utils.dataset import Dataset
+from tqdm import tqdm
 
 def setup(config):
     experiment_dir = os.path.abspath(config.experiment_dir)
@@ -19,7 +20,7 @@ def setup(config):
     # formerly "paper_content_by_id"
 
     kps_by_submission = defaultdict(list)
-    for file_id, text in dataset.submissions():
+    for file_id, text in tqdm(dataset.submissions(), total=dataset.num_submissions, desc='parsing submission keyphrases'):
         kps_by_submission[file_id].extend(keyphrases(text))
 
     submission_kps_path = os.path.join(setup_dir, 'submission_kps.pkl')
@@ -28,7 +29,8 @@ def setup(config):
     # write keyphrases for reviewer archives to pickle file
     # formerly "reviewer_content_by_id"
     kps_by_reviewer = defaultdict(list)
-    for file_id, text in dataset.archives():
+
+    for file_id, text in tqdm(dataset.archives(), total=dataset.num_archives, desc='parsing archive keyphrases'):
         kps_by_reviewer[file_id].append(keyphrases(text))
 
     reviewer_kps_path = os.path.join(setup_dir, 'reviewer_kps.pkl')
