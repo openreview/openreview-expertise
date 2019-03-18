@@ -29,7 +29,7 @@ def setup(config):
     # formerly "reviewer_content_by_id"
     kps_by_reviewer = defaultdict(list)
     for file_id, text in dataset.archives():
-        kps_by_reviewer[file_id].extend(keyphrases(text))
+        kps_by_reviewer[file_id].append(keyphrases(text))
 
     reviewer_kps_path = os.path.join(setup_dir, 'reviewer_kps.pkl')
     dump_pkl(reviewer_kps_path, kps_by_reviewer)

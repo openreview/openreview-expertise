@@ -6,50 +6,65 @@ import re
 from collections import defaultdict
 from collections import Counter
 
-from gensim.models.tfidfmodel import TfidfModel
+from gensim.similarities import SparseMatrixSimilarity
+from gensim.models import TfidfModel
 from gensim import corpora
 
 from expertise.preprocessors import pos_regex
 
 
 class Model():
-    def __init__(self):
+    def __init__(self, kps_by_paperid, kp_archives_by_userid):
 
-        self.tfidf_dictionary = corpora.Dictionary()
+        self.dictionary = corpora.Dictionary()
 
-        self.document_tokens = []
+        self.bow_by_userid = defaultdict(Counter)
+        self.bow_by_paperid = defaultdict(Counter)
 
-        # a dictionary keyed on reviewer signatures, containing a BOW representation of that reviewer's Archive (Ar)
-        self.bow_by_signature = defaultdict(Counter)
-
-        # a dictionary keyed on forum IDs, containing a BOW representation of the paper (P)
-        #self.bow_by_paperid = defaultdict(Counter)
+        self.all_documents = []
 
         self.preprocess_content = pos_regex.extract_candidate_words
 
-    def fit(self, keyphrases):
+        self.kps_by_paperid = kps_by_paperid
+        self.kp_archives_by_userid = kp_archives_by_userid
+
+        for token_list in self.kps_by_paperid.values():
+            self.dictionary.add_documents([token_list])
+            self.all_documents += [token_list]
+
+        for archive in self.kp_archives_by_userid.values():
+            for token_list in archive:
+                self.dictionary.add_documents([token_list])
+                self.all_documents += [token_list]
+
+        self.corpus_bows = [self.dictionary.doc2bow(doc) for doc in self.all_documents]
+        self.tfidf = TfidfModel(self.corpus_bows)
+
+    def fit(self):
         """
         Fit the TFIDF model
 
-        keyphrases should be a list of lists, where each inner list is a list of keyphrases.
+        each argument should be a list of lists, where each inner list is a list of keyphrases.
 
         e.g.
 
-        keyphrases = [
+        submission_kps = [
             ['deep_learning', 'natural_language_processing'],
             ['neural_imaging', 'fmri', 'functional_magnetic_resonance']
         ]
         """
-        for tokens in keyphrases:
-            self.tfidf_dictionary.add_documents([tokens])
-            self.document_tokens += [tokens]
 
-        # get the BOW representation for every document and put it in corpus_bows
-        self.corpus_bows = [self.tfidf_dictionary.doc2bow(doc) for doc in self.document_tokens]
+        self.bow_by_paperid = {paperid: self.dictionary.doc2bow(doc) \
+            for paperid, doc in self.kps_by_paperid.items()}
 
-        # print(self.corpus_bows)
-        # generate a TF-IDF model based on the entire corpus's BOW representations
-        self.tfidf_model = TfidfModel(self.corpus_bows)
+        self.bow_archives_by_userid = {userid: [self.dictionary.doc2bow(doc) for doc in archive] \
+            for userid, archive in self.kp_archives_by_userid.items()}
+
+        self.index = SparseMatrixSimilarity(
+            [self.tfidf[bow] for bow in self.bow_by_paperid.values()],
+            num_features=len(self.dictionary)
+        )
+
 
     def predict(self, note_record):
         """
@@ -67,7 +82,7 @@ class Model():
 
         """
 
-        scores = [(signature, self.score(signature, note_record)) for signature, _ in self.bow_by_signature.iteritems()]
+        scores = [(signature, self.score(signature, note_record)) for signature, _ in self.bow_by_userid.iteritems()]
         rank_list = [signature for signature, score in sorted(scores, key=lambda x: x[1], reverse=True)]
 
         return rank_list
@@ -78,10 +93,10 @@ class Model():
 
         """
         paper_tokens = self.preprocess_content(paper_content)
-        paper_bow = [(t[0], t[1]) for t in self.tfidf_dictionary.doc2bow(paper_tokens)]
+        paper_bow = [(t[0], t[1]) for t in self.dictionary.doc2bow(paper_tokens)]
 
         reviewer_tokens = self.preprocess_content(archive_content)
-        reviewer_bow = [(t[0], t[1]) for t in self.tfidf_dictionary.doc2bow(reviewer_tokens)]
+        reviewer_bow = [(t[0], t[1]) for t in self.dictionary.doc2bow(reviewer_tokens)]
 
         forum_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf_model[paper_bow]})
         reviewer_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf_model[reviewer_bow]})

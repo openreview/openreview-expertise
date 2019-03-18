@@ -4,6 +4,7 @@ from expertise import utils
 from expertise.utils.dataset import Dataset
 from expertise.evaluators.mean_avg_precision import eval_map
 from expertise.evaluators.hits_at_k import eval_hits_at_k
+from tqdm import tqdm
 
 def test(config):
 
