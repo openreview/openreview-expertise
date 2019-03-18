@@ -7,21 +7,13 @@ from expertise.utils.dataset import Dataset
 from datetime import datetime
 import multiprocessing as mp
 
-def get_best_score_pool(payload):
-    paper_id, reviewer_id, paper_text, reviewer_archives, model = payload
-    best_score = 0.0
+from gensim.corpora.textcorpus import TextCorpus
+from gensim.similarities.docsim import SparseMatrixSimilarity
 
-    for reviewer_text in reviewer_archives:
-        score = model.score(reviewer_text, paper_text)
-        if score > best_score:
-            best_score = score
+import numpy as np
+from tqdm import tqdm
 
-    result = {
-        'source_id': paper_id,
-        'target_id': reviewer_id,
-        'score': best_score
-    }
-    return result
+
 
 def infer(config):
     experiment_dir = os.path.abspath(config.experiment_dir)
@@ -33,58 +25,28 @@ def infer(config):
     train_dir = os.path.join(experiment_dir, 'train')
     assert os.path.isdir(train_dir), 'Train dir does not exist. Make sure that this model has been trained.'
 
-    dataset = Dataset(**config.dataset)
-
-    paper_ids = set()
-    reviewer_ids = set()
-
-    paper_text_by_id = {}
-    for paper_id, paper_text in dataset.submissions():
-        paper_text_by_id[paper_id] = paper_text
-        paper_ids.update([paper_id])
-
-    reviewer_text_by_id = defaultdict(list)
-    for reviewer_id, reviewer_text in dataset.archives():
-        reviewer_text_by_id[reviewer_id].append(reviewer_text)
-        reviewer_ids.update([reviewer_id])
-
-    print('loading model')
     model = utils.load_pkl(os.path.join(train_dir, 'model.pkl'))
 
+    dataset = Dataset(**config.dataset)
+
+    paperid_by_index = {index: paperid \
+        for index, paperid in enumerate(model.bow_by_paperid.keys())}
+
     # appends new scores to an existing file, if possible
-    file_mode = 'w'
-    existing_cells = []
-    score_file_path = os.path.join(infer_dir, config.name + '-scores.txt')
+    score_file_path = os.path.join(infer_dir, config.name + '-scores.jsonl')
 
-    if os.path.isfile(score_file_path):
-        print('reading scores')
-        file_mode = 'a'
-        with open(score_file_path) as f:
-            reader = csv.reader(f)
-            for row in reader:
-                existing_paper_reviewer = (row[0], row[1])
-                existing_cells.append(existing_paper_reviewer)
+    with open(score_file_path, 'w') as f:
+        for userid, bow_archive in tqdm(model.bow_archives_by_userid.items(), total=len(dataset.reviewer_ids)):
 
-    multiprocessing_payloads = []
-    for paper_id in paper_ids:
-        for reviewer_id in reviewer_ids:
-            if (paper_id, reviewer_id) not in existing_cells:
-                multiprocessing_payloads.append(
-                    (
-                        paper_id,
-                        reviewer_id,
-                        paper_text_by_id[paper_id],
-                        reviewer_text_by_id[reviewer_id],
-                        model
-                    )
-                )
+            best_scores = np.amax(model.index[bow_archive], axis=0)
 
-    start_worker_pool = datetime.now()
-    print('starting pool on {} pairs at {}'.format(len(multiprocessing_payloads), start_worker_pool))
-    # start 4 worker processes
-    with open(score_file_path, file_mode) as f:
-        pool = mp.Pool(processes=int(config.num_processes))
-        for result in pool.imap(get_best_score_pool, multiprocessing_payloads):
-            f.write(json.dumps(result) + '\n')
+            for paper_index, score in enumerate(best_scores):
+                paperid = paperid_by_index[paper_index]
 
-    print('finished job in {}'.format(datetime.now() - start_worker_pool))
+                result = {
+                    'source_id': paperid,
+                    'target_id': userid,
+                    'score': float(score)
+                }
+
+                f.write(json.dumps(result) + '\n')

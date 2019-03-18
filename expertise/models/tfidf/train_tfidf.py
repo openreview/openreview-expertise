@@ -15,18 +15,16 @@ def train(config):
 
     print('fitting model')
     start_training_datetime = datetime.now()
-    model = tfidf.Model()
 
     with open(submission_kps_file, 'rb') as f:
-    	kps_by_submission_id = pickle.load(f)
-    	submission_kps = (kp_list for kp_list in kps_by_submission_id.values())
+        kps_by_paperid = pickle.load(f)
 
     with open(reviewer_kps_file, 'rb') as f:
-    	kps_by_reviewer_id = pickle.load(f)
-    	reviewer_kps = (kp_list for kp_list in kps_by_reviewer_id.values())
+        kp_archives_by_userid = pickle.load(f)
 
-    all_content = itertools.chain(submission_kps, reviewer_kps)
-    model.fit(all_content)
+    model = tfidf.Model(kps_by_paperid, kp_archives_by_userid)
+    model.fit()
+
     print('finished training in {}'.format(datetime.now() - start_training_datetime))
 
     train_dir = os.path.join(experiment_dir, 'train')

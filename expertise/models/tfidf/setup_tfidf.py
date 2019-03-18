@@ -29,8 +29,9 @@ def setup(config):
     # write keyphrases for reviewer archives to pickle file
     # formerly "reviewer_content_by_id"
     kps_by_reviewer = defaultdict(list)
+
     for file_id, text in tqdm(dataset.archives(), total=dataset.num_archives, desc='parsing archive keyphrases'):
-        kps_by_reviewer[file_id].extend(keyphrases(text))
+        kps_by_reviewer[file_id].append(keyphrases(text))
 
     reviewer_kps_path = os.path.join(setup_dir, 'reviewer_kps.pkl')
     dump_pkl(reviewer_kps_path, kps_by_reviewer)

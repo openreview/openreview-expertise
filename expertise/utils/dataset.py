@@ -69,14 +69,6 @@ class Dataset(object):
             filepath = os.path.join(data_dir, filename)
             file_id = filename.replace('.jsonl', '')
 
-            '''
-            WARNING: The UAI dataset is a full note record!
-                that is why this code *used to* assume that there is a "content" field.
-                remember to correct the UAI dataset and remove this.
-
-            for json_line in utils.jsonl_reader(filepath):
-                content = json_line['content']
-            '''
             for content in utils.jsonl_reader(filepath):
                 # preprocessing
                 record_text_unfiltered = utils.content_to_text(content, fields=['title', 'abstract', 'fulltext'])
