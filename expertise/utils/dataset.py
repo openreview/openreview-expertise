@@ -52,7 +52,11 @@ class Dataset(object):
 
         self.num_submissions = len(list(self._read_json_records(self.submission_records_path)))
 
-        self.num_archives = len(list(self._read_json_records(self.archives_path)))
+        self.num_archives = 0
+        self.reviewer_ids = set()
+        for userid, archive in self._read_json_records(self.archives_path):
+            self.reviewer_ids.add(userid)
+            self.num_archives += 1
 
         # TODO: Important! Need to make sure that different bid values get handled properly
         # across different kinds of datasets.
