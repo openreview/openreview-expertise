@@ -24,7 +24,7 @@ def setup(config):
         kps_by_submission[file_id].extend(keyphrases(text))
 
     submission_kps_path = os.path.join(setup_dir, 'submission_kps.pkl')
-    dump_pkl(submission_kps_path, kps_by_submission),
+    dump_pkl(submission_kps_path, kps_by_submission)
 
     # write keyphrases for reviewer archives to pickle file
     # formerly "reviewer_content_by_id"
