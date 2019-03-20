@@ -342,7 +342,8 @@ def read_examples(input_file):
 
 
 def main(_):
-  tf.logging.set_verbosity(tf.logging.INFO)
+  # tf.logging.set_verbosity(tf.logging.INFO)
+  tf.logging.set_verbosity(tf.logging.ERROR)
 
   layer_indexes = [int(x) for x in FLAGS.layers.split(",")]
 
