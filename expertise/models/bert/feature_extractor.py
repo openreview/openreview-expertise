@@ -421,11 +421,11 @@ def extract(input_file, vocab_file, bert_config_file, init_checkpoint, output_fi
   # Reference: https://stackoverflow.com/questions/48198770/tensorflow-1-5-0-rc0-error-using-tf-app-flags
   remaining_args = FLAGS([sys.argv[0]] + [flag for flag in sys.argv if flag.startswith("--")])
   assert(remaining_args == [sys.argv[0]])
-  # End Warning
 
   keys_list = ['input_file', 'vocab_file', 'bert_config_file', 'init_checkpoint', 'output_file']
   for keys in keys_list:
       FLAGS.__delattr__(keys)
+  # End Warning
 
   flags.DEFINE_string("input_file", input_file, "")
 

@@ -35,7 +35,3 @@ def setup(config):
 
     reviewer_kps_path = os.path.join(setup_dir, 'reviewer_kps.pkl')
     dump_pkl(reviewer_kps_path, kps_by_reviewer)
-
-
-
-
