@@ -47,12 +47,16 @@ def setup(config):
 
     for file_id, text in tqdm(dataset.submissions(fields=['title','abstract']), total=dataset.num_submissions, desc='parsing submission keyphrases'):
         new_filename = '{}.txt'.format(file_id)
-        write_bert_data(os.path.join(submissions_dir, new_filename), text)
+        new_filepath = os.path.join(submissions_dir, new_filename)
+        if not os.path.exists(new_filepath):
+            write_bert_data(new_filepath, text)
 
     for file_id, text in tqdm(dataset.archives(fields=['title','abstract']), total=dataset.num_archives, desc='parsing archive keyphrases'):
         new_filename = '{}_{:03d}.txt'.format(file_id, counter[file_id])
-        write_bert_data(os.path.join(archives_dir, new_filename), text)
         counter[file_id] += 1
+        new_filepath = os.path.join(archives_dir, new_filename)
+        if not os.path.exists(new_filename):
+            write_bert_data(new_filepath, text)
 
     submission_files = os.listdir(submissions_dir)
     archives_files = os.listdir(archives_dir)
