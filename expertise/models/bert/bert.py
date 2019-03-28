@@ -61,24 +61,26 @@ def setup(config):
     for file in tqdm(submission_files, total=len(submission_files), desc='extracting submission features'):
         input_file = os.path.join(submissions_dir, file)
         output_file = os.path.join(submissions_features_dir, file)
-        feature_extractor.extract(
-            input_file=input_file,
-            vocab_file=os.path.join(bert_base_dir, 'vocab.txt'),
-            bert_config_file=os.path.join(bert_base_dir, 'bert_config.json'),
-            init_checkpoint=os.path.join(bert_base_dir, 'bert_model.ckpt'),
-            output_file=output_file
-        )
+        if not os.path.exists(output_file):
+            feature_extractor.extract(
+                input_file=input_file,
+                vocab_file=os.path.join(bert_base_dir, 'vocab.txt'),
+                bert_config_file=os.path.join(bert_base_dir, 'bert_config.json'),
+                init_checkpoint=os.path.join(bert_base_dir, 'bert_model.ckpt'),
+                output_file=output_file
+            )
 
     for file in tqdm(archives_files, total=len(archives_files), desc='extracting archive features'):
         input_file = os.path.join(archives_dir, file)
         output_file = os.path.join(archives_features_dir, file)
-        feature_extractor.extract(
-            input_file=input_file,
-            vocab_file=os.path.join(bert_base_dir, 'vocab.txt'),
-            bert_config_file=os.path.join(bert_base_dir, 'bert_config.json'),
-            init_checkpoint=os.path.join(bert_base_dir, 'bert_model.ckpt'),
-            output_file=output_file
-        )
+        if not os.path.exists(output_file):
+            feature_extractor.extract(
+                input_file=input_file,
+                vocab_file=os.path.join(bert_base_dir, 'vocab.txt'),
+                bert_config_file=os.path.join(bert_base_dir, 'bert_config.json'),
+                init_checkpoint=os.path.join(bert_base_dir, 'bert_model.ckpt'),
+                output_file=output_file
+            )
 
     #reviewer_kps_path = os.path.join(setup_dir, 'reviewer_kps.pkl')
     #dump_pkl(reviewer_kps_path, kps_by_reviewer)
