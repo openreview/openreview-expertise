@@ -17,8 +17,7 @@ def write_bert_data(filename, text):
 
 def setup(config):
 
-    bert_base_dir = '/Users/michaelspector/projects/openreview/openreview-expertise/expertise/models/bert/uncased_L-12_H-768_A-12'
-
+    bert_base_dir = config.bert_base_dir
     experiment_dir = os.path.abspath(config.experiment_dir)
 
     setup_dir = os.path.join(experiment_dir, 'setup')
