@@ -8,12 +8,28 @@ import gensim
 
 from . import feature_extractor
 
-def write_bert_data(filename, text):
-    sentences = gensim.summarization.textcleaner.split_sentences(text)
+def write_bert_data(filename, text, max_seq_length=None):
+    if not max_seq_length:
+        sentences = gensim.summarization.textcleaner.split_sentences(text):
+    else:
+        sentences = split_by_chunks(text, max_seq_length)
+
     with open(filename, 'w') as f:
         for sentence in sentences:
             f.write(sentence)
             f.write('\n')
+
+def split_by_chunks(text, max_seq_length):
+    sentences = gensim.summarization.textcleaner.split_sentences(text)
+    chunks = [[]]
+    for sentence in sentences:
+        for word in sentence.split():
+            if len(chunks[-1]) >= max_seq_length:
+                chunks.append([])
+
+            chunks[-1].append(word)
+    chunked_sentences = [' '.join(chunk) for chunk in chunks]
+    return chunked_sentences
 
 def setup(config):
 
@@ -70,7 +86,8 @@ def setup(config):
                 vocab_file=os.path.join(bert_base_dir, 'vocab.txt'),
                 bert_config_file=os.path.join(bert_base_dir, 'bert_config.json'),
                 init_checkpoint=os.path.join(bert_base_dir, 'bert_model.ckpt'),
-                output_file=output_file
+                output_file=output_file,
+                max_seq_length=config.max_seq_length
             )
 
     for file in tqdm(archives_files, total=len(archives_files), desc='extracting archive features'):
@@ -82,7 +99,8 @@ def setup(config):
                 vocab_file=os.path.join(bert_base_dir, 'vocab.txt'),
                 bert_config_file=os.path.join(bert_base_dir, 'bert_config.json'),
                 init_checkpoint=os.path.join(bert_base_dir, 'bert_model.ckpt'),
-                output_file=output_file
+                output_file=output_file,
+                max_seq_length=config.max_seq_length
             )
 
     #reviewer_kps_path = os.path.join(setup_dir, 'reviewer_kps.pkl')
