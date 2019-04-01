@@ -68,14 +68,14 @@ class Dataset(object):
         for json_line in utils.jsonl_reader(self.reviewer_bids_file):
             yield openreview.Tag.from_json(json_line)
 
-    def _read_json_records(self, data_dir):
+    def _read_json_records(self, data_dir, fields=['title','abstract','fulltext']):
         for filename in os.listdir(data_dir):
             filepath = os.path.join(data_dir, filename)
             file_id = filename.replace('.jsonl', '')
 
             for content in utils.jsonl_reader(filepath):
                 # preprocessing
-                record_text_unfiltered = utils.content_to_text(content, fields=['title', 'abstract', 'fulltext'])
+                record_text_unfiltered = utils.content_to_text(content, fields)
                 record_text_filtered = utils.strip_nonalpha(record_text_unfiltered)
 
                 yield file_id, record_text_unfiltered
@@ -83,15 +83,15 @@ class Dataset(object):
     WARNING: This generator used to be called "submission_records".
     '''
     # def submission_records(self):
-    def submissions(self):
-        for submission_id, submission_text in self._read_json_records(self.submission_records_path):
+    def submissions(self, fields=['title', 'abstract', 'fulltext']):
+        for submission_id, submission_text in self._read_json_records(self.submission_records_path, fields):
             yield submission_id, submission_text
 
     '''
     WARNING: This generator used to be called "reviewer_archives".
     '''
     # def reviewer_archives(self):
-    def archives(self):
-        for reviewer_id, paper_text in self._read_json_records(self.archives_path):
+    def archives(self, fields=['title', 'abstract', 'fulltext']):
+        for reviewer_id, paper_text in self._read_json_records(self.archives_path, fields):
             yield reviewer_id, paper_text
 
