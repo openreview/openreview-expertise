@@ -10,7 +10,7 @@ from . import feature_extractor
 
 def write_bert_data(filename, text, max_seq_length=None):
     if not max_seq_length:
-        sentences = gensim.summarization.textcleaner.split_sentences(text):
+        sentences = gensim.summarization.textcleaner.split_sentences(text)
     else:
         sentences = split_by_chunks(text, max_seq_length)
 
