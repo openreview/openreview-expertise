@@ -411,7 +411,7 @@ def main(_):
       output_json["features"] = all_features
       writer.write(json.dumps(output_json) + "\n")
 
-def extract(input_file, vocab_file, bert_config_file, init_checkpoint, output_file):
+def extract(input_file, vocab_file, bert_config_file, init_checkpoint, output_file, max_seq_length=128):
   '''
   Wrapper on main to allow access from Python
   '''
@@ -422,7 +422,7 @@ def extract(input_file, vocab_file, bert_config_file, init_checkpoint, output_fi
   remaining_args = FLAGS([sys.argv[0]] + [flag for flag in sys.argv if flag.startswith("--")])
   assert(remaining_args == [sys.argv[0]])
 
-  keys_list = ['input_file', 'vocab_file', 'bert_config_file', 'init_checkpoint', 'output_file']
+  keys_list = ['input_file', 'vocab_file', 'bert_config_file', 'init_checkpoint', 'output_file', 'max_seq_length']
   for keys in keys_list:
       FLAGS.__delattr__(keys)
   # End Warning
@@ -442,6 +442,12 @@ def extract(input_file, vocab_file, bert_config_file, init_checkpoint, output_fi
       "Initial checkpoint (usually from a pre-trained BERT model).")
 
   flags.DEFINE_string("output_file", output_file, "")
+
+  flags.DEFINE_integer(
+    "max_seq_length", max_seq_length,
+    "The maximum total input sequence length after WordPiece tokenization. "
+    "Sequences longer than this will be truncated, and sequences shorter "
+    "than this will be padded.")
 
   main(sys.argv[0])
 
