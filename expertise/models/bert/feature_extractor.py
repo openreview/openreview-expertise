@@ -425,6 +425,7 @@ def extract(input_file, vocab_file, bert_config_file, init_checkpoint, output_fi
   keys_list = ['input_file', 'vocab_file', 'bert_config_file', 'init_checkpoint', 'output_file', 'max_seq_length']
   for keys in keys_list:
       FLAGS.__delattr__(keys)
+
   # End Warning
 
   flags.DEFINE_string("input_file", input_file, "")
@@ -457,4 +458,5 @@ if __name__ == "__main__":
   flags.mark_flag_as_required("bert_config_file")
   flags.mark_flag_as_required("init_checkpoint")
   flags.mark_flag_as_required("output_file")
+  flags.mark_flag_as_required("max_seq_length")
   tf.app.run()
