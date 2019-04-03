@@ -40,7 +40,6 @@ def setup(config):
     if not os.path.exists(setup_dir):
         os.mkdir(setup_dir)
 
-
     submissions_dir = os.path.join(setup_dir, 'submissions')
     if not os.path.exists(submissions_dir):
         os.mkdir(submissions_dir)
@@ -59,17 +58,15 @@ def setup(config):
 
     dataset = Dataset(**config.dataset)
 
-    counter = defaultdict(int)
-
-    for file_id, text in tqdm(dataset.submissions(fields=['title','abstract']), total=dataset.num_submissions, desc='parsing submission keyphrases'):
-        new_filename = '{}.txt'.format(file_id)
+    for file_idx, filename, text in tqdm(dataset.submissions(fields=['title','abstract']), total=dataset.num_submissions, desc='parsing submission keyphrases'):
+        new_filename = filename.replace('.jsonl', '.txt')
         new_filepath = os.path.join(submissions_dir, new_filename)
         if not os.path.exists(new_filepath):
             write_bert_data(new_filepath, text)
 
-    for file_id, text in tqdm(dataset.archives(fields=['title','abstract']), total=dataset.num_archives, desc='parsing archive keyphrases'):
-        new_filename = '{}_{:03d}.txt'.format(file_id, counter[file_id])
-        counter[file_id] += 1
+    for file_idx, filename, text in tqdm(dataset.archives(fields=['title','abstract']), total=dataset.num_archives, desc='parsing archive keyphrases'):
+        file_id = filename.replace('.jsonl', '')
+        new_filename = '{}_{:03d}.txt'.format(file_id, file_idx)
         new_filepath = os.path.join(archives_dir, new_filename)
         if not os.path.exists(new_filename):
             write_bert_data(new_filepath, text)
