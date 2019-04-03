@@ -62,14 +62,14 @@ def setup(config, partition_id=0, num_partitions=1):
         new_filename = '{}.txt'.format(filename.replace('.jsonl', ''))
         new_filepath = os.path.join(submissions_dir, new_filename)
         if not os.path.exists(new_filepath):
-            write_bert_data(new_filepath, text)
+            write_bert_data(new_filepath, text, config.max_seq_length)
 
     for file_idx, (filename, text) in enumerate(tqdm(dataset.archives(fields=['title','abstract']), total=dataset.num_archives, desc='parsing archive keyphrases')):
         file_id = filename.replace('.jsonl', '')
         new_filename = '{:05d}|{}.txt'.format(file_idx, file_id)
         new_filepath = os.path.join(archives_dir, new_filename)
         if not os.path.exists(new_filename):
-            write_bert_data(new_filepath, text)
+            write_bert_data(new_filepath, text, config.max_seq_length)
 
     submission_files = list(partition(
         sorted(os.listdir(submissions_dir)),
