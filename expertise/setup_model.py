@@ -10,8 +10,8 @@ import os
 
 from expertise.utils.config import Config
 
-def setup_model(config_path):
-    config_path = os.path.abspath(config_path)
+def setup_model(args):
+    config_path = os.path.abspath(args.config_path)
     experiment_path = os.path.dirname(config_path)
 
     config = Config(config_path)
@@ -22,11 +22,12 @@ def setup_model(config_path):
     if not os.path.isdir(setup_path):
         os.mkdir(setup_path)
 
-    model.setup(config)
+    model.setup(config, *args.additional_params)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('config_path', help="a config file for a model")
+    parser.add_argument('additional_params', nargs=argparse.REMAINDER)
     args = parser.parse_args()
 
-    setup_model(args.config_path)
+    setup_model(args)
