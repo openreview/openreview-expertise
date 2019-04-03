@@ -1,12 +1,12 @@
 import os
 import importlib
 from collections import defaultdict
-from expertise.utils import dump_pkl
+from expertise.utils import dump_pkl, partition
 from expertise.utils.dataset import Dataset
 from tqdm import tqdm
 import gensim
 
-from . import feature_extractor
+from expertise.models.bert import feature_extractor
 
 def write_bert_data(filename, text, max_seq_length=None):
     if not max_seq_length:
@@ -31,7 +31,7 @@ def split_by_chunks(text, max_seq_length):
     chunked_sentences = [' '.join(chunk) for chunk in chunks]
     return chunked_sentences
 
-def setup(config):
+def setup(config, partition_id=0, num_partitions=1):
 
     bert_base_dir = config.bert_base_dir
     experiment_dir = os.path.abspath(config.experiment_dir)
@@ -58,21 +58,24 @@ def setup(config):
 
     dataset = Dataset(**config.dataset)
 
-    for file_idx, filename, text in tqdm(dataset.submissions(fields=['title','abstract']), total=dataset.num_submissions, desc='parsing submission keyphrases'):
-        new_filename = filename.replace('.jsonl', '.txt')
+    for filename, text in tqdm(dataset.submissions(fields=['title','abstract']), total=dataset.num_submissions, desc='parsing submission keyphrases'):
+        new_filename = '{}.txt'.format(filename.replace('.jsonl', ''))
         new_filepath = os.path.join(submissions_dir, new_filename)
         if not os.path.exists(new_filepath):
             write_bert_data(new_filepath, text)
 
-    for file_idx, filename, text in tqdm(dataset.archives(fields=['title','abstract']), total=dataset.num_archives, desc='parsing archive keyphrases'):
+    for file_idx, (filename, text) in enumerate(tqdm(dataset.archives(fields=['title','abstract']), total=dataset.num_archives, desc='parsing archive keyphrases')):
         file_id = filename.replace('.jsonl', '')
-        new_filename = '{}_{:03d}.txt'.format(file_id, file_idx)
+        new_filename = '{:05d}|{}.txt'.format(file_idx, file_id)
         new_filepath = os.path.join(archives_dir, new_filename)
         if not os.path.exists(new_filename):
             write_bert_data(new_filepath, text)
 
-    submission_files = os.listdir(submissions_dir)
-    archives_files = os.listdir(archives_dir)
+    submission_files = list(partition(
+        sorted(os.listdir(submissions_dir)),
+        partition_id=int(partition_id),
+        num_partitions=int(num_partitions)
+    ))
 
     for file in tqdm(submission_files, total=len(submission_files), desc='extracting submission features'):
         input_file = os.path.join(submissions_dir, file)
@@ -86,6 +89,12 @@ def setup(config):
                 output_file=output_file,
                 max_seq_length=config.max_seq_length
             )
+
+    archives_files = list(partition(
+        sorted(os.listdir(archives_dir)),
+        partition_id=int(partition_id),
+        num_partitions=int(num_partitions)
+    ))
 
     for file in tqdm(archives_files, total=len(archives_files), desc='extracting archive features'):
         input_file = os.path.join(archives_dir, file)

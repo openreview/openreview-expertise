@@ -13,6 +13,27 @@ import csv
 from collections import defaultdict
 import math, random
 
+def partition(list_, partition_id=0, num_partitions=1):
+    '''
+    Given a list, partitions the list according to `num_partitions`.
+    This function is useful for parallelization.
+
+    Example:
+    >>> for i in partition(range(100), partition_id=3, num_partitions=20):
+    >>>     print(i)
+    3
+    23
+    43
+    63
+    83
+
+    '''
+    for item_idx, item in enumerate(list_):
+        if item_idx % num_partitions == partition_id:
+            yield item
+        else:
+            pass
+
 def dump_csv(filepath, data):
     '''
     Writes .csv files in a specific format preferred by some IESL students:
