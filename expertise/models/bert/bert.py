@@ -1,12 +1,37 @@
 import os
 import importlib
 from collections import defaultdict
-from expertise.utils import dump_pkl, partition
+from expertise.utils import dump_pkl, partition, jsonl_reader
 from expertise.utils.dataset import Dataset
 from tqdm import tqdm
 import gensim
+from gensim.models import KeyedVectors
 
 from expertise.models.bert import feature_extractor
+
+class Model():
+    def __init__(self, archives_features_dir):
+        self.keyedvectors = KeyedVectors()
+        self.entities = []
+        self.weights = []
+        feature_files = os.listdir(archives_features_dir)
+        for file in tqdm(feature_files, total=len(feature_files)):
+            for data in jsonl_reader(os.path.join(archives_features_dir, file)):
+                vector = get_vector(data)
+                self.entities.append(file)
+                self.weights.append(vector)
+
+        self.keyedvectors.add(entities=entities, weights=weights)
+
+    def get_vector(data):
+        '''
+        Returns the vector representing input data.
+
+        '''
+        class_vector = [f for f in data['features'] if f['token'] == '[CLS]'][0]
+        last_layer = [l for l in class_vector['layers'] if l['index'] == -1][0]
+        vector = np.array(last_layer['values'])
+        return vector
 
 def write_bert_data(filename, text, max_seq_length=None):
     if not max_seq_length:
@@ -109,8 +134,8 @@ def setup(config, partition_id=0, num_partitions=1):
                 max_seq_length=config.max_seq_length
             )
 
-    #reviewer_kps_path = os.path.join(setup_dir, 'reviewer_kps.pkl')
-    #dump_pkl(reviewer_kps_path, kps_by_reviewer)
+    bert_model = Model(archives_features_dir)
+    dump_pkl(os.path.join(setup_dir, 'model.pkl'), bert_model)
 
 def train(config):
     pass
