@@ -6,6 +6,7 @@ from expertise.utils.dataset import Dataset
 from tqdm import tqdm
 import gensim
 from gensim.models import KeyedVectors
+import numpy as np
 
 from expertise.models.bert import feature_extractor
 
@@ -17,13 +18,13 @@ class Model():
         feature_files = os.listdir(archives_features_dir)
         for file in tqdm(feature_files, total=len(feature_files)):
             for data in jsonl_reader(os.path.join(archives_features_dir, file)):
-                vector = get_vector(data)
+                vector = self.get_vector(data)
                 self.entities.append(file)
                 self.weights.append(vector)
 
-        self.keyedvectors.add(entities=entities, weights=weights)
+        self.keyedvectors.add(entities=self.entities, weights=self.weights)
 
-    def get_vector(data):
+    def get_vector(self, data):
         '''
         Returns the vector representing input data.
 
