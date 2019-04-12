@@ -10,8 +10,8 @@ from gensim.models import KeyedVectors
 from expertise.models.bert import feature_extractor
 
 class Model():
-    def __init__(self, archives_features_dir):
-        self.keyedvectors = KeyedVectors()
+    def __init__(self, archives_features_dir, vector_size=768):
+        self.keyedvectors = KeyedVectors(vector_size)
         self.entities = []
         self.weights = []
         feature_files = os.listdir(archives_features_dir)
