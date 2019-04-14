@@ -20,7 +20,8 @@ setup(
         'torch',
         'cloudpickle',
         'scikit-learn',
-        'tqdm'
+        'tqdm',
+        'pytorch_pretrained_bert'
     ],
     zip_safe=False
 )
