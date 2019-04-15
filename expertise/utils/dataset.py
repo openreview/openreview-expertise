@@ -107,8 +107,7 @@ class Dataset(object):
                 total=num_items,
                 desc=desc)
 
-        for item_id, items in item_generator:
-            yield item_id, items
+        return item_generator
 
     def submissions(self, fields=['title', 'abstract', 'fulltext'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
 
@@ -119,8 +118,8 @@ class Dataset(object):
             fields=fields,
             sequential=sequential,
             progressbar=progressbar,
-            partition_id=partition_id,
-            num_partitions=num_partitions
+            partition_id=int(partition_id),
+            num_partitions=int(num_partitions)
         )
 
         for submission_id, submission_items in submission_generator:
@@ -136,8 +135,8 @@ class Dataset(object):
             fields=fields,
             sequential=sequential,
             progressbar=progressbar,
-            partition_id=partition_id,
-            num_partitions=num_partitions
+            partition_id=int(partition_id),
+            num_partitions=int(num_partitions)
         )
 
         for archive_id, archive_items in archive_generator:
