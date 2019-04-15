@@ -40,7 +40,11 @@ def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
     model = setup_bert_pretrained(config.bert_model)
 
     # convert submissions and archives to bert feature vectors
-    for text_id, text in dataset.submissions():
+    for text_id, text in dataset.submissions(
+        partition_id=partition_id,
+        num_partitions=num_partitions,
+        progressbar=False):
+
         all_lines_features = helpers.extract_features(
             lines=[text],
             model=model,
@@ -58,7 +62,12 @@ def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
         cls_emb_file = os.path.join(setup_dir, 'submissions-features/cls/{}.npy'.format(text_id))
         np.save(cls_emb_file, class_embeddings)
 
-    for text_id, all_text in dataset.archives(sequential=False):
+    for text_id, all_text in dataset.archives(
+        sequential=False,
+        partition_id=partition_id,
+        num_partitions=num_partitions,
+        progressbar=False):
+
         all_lines_features = helpers.extract_features(
             lines=all_text,
             model=model,
