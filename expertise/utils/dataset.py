@@ -90,21 +90,55 @@ class Dataset(object):
             if not sequential:
                 yield file_id, all_text
 
-    # def submission_records(self):
-    def submissions(self, fields=['title', 'abstract', 'fulltext']):
-        for submission_id, submission_text in tqdm(
-            self._read_json_records(self.submission_records_path, fields),
-            total=self.num_submissions,
-            desc='dataset submissions'):
 
-            yield submission_id, submission_text
+    def _items(self, path, num_items, desc='', fields=['title', 'abstract', 'fulltext'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
+        item_generator = self._read_json_records(path, fields, sequential=sequential)
+
+        if num_partitions > 1:
+            item_generator = utils.partition(
+                item_generator,
+                partition_id=partition_id, num_partitions=num_partitions)
+            num_items = num_items / num_partitions
+            desc = '{} (partition {})'.format(desc, partition_id)
+
+        if progressbar:
+            item_generator = tqdm(
+                item_generator,
+                total=num_items,
+                desc=desc)
+
+        for item_id, items in item_generator:
+            yield item_id, items
+
+    def submissions(self, fields=['title', 'abstract', 'fulltext'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
+
+        submission_generator = self._items(
+            path=self.submission_records_path,
+            num_items=self.num_submissions,
+            desc='submissions',
+            fields=fields,
+            sequential=sequential,
+            progressbar=progressbar,
+            partition_id=partition_id,
+            num_partitions=num_partitions
+        )
+
+        for submission_id, submission_items in submission_generator:
+            yield submission_id, submission_items
 
     # def reviewer_archives(self):
-    def archives(self, fields=['title', 'abstract', 'fulltext'], sequential=True):
-        for reviewer_id, paper_text in tqdm(
-            self._read_json_records(self.archives_path, fields, sequential=sequential),
-            total=self.num_archives if sequential else len(self.reviewer_ids),
-            desc='dataset archives'):
+    def archives(self, fields=['title', 'abstract', 'fulltext'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
 
-            yield reviewer_id, paper_text
+        archive_generator = self._items(
+            path=self.submission_records_path,
+            num_items=self.num_submissions,
+            desc='submissions',
+            fields=fields,
+            sequential=sequential,
+            progressbar=progressbar,
+            partition_id=partition_id,
+            num_partitions=num_partitions
+        )
 
+        for archive_id, archive_items in archive_generator:
+            yield archive_id, archive_items
