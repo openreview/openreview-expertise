@@ -85,7 +85,7 @@ class Dataset(object):
                 if sequential:
                     yield file_id, record_text_unfiltered
                 else:
-                    all_text.append(record_text_filtered)
+                    all_text.append(record_text_unfiltered)
 
             if not sequential:
                 yield file_id, all_text
