@@ -129,9 +129,9 @@ class Dataset(object):
     def archives(self, fields=['title', 'abstract', 'fulltext'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
 
         archive_generator = self._items(
-            path=self.submission_records_path,
-            num_items=self.num_submissions,
-            desc='submissions',
+            path=self.archives_path,
+            num_items=self.num_archives,
+            desc='archives',
             fields=fields,
             sequential=sequential,
             progressbar=progressbar,
