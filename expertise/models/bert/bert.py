@@ -1,78 +1,30 @@
 import os
-import importlib
-from collections import defaultdict
-from expertise.utils import dump_pkl, partition, jsonl_reader
 from expertise.utils.dataset import Dataset
 from tqdm import tqdm
+
+# needed?
 import gensim
 from gensim.models import KeyedVectors
+
 import numpy as np
+from torch.utils.data import TensorDataset, DataLoader, SequentialSampler
+from pytorch_pretrained_bert.tokenization import BertTokenizer
+from pytorch_pretrained_bert.modeling import BertModel
 
-from expertise.models.bert import feature_extractor
+from . import helpers
 
-class Model():
-    def __init__(self, archives_features_dir, vector_size=768):
-        self.keyedvectors = KeyedVectors(vector_size)
-        self.entities = []
-        self.weights = []
-        feature_files = os.listdir(archives_features_dir)
-        for file in tqdm(feature_files, total=len(feature_files)):
-            for data in jsonl_reader(os.path.join(archives_features_dir, file)):
-                vector = self.get_vector(data)
-                self.entities.append(file)
-                self.weights.append(vector)
+def setup_bert_pretrained(bert_model):
+    model = BertModel.from_pretrained(bert_model)
 
-        self.keyedvectors.add(entities=self.entities, weights=self.weights)
+    return model
 
-    def get_vector(self, data):
-        '''
-        Returns the vector representing input data.
+def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
 
-        '''
-        class_vector = [f for f in data['features'] if f['token'] == '[CLS]'][0]
-        last_layer = [l for l in class_vector['layers'] if l['index'] == -1][0]
-        vector = np.array(last_layer['values'])
-        return vector
-
-def write_bert_data(filename, text, max_seq_length=None):
-    if not max_seq_length:
-        sentences = gensim.summarization.textcleaner.split_sentences(text)
-    else:
-        sentences = split_by_chunks(text, max_seq_length)
-
-    with open(filename, 'w') as f:
-        for sentence in sentences:
-            f.write(sentence)
-            f.write('\n')
-
-def split_by_chunks(text, max_seq_length):
-    sentences = gensim.summarization.textcleaner.split_sentences(text)
-    chunks = [[]]
-    for sentence in sentences:
-        for word in sentence.split():
-            if len(chunks[-1]) >= max_seq_length:
-                chunks.append([])
-
-            chunks[-1].append(word)
-    chunked_sentences = [' '.join(chunk) for chunk in chunks]
-    return chunked_sentences
-
-def setup(config, partition_id=0, num_partitions=1):
-
-    bert_base_dir = config.bert_base_dir
     experiment_dir = os.path.abspath(config.experiment_dir)
 
     setup_dir = os.path.join(experiment_dir, 'setup')
     if not os.path.exists(setup_dir):
         os.mkdir(setup_dir)
-
-    submissions_dir = os.path.join(setup_dir, 'submissions')
-    if not os.path.exists(submissions_dir):
-        os.mkdir(submissions_dir)
-
-    archives_dir = os.path.join(setup_dir, 'archives')
-    if not os.path.exists(archives_dir):
-        os.mkdir(archives_dir)
 
     submissions_features_dir = os.path.join(setup_dir, 'submissions-features')
     if not os.path.exists(submissions_features_dir):
@@ -84,59 +36,40 @@ def setup(config, partition_id=0, num_partitions=1):
 
     dataset = Dataset(**config.dataset)
 
-    for filename, text in tqdm(dataset.submissions(fields=['title','abstract']), total=dataset.num_submissions, desc='parsing submission keyphrases'):
-        new_filename = '{}.txt'.format(filename.replace('.jsonl', ''))
-        new_filepath = os.path.join(submissions_dir, new_filename)
-        if not os.path.exists(new_filepath):
-            write_bert_data(new_filepath, text, config.max_seq_length)
+    tokenizer = BertTokenizer.from_pretrained(
+        config.bert_model, do_lower_case=config.do_lower_case)
 
-    for file_idx, (filename, text) in enumerate(tqdm(dataset.archives(fields=['title','abstract']), total=dataset.num_archives, desc='parsing archive keyphrases')):
-        file_id = filename.replace('.jsonl', '')
-        new_filename = '{:05d}|{}.txt'.format(file_idx, file_id)
-        new_filepath = os.path.join(archives_dir, new_filename)
-        if not os.path.exists(new_filename):
-            write_bert_data(new_filepath, text, config.max_seq_length)
+    model = setup_bert_pretrained(config.bert_model)
 
-    submission_files = list(partition(
-        sorted(os.listdir(submissions_dir)),
-        partition_id=int(partition_id),
-        num_partitions=int(num_partitions)
-    ))
-
-    for file in tqdm(submission_files, total=len(submission_files), desc='extracting submission features'):
-        input_file = os.path.join(submissions_dir, file)
-        output_file = os.path.join(submissions_features_dir, file)
-        if not os.path.exists(output_file):
-            feature_extractor.extract(
-                input_file=input_file,
-                vocab_file=os.path.join(bert_base_dir, 'vocab.txt'),
-                bert_config_file=os.path.join(bert_base_dir, 'bert_config.json'),
-                init_checkpoint=os.path.join(bert_base_dir, 'bert_model.ckpt'),
-                output_file=output_file,
-                max_seq_length=config.max_seq_length
+    # convert submissions and archives to bert feature vectors
+    for paper_generator in [dataset.submissions(), dataset.archives()]:
+        for filename, text in paper_generator:
+            all_lines_features = helpers.extract_features(
+                lines=[text],
+                model=model,
+                tokenizer=tokenizer,
+                max_seq_length=config.max_seq_length,
+                batch_size=32
             )
 
-    archives_files = list(partition(
-        sorted(os.listdir(archives_dir)),
-        partition_id=int(partition_id),
-        num_partitions=int(num_partitions)
-    ))
+            avg_embeddings = helpers.get_avg_words(all_lines_features)
+            class_embeddings = helpers.get_cls_vectors(all_lines_features)
 
-    for file in tqdm(archives_files, total=len(archives_files), desc='extracting archive features'):
-        input_file = os.path.join(archives_dir, file)
-        output_file = os.path.join(archives_features_dir, file)
-        if not os.path.exists(output_file):
-            feature_extractor.extract(
-                input_file=input_file,
-                vocab_file=os.path.join(bert_base_dir, 'vocab.txt'),
-                bert_config_file=os.path.join(bert_base_dir, 'bert_config.json'),
-                init_checkpoint=os.path.join(bert_base_dir, 'bert_model.ckpt'),
-                output_file=output_file,
-                max_seq_length=config.max_seq_length
-            )
+            avg_emb_file = os.path.join(submissions_features_dir, '{}-avg_emb.npy'.format(filename))
+            np.save(avg_emb_file, avg_embeddings)
 
-    bert_model = Model(archives_features_dir)
-    dump_pkl(os.path.join(setup_dir, 'model.pkl'), bert_model)
+            cls_emb_file = os.path.join(submissions_features_dir, '{}-cls_emb.npy'.format(filename))
+            np.save(cls_emb_file, class_embeddings)
+
+
+    # for file in tqdm(submission_files, total=len(submission_files), desc='extracting submission features'):
+    #     output_file = os.path.join(submissions_features_dir, file)
+    #     # write output_file
+
+    # for file in tqdm(archives_files, total=len(archives_files), desc='extracting archive features'):
+    #     output_file = os.path.join(archives_features_dir, file)
+    #     # write output_file
+
 
 def train(config):
     pass
