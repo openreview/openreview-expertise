@@ -2,6 +2,7 @@ import json
 import random
 import os
 import openreview
+from tqdm import tqdm
 
 from . import utils
 
@@ -68,30 +69,42 @@ class Dataset(object):
         for json_line in utils.jsonl_reader(self.reviewer_bids_file):
             yield openreview.Tag.from_json(json_line)
 
-    def _read_json_records(self, data_dir, fields=['title','abstract','fulltext']):
+    def _read_json_records(self, data_dir, fields=['title','abstract','fulltext'], sequential=True):
         for filename in os.listdir(data_dir):
             filepath = os.path.join(data_dir, filename)
             file_id = filename.replace('.jsonl', '')
+
+            if not sequential:
+                all_text = []
 
             for content in utils.jsonl_reader(filepath):
                 # preprocessing
                 record_text_unfiltered = utils.content_to_text(content, fields)
                 record_text_filtered = utils.strip_nonalpha(record_text_unfiltered)
 
-                yield file_id, record_text_unfiltered
-    '''
-    WARNING: This generator used to be called "submission_records".
-    '''
+                if sequential:
+                    yield file_id, record_text_unfiltered
+                else:
+                    all_text.append(record_text_filtered)
+
+            if not sequential:
+                yield file_id, all_text
+
     # def submission_records(self):
     def submissions(self, fields=['title', 'abstract', 'fulltext']):
-        for submission_id, submission_text in self._read_json_records(self.submission_records_path, fields):
+        for submission_id, submission_text in tqdm(
+            self._read_json_records(self.submission_records_path, fields),
+            total=self.num_submissions,
+            desc='dataset submissions'):
+
             yield submission_id, submission_text
 
-    '''
-    WARNING: This generator used to be called "reviewer_archives".
-    '''
     # def reviewer_archives(self):
-    def archives(self, fields=['title', 'abstract', 'fulltext']):
-        for reviewer_id, paper_text in self._read_json_records(self.archives_path, fields):
+    def archives(self, fields=['title', 'abstract', 'fulltext'], sequential=True):
+        for reviewer_id, paper_text in tqdm(
+            self._read_json_records(self.archives_path, fields, sequential=sequential),
+            total=self.num_archives if sequential else len(self.reviewer_ids),
+            desc='dataset archives'):
+
             yield reviewer_id, paper_text
 

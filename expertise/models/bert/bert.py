@@ -42,33 +42,41 @@ def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
     model = setup_bert_pretrained(config.bert_model)
 
     # convert submissions and archives to bert feature vectors
-    for paper_generator in [dataset.submissions(), dataset.archives()]:
-        for filename, text in paper_generator:
-            all_lines_features = helpers.extract_features(
-                lines=[text],
-                model=model,
-                tokenizer=tokenizer,
-                max_seq_length=config.max_seq_length,
-                batch_size=32
-            )
+    for text_id, text in dataset.submissions():
+        all_lines_features = helpers.extract_features(
+            lines=[text],
+            model=model,
+            tokenizer=tokenizer,
+            max_seq_length=config.max_seq_length,
+            batch_size=32
+        )
 
-            avg_embeddings = helpers.get_avg_words(all_lines_features)
-            class_embeddings = helpers.get_cls_vectors(all_lines_features)
+        avg_embeddings = helpers.get_avg_words(all_lines_features)
+        class_embeddings = helpers.get_cls_vectors(all_lines_features)
 
-            avg_emb_file = os.path.join(submissions_features_dir, '{}-avg_emb.npy'.format(filename))
-            np.save(avg_emb_file, avg_embeddings)
+        avg_emb_file = os.path.join(submissions_features_dir, '{}-avg.npy'.format(text_id))
+        np.save(avg_emb_file, avg_embeddings)
 
-            cls_emb_file = os.path.join(submissions_features_dir, '{}-cls_emb.npy'.format(filename))
-            np.save(cls_emb_file, class_embeddings)
+        cls_emb_file = os.path.join(submissions_features_dir, '{}-cls.npy'.format(text_id))
+        np.save(cls_emb_file, class_embeddings)
 
+    for text_id, all_text in dataset.archives(sequential=False):
+        all_lines_features = helpers.extract_features(
+            lines=all_text,
+            model=model,
+            tokenizer=tokenizer,
+            max_seq_length=config.max_seq_length,
+            batch_size=32
+        )
 
-    # for file in tqdm(submission_files, total=len(submission_files), desc='extracting submission features'):
-    #     output_file = os.path.join(submissions_features_dir, file)
-    #     # write output_file
+        avg_embeddings = helpers.get_avg_words(all_lines_features)
+        class_embeddings = helpers.get_cls_vectors(all_lines_features)
 
-    # for file in tqdm(archives_files, total=len(archives_files), desc='extracting archive features'):
-    #     output_file = os.path.join(archives_features_dir, file)
-    #     # write output_file
+        avg_emb_file = os.path.join(archives_features_dir, '{}-avg.npy'.format(text_id))
+        np.save(avg_emb_file, avg_embeddings)
+
+        cls_emb_file = os.path.join(archives_features_dir, '{}-cls.npy'.format(text_id))
+        np.save(cls_emb_file, class_embeddings)
 
 
 def train(config):
