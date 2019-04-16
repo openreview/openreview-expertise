@@ -15,75 +15,77 @@ from pytorch_pretrained_bert.modeling import BertModel
 
 from . import helpers
 
-def setup_bert_pretrained(bert_model):
+def _setup_bert_pretrained(bert_model):
     model = BertModel.from_pretrained(bert_model)
     return model
 
-def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
+def _write_features(text_id, lines, feature_dir, extraction_args):
+    avg_emb_file = os.path.join(feature_dir, 'avg/{}.npy'.format(text_id))
+    cls_emb_file = os.path.join(feature_dir, 'cls/{}.npy'.format(text_id))
 
+    if any([not os.path.exists(f) for f in [avg_emb_file, cls_emb_file]]):
+        all_lines_features = helpers.extract_features(
+            lines=lines,
+            model=extraction_args['model'],
+            tokenizer=extraction_args['tokenizer'],
+            max_seq_length=extraction_args['max_seq_length'],
+            batch_size=extraction_args['batch_size']
+        )
+
+        avg_embeddings = helpers.get_avg_words(all_lines_features)
+        class_embeddings = helpers.get_cls_vectors(all_lines_features)
+
+        np.save(avg_emb_file, avg_embeddings)
+        np.save(cls_emb_file, class_embeddings)
+    else:
+        print('skipping {}'.format(text_id))
+
+def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
     experiment_dir = os.path.abspath(config.experiment_dir)
     setup_dir = os.path.join(experiment_dir, 'setup')
 
-    for feature_dir in [
+    feature_dirs = [
         'submissions-features/cls',
         'submissions-features/avg',
         'archives-features/cls',
-        'archives-features/avg']:
+        'archives-features/avg'
+    ]
 
-        os.makedirs(os.path.join(setup_dir, feature_dir), exist_ok=True)
+    for d in feature_dirs:
+        os.makedirs(os.path.join(setup_dir, d), exist_ok=True)
 
     dataset = Dataset(**config.dataset)
 
     tokenizer = BertTokenizer.from_pretrained(
         config.bert_model, do_lower_case=config.do_lower_case)
 
-    model = setup_bert_pretrained(config.bert_model)
+    model = _setup_bert_pretrained(config.bert_model)
 
     # convert submissions and archives to bert feature vectors
-    for text_id, text in dataset.submissions(
-        partition_id=partition_id,
-        num_partitions=num_partitions,
-        progressbar=False):
 
-        all_lines_features = helpers.extract_features(
-            lines=[text],
-            model=model,
-            tokenizer=tokenizer,
-            max_seq_length=config.max_seq_length,
-            batch_size=32
-        )
+    dataset_args = {
+        'partition_id': partition_id,
+        'num_partitions': num_partitions,
+        'progressbar': False,
+        'sequential': False
+    }
 
-        avg_embeddings = helpers.get_avg_words(all_lines_features)
-        class_embeddings = helpers.get_cls_vectors(all_lines_features)
+    extraction_args = {
+        'model': model,
+        'tokenizer': tokenizer,
+        'max_seq_length': config.max_seq_length,
+        'batch_size': config.batch_size
+    }
 
-        avg_emb_file = os.path.join(setup_dir, 'submissions-features/avg/{}.npy'.format(text_id))
-        np.save(avg_emb_file, avg_embeddings)
+    for text_id, text_list in dataset.submissions(**dataset_args):
+        feature_dir = os.path.join(setup_dir, 'submissions-features')
+        _write_features(
+            text_id, text_list, feature_dir, extraction_args)
 
-        cls_emb_file = os.path.join(setup_dir, 'submissions-features/cls/{}.npy'.format(text_id))
-        np.save(cls_emb_file, class_embeddings)
-
-    for text_id, all_text in dataset.archives(
-        sequential=False,
-        partition_id=partition_id,
-        num_partitions=num_partitions,
-        progressbar=False):
-
-        all_lines_features = helpers.extract_features(
-            lines=all_text,
-            model=model,
-            tokenizer=tokenizer,
-            max_seq_length=config.max_seq_length,
-            batch_size=32
-        )
-
-        avg_embeddings = helpers.get_avg_words(all_lines_features)
-        class_embeddings = helpers.get_cls_vectors(all_lines_features)
-
-        avg_emb_file = os.path.join(setup_dir, 'archives-features/avg/{}.npy'.format(text_id))
-        np.save(avg_emb_file, avg_embeddings)
-
-        cls_emb_file = os.path.join(setup_dir, 'archives-features/cls/{}.npy'.format(text_id))
-        np.save(cls_emb_file, class_embeddings)
+    for text_id, text_list in dataset.archives(**dataset_args):
+        feature_dir = os.path.join(setup_dir, 'archives-features')
+        _write_features(
+            text_id, text_list, feature_dir, extraction_args)
 
 
 def train(config):
