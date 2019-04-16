@@ -29,7 +29,8 @@ def _write_features(text_id, lines, feature_dir, extraction_args):
             model=extraction_args['model'],
             tokenizer=extraction_args['tokenizer'],
             max_seq_length=extraction_args['max_seq_length'],
-            batch_size=extraction_args['batch_size']
+            batch_size=extraction_args['batch_size'],
+            no_cuda=extraction_args['no_cuda']
         )
 
         avg_embeddings = helpers.get_avg_words(all_lines_features)
@@ -74,7 +75,8 @@ def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
         'model': model,
         'tokenizer': tokenizer,
         'max_seq_length': config.max_seq_length,
-        'batch_size': config.batch_size
+        'batch_size': config.batch_size,
+        'no_cuda': not config.use_cuda
     }
 
     for text_id, text_list in dataset.submissions(**dataset_args):
