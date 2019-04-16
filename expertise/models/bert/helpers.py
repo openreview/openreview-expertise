@@ -277,6 +277,7 @@ def extract_features(
 
     model.eval()
 
+    lines = []
     for input_ids, input_mask, example_indices in eval_dataloader:
         input_ids = input_ids.to(device)
         input_mask = input_mask.to(device)
@@ -284,8 +285,6 @@ def extract_features(
         all_encoder_layers, _ = model(input_ids, token_type_ids=None, attention_mask=input_mask)
         all_encoder_layers = all_encoder_layers
 
-
-        lines = []
         for b, example_index in enumerate(example_indices):
             feature = features[example_index.item()]
             unique_id = int(feature.unique_id)
@@ -308,6 +307,7 @@ def extract_features(
                 out_features["token"] = token
                 out_features["layers"] = all_layers
                 all_out_features.append(out_features)
+
             output_dict["features"] = all_out_features
             lines.append(output_dict)
-        return lines
+    return lines
