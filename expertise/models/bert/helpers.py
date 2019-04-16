@@ -59,7 +59,7 @@ class InputFeatures(object):
         self.input_mask = input_mask
         self.input_type_ids = input_type_ids
 
-def convert_examples_to_features(examples, seq_length, tokenizer):
+def convert_examples_to_features(examples, seq_length, tokenizer, verbose=False):
     """Loads a data file into a list of `InputFeature`s."""
 
     features = []
@@ -131,7 +131,7 @@ def convert_examples_to_features(examples, seq_length, tokenizer):
         assert len(input_mask) == seq_length
         assert len(input_type_ids) == seq_length
 
-        if ex_index < 5:
+        if verbose and ex_index < 5:
             logger.info("*** Example ***")
             logger.info("unique_id: %s" % (example.unique_id))
             logger.info("tokens: %s" % " ".join([str(x) for x in tokens]))
@@ -228,7 +228,7 @@ def extract_features(
     layers='-1',
     max_seq_length=128,
     batch_size=32,
-    ):
+    verbose=False):
     '''
     Same arguments as main()
     '''
@@ -242,7 +242,8 @@ def extract_features(
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.distributed.init_process_group(backend='nccl')
 
-    logger.info("device: {} n_gpu: {} distributed training: {}".format(device, n_gpu, bool(local_rank != -1)))
+    if verbose:
+        logger.info("device: {} n_gpu: {} distributed training: {}".format(device, n_gpu, bool(local_rank != -1)))
 
     layer_indexes = [int(x) for x in layers.split(",")]
 
