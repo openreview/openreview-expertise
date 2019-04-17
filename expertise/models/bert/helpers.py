@@ -277,7 +277,7 @@ def extract_features(
 
     model.eval()
 
-    lines = []
+    line_features = []
     for input_ids, input_mask, example_indices in eval_dataloader:
         input_ids = input_ids.to(device)
         input_mask = input_mask.to(device)
@@ -309,5 +309,5 @@ def extract_features(
                 all_out_features.append(out_features)
 
             output_dict["features"] = all_out_features
-            lines.append(output_dict)
-    return lines
+            line_features.append(output_dict)
+    return line_features

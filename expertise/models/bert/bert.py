@@ -1,5 +1,7 @@
 import os
 import json
+from collections import defaultdict
+
 from expertise.utils.standard_test import test
 from expertise.utils.dataset import Dataset
 from tqdm import tqdm
@@ -130,14 +132,19 @@ def infer(config):
     score_file_path = os.path.join(infer_dir, config.name + '-scores.jsonl')
     with open(score_file_path, 'w') as f:
         for paper_idx, row in enumerate(scores):
-            max_index = row.argmax()
-            max_score = row[max_index]
-            author_id = author_lookup[max_index]
             paper_id = paper_lookup[paper_idx]
 
-            result = {
-                'source_id': paper_id,
-                'target_id': author_id,
-                'score': float(max_score)
-            }
-            f.write(json.dumps(result) + '\n')
+            author_max_scores = defaultdict(int)
+
+            for author_idx, score in enumerate(row):
+                a = author_lookup[author_idx]
+                if author_max_scores[a] < score:
+                    author_max_scores[a] = score
+
+            for author_id, max_score in author_max_scores.items():
+                result = {
+                    'source_id': paper_id,
+                    'target_id': author_id,
+                    'score': float(max_score)
+                }
+                f.write(json.dumps(result) + '\n')
