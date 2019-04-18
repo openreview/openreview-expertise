@@ -17,7 +17,7 @@ class Dataset(object):
         directory=None,
         archive_dirname='archives',
         submissions_dirname='submissions',
-        bids_filename = 'bids.jsonl',
+        bids_dirname = 'bids',
         bid_values=[
             'Very High',
             'High',
@@ -33,8 +33,8 @@ class Dataset(object):
 
         assert directory and os.path.isdir(directory), 'Directory <{}> does not exist.'.format(directory)
 
-        self.reviewer_bids_file = os.path.join(
-            directory, bids_filename)
+        self.bids_path = os.path.join(
+            directory, bids_dirname)
 
         self.archives_path = os.path.join(
             directory,  archive_dirname)
@@ -52,7 +52,7 @@ class Dataset(object):
             directory, 'test_set.tsv')
 
         self.num_submissions = len(list(self._read_json_records(self.submission_records_path)))
-
+        self.num_bids = len(list(self._read_json_records(self.bids_path)))
         self.num_archives = 0
         self.reviewer_ids = set()
         for userid, archive in self._read_json_records(self.archives_path):
@@ -65,34 +65,27 @@ class Dataset(object):
 
         self.positive_bid_values = positive_bid_values
 
-    def bids(self):
-        for json_line in utils.jsonl_reader(self.reviewer_bids_file):
-            yield openreview.Tag.from_json(json_line)
-
-    def _read_json_records(self, data_dir, fields=['title','abstract','fulltext'], sequential=True):
+    def _read_json_records(self, data_dir, sequential=True):
         for filename in os.listdir(data_dir):
             filepath = os.path.join(data_dir, filename)
             file_id = filename.replace('.jsonl', '')
 
             if not sequential:
-                all_text = []
+                all_data = []
 
-            for content in utils.jsonl_reader(filepath):
-                # preprocessing
-                record_text_unfiltered = utils.content_to_text(content, fields)
-                record_text_filtered = utils.strip_nonalpha(record_text_unfiltered)
+            for data in utils.jsonl_reader(filepath):
 
                 if sequential:
-                    yield file_id, record_text_unfiltered
+                    yield file_id, [data]
                 else:
-                    all_text.append(record_text_unfiltered)
+                    all_data.append(data)
 
             if not sequential:
-                yield file_id, all_text
+                yield file_id, all_data
 
 
-    def _items(self, path, num_items, desc='', fields=['title', 'abstract', 'fulltext'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
-        item_generator = self._read_json_records(path, fields, sequential=sequential)
+    def _items(self, path, num_items, desc='', sequential=True, progressbar=True, partition_id=0, num_partitions=1):
+        item_generator = self._read_json_records(path, sequential=sequential)
 
         if num_partitions > 1:
             item_generator = utils.partition(
@@ -115,7 +108,6 @@ class Dataset(object):
             path=self.submission_records_path,
             num_items=self.num_submissions,
             desc='submissions',
-            fields=fields,
             sequential=sequential,
             progressbar=progressbar,
             partition_id=int(partition_id),
@@ -123,7 +115,7 @@ class Dataset(object):
         )
 
         for submission_id, submission_items in submission_generator:
-            yield submission_id, submission_items
+            yield submission_id, [utils.content_to_text(i, fields) for i in submission_items]
 
     # def reviewer_archives(self):
     def archives(self, fields=['title', 'abstract', 'fulltext'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
@@ -132,7 +124,6 @@ class Dataset(object):
             path=self.archives_path,
             num_items=self.num_archives,
             desc='archives',
-            fields=fields,
             sequential=sequential,
             progressbar=progressbar,
             partition_id=int(partition_id),
@@ -140,4 +131,20 @@ class Dataset(object):
         )
 
         for archive_id, archive_items in archive_generator:
-            yield archive_id, archive_items
+            yield archive_id, [utils.content_to_text(i, fields) for i in archive_items]
+
+
+    def bids(self, sequential=True, progressbar=True, partition_id=0, num_partitions=1):
+
+        bid_generator = self._items(
+            path=self.bids_path,
+            num_items=self.num_bids,
+            desc='bids',
+            sequential=sequential,
+            progressbar=progressbar,
+            partition_id=int(partition_id),
+            num_partitions=int(num_partitions)
+        )
+
+        for forum_id, bid_items in bid_generator:
+            yield forum_id, bid_items

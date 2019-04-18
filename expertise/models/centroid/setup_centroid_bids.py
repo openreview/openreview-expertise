@@ -17,22 +17,29 @@ def setup(config):
 
     dataset = Dataset(**config.dataset)
     vocab = Vocab(max_num_keyphrases = config.max_num_keyphrases)
+
     keyphrases = importlib.import_module(config.keyphrases).keyphrases
 
-    bids_by_forum = utils.get_bids_by_forum(dataset)
+    bids_by_forum = {
+        forum: {
+            'positive': [b['signatures'][0] for b in bids if b['tag'] in dataset.positive_bid_values],
+            'negative': [b['signatures'][0] for b in bids if b['tag'] not in dataset.positive_bid_values]
+        } for forum, bids in dataset.bids(sequential=False, progressbar=False)
+    }
+
     kps_by_submission = defaultdict(list)
-    for submission_id, text in dataset.submissions():
-        kp_list = keyphrases(text)
+    for submission_id, text in dataset.submissions(sequential=True):
+        kp_list = keyphrases(text[0])
         kps_by_submission[submission_id].extend(kp_list)
         vocab.load_items(kp_list)
 
     kps_by_reviewer = defaultdict(list)
-    for reviewer_id, text in dataset.archives():
-        kp_list = keyphrases(text)
+    for reviewer_id, text in dataset.archives(sequential=True):
+        kp_list = keyphrases(text[0])
         kps_by_reviewer[reviewer_id].extend(kp_list)
         vocab.load_items(kp_list)
 
-    config.setup_save(vocab, 'vocab.pkl')
+    vocab.dump_csv(outfile=os.path.join(config.setup_dir, 'vocab'))
 
     train_set_ids, dev_set_ids, test_set_ids = utils.split_ids(list(bids_by_forum.keys()))
 

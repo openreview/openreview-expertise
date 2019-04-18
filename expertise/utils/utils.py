@@ -134,35 +134,6 @@ def load_labels(filename):
 
     return result_labels, result_scores
 
-def get_bids_by_forum(dataset):
-    binned_bids = {val: [] for val in dataset.bid_values}
-
-    positive_labels = dataset.positive_bid_values
-
-    users_w_bids = set()
-    for bid in dataset.bids():
-        binned_bids[bid.tag].append(bid)
-        users_w_bids.update(bid.signatures)
-
-    bids_by_forum = defaultdict(list)
-    for bid in dataset.bids():
-        bids_by_forum[bid.forum].append(bid)
-
-    pos_and_neg_signatures_by_forum = {}
-
-    # Get pos bids for forum
-    for forum_id, forum_bids in bids_by_forum.items():
-        forum_bids_flat = [{"signature": bid.signatures[0], "bid": bid.tag} for bid in forum_bids]
-        neg_bids = [bid for bid in forum_bids_flat if bid["bid"] not in positive_labels]
-        neg_signatures = [bid['signature'] for bid in neg_bids]
-        pos_bids = [bid for bid in forum_bids_flat if bid["bid"] in positive_labels]
-        pos_signatures = [bid['signature'] for bid in pos_bids]
-        pos_and_neg_signatures_by_forum[forum_id] = {}
-        pos_and_neg_signatures_by_forum[forum_id]['positive'] = pos_signatures
-        pos_and_neg_signatures_by_forum[forum_id]['negative'] = neg_signatures
-
-    return pos_and_neg_signatures_by_forum
-
 def format_bid_labels(eval_set_ids, bids_by_forum):
     for forum_id in eval_set_ids:
         for reviewer in bids_by_forum[forum_id]['positive']:

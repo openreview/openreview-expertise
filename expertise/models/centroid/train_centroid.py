@@ -72,7 +72,7 @@ def train(config):
             np.asarray(batch_neg_lens, dtype=np.float32)
         )
 
-        loss = model.compute_loss(*loss_parameters)
+        loss = model.get_loss(*loss_parameters)
         loss.backward()
 
         # torch.nn.utils.clip_grad_norm(model.parameters(), config.clip)

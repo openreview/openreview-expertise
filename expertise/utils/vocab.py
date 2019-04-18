@@ -61,7 +61,7 @@ class Vocab(object):
             writer = csv.writer(output, delimiter=delimiter)
             for item, count in self.count_by_item.items():
                 if count >= self.min_count:
-                    writer.writerow([item, self.index_by_item[item]])
+                    writer.writerow([self.index_by_item[item], item])
 
         if outfile:
             with open(outfile, 'w') as f:
