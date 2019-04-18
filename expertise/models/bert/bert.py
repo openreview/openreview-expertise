@@ -6,10 +6,6 @@ from expertise.utils.standard_test import test
 from expertise.utils.dataset import Dataset
 from tqdm import tqdm
 
-# needed?
-import gensim
-from gensim.models import KeyedVectors
-
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader, SequentialSampler
 from pytorch_pretrained_bert.tokenization import BertTokenizer
@@ -21,11 +17,9 @@ def _setup_bert_pretrained(bert_model):
     model = BertModel.from_pretrained(bert_model)
     return model
 
-def _write_features(text_id, lines, feature_dir, extraction_args):
-    avg_emb_file = os.path.join(feature_dir, 'avg/{}.npy'.format(text_id))
-    cls_emb_file = os.path.join(feature_dir, 'cls/{}.npy'.format(text_id))
+def _write_features(lines, outfile, extraction_args):
 
-    if any([not os.path.exists(f) for f in [avg_emb_file, cls_emb_file]]):
+    if not os.path.exists(outfile):
         all_lines_features = helpers.extract_features(
             lines=lines,
             model=extraction_args['model'],
@@ -35,23 +29,18 @@ def _write_features(text_id, lines, feature_dir, extraction_args):
             no_cuda=extraction_args['no_cuda']
         )
 
-        avg_embeddings = helpers.get_avg_words(all_lines_features)
-        class_embeddings = helpers.get_cls_vectors(all_lines_features)
-
-        np.save(avg_emb_file, avg_embeddings)
-        np.save(cls_emb_file, class_embeddings)
+        embeddings = extraction_args['aggregator_fn'](all_lines_features)
+        np.save(outfile, embeddings)
     else:
-        print('skipping {}'.format(text_id))
+        print('skipping {}'.format(outfile))
 
 def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
     experiment_dir = os.path.abspath(config.experiment_dir)
     setup_dir = os.path.join(experiment_dir, 'setup')
 
     feature_dirs = [
-        'submissions-features/cls',
-        'submissions-features/avg',
-        'archives-features/cls',
-        'archives-features/avg'
+        'submissions-features',
+        'archives-features'
     ]
 
     for d in feature_dirs:
@@ -78,18 +67,21 @@ def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
         'tokenizer': tokenizer,
         'max_seq_length': config.max_seq_length,
         'batch_size': config.batch_size,
-        'no_cuda': not config.use_cuda
+        'no_cuda': not config.use_cuda,
+        'aggregator_fn': helpers.AGGREGATOR_MAP[config.embedding_aggregation_type]
     }
 
     for text_id, text_list in dataset.submissions(**dataset_args):
         feature_dir = os.path.join(setup_dir, 'submissions-features')
+        outfile = os.path.join(feature_dir, '{}.npy'.format(text_id))
         _write_features(
-            text_id, text_list, feature_dir, extraction_args)
+            text_list, outfile, extraction_args)
 
     for text_id, text_list in dataset.archives(**dataset_args):
         feature_dir = os.path.join(setup_dir, 'archives-features')
+        outfile = os.path.join(feature_dir, '{}.npy'.format(text_id))
         _write_features(
-            text_id, text_list, feature_dir, extraction_args)
+            text_list, outfile, extraction_args)
 
 
 def train(config):
@@ -103,11 +95,11 @@ def infer(config):
 
     submissions_dir = os.path.join(
         setup_dir,
-        'submissions-features/{}'.format(config.embedding_aggregation_type))
+        'submissions-features')
 
     archives_dir = os.path.join(
         setup_dir,
-        'archives-features/{}'.format(config.embedding_aggregation_type))
+        'archives-features')
 
     submission_embeddings = []
     paper_lookup = []
