@@ -31,9 +31,9 @@ class Model(torch.nn.Module):
         else:
             self.ones = torch.ones(config.batch_size, 1)
 
-        self.loss = BCEWithLogitsLoss() # Is this the best loss function, or should we use BPR (sig(pos - neg)) instead?
+        self._bce_loss = BCEWithLogitsLoss()
 
-    def compute_loss(self, batch_source, pos_result, neg_result, batch_lengths, pos_len, neg_len):
+    def get_loss(self, batch_source, pos_result, neg_result, batch_lengths, pos_len, neg_len):
         """ Compute the loss (BPR) for a batch of examples
         :param batch_source: a batch of source keyphrase indices (list of lists)
         :param pos_result: True aliases of the Mentions
@@ -50,7 +50,7 @@ class Model(torch.nn.Module):
         pos_embed = self.embed(pos_result, pos_len)
         # B by dim
         neg_embed = self.embed(neg_result, neg_len)
-        loss = self.loss(
+        loss = self._bce_loss(
             utils.row_wise_dot(source_embed , pos_embed )
             - utils.row_wise_dot(source_embed , neg_embed ),
             self.ones)
@@ -101,11 +101,19 @@ class Model(torch.nn.Module):
             if self.config.use_cuda:
                 kw_indices = kw_indices.cuda()
                 kw_lengths = kw_lengths.cuda()
-            # B by L by d
+
+            # get all the embeddings for each keyword
+            # B x L x d
             embeddings = self.embedding(kw_indices)
+
+            # make sure that we don't divide by zero
             kw_lengths[kw_lengths == 0] = 1
+
+            # for each sample within the batch, find the average of all of that sample's keyword embeddings
             summed_emb = torch.sum(embeddings, dim=1)
             averaged = torch.div(summed_emb, kw_lengths.float())
+
+            # B x 1 x d
             return averaged
 
     def embed_dev(self, keyword_lists, keyword_lengths, print_embed=False, batch_size=None):
