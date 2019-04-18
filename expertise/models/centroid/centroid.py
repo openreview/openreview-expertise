@@ -5,7 +5,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss
-from torch.autograd import Variable
 from expertise import utils
 
 from expertise.evaluators.mean_avg_precision import eval_map
@@ -28,25 +27,25 @@ class Model(torch.nn.Module):
 
         # Vector of ones (used for loss)
         if self.config.use_cuda:
-            self.ones = Variable(torch.ones(config.batch_size, 1).cuda())
+            self.ones = torch.ones(config.batch_size, 1).cuda()
         else:
-            self.ones = Variable(torch.ones(config.batch_size, 1))
+            self.ones = torch.ones(config.batch_size, 1)
 
         self.loss = BCEWithLogitsLoss() # Is this the best loss function, or should we use BPR (sig(pos - neg)) instead?
 
-    def compute_loss(self, query, pos_result, neg_result, query_len, pos_len, neg_len):
+    def compute_loss(self, batch_source, pos_result, neg_result, batch_lengths, pos_len, neg_len):
         """ Compute the loss (BPR) for a batch of examples
-        :param query: Entity mentions
+        :param batch_source: a batch of source keyphrase indices (list of lists)
         :param pos_result: True aliases of the Mentions
         :param neg_result: False aliases of the Mentions
-        :param query_len: lengths of mentions
+        :param batch_lengths: a list of sample lengths, one for each sample in the batch (list of lists)
         :param pos_len: lengths of positives
         :param neg_len: lengths of negatives
         :return:
         """
 
         # B by dim
-        source_embed = self.embed(query, query_len)
+        source_embed = self.embed(batch_source, batch_lengths)
         # B by dim
         pos_embed = self.embed(pos_result, pos_len)
         # B by dim
