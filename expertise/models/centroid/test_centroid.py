@@ -3,11 +3,13 @@ import torch
 from expertise.utils.batcher import Batcher
 from expertise.models import centroid
 
+import os
+
 def test(config):
     print('config.best_model_path', config.best_model_path)
     model = torch.load(config.best_model_path)
 
-    batcher = Batcher(input_file=config.setup_path('test_samples.jsonl'))
+    batcher = Batcher(input_file=os.path.join(config.setup_dir, 'test_samples.csv'))
 
     predictions = centroid.generate_predictions(config, model, batcher)
 

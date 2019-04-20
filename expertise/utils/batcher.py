@@ -26,11 +26,12 @@ from . import utils
 csv.field_size_limit(sys.maxsize)
 
 class Batcher(object):
-    def __init__(self, input_file, triplet=False):
+    def __init__(self, input_file, batch_size=4, max_num_batches=None):
         self.data = []
         self.num_examples = 0
-        self.triplet = triplet
+        self.max_num_batches = max_num_batches
         self.input_file = input_file
+        self.batch_size = batch_size
 
         self.load_data(self.input_file)
 
@@ -54,27 +55,42 @@ class Batcher(object):
         with open(input_file) as f:
             if any(input_file.endswith(ext) for ext in ['.tsv','.csv']):
                 reader = csv.reader(f, delimiter=delimiter)
+            elif input_file.endswith('.jsonl'):
+                reader = utils.jsonl_reader(input_file)
+            else:
+                raise IOError('input file type must be .tsv, .csv, or .jsonl')
 
-                for line in reader:
-                    for column_index, item in enumerate(line):
-                        self.data[column_index].append(item)
-
-                    self.num_examples += 1
-
-            if input_file.endswith('.jsonl'):
-                for data_dict in utils.jsonl_reader(input_file):
-                    self.data.append(data_dict)
+            for item in reader:
+                self.data.append(item)
 
         self.num_examples = len(self.data)
 
-    def batches(self, batch_size, delimiter='\t'):
+    def batches(self, batch_size=None, delimiter='\t', transpose=False):
+        if not batch_size:
+            batch_size = self.batch_size
+
+        num_batches_yielded = 0
+
         batch = []
         self.start_index = 0
-        for data in utils.jsonl_reader(self.input_file):
-            batch.append(data)
-            self.start_index += 1
-            if self.start_index % batch_size == 0 or self.start_index == self.num_examples:
-                yield batch
 
-                batch = []
+        with open(self.input_file) as f:
+            if self.input_file.endswith('.jsonl'):
+                reader = utils.jsonl_reader(self.input_file)
+            elif any(self.input_file.endswith(ext) for ext in ['.tsv','.csv']):
+                reader = csv.reader(f, delimiter=delimiter)
+            else:
+                raise IOError('input file type must be .tsv, .csv, or .jsonl')
+
+            for data in reader:
+                batch.append(data)
+                self.start_index += 1
+
+                if self.start_index % batch_size == 0 or self.start_index == self.num_examples:
+                    yield batch if not transpose else list(map(list, zip(*batch)))
+                    num_batches_yielded += 1
+                    batch = []
+
+                if num_batches_yielded == self.max_num_batches:
+                    break
 

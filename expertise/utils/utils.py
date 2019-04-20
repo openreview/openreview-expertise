@@ -156,39 +156,6 @@ def split_ids(ids):
 
     return train_set_ids, dev_set_ids, test_set_ids
 
-def format_data_bids(train_set_ids, bids_by_forum, reviewer_kps, submission_kps, max_num_keyphrases=None):
-    '''
-    Formats bid data into source/positive/negative triplets.
-    (This function is written specifically to handle keyphrase-based data.)
-
-    "source" represents the paper being compared against.
-    "positive" represents a paper authored by a reviewer who bid highly on
-        the source paper.
-    "negative" represents a paper authored by a reviewer who bid lowly on
-        the source paper.
-
-    '''
-
-    for forum_id in train_set_ids:
-        if forum_id in submission_kps:
-
-            forum_kps = [kp for kp in submission_kps[forum_id]][:max_num_keyphrases]
-            forum_pos_signatures = sorted(bids_by_forum[forum_id]['positive'])
-            forum_neg_signatures = sorted(bids_by_forum[forum_id]['negative'])
-
-            pos_neg_pairs = itertools.product(forum_pos_signatures, forum_neg_signatures)
-            for pos, neg in pos_neg_pairs:
-                if pos in reviewer_kps and neg in reviewer_kps:
-                    data = {
-                        'source': forum_kps[:max_num_keyphrases],
-                        'source_id': forum_id,
-                        'positive': reviewer_kps[pos][:max_num_keyphrases],
-                        'positive_id': pos,
-                        'negative': reviewer_kps[neg][:max_num_keyphrases],
-                        'negative_id': neg
-                    }
-
-                    yield data
 
 def format_data_heldout_authors(kp_lists_by_reviewer, kps_by_reviewer):
     '''

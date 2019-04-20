@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 
 # import fastText as ft
@@ -9,6 +11,8 @@ from expertise import utils
 
 from expertise.evaluators.mean_avg_precision import eval_map
 from expertise.evaluators.hits_at_k import eval_hits_at_k
+
+import ipdb
 
 class Model(torch.nn.Module):
     def __init__(self, config, vocab):
@@ -50,100 +54,141 @@ class Model(torch.nn.Module):
         pos_embed = self.embed(pos_result, pos_len)
         # B by dim
         neg_embed = self.embed(neg_result, neg_len)
-        loss = self._bce_loss(
-            utils.row_wise_dot(source_embed , pos_embed )
-            - utils.row_wise_dot(source_embed , neg_embed ),
-            self.ones)
+
+        try:
+            loss = self._bce_loss(
+                utils.row_wise_dot(source_embed , pos_embed )
+                - utils.row_wise_dot(source_embed , neg_embed ),
+                self.ones[:len(source_embed)])
+        except ValueError as e:
+            ipdb.set_trace()
+            raise e
+
         return loss
 
-    def score_pair(self, source, target, source_len, target_len):
+
+    def embed(self, keyword_lists, keyword_lengths):
+        """
+        :param keyword_lists:
+            np.array - B x <max number of keywords>
+            A list of lists of integers corresponding to keywords in the vocabulary.
+
+        :param keyword_lengths:
+            np.array - B x 1
+        :return: batch_size by embedding dim
+        """
+
+        try:
+            kw_lengths = torch.from_numpy(keyword_lengths)
+            kw_indices = torch.from_numpy(keyword_lists).long()
+        except RuntimeError as e:
+            ipdb.set_trace()
+            raise e
+
+        if self.config.use_cuda:
+            kw_indices = kw_indices.cuda()
+            kw_lengths = kw_lengths.cuda()
+
+        # get all the embeddings for each keyword
+        # B x L x d
+        embeddings = self.embedding(kw_indices)
+
+        # make sure that we don't divide by zero
+        kw_lengths[kw_lengths == 0] = 1
+
+        # for each sample within the batch, find the average of all of that sample's keyword embeddings
+        summed_emb = torch.sum(embeddings, dim=1)
+        try:
+            averaged = torch.div(summed_emb, kw_lengths.float())
+        except RuntimeError as e:
+            ipdb.set_trace(context=30)
+            raise e
+
+        # B x 1 x d
+        return averaged
+
+    def score_pairs(self, sources, targets, source_lens, target_lens):
         """
 
         :param source: Batchsize by Max_String_Length
         :param target: Batchsize by Max_String_Length
         :return: Batchsize by 1
         """
-        source_embed = self.embed_dev(source, source_len)
-        target_embed = self.embed_dev(target, target_len)
-        scores = utils.row_wise_dot(source_embed, target_embed)
-        return scores
+        source_embeddings = self.embed(sources, source_lens)
+        target_embeddings = self.embed(targets, target_lens)
+        return utils.row_wise_dot(source_embeddings, target_embeddings)
 
-    def embed(self, keyword_lists, keyword_lengths):
-        """
-        :param keyword_lists: Numpy array - Batch_size by max_num_keywords - integers corresponding to keywords in the vocabulary.
-        :param keyword_lengths: numpy array - batch_size by 1
-        :return: batch_size by embedding dim
-        """
+def _pad_kps(kp_list, max_len):
+    try:
+        result = np.pad(kp_list, (0, int(max_len) - len(kp_list)), 'constant')
+    except ValueError as e:
+        ipdb.set_trace()
+        raise e
+    return result
 
-        '''
-        Keep this here for now.
-        '''
-        if False:
-            pass
-        # if self.cached_ft:
-        #     print('Using fasttext pretrained embeddings')
-        #     D = self.cached_ft.get_dimension()
-        #     # Get the phrases
-        #     summed_emb = np.zeros((keyword_lists.shape[0], D))
-        #     for idx, author_kps in enumerate(keyword_lists):
-        #         embeddings = np.zeros((len(author_kps), D))
-        #         for phr_idx, phrase in enumerate(author_kps):
-        #             if phrase:
-        #                 embeddings[phr_idx, :] = self.cached_ft.get_word_vector(self.vocab.id2item[phrase])
-        #             else:
-        #                 embeddings[phr_idx, :] = np.zeros((D,))
-        #         summed_emb[idx, :] = np.sum(embeddings, axis=0)
-        #     averaged = summed_emb / keyword_lengths
-        #     return torch.from_numpy(averaged)
-        else:
-            kw_indices = torch.from_numpy(keyword_lists).long()
-            kw_lengths = torch.from_numpy(keyword_lengths)
-            if self.config.use_cuda:
-                kw_indices = kw_indices.cuda()
-                kw_lengths = kw_lengths.cuda()
+def _get_batch_lens(features_batch):
+    '''
+    Helper function for getting the lengths of a list of features,
+    formatting it correctly for downstream use.
+    '''
 
-            # get all the embeddings for each keyword
-            # B x L x d
-            embeddings = self.embedding(kw_indices)
+    return np.asarray([np.asarray([len(f)], dtype=np.float) for f in features_batch])
 
-            # make sure that we don't divide by zero
-            kw_lengths[kw_lengths == 0] = 1
+def _load_features(id, dir, config):
+    '''
+    Loads and returns a batch of features, if file exists.
+    '''
+    matrix_path = os.path.join(config.setup_dir, dir, id + '.npy')
 
-            # for each sample within the batch, find the average of all of that sample's keyword embeddings
-            summed_emb = torch.sum(embeddings, dim=1)
-            averaged = torch.div(summed_emb, kw_lengths.float())
+    if os.path.exists(matrix_path):
+        return np.load(matrix_path).flatten()
+    else:
+        return np.asarray([])
 
-            # B x 1 x d
-            return averaged
+def format_batch(batcher, config):
+    '''
+    Formats the output of a batcher to produce this model's
+    loss parameters.
+    '''
 
-    def embed_dev(self, keyword_lists, keyword_lengths, print_embed=False, batch_size=None):
-        """
-        :param keyword_lists: Batch_size by max_num_keywords
-        :return: batch_size by embedding dim
-        """
-        return self.embed(keyword_lists, keyword_lengths)
+    # ipdb.set_trace()
 
-    def score_dev_test_batch(self,
-        batch_queries,
-        batch_query_lengths,
-        batch_targets,
-        batch_target_lengths,
-        batch_size
-        ):
+    for sources, positives, negatives in batcher.batches(transpose=True):
 
-        if batch_size == self.config.dev_batch_size:
-            source_embed = self.embed_dev(batch_queries, batch_query_lengths)
-            target_embed = self.embed_dev(batch_targets, batch_target_lengths)
-        else:
-            source_embed = self.embed_dev(batch_queries, batch_query_lengths, batch_size=batch_size)
-            target_embed = self.embed_dev(batch_targets, batch_target_lengths, batch_size=batch_size)
+        src_params = ('submissions-features', config)
+        arc_params = ('archives-features', config)
 
-        scores = utils.row_wise_dot(source_embed, target_embed)
+        src_features = np.asarray([_load_features(s, *src_params) for s in sources])
+        pos_features = np.asarray([_load_features(p, *arc_params) for p in positives])
+        neg_features = np.asarray([_load_features(n, *arc_params) for n in negatives])
 
-        # what is this?
-        scores[scores != scores] = 0
+        src_lens = _get_batch_lens(src_features)
+        pos_lens = _get_batch_lens(pos_features)
+        neg_lens = _get_batch_lens(neg_features)
 
-        return scores
+        max_kps = np.max(pos_lens + neg_lens)
+        pos_features_pad = np.asarray([_pad_kps(kps, max_kps) for kps in pos_features])
+        neg_features_pad = np.asarray([_pad_kps(kps, max_kps) for kps in neg_features])
+
+        source = {
+            'features': src_features,
+            'lens': src_lens,
+            'ids': sources
+        }
+
+        pos = {
+            'features': pos_features_pad,
+            'lens': pos_lens,
+            'ids': positives
+        }
+
+        neg = {
+            'features': neg_features_pad,
+            'lens': neg_lens,
+            'ids': negatives
+        }
+
+        yield (source, pos, neg)
 
 
 def generate_predictions(config, model, batcher):
@@ -155,72 +200,72 @@ def generate_predictions(config, model, batcher):
     :return:
     """
 
-    for idx, batch in enumerate(batcher.batches(batch_size=config.dev_batch_size)):
-        if idx % 100 == 0:
-            print('Predicted {} batches'.format(idx))
+    # for idx, batch in enumerate(batcher.batches(batch_size=config.dev_batch_size)):
 
-        batch_queries = []
-        batch_query_lengths = []
-        batch_query_ids = []
-        batch_targets = []
-        batch_target_lengths = []
-        batch_target_ids = []
-        batch_labels = []
-        batch_size = len(batch)
+    def _predictions(
+        sources,
+        targets,
+        source_lens,
+        target_lens,
+        source_ids,
+        target_ids,
+        labels):
 
-        for data in batch:
-            # append a positive sample
-            batch_queries.append(data['source'])
-            batch_query_lengths.append(data['source_length'])
-            batch_query_ids.append(data['source_id'])
-            batch_targets.append(data['positive'])
-            batch_target_lengths.append(data['positive_length'])
-            batch_target_ids.append(data['positive_id'])
-            batch_labels.append(1)
+        if sources.size and targets.size:
+            scores = model.score_pairs(
+                sources=sources,
+                targets=targets,
+                source_lens=source_lens,
+                target_lens=target_lens,
+            )
 
-            # append a negative sample
-            batch_queries.append(data['source'])
-            batch_query_lengths.append(data['source_length'])
-            batch_query_ids.append(data['source_id'])
-            batch_targets.append(data['negative'])
-            batch_target_lengths.append(data['negative_length'])
-            batch_target_ids.append(data['negative_id'])
-            batch_labels.append(0)
+            for s_id, t_id, score, label in zip(source_ids, target_ids, scores, labels):
+                payload = {
+                    'source_id': s_id,
+                    'target_id': t_id,
+                    'label': label,
+                    'score': float(score)
+                }
 
-        scores = model.score_dev_test_batch(
-            np.asarray(batch_queries),
-            np.asarray(batch_query_lengths),
-            np.asarray(batch_targets),
-            np.asarray(batch_target_lengths),
-            np.asarray(batch_size)
-        )
+                yield payload
 
-        if type(batch_labels) is not list:
-            batch_labels = batch_labels.tolist()
 
-        if type(scores) is not list:
-            scores = list(scores.cpu().data.numpy().squeeze())
+    for sources, targets, labels in batcher.batches(transpose=True):
+        # ipdb.set_trace()
+        # batch_labels = []
+        # what's this for?
+        # if type(batch_labels) is not list:
+        #     batch_labels = batch_labels.tolist()
 
-        for source, source_id, target, target_id, label, score in zip(
-            batch_queries,
-            batch_query_ids,
-            batch_targets,
-            batch_target_ids,
-            batch_labels,
-            scores
-            ):
+        # what's this for?
+        # if type(scores) is not list:
+        #     scores = list(scores.cpu().data.numpy().squeeze())
 
-            # temporarily commenting out "source" and "target" because I think they are not needed.
-            prediction = {
-                # 'source': source,
-                'source_id': source_id,
-                # 'target': target,
-                'target_id': target_id,
-                'label': label,
-                'score': float(score)
-            }
+        src_params = ('submissions-features', config)
+        arc_params = ('archives-features', config)
 
-            yield prediction
+        source_features = np.asarray([_load_features(s, *src_params) for s in sources])
+        target_features = np.asarray([_load_features(t, *arc_params) for t in targets])
+
+        source_lens = _get_batch_lens(source_features)
+        target_lens = _get_batch_lens(target_features)
+
+        max_kps = np.max(source_lens + target_lens)
+        target_features_pad = np.asarray([_pad_kps(kps, max_kps) for kps in target_features])
+
+
+        predictions = _predictions(
+            sources=source_features,
+            targets=target_features_pad,
+            source_lens=source_lens,
+            target_lens=target_lens,
+            source_ids=sources,
+            target_ids=targets,
+            labels=labels)
+
+        for p in predictions:
+            yield p
+
 
 def load_jsonl(filename):
 

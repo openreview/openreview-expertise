@@ -32,7 +32,7 @@ def count_keyphrases(reviewer_keyphrase_file, submission_keyphrase_file, outputf
                 kp_index += 1
 
 class Vocab(object):
-    def __init__(self, max_num_keyphrases, min_count=1):
+    def __init__(self, max_num_keyphrases, vocabfile=None, min_count=1):
         self.index_by_item = {}
         self.item_by_index = {}
         self.count_by_item = Counter()
@@ -48,6 +48,17 @@ class Vocab(object):
 
         self.max_num_keyphrases = int(max_num_keyphrases)
         self.min_count = int(min_count)
+
+        if vocabfile:
+            self.vocabfile = vocabfile
+            with open(self.vocabfile) as f:
+                reader = csv.reader(f, delimiter='\t')
+                for idx_str, item in reader:
+                    index = int(idx_str)
+                    self.index_by_item[item] = index
+                    self.item_by_index[index] = item
+                    self.next_index = index + 1
+                    self.count_by_item.update([item])
 
     def __len__(self):
         return len(self.index_by_item)

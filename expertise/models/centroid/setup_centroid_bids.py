@@ -1,5 +1,6 @@
 import csv, importlib, itertools, json, math, os, pickle, random
 from collections import defaultdict
+from itertools import chain
 
 import numpy as np
 
@@ -10,79 +11,92 @@ from expertise.utils.dataset import Dataset
 import expertise.utils as utils
 from expertise.utils.data_to_sample import data_to_sample
 
+import ipdb
+
 def setup(config):
-    '''
-    First define the dataset, vocabulary, and keyphrase extractor
-    '''
+
+    experiment_dir = os.path.abspath(config.experiment_dir)
+    setup_dir = os.path.join(experiment_dir, 'setup')
+
+    feature_dirs = [
+        'submissions-features',
+        'archives-features'
+    ]
+
+    for d in feature_dirs:
+        os.makedirs(os.path.join(setup_dir, d), exist_ok=True)
+        print('created', d)
 
     dataset = Dataset(**config.dataset)
-    vocab = Vocab(max_num_keyphrases = config.max_num_keyphrases)
+
+    vocab = Vocab(max_num_keyphrases=config.max_num_keyphrases)
 
     keyphrases = importlib.import_module(config.keyphrases).keyphrases
 
-    bids_by_forum = {
-        forum: {
-            'positive': [b['signatures'][0] for b in bids if b['tag'] in dataset.positive_bid_values],
-            'negative': [b['signatures'][0] for b in bids if b['tag'] not in dataset.positive_bid_values]
-        } for forum, bids in dataset.bids(sequential=False, progressbar=False)
-    }
+    kps_by_id = {}
+    for item_id, text_list in chain(
+        dataset.submissions(sequential=False),
+        dataset.archives(sequential=False)):
 
-    kps_by_submission = defaultdict(list)
-    for submission_id, text in dataset.submissions(sequential=True):
-        kp_list = keyphrases(text[0])
-        kps_by_submission[submission_id].extend(kp_list)
-        vocab.load_items(kp_list)
-
-    kps_by_reviewer = defaultdict(list)
-    for reviewer_id, text in dataset.archives(sequential=True):
-        kp_list = keyphrases(text[0])
-        kps_by_reviewer[reviewer_id].extend(kp_list)
-        vocab.load_items(kp_list)
+        kp_lists = []
+        for text in text_list:
+            kps = keyphrases(text)
+            vocab.load_items(kps)
+            kp_lists.append(kps)
+        kps_by_id[item_id] = kp_lists
 
     vocab.dump_csv(outfile=os.path.join(config.setup_dir, 'vocab'))
 
-    train_set_ids, dev_set_ids, test_set_ids = utils.split_ids(list(bids_by_forum.keys()))
 
-    train_set = utils.format_data_bids(
-        train_set_ids,
-        bids_by_forum,
-        kps_by_reviewer,
-        kps_by_submission)
+    submission_ids = []
+    for submission_id, text_list in dataset.submissions(sequential=True):
+        outfile = os.path.join(setup_dir, 'submissions-features', submission_id + '.npy')
+        features = np.array([vocab.to_ints(kps) for kps in kps_by_id[submission_id]])
+        np.save(outfile, features)
+        submission_ids.append(submission_id)
 
-    dev_set = utils.format_data_bids(
-        dev_set_ids,
-        bids_by_forum,
-        kps_by_reviewer,
-        kps_by_submission,
-        max_num_keyphrases=10)
+    for reviewer_id, text_list in dataset.archives(sequential=False):
+        outfile = os.path.join(setup_dir, 'archives-features', reviewer_id + '.npy')
+        features = np.array([vocab.to_ints(kps) for kps in kps_by_id[reviewer_id]])
+        np.save(outfile, features)
 
-    test_set = utils.format_data_bids(
-        test_set_ids,
-        bids_by_forum,
-        kps_by_reviewer,
-        kps_by_submission,
-        max_num_keyphrases=10)
+    (train_set_ids,
+     dev_set_ids,
+     test_set_ids) = utils.split_ids(submission_ids)
 
-    dev_labels = utils.format_bid_labels(dev_set_ids, bids_by_forum)
-    dev_labels_file = config.setup_save(dev_labels, 'dev_labels.jsonl')
 
-    test_labels = utils.format_bid_labels(test_set_ids, bids_by_forum)
-    test_labels_file = config.setup_save(test_labels, 'test_labels.jsonl')
+    # we need a defaultdict here because not all submissions have bids,
+    bids_by_forum = defaultdict(lambda: {'pos':[], 'neg':[]})
+    for forum, bids in dataset.bids(sequential=False, progressbar=False):
+        for b in bids:
+            if b['tag'] in dataset.positive_bid_values:
+                bids_by_forum[forum]['pos'].append(b['signatures'][0])
+            else:
+                bids_by_forum[forum]['neg'].append(b['signatures'][0])
 
-    train_set_file = config.setup_save(train_set, 'train_set.jsonl')
-    dev_set_file = config.setup_save(dev_set, 'dev_set.jsonl')
-    test_set_file = config.setup_save(test_set, 'test_set.jsonl')
+    with open(os.path.join(setup_dir, 'train_samples.csv'), 'w') as f:
+        for source_id in train_set_ids:
+            pos_targets = bids_by_forum[source_id]['pos']
+            neg_targets = bids_by_forum[source_id]['neg']
+            for pos_id, neg_id in itertools.product(pos_targets, neg_targets):
+                f.write('\t'.join([source_id, pos_id, neg_id]))
+                f.write('\n')
 
-    # for very large datasets, the training data should be shuffled in advance.
-    # (you can use /expertise/utils/shuffle_big_file.py to do this)
-    train_samples = (data_to_sample(data, vocab) for data in utils.jsonl_reader(train_set_file))
-    config.setup_save(train_samples, 'train_samples_permuted.jsonl')
+    with open(os.path.join(setup_dir, 'dev_samples.csv'), 'w') as f:
+        for source_id in dev_set_ids:
+            pos_targets = bids_by_forum[source_id]['pos']
+            neg_targets = bids_by_forum[source_id]['neg']
+            targets = [(p, 1) for p in pos_targets] + [(n, 0) for n in neg_targets]
+            for target_id, label in random.sample(targets, len(targets)):
+                f.write('\t'.join([source_id, target_id, str(label)]))
+                f.write('\n')
 
-    # dev_set_permuted = np.random.permutation(list(utils.jsonl_reader(dev_set_file)))
-    dev_samples = (data_to_sample(data, vocab) for data in utils.jsonl_reader(dev_set_file))
-    config.setup_save(dev_samples, 'dev_samples.jsonl')
-
-    # test_set_permuted = np.random.permutation(list(utils.jsonl_reader(test_set_file)))
-    test_samples = (data_to_sample(data, vocab) for data in utils.jsonl_reader(test_set_file))
-    config.setup_save(test_samples, 'test_samples.jsonl')
+    with open(os.path.join(setup_dir, 'test_samples.csv'), 'w') as f:
+        for source_id in test_set_ids:
+            pos_targets = bids_by_forum[source_id]['pos']
+            neg_targets = bids_by_forum[source_id]['neg']
+            targets = [(p, 1) for p in pos_targets] + [(n, 0) for n in neg_targets]
+            for target_id, label in random.sample(targets, len(targets)):
+                f.write('\t'.join([source_id, target_id, str(label)]))
+                f.write('\n')
 
