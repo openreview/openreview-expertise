@@ -55,14 +55,10 @@ class Model(torch.nn.Module):
         # B by dim
         neg_embed = self.embed(neg_result, neg_len)
 
-        try:
-            loss = self._bce_loss(
-                utils.row_wise_dot(source_embed , pos_embed )
-                - utils.row_wise_dot(source_embed , neg_embed ),
-                self.ones[:len(source_embed)])
-        except ValueError as e:
-            ipdb.set_trace()
-            raise e
+        loss = self._bce_loss(
+            utils.row_wise_dot(source_embed, pos_embed )
+            - utils.row_wise_dot(source_embed, neg_embed ),
+            self.ones[:len(source_embed)])
 
         return loss
 
@@ -118,14 +114,6 @@ class Model(torch.nn.Module):
         target_embeddings = self.embed(targets, target_lens)
         return utils.row_wise_dot(source_embeddings, target_embeddings)
 
-def _pad_kps(kp_list, max_len):
-    try:
-        result = np.pad(kp_list, (0, int(max_len) - len(kp_list)), 'constant')
-    except ValueError as e:
-        ipdb.set_trace()
-        raise e
-    return result
-
 def _get_batch_lens(features_batch):
     '''
     Helper function for getting the lengths of a list of features,
@@ -167,8 +155,8 @@ def format_batch(batcher, config):
         neg_lens = _get_batch_lens(neg_features)
 
         max_kps = np.max(pos_lens + neg_lens)
-        pos_features_pad = np.asarray([_pad_kps(kps, max_kps) for kps in pos_features])
-        neg_features_pad = np.asarray([_pad_kps(kps, max_kps) for kps in neg_features])
+        pos_features_pad = np.asarray([utils.fixedwidth(kps, max_kps) for kps in pos_features])
+        neg_features_pad = np.asarray([utils.fixedwidth(kps, max_kps) for kps in neg_features])
 
         source = {
             'features': src_features,
@@ -251,7 +239,7 @@ def generate_predictions(config, model, batcher):
         target_lens = _get_batch_lens(target_features)
 
         max_kps = np.max(source_lens + target_lens)
-        target_features_pad = np.asarray([_pad_kps(kps, max_kps) for kps in target_features])
+        target_features_pad = np.asarray([utils.fixedwidth(kps, max_kps) for kps in target_features])
 
 
         predictions = _predictions(

@@ -4,6 +4,8 @@ from collections import Counter
 import csv
 import io
 
+from expertise import utils
+
 # Note, because I used sets when I constructed the reviewer keyphrase file, I end up with
 # count_keyphrases being a count based on number of documents containing the keyphrase.
 def count_keyphrases(reviewer_keyphrase_file, submission_keyphrase_file, outputfile, min_count):
@@ -32,7 +34,7 @@ def count_keyphrases(reviewer_keyphrase_file, submission_keyphrase_file, outputf
                 kp_index += 1
 
 class Vocab(object):
-    def __init__(self, max_num_keyphrases, vocabfile=None, min_count=1):
+    def __init__(self, vocabfile=None, min_count=1):
         self.index_by_item = {}
         self.item_by_index = {}
         self.count_by_item = Counter()
@@ -46,7 +48,6 @@ class Vocab(object):
         self.index_by_item[self.OOV] = self.OOV_INDEX
         self.item_by_index[self.OOV_INDEX] = self.OOV
 
-        self.max_num_keyphrases = int(max_num_keyphrases)
         self.min_count = int(min_count)
 
         if vocabfile:
@@ -97,28 +98,13 @@ class Vocab(object):
 
         self.count_by_item.update(vocab_items)
 
-    def to_ints(self, kp_list, padding=True):
-        kp_indices = []
+    def to_ints(self, kp_list, length=None):
+        kp_indices = [self.index_by_item.get(kp, self.OOV_INDEX) for kp in kp_list]
 
-        for kp in kp_list[:self.max_num_keyphrases]:
-            kp_indices.append(self.index_by_item.get(kp, self.OOV_INDEX))
-
-        if padding and self.max_num_keyphrases > len(kp_indices):
-            padding_length = self.max_num_keyphrases - len(kp_indices)
-            padding = [0] * padding_length
-            kp_indices.extend(padding)
-
-        return kp_indices
-
-    # deprecated
-    def to_ints_no_pad(self,string):
-        print('function deprecated')
-        # arr = []
-        # for c in list(string.split(" ")):
-        #     arr.append(self.index_by_item.get(c,self.OOV_INDEX))
-        # if len(arr) > self.max_num_keyphrases:
-        #     return np.asarray(arr[0:self.max_num_keyphrases])
-        # return np.asarray(arr)
+        if length:
+            return utils.fixedwidth(kp_indices, length, pad_val=self.PADDING_INDEX)
+        else:
+            return kp_indices
 
     def to_string(self,list_ints):
         stri = ""

@@ -12,6 +12,8 @@ import pickle
 import csv
 from collections import defaultdict
 import math, random
+import numpy as np
+import ipdb
 
 def partition(list_, partition_id=0, num_partitions=1):
     '''
@@ -33,6 +35,32 @@ def partition(list_, partition_id=0, num_partitions=1):
             yield item
         else:
             pass
+
+def fixedwidth(item_list, list_len, pad_val=0):
+    '''
+    Given a list `item_list` and an integer `list_len`,
+    return a list that is `list_len` items long.
+
+    If `item_list` is longer than `list_len` items,
+    truncate the list.
+
+    If `item_list` is shorter than `list_len` items,
+    pad the returned list with the value in `pad_with`.
+
+    '''
+    # ipdb.set_trace()
+
+    list_len = int(list_len)
+    padding_bounds = (0, max(0, list_len - len(item_list)))
+
+    padded = np.pad(
+        item_list,
+        padding_bounds,
+        'constant',
+        constant_values=pad_val)
+
+    truncated = padded[:list_len]
+    return truncated
 
 def dump_csv(filepath, data):
     '''
