@@ -39,7 +39,7 @@ class Dataset(object):
         self.archives_path = os.path.join(
             directory,  archive_dirname)
 
-        self.submission_records_path = os.path.join(
+        self.submissions_path = os.path.join(
             directory, submissions_dirname)
 
         self.train_set_path = os.path.join(
@@ -51,13 +51,18 @@ class Dataset(object):
         self.test_set_path = os.path.join(
             directory, 'test_set.tsv')
 
-        self.num_submissions = len(list(self._read_json_records(self.submission_records_path)))
         self.num_bids = len(list(self._read_json_records(self.bids_path)))
         self.num_archives = 0
+        self.num_submissions = 0
         self.reviewer_ids = set()
-        for userid, archive in self._read_json_records(self.archives_path):
+        for userid, _ in self._read_json_records(self.archives_path):
             self.reviewer_ids.add(userid)
             self.num_archives += 1
+
+        self.submission_ids = set()
+        for submission_id, _ in self._read_json_records(self.submissions_path):
+            self.submission_ids.add(submission_id)
+            self.num_submissions += 1
 
         # TODO: Important! Need to make sure that different bid values get handled properly
         # across different kinds of datasets.
@@ -105,7 +110,7 @@ class Dataset(object):
     def submissions(self, fields=['title', 'abstract', 'fulltext'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
 
         submission_generator = self._items(
-            path=self.submission_records_path,
+            path=self.submissions_path,
             num_items=self.num_submissions,
             desc='submissions',
             sequential=sequential,

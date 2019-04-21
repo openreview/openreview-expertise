@@ -26,7 +26,7 @@ def train(config):
             os.mkdir(train_subdir_path)
 
     vocabfile = os.path.join(config.setup_dir, 'vocab')
-    vocab = Vocab(vocabfile=vocabfile, max_num_keyphrases=config.max_num_keyphrases)
+    vocab = Vocab(vocabfile=vocabfile)
 
     torch.manual_seed(config.random_seed)
 
@@ -100,10 +100,6 @@ def train(config):
             hits_at_3 = float(centroid.eval_hits_at_k_file(predictions_file, 3))
             hits_at_5 = float(centroid.eval_hits_at_k_file(predictions_file, 5))
             hits_at_10 = float(centroid.eval_hits_at_k_file(predictions_file, 10))
-            hits_at_1 = 0
-            hits_at_3 = 0
-            hits_at_5 = 0
-            hits_at_10 = 0
 
             score_lines = [
                 [config.name, batch_idx, text, data] for text, data in [

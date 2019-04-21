@@ -99,7 +99,8 @@ class Vocab(object):
         self.count_by_item.update(vocab_items)
 
     def to_ints(self, kp_list, length=None):
-        kp_indices = [self.index_by_item.get(kp, self.OOV_INDEX) for kp in kp_list]
+        kp_indices = np.array(
+            [self.index_by_item.get(kp, self.OOV_INDEX) for kp in kp_list])
 
         if length:
             return utils.fixedwidth(kp_indices, length, pad_val=self.PADDING_INDEX)

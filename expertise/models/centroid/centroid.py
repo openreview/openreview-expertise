@@ -143,12 +143,9 @@ def format_batch(batcher, config):
 
     for sources, positives, negatives in batcher.batches(transpose=True):
 
-        src_params = ('submissions-features', config)
-        arc_params = ('archives-features', config)
-
-        src_features = np.asarray([_load_features(s, *src_params) for s in sources])
-        pos_features = np.asarray([_load_features(p, *arc_params) for p in positives])
-        neg_features = np.asarray([_load_features(n, *arc_params) for n in negatives])
+        src_features = np.asarray([_load_features(s, 'features', config) for s in sources])
+        pos_features = np.asarray([_load_features(p, 'features', config) for p in positives])
+        neg_features = np.asarray([_load_features(n, 'features', config) for n in negatives])
 
         src_lens = _get_batch_lens(src_features)
         pos_lens = _get_batch_lens(pos_features)
@@ -229,11 +226,8 @@ def generate_predictions(config, model, batcher):
         # if type(scores) is not list:
         #     scores = list(scores.cpu().data.numpy().squeeze())
 
-        src_params = ('submissions-features', config)
-        arc_params = ('archives-features', config)
-
-        source_features = np.asarray([_load_features(s, *src_params) for s in sources])
-        target_features = np.asarray([_load_features(t, *arc_params) for t in targets])
+        source_features = np.asarray([_load_features(s, 'features', config) for s in sources])
+        target_features = np.asarray([_load_features(t, 'features', config) for t in targets])
 
         source_lens = _get_batch_lens(source_features)
         target_lens = _get_batch_lens(target_features)
@@ -267,7 +261,6 @@ def load_jsonl(filename):
         score = data['score']
         labels_by_forum[forum][reviewer] = label
         scores_by_forum[forum][reviewer] = score
-
 
     result_labels = []
     result_scores = []
