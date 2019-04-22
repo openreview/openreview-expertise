@@ -77,7 +77,7 @@ def train(config):
 
             print(
                 f'Loss of batch {batch_idx:04}: {this_loss}. '
-                f'Average loss: {sum_loss / (batch_idx / 100)}'
+                f'Average loss: {sum_loss / (batch_idx)}'
             )
 
             # write out scores and predictions
