@@ -144,6 +144,8 @@ def holdouts(full_list):
 def load_labels(filename):
     '''
     '''
+
+
     labels_by_forum = defaultdict(dict)
     scores_by_forum = defaultdict(dict)
 
@@ -180,8 +182,8 @@ def format_bid_labels(eval_set_ids, bids_by_forum):
         for reviewer in bids_by_forum[forum_id]['negative']:
             yield {'source_id': forum_id, 'target_id': reviewer, 'label': 0}
 
-def split_ids(ids):
-    random.seed(a=3577057385653016827)
+def split_ids(ids, seed=3577057385653016827):
+    random.seed(seed)
 
     forums = sorted(ids)
     random.shuffle(forums)
