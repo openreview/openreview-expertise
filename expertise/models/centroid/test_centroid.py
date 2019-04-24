@@ -1,5 +1,5 @@
 import torch
-
+from expertise import utils
 from expertise.utils.batcher import Batcher
 from expertise.models import centroid
 
@@ -8,10 +8,10 @@ import os
 def test(config):
     print('config.best_model_path', config.best_model_path)
     model = torch.load(config.best_model_path)
-
+    features_lookup = utils.load_pkl(os.path.join(config.setup_dir, 'featureids_lookup.pkl'))
     batcher = Batcher(input_file=os.path.join(config.setup_dir, 'test_samples.csv'))
 
-    predictions = centroid.generate_predictions(config, model, batcher)
+    predictions = centroid.generate_predictions(config, model, batcher, features_lookup)
 
     prediction_filename = config.test_save(predictions,
         'test.predictions.jsonl')

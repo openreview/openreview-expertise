@@ -113,6 +113,7 @@ class Model(torch.nn.Module):
         source_embeddings = self.embed(sources, source_lens)
         target_embeddings = self.embed(targets, target_lens)
         result = utils.row_wise_dot(source_embeddings, target_embeddings, normalize=True)
+
         if np.isnan(sum(result.detach())):
             ipdb.set_trace()
 
@@ -168,7 +169,7 @@ def format_batch(batcher, config):
 
         yield (source, pos, neg)
 
-def generate_predictions(config, model, batcher):
+def generate_predictions(config, model, batcher, features_lookup):
     """
     Use the model to make predictions on the data in the batcher
 
@@ -179,14 +180,18 @@ def generate_predictions(config, model, batcher):
 
     # for idx, batch in enumerate(batcher.batches(batch_size=config.dev_batch_size)):
 
-    def _predictions(
+
+
+    def _predict_max(
         sources,
         targets,
         source_lens,
         target_lens,
-        source_ids,
-        target_ids,
-        labels):
+        source_id,
+        target_id,
+        label):
+
+        score = 0.0
 
         if sources.size and targets.size:
             scores = model.score_pairs(
@@ -196,49 +201,52 @@ def generate_predictions(config, model, batcher):
                 target_lens=target_lens,
             )
 
-            for s_id, t_id, score, label in zip(source_ids, target_ids, scores, labels):
-                payload = {
-                    'source_id': s_id,
-                    'target_id': t_id,
-                    'label': label,
-                    'score': float(score)
-                }
+            max_score = max(scores.detach())[0]
 
-                yield payload
+            score = float(max_score)
 
+        return score
 
-    for sources, targets, labels in batcher.batches(transpose=True):
-        # ipdb.set_trace()
-        # batch_labels = []
-        # what's this for?
-        # if type(batch_labels) is not list:
-        #     batch_labels = batch_labels.tolist()
+    predictions = []
+    for source_ids, target_ids, labels in batcher.batches(transpose=True):
+        for source_id, target_id, label in zip(source_ids, target_ids, labels):
 
-        # what's this for?
-        # if type(scores) is not list:
-        #     scores = list(scores.cpu().data.numpy().squeeze())
+            target_fids = features_lookup[target_id]
+            source_fids = utils.fixedwidth(
+                features_lookup[source_id],
+                len(target_fids),
+                pad_val=features_lookup[source_id][-1])
 
-        source_features = np.asarray([utils.load_features(s, 'features', config) for s in sources])
-        target_features = np.asarray([utils.load_features(t, 'features', config) for t in targets])
+            prediction = {
+                'source_id': source_id,
+                'target_id': target_id,
+                'label': label,
+                'score': 0.0
+            }
 
-        source_lens = _get_batch_lens(source_features)
-        target_lens = _get_batch_lens(target_features)
+            if len(target_fids) > 0:
+                source_features = np.asarray([utils.load_features(s, 'features', config) for s in source_fids])
+                target_features = np.asarray([utils.load_features(t, 'features', config) for t in target_fids])
 
-        max_kps = np.max(source_lens + target_lens)
-        target_features_pad = np.asarray([utils.fixedwidth(kps, max_kps) for kps in target_features])
+                source_lens = _get_batch_lens(source_features)
+                target_lens = _get_batch_lens(target_features)
 
+                max_kps = max(np.max(source_lens), np.max(target_lens))
+                target_features_pad = np.asarray([utils.fixedwidth(kps, max_kps) for kps in target_features])
 
-        predictions = _predictions(
-            sources=source_features,
-            targets=target_features_pad,
-            source_lens=source_lens,
-            target_lens=target_lens,
-            source_ids=sources,
-            target_ids=targets,
-            labels=labels)
+                prediction['score'] = _predict_max(
+                    sources=source_features,
+                    targets=target_features_pad,
+                    source_lens=source_lens,
+                    target_lens=target_lens,
+                    source_id=source_id,
+                    target_id=target_id,
+                    label=label)
 
-        for p in predictions:
-            yield p
+            predictions.append(prediction)
+
+    for p in predictions:
+        yield p
 
 
 def load_jsonl(filename):

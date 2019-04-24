@@ -1,12 +1,24 @@
 import os
-from expertise.utils.dataset import Dataset
+from expertise import utils
 from expertise.utils.vocab import Vocab
+from expertise.utils.dataset import Dataset
 from expertise.preprocessors.textrank import TextRank
-from itertools import chain
+from itertools import chain, product
 from collections import defaultdict
 import numpy as np
 
+import ipdb
+
 def setup_kp_features(config):
+    '''
+    Want to end up with:
+        -   A list of positive training pairs, in the format (PAPER, REVIEWER)
+        -   A train/dev/test split of the list of pairs
+        -   A feature file for each document in the format ID:DOC_NUM.npy
+        -   An index allowing fast lookup of feature files for a given ID
+
+    '''
+
     experiment_dir = os.path.abspath(config.experiment_dir)
     setup_dir = os.path.join(experiment_dir, 'setup')
 
@@ -51,12 +63,12 @@ def setup_kp_features(config):
             np.save(outfile, features)
             featureids_by_id[id].append(fid)
 
-    all_featureids = [fid
-     for fids in featureids_by_id.values()
-     for fid in fids]
+    train_split, dev_split, test_split = utils.split_ids(submission_ids, seed=config.random_seed)
 
-    (train_set_ids
-     dev_set_ids,
-     test_set_ids) = utils.split_ids(all_featureids)
+    utils.dump_csv(os.path.join(setup_dir, 'train_split.csv'), [[id] for id in train_split])
+    utils.dump_csv(os.path.join(setup_dir, 'dev_split.csv'), [[id] for id in dev_split])
+    utils.dump_csv(os.path.join(setup_dir, 'test_split.csv'), [[id] for id in test_split])
 
-    return featureids_by_id, vocab
+    utils.dump_pkl(os.path.join(setup_dir, 'featureids_lookup.pkl'), featureids_by_id)
+
+    return featureids_by_id, vocab, (train_split, dev_split, test_split)

@@ -20,6 +20,8 @@ current_path = os.path.abspath(os.path.dirname(__file__))
 KPS_PER_USER = 100
 
 def train(config):
+    torch.manual_seed(config.random_seed)
+
     for train_subdir in ['dev_scores', 'dev_predictions']:
         train_subdir_path = os.path.join(config.train_dir, train_subdir)
         if not os.path.exists(train_subdir_path):
@@ -28,7 +30,7 @@ def train(config):
     vocabfile = os.path.join(config.setup_dir, 'vocab')
     vocab = Vocab(vocabfile=vocabfile)
 
-    torch.manual_seed(config.random_seed)
+    features_lookup = utils.load_pkl(os.path.join(config.setup_dir, 'featureids_lookup.pkl'))
 
     batcher = Batcher(
         input_file=os.path.join(config.setup_dir, 'train_samples.csv'),
@@ -92,7 +94,7 @@ def train(config):
                 batch_size=config.dev_batch_size,
                 max_num_batches=config.num_minibatches)
 
-            predictions = centroid.generate_predictions(config, model, dev_batcher)
+            predictions = centroid.generate_predictions(config, model, dev_batcher, features_lookup)
             utils.dump_jsonl(predictions_file, predictions)
 
             map_score = float(centroid.eval_map_file(predictions_file))
