@@ -1,10 +1,12 @@
 import os
 from expertise.utils.dataset import Dataset
 from expertise.utils.vocab import Vocab
+from expertise import utils
 from expertise.preprocessors.textrank import TextRank
 from itertools import chain
 from collections import defaultdict
 import numpy as np
+
 
 def setup_kp_features(config):
     experiment_dir = os.path.abspath(config.experiment_dir)
@@ -55,8 +57,9 @@ def setup_kp_features(config):
      for fids in featureids_by_id.values()
      for fid in fids]
 
-    (train_set_ids
+    (train_set_ids,
      dev_set_ids,
-     test_set_ids) = utils.split_ids(all_featureids)
+     test_set_ids) = utils.split_ids(all_featureids, seed=config.random_seed)
 
-    return featureids_by_id, vocab
+    return featureids_by_id, train_set_ids, dev_set_ids, test_set_ids, vocab
+

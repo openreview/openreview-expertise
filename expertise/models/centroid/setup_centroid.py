@@ -28,6 +28,7 @@ def setup(config):
      vocab) = setup_kp_features(config)
 
     print('standard setup done')
+    all_feature_ids = [fid for fids in featureids_by_id.values() for fid in fids]
 
     all_submission_fids = []
     all_reviewer_fids = []
