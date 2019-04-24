@@ -1,8 +1,10 @@
 import json
 import random
 import os
+import itertools
 import openreview
 from tqdm import tqdm
+
 
 from . import utils
 
@@ -42,33 +44,23 @@ class Dataset(object):
         self.submissions_path = os.path.join(
             directory, submissions_dirname)
 
-        self.train_set_path = os.path.join(
-            directory, 'train_set.tsv')
-
-        self.dev_set_path = os.path.join(
-            directory, 'dev_set.tsv')
-
-        self.test_set_path = os.path.join(
-            directory, 'test_set.tsv')
+        self.bid_values = bid_values
+        self.positive_bid_values = positive_bid_values
 
         self.num_bids = len(list(self._read_json_records(self.bids_path)))
-        self.num_archives = 0
-        self.num_submissions = 0
-        self.reviewer_ids = set()
+
+        self.num_archives = 0 # counts the number of reviewer *documents*, not ids
+        reviewer_id_set = set()
         for userid, _ in self._read_json_records(self.archives_path):
-            self.reviewer_ids.add(userid)
+            reviewer_id_set.add(userid)
             self.num_archives += 1
+        self.reviewer_ids = list(reviewer_id_set)
 
-        self.submission_ids = set()
+        submission_id_set = set()
         for submission_id, _ in self._read_json_records(self.submissions_path):
-            self.submission_ids.add(submission_id)
-            self.num_submissions += 1
-
-        # TODO: Important! Need to make sure that different bid values get handled properly
-        # across different kinds of datasets.
-        self.bid_values = bid_values
-
-        self.positive_bid_values = positive_bid_values
+            submission_id_set.add(submission_id)
+        self.submission_ids = list(submission_id_set)
+        self.num_submissions = len(self.submission_ids)
 
     def _read_json_records(self, data_dir, sequential=True):
         for filename in os.listdir(data_dir):
@@ -153,3 +145,20 @@ class Dataset(object):
 
         for forum_id, bid_items in bid_generator:
             yield forum_id, bid_items
+
+
+    def positive_pairs(self):
+        for forum, bids in self.bids(sequential=False, progressbar=False):
+            for b in bids:
+                reviewer_id = b['signatures'][0]
+
+                if b['tag'] in self.positive_bid_values:
+                    yield (forum, reviewer_id)
+
+    def negative_pairs(self):
+        for forum, bids in self.bids(sequential=False, progressbar=False):
+            for b in bids:
+                reviewer_id = b['signatures'][0]
+
+                if b['tag'] not in self.positive_bid_values:
+                    yield (forum, reviewer_id)
