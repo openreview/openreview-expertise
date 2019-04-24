@@ -7,8 +7,6 @@ from itertools import chain, product
 from collections import defaultdict
 import numpy as np
 
-import ipdb
-
 def setup_kp_features(config):
     '''
     Want to end up with:
