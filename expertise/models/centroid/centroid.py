@@ -56,8 +56,8 @@ class Model(torch.nn.Module):
         neg_embed = self.embed(neg_result, neg_len)
 
         loss = self._bce_loss(
-            utils.row_wise_dot(source_embed, pos_embed )
-            - utils.row_wise_dot(source_embed, neg_embed ),
+            utils.row_wise_dot(source_embed, pos_embed, normalize=True)
+            - utils.row_wise_dot(source_embed, neg_embed, normalize=True),
             self.ones[:len(source_embed)])
 
         return loss
@@ -112,7 +112,11 @@ class Model(torch.nn.Module):
         """
         source_embeddings = self.embed(sources, source_lens)
         target_embeddings = self.embed(targets, target_lens)
-        return utils.row_wise_dot(source_embeddings, target_embeddings)
+        result = utils.row_wise_dot(source_embeddings, target_embeddings, normalize=True)
+        if np.isnan(sum(result.detach())):
+            ipdb.set_trace()
+
+        return result
 
 def _get_batch_lens(features_batch):
     '''
@@ -121,17 +125,6 @@ def _get_batch_lens(features_batch):
     '''
 
     return np.asarray([np.asarray([len(f)], dtype=np.float) for f in features_batch])
-
-def _load_features(id, dir, config):
-    '''
-    Loads and returns a batch of features, if file exists.
-    '''
-    matrix_path = os.path.join(config.setup_dir, dir, id + '.npy')
-
-    if os.path.exists(matrix_path):
-        return np.load(matrix_path).flatten()
-    else:
-        return np.asarray([])
 
 def format_batch(batcher, config):
     '''
@@ -143,9 +136,9 @@ def format_batch(batcher, config):
 
     for sources, positives, negatives in batcher.batches(transpose=True):
 
-        src_features = np.asarray([_load_features(s, 'features', config) for s in sources])
-        pos_features = np.asarray([_load_features(p, 'features', config) for p in positives])
-        neg_features = np.asarray([_load_features(n, 'features', config) for n in negatives])
+        src_features = np.asarray([utils.load_features(s, 'features', config) for s in sources])
+        pos_features = np.asarray([utils.load_features(p, 'features', config) for p in positives])
+        neg_features = np.asarray([utils.load_features(n, 'features', config) for n in negatives])
 
         src_lens = _get_batch_lens(src_features)
         pos_lens = _get_batch_lens(pos_features)
@@ -174,7 +167,6 @@ def format_batch(batcher, config):
         }
 
         yield (source, pos, neg)
-
 
 def generate_predictions(config, model, batcher):
     """
@@ -226,8 +218,8 @@ def generate_predictions(config, model, batcher):
         # if type(scores) is not list:
         #     scores = list(scores.cpu().data.numpy().squeeze())
 
-        source_features = np.asarray([_load_features(s, 'features', config) for s in sources])
-        target_features = np.asarray([_load_features(t, 'features', config) for t in targets])
+        source_features = np.asarray([utils.load_features(s, 'features', config) for s in sources])
+        target_features = np.asarray([utils.load_features(t, 'features', config) for t in targets])
 
         source_lens = _get_batch_lens(source_features)
         target_lens = _get_batch_lens(target_features)
@@ -281,7 +273,8 @@ def load_jsonl(filename):
 
 def eval_map_file(filename):
     list_of_list_of_labels, list_of_list_of_scores = utils.load_labels(filename)
-    return eval_map(list_of_list_of_labels, list_of_list_of_scores)
+    result = eval_map(list_of_list_of_labels, list_of_list_of_scores)
+    return result
 
 def eval_hits_at_k_file(filename, k=2, oracle=False):
     list_of_list_of_labels,list_of_list_of_scores = utils.load_labels(filename)

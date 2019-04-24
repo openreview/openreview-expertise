@@ -13,6 +13,7 @@ import csv
 from collections import defaultdict
 import math, random
 import numpy as np
+import os
 import ipdb
 
 def partition(list_, partition_id=0, num_partitions=1):
@@ -36,6 +37,17 @@ def partition(list_, partition_id=0, num_partitions=1):
         else:
             pass
 
+def load_features(id, dir, config):
+    '''
+    Loads and returns a batch of features, if file exists.
+    '''
+    matrix_path = os.path.join(config.setup_dir, dir, id + '.npy')
+
+    if os.path.exists(matrix_path):
+        return np.load(matrix_path).flatten()
+    else:
+        return np.asarray([])
+
 def fixedwidth(item_list, list_len, pad_val=0):
     '''
     Given a list `item_list` and an integer `list_len`,
@@ -48,7 +60,6 @@ def fixedwidth(item_list, list_len, pad_val=0):
     pad the returned list with the value in `pad_with`.
 
     '''
-    # ipdb.set_trace()
 
     list_len = int(list_len)
     padding_bounds = (0, max(0, list_len - len(item_list)))
@@ -143,7 +154,6 @@ def load_labels(filename):
         score = data['score']
         labels_by_forum[forum][reviewer] = int(label)
         scores_by_forum[forum][reviewer] = float(score)
-
 
     result_labels = []
     result_scores = []
@@ -400,7 +410,13 @@ def file_lines(filename):
         for line in f.readlines():
             yield line.decode(codec)
 
-def row_wise_dot(tensor1, tensor2):
+def row_wise_dot(tensor1, tensor2, normalize=False):
+    if normalize:
+        denominator = tensor1.norm(dim=1).detach()
+        if 0 in denominator:
+            ipdb.set_trace()
+        tensor1 = tensor1 / denominator[:, None]
+        tensor2 = tensor2 / denominator[:, None]
     return torch.sum(tensor1 * tensor2, dim=1, keepdim=True)
 
 def __filter_json(the_dict):
