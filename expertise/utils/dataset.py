@@ -59,6 +59,7 @@ class Dataset(object):
         submission_id_set = set()
         for submission_id, _ in self._read_json_records(self.submissions_path):
             submission_id_set.add(submission_id)
+
         self.submission_ids = list(submission_id_set)
         self.num_submissions = len(self.submission_ids)
 
@@ -162,3 +163,9 @@ class Dataset(object):
 
                 if b['tag'] not in self.positive_bid_values:
                     yield (forum, reviewer_id)
+
+    def nonpositive_pairs(self):
+        positive_pairs = [p for p in self.positive_pairs()]
+        for pair in itertools.product(self.submission_ids, self.reviewer_ids):
+            if pair not in positive_pairs:
+                yield pair
