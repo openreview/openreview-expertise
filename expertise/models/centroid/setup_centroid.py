@@ -13,15 +13,58 @@ from expertise.utils.data_to_sample import data_to_sample
 
 from expertise.preprocessors.textrank import TextRank
 
-from expertise.utils.standard_setup import setup_kp_features
+from expertise.utils.standard_setup import setup_train_dev_test
 
 import ipdb
 
 def setup(config):
 
+    train_split, dev_split, test_split = setup_train_dev_test(config)
+
     dataset = Dataset(**config.dataset)
 
-    features_lookup, vocab, train_dev_test = setup_kp_features(config)
+    feature_dirs = [
+        'features'
+    ]
+
+    for d in feature_dirs:
+        os.makedirs(os.path.join(config.setup_dir, d), exist_ok=True)
+        print('created', d)
+
+    vocab = Vocab()
+    textrank = TextRank()
+
+    kps_by_id = {}
+
+    combined_data = chain(
+        dataset.submissions(sequential=False, fields=['title','abstract']),
+        dataset.archives(sequential=False, fields=['title','abstract']))
+
+    for item_id, text_list in combined_data:
+        kp_lists = []
+        for text in text_list:
+            textrank.analyze(text)
+            kps = [kp for kp, score in textrank.keyphrases()]
+            if len(kps) > 0:
+                vocab.load_items(kps)
+                kp_lists.append(kps)
+        kps_by_id[item_id] = kp_lists
+
+    vocab.dump_csv(outfile=os.path.join(config.setup_dir, 'vocab'))
+
+    featureids_by_id = defaultdict(list)
+
+    for id in dataset.submission_ids + dataset.reviewer_ids:
+        for i, kps in enumerate(kps_by_id[id]):
+            fid = f'{id}:{i}'
+            outfile = os.path.join(
+                config.setup_dir, 'features', f'{fid}.npy')
+
+            features = vocab.to_ints(kps, length=config.max_num_keyphrases)
+            np.save(outfile, features)
+            featureids_by_id[id].append(fid)
+
+    utils.dump_pkl(os.path.join(config.setup_dir, 'featureids_lookup.pkl'), featureids_by_id)
 
     positive_pairs = [p for p in dataset.positive_pairs()]
     negative_pairs = [p for p in dataset.negative_pairs()]
@@ -39,10 +82,8 @@ def setup(config):
     all_ids = [id for id in set(chain(
         positives_lookup.keys(),
         negatives_lookup.keys(),
-        features_lookup.keys()
+        featureids_by_id.keys()
     ))]
-
-    print(sorted(all_ids))
 
     random.seed(config.random_seed)
 
@@ -72,7 +113,7 @@ def setup(config):
     }
 
     feature_samplers = {
-        id: _sample_generator(id, features_lookup) for id in all_ids
+        id: _sample_generator(id, featureids_by_id) for id in all_ids
     }
 
     def _sample_feature(id):
@@ -103,10 +144,6 @@ def setup(config):
             >>> return next(neutral_sampler)
             '''
             return None
-
-    (train_split,
-     dev_split,
-     test_split) = train_dev_test
 
     '''
     Generate training samples.
@@ -147,33 +184,3 @@ def setup(config):
                         submission_feat,
                         reviewer_neg_feat]))
                     f.write('\n')
-
-    '''
-    Generate dev and test samples.
-
-    '''
-    def _write_eval_data(f, data_split):
-        for submission_id in data_split:
-            for reviewer_pos_id in positives_lookup[submission_id]:
-                if reviewer_pos_id:
-                    f.write('\t'.join([
-                        submission_id,
-                        reviewer_pos_id,
-                        '1'
-                    ]))
-                    f.write('\n')
-
-            for reviewer_neg_id in negatives_lookup[submission_id]:
-                if reviewer_neg_id:
-                    f.write('\t'.join([
-                        submission_id,
-                        reviewer_neg_id,
-                        '0'
-                    ]))
-                    f.write('\n')
-
-    with open(os.path.join(config.setup_dir, 'dev_samples.csv'), 'w') as f:
-        _write_eval_data(f, dev_split)
-
-    with open(os.path.join(config.setup_dir, 'test_samples.csv'), 'w') as f:
-        _write_eval_data(f, test_split)

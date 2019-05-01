@@ -7,66 +7,75 @@ from itertools import chain, product
 from collections import defaultdict
 import numpy as np
 
-def setup_kp_features(config):
+def setup_train_dev_test(config):
     '''
-    Want to end up with:
-        -   A list of positive training pairs, in the format (PAPER, REVIEWER)
-        -   A train/dev/test split of the list of pairs
-        -   A feature file for each document in the format ID:DOC_NUM.npy
-        -   An index allowing fast lookup of feature files for a given ID
-
+    Handles train/dev/test split common to all models
     '''
 
     experiment_dir = os.path.abspath(config.experiment_dir)
     setup_dir = os.path.join(experiment_dir, 'setup')
 
-    feature_dirs = [
-        'features'
-    ]
-
-    for d in feature_dirs:
-        os.makedirs(os.path.join(setup_dir, d), exist_ok=True)
-        print('created', d)
-
     dataset = Dataset(**config.dataset)
-    vocab = Vocab()
-    textrank = TextRank()
-
-    kps_by_id = {}
-    for item_id, text_list in chain(
-        dataset.submissions(sequential=False, fields=['title','abstract']),
-        dataset.archives(sequential=False, fields=['title','abstract'])):
-
-        kp_lists = []
-        for text in text_list:
-            textrank.analyze(text)
-            kps = [kp for kp, score in textrank.keyphrases()]
-            vocab.load_items(kps)
-            kp_lists.append(kps)
-        kps_by_id[item_id] = kp_lists
-
-    vocab.dump_csv(outfile=os.path.join(config.setup_dir, 'vocab'))
 
     submission_ids = list(dataset.submission_ids)
     reviewer_ids = list(dataset.reviewer_ids)
     featureids_by_id = defaultdict(list)
 
-    for id in submission_ids + reviewer_ids:
-        for i, kps in enumerate(kps_by_id[id]):
-            fid = f'{id}:{i}'
-            outfile = os.path.join(
-                setup_dir, 'features', f'{fid}.npy')
-
-            features = vocab.to_ints(kps, length=config.max_num_keyphrases)
-            np.save(outfile, features)
-            featureids_by_id[id].append(fid)
-
-    train_split, dev_split, test_split = utils.split_ids(submission_ids, seed=config.random_seed)
+    train_split, dev_split, test_split = utils.split_ids(submission_ids, seed=config.data_split_seed)
 
     utils.dump_csv(os.path.join(setup_dir, 'train_split.csv'), [[id] for id in train_split])
     utils.dump_csv(os.path.join(setup_dir, 'dev_split.csv'), [[id] for id in dev_split])
     utils.dump_csv(os.path.join(setup_dir, 'test_split.csv'), [[id] for id in test_split])
 
-    utils.dump_pkl(os.path.join(setup_dir, 'featureids_lookup.pkl'), featureids_by_id)
+    positive_pairs = [p for p in dataset.positive_pairs()]
+    negative_pairs = [p for p in dataset.negative_pairs()]
+    nonpositive_pairs = [p for p in dataset.nonpositive_pairs()]
 
-    return featureids_by_id, vocab, (train_split, dev_split, test_split)
+    positives_lookup = defaultdict(list)
+    for s_id, r_id in positive_pairs:
+        positives_lookup[s_id].append(r_id)
+        positives_lookup[r_id].append(s_id)
+
+    negatives_lookup = defaultdict(list)
+    for s_id, r_id in negative_pairs:
+        negatives_lookup[s_id].append(r_id)
+        negatives_lookup[r_id].append(s_id)
+
+    nonpositives_lookup = defaultdict(list)
+    for s_id, r_id in nonpositive_pairs:
+        nonpositives_lookup[s_id].append(r_id)
+        nonpositives_lookup[r_id].append(s_id)
+
+
+    def _write_eval_data(f, data_split, pos_lookup, neg_lookup):
+        for submission_id in data_split:
+            for reviewer_pos_id in pos_lookup[submission_id]:
+                if reviewer_pos_id:
+                    f.write('\t'.join([
+                        submission_id,
+                        reviewer_pos_id,
+                        '1'
+                    ]))
+                    f.write('\n')
+
+            for reviewer_neg_id in neg_lookup[submission_id]:
+                if reviewer_neg_id:
+                    f.write('\t'.join([
+                        submission_id,
+                        reviewer_neg_id,
+                        '0'
+                    ]))
+                    f.write('\n')
+
+
+    with open(os.path.join(config.setup_dir, 'test_samples.csv'), 'w') as f:
+        _write_eval_data(f, test_split, positives_lookup, negatives_lookup)
+
+    with open(os.path.join(config.setup_dir, 'test_samples_nonpositive.csv'), 'w') as f:
+        _write_eval_data(f, test_split, positives_lookup, nonpositives_lookup)
+
+    with open(os.path.join(config.setup_dir, 'dev_samples.csv'), 'w') as f:
+        _write_eval_data(f, dev_split, positives_lookup, negatives_lookup)
+
+
+    return train_split, dev_split, test_split
