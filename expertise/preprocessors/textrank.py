@@ -1,8 +1,8 @@
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 import numpy as np
 import spacy
 from spacy.lang.en.stop_words import STOP_WORDS
-
+import ipdb
 nlp = spacy.load('en_core_web_sm')
 
 class TextRank():
@@ -20,14 +20,14 @@ class TextRank():
             lexeme = nlp.vocab[word]
             lexeme.is_stop = True
 
-    def sentence_segment(self, doc, candidate_pos, lower, lemma):
+    def sentence_segment(self, doc, candidate_pos, lower, lemma, min_len=2):
         """Store those words only in cadidate_pos"""
         sentences = []
         for sent in doc.sents:
             selected_words = []
             for token in sent:
                 # Store words only with cadidate POS tag
-                if token.pos_ in candidate_pos and token.is_stop is False:
+                if token.pos_ in candidate_pos and token.is_stop is False and len(token) >= min_len:
                     if lemma is True:
                         selected_word = token.lemma_
                     else:
@@ -61,13 +61,15 @@ class TextRank():
     def get_vocab(self, sentences):
         """Get all tokens"""
         vocab = OrderedDict()
+        counts = defaultdict(int)
         i = 0
         for sentence in sentences:
             for word in sentence:
                 if word not in vocab:
                     vocab[word] = i
                     i += 1
-        return vocab
+                counts[word] += 1
+        return vocab, counts
 
     def get_token_pairs(self, window_size, sentences):
         """Build token_pairs from windows in sentences"""
@@ -138,7 +140,7 @@ class TextRank():
         sentences = self.sentence_segment(doc, candidate_pos, lower, lemma) # list of list of words
 
         # Build vocabulary
-        vocab = self.get_vocab(sentences)
+        vocab, self.counts = self.get_vocab(sentences)
 
         # Get token_pairs from windows
         token_pairs = self.get_token_pairs(window_size, sentences)
