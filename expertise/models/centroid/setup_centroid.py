@@ -88,99 +88,42 @@ def setup(config):
     random.seed(config.random_seed)
 
 
-    def _sample_generator(id, lookup):
-        items = random.sample(
-            lookup.get(id, []),
-            len(lookup.get(id, [])))
-
-        if len(items) == 0:
-            '''
-            If the item list is empty, the generator will stop.
-            Appending None to the list lets the generator cycle None values forever,
-            which can be caught and handled downstream.
-            '''
-            items.append(None)
-
-        for positive in cycle(items):
-            yield positive
-
-    positive_samplers = {
-        id: _sample_generator(id, positives_lookup) for id in all_ids
-    }
-
-    negative_samplers = {
-        id: _sample_generator(id, negatives_lookup) for id in all_ids
-    }
-
-    feature_samplers = {
-        id: _sample_generator(id, featureids_by_id) for id in all_ids
-    }
-
-    def _sample_feature(id):
-        sampler = feature_samplers.get(id)
-        if sampler:
-            return next(sampler)
-        else:
-            return None
-
-    def _sample_positive(id):
-        sampler = positive_samplers.get(id)
-        if sampler:
-            return next(sampler)
-        else:
-            return None
-
-    def _sample_negative(id):
-        sampler = negative_samplers.get(id)
-        if sampler:
-            return next(sampler)
-        else:
-            '''
-            Open question: when the given `id` has no negative samples,
-            should I return a sample that has no label?
-
-            e.g. something like this:
-            >>> neutral_sampler = neutral_samplers[id]
-            >>> return next(neutral_sampler)
-            '''
-            return None
-
     '''
     Generate training samples.
 
     Hypothesis: train_samples_per_pair should be set to the median
         number of documents per archive in the dataset.
     '''
-    train_samples_per_pair = 1000
+    train_samples_per_pair = 100
     with open(os.path.join(config.setup_dir, 'train_samples.csv'), 'w') as f:
         for iteration in range(train_samples_per_pair):
             for submission_id in train_split:
+
                 '''
                 Write out two samples:
                 one that finds the negative sample of the submission,
                 the other that finds the negative sample of the reviewer.
                 '''
-                submission_feat = _sample_feature(submission_id)
+                positives = positives_lookup[submission_id]
+                if len(positives) > 0:
+                    reviewer_id = random.sample(positives, 1)[0]
 
-                reviewer_id = _sample_positive(submission_id)
-                reviewer_feat = _sample_feature(reviewer_id)
+                    negatives = negatives_lookup[reviewer_id]
+                    if len(negatives) > 0:
+                        reviewer_neg_id = random.sample(negatives, 1)[0]
+                        f.write('\t'.join([
+                            reviewer_id,
+                            submission_id,
+                            reviewer_neg_id]))
+                        f.write('\n')
 
-                reviewer_neg_feat = _sample_feature(_sample_negative(reviewer_id))
-                submission_neg_feat = _sample_feature(_sample_negative(submission_id))
+                    submission_negatives = negatives_lookup[submission_id]
+                    if len(submission_negatives) > 0:
+                        submission_neg_id = random.sample(submission_negatives, 1)[0]
+                        f.write('\t'.join([
+                            submission_id,
+                            reviewer_id,
+                            submission_neg_id]))
+                        f.write('\n')
 
-                '''
-                Open question: is this the right way to be generating random training samples?
-                '''
-                if submission_feat and reviewer_feat and submission_neg_feat:
-                    f.write('\t'.join([
-                        submission_feat,
-                        reviewer_feat,
-                        submission_neg_feat]))
-                    f.write('\n')
 
-                if submission_feat and reviewer_feat and reviewer_neg_feat:
-                    f.write('\t'.join([
-                        reviewer_feat,
-                        submission_feat,
-                        reviewer_neg_feat]))
-                    f.write('\n')
