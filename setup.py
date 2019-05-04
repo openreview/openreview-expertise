@@ -21,7 +21,8 @@ setup(
         'cloudpickle',
         'scikit-learn',
         'tqdm',
-        'pytorch_pretrained_bert'
+        'pytorch_pretrained_bert',
+        'spacy'
     ],
     zip_safe=False
 )
