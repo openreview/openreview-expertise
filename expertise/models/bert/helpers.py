@@ -77,7 +77,8 @@ def get_cls_vectors(line_features, layer_index=-1):
 
 AGGREGATOR_MAP = {
     'avg': get_avg_words,
-    'cls': get_cls_vectors
+    'cls': get_cls_vectors,
+    'all': lambda x: x
 }
 
 

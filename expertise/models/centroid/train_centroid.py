@@ -49,8 +49,7 @@ def train(config):
 
     print('Begin Training')
 
-    for batch_idx, (src, pos, neg) in enumerate(
-        centroid.format_batch(batcher, config)):
+    for batch_idx, (src, pos, neg) in enumerate(centroid.format_batch(batcher, features_lookup, config)):
 
         optimizer.zero_grad()
 
@@ -58,9 +57,9 @@ def train(config):
             'batch_source': src['features'],
             'pos_result': pos['features'],
             'neg_result': neg['features'],
-            'batch_lengths': src['lens'],
-            'pos_len': pos['lens'],
-            'neg_len': neg['lens']
+            # 'batch_lengths': src['lens'],
+            # 'pos_len': pos['lens'],
+            # 'neg_len': neg['lens']
         }
 
         # ipdb.set_trace()
