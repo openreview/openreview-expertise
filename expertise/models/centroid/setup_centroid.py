@@ -50,7 +50,7 @@ def setup(config):
                 kp_lists.append(kps)
         kps_by_id[item_id] = kp_lists
 
-    vocab.dump_csv(outfile=os.path.join(config.setup_dir, 'vocab'))
+    vocab.dump_csv(outfile=os.path.join(config.setup_dir, 'vocab.csv'))
 
     featureids_by_id = defaultdict(list)
 
@@ -67,7 +67,7 @@ def setup(config):
     utils.dump_pkl(os.path.join(config.setup_dir, 'featureids_lookup.pkl'), featureids_by_id)
 
     positive_pairs = [p for p in dataset.positive_pairs()]
-    negative_pairs = [p for p in dataset.negative_pairs()]
+    negative_pairs = list(set([p for p in chain(dataset.negative_pairs(), dataset.nonpositive_pairs())]))
 
     positives_lookup = defaultdict(list)
     for s_id, r_id in positive_pairs:
@@ -79,12 +79,6 @@ def setup(config):
         negatives_lookup[s_id].append(r_id)
         negatives_lookup[r_id].append(s_id)
 
-    all_ids = [id for id in set(chain(
-        positives_lookup.keys(),
-        negatives_lookup.keys(),
-        featureids_by_id.keys()
-    ))]
-
     random.seed(config.random_seed)
 
 
@@ -94,7 +88,7 @@ def setup(config):
     Hypothesis: train_samples_per_pair should be set to the median
         number of documents per archive in the dataset.
     '''
-    train_samples_per_pair = 100
+    train_samples_per_pair = 500
     with open(os.path.join(config.setup_dir, 'train_samples.csv'), 'w') as f:
         for iteration in range(train_samples_per_pair):
             for submission_id in train_split:

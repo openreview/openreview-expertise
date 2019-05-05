@@ -27,7 +27,7 @@ def train(config):
         if not os.path.exists(train_subdir_path):
             os.mkdir(train_subdir_path)
 
-    vocabfile = os.path.join(config.setup_dir, 'vocab')
+    vocabfile = os.path.join(config.setup_dir, 'vocab.csv')
     vocab = Vocab(vocabfile=vocabfile)
 
     features_lookup = utils.load_pkl(os.path.join(config.setup_dir, 'featureids_lookup.pkl'))
@@ -122,11 +122,6 @@ def train(config):
 
                 torch.save(model, best_model_path)
                 config.best_model_path = best_model_path
-                config.best_map_score = best_map
-                config.hits_at_1 = hits_at_1
-                config.hits_at_3 = hits_at_3
-                config.hits_at_5 = hits_at_5
-                config.hits_at_10 = hits_at_10
                 config.save_config()
 
                 config.train_save(score_lines, 'dev.scores.best.tsv')
