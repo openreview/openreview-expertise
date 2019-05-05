@@ -33,7 +33,7 @@ class Model(torch.nn.Module):
 
         self._bce_loss = BCEWithLogitsLoss()
 
-    def get_loss(self, batch_source, pos_result, neg_result, batch_lengths, pos_len, neg_len):
+    def compute_loss(self, batch_source, pos_result, neg_result, batch_lengths, pos_len, neg_len):
         """ Compute the loss (BPR) for a batch of examples
         :param batch_source: a batch of source keyphrase indices (list of lists)
         :param pos_result: True aliases of the Mentions
