@@ -32,6 +32,10 @@ def setup(config):
         kps_by_reviewer[reviewer_id].extend(kp_list)
         vocab.load_items(kp_list)
 
+    config.setup_save(kps_by_reviewer, 'kps_by_reviewer.pkl')
+
+    config.setup_save(kps_by_submission, 'kps_by_submission.pkl')
+
     config.setup_save(vocab, 'vocab.pkl')
 
     train_set_ids, dev_set_ids, test_set_ids = utils.split_ids(list(bids_by_forum.keys()))
