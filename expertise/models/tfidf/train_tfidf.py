@@ -13,9 +13,6 @@ def train(config):
     submission_kps_file = os.path.join(setup_dir, 'submission_kps.pkl')
     reviewer_kps_file = os.path.join(setup_dir, 'reviewer_kps.pkl')
 
-    print('fitting model')
-    start_training_datetime = datetime.now()
-
     with open(submission_kps_file, 'rb') as f:
         kps_by_paperid = pickle.load(f)
 
@@ -24,8 +21,6 @@ def train(config):
 
     model = tfidf.Model(kps_by_paperid, kp_archives_by_userid)
     model.fit()
-
-    print('finished training in {}'.format(datetime.now() - start_training_datetime))
 
     train_dir = os.path.join(experiment_dir, 'train')
     if not os.path.isdir(train_dir):
