@@ -65,7 +65,7 @@ class Model(torch.nn.Module):
         result = torch.max(comparisons)
         return result
 
-    def get_loss(self, batch_source, pos_result, neg_result):
+    def get_loss(self, batch_source, pos_result, neg_result, use_cuda=False):
         """ Compute the loss (BPR) for a batch of examples
         """
 
@@ -77,8 +77,15 @@ class Model(torch.nn.Module):
 
         pos_comparison_tensors = torch.stack(pos_comparisons, dim=0)
         neg_comparison_tensors = torch.stack(neg_comparisons, dim=0)
+        if use_cuda:
+            pos_comparison_tensors.cuda()
+            neg_comparison_tensors.cuda()
+
         output = pos_comparison_tensors - neg_comparison_tensors
         target = torch.ones(pos_comparison_tensors.size())
+        if use_cuda:
+            target.cuda()
+
         # ipdb.set_trace()
         assert len(output) == len(target)
         # # B by dim
