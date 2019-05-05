@@ -49,16 +49,16 @@ class Model(torch.nn.Module):
         lens2_shape[-1] = 1
         lens2_tensor = torch.ones(lens2_shape) * self.config.max_num_keyphrases
 
-        # if self.config.use_cuda:
-        #     lens1_tensor = lens1_tensor.cuda()
-        #     lens2_tensor = lens2_tensor.cuda()
+        if self.config.use_cuda:
+            lens1_tensor = lens1_tensor.cuda()
+            lens2_tensor = lens2_tensor.cuda()
 
         arch1_embedded = self.embed(archive1.long(), lens1_tensor)
         arch2_embedded = self.embed(archive2.long(), lens2_tensor)
 
-        # if self.config.use_cuda:
-        #     arch1_embedded = arch1_embedded.cuda()
-        #     arch2_embedded = arch2_embedded.cuda()
+        if self.config.use_cuda:
+            arch1_embedded = arch1_embedded.cuda()
+            arch2_embedded = arch2_embedded.cuda()
 
         for t1 in arch1_embedded:
             for t2 in arch2_embedded:
@@ -88,9 +88,9 @@ class Model(torch.nn.Module):
 
         pos_comparison_tensors = torch.stack(pos_comparisons, dim=0)
         neg_comparison_tensors = torch.stack(neg_comparisons, dim=0)
-        # if self.config.use_cuda:
-        #     pos_comparison_tensors = pos_comparison_tensors.cuda()
-        #     neg_comparison_tensors = neg_comparison_tensors.cuda()
+        if self.config.use_cuda:
+            pos_comparison_tensors = pos_comparison_tensors.cuda()
+            neg_comparison_tensors = neg_comparison_tensors.cuda()
 
         output = pos_comparison_tensors - neg_comparison_tensors
         target = torch.ones(pos_comparison_tensors.size())
