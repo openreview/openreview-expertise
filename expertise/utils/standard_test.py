@@ -11,9 +11,11 @@ def test(config):
     dataset = Dataset(**config.dataset)
 
     labels_by_reviewer_by_forum = defaultdict(dict)
-    for bid in dataset.bids():
-        label = 1 if bid.tag in dataset.positive_bid_values else 0
-        labels_by_reviewer_by_forum[bid.forum][bid.signatures[0]] = label
+    for forum_id, bids in dataset.bids():
+        for bid in bids:
+            print('bid', bid)
+            label = 1 if bid['tag'] in dataset.positive_bid_values else 0
+            labels_by_reviewer_by_forum[forum_id][bid['signatures'][0]] = label
 
     inferred_scores_path = os.path.join(config.infer_dir, config.name + '-scores.jsonl')
 

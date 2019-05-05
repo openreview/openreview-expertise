@@ -28,8 +28,7 @@ def setup_train_dev_test(config):
     utils.dump_csv(os.path.join(setup_dir, 'test_split.csv'), [[id] for id in test_split])
 
     positive_pairs = [p for p in dataset.positive_pairs()]
-    negative_pairs = [p for p in dataset.negative_pairs()]
-    nonpositive_pairs = [p for p in dataset.nonpositive_pairs()]
+    negative_pairs = list(set([p for p in chain(dataset.negative_pairs(), dataset.nonpositive_pairs())]))
 
     positives_lookup = defaultdict(list)
     for s_id, r_id in positive_pairs:
@@ -40,12 +39,6 @@ def setup_train_dev_test(config):
     for s_id, r_id in negative_pairs:
         negatives_lookup[s_id].append(r_id)
         negatives_lookup[r_id].append(s_id)
-
-    nonpositives_lookup = defaultdict(list)
-    for s_id, r_id in nonpositive_pairs:
-        nonpositives_lookup[s_id].append(r_id)
-        nonpositives_lookup[r_id].append(s_id)
-
 
     def _write_eval_data(f, data_split, pos_lookup, neg_lookup):
         for submission_id in data_split:
@@ -70,9 +63,6 @@ def setup_train_dev_test(config):
 
     with open(os.path.join(config.setup_dir, 'test_samples.csv'), 'w') as f:
         _write_eval_data(f, test_split, positives_lookup, negatives_lookup)
-
-    with open(os.path.join(config.setup_dir, 'test_samples_nonpositive.csv'), 'w') as f:
-        _write_eval_data(f, test_split, positives_lookup, nonpositives_lookup)
 
     with open(os.path.join(config.setup_dir, 'dev_samples.csv'), 'w') as f:
         _write_eval_data(f, dev_split, positives_lookup, negatives_lookup)

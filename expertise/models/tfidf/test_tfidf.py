@@ -1,42 +1,58 @@
 import os
+import csv, json
+import numpy as np
 from collections import defaultdict
 from expertise import utils
 from expertise.utils.dataset import Dataset
 from expertise.evaluators.mean_avg_precision import eval_map
 from expertise.evaluators.hits_at_k import eval_hits_at_k
+
 from tqdm import tqdm
+import ipdb
 
 def test(config):
 
     dataset = Dataset(**config.dataset)
 
-    labels_by_reviewer_by_forum = defaultdict(dict)
-    for bid in dataset.bids():
-        label = 1 if bid.tag in dataset.positive_bid_values else 0
-        labels_by_reviewer_by_forum[bid.forum][bid.signatures[0]] = label
+    model = utils.load_pkl(os.path.join(config.train_dir, 'model.pkl'))
 
-    inferred_scores_path = os.path.join(config.infer_dir, config.name + '-scores.jsonl')
+    paperidx_by_id = {
+        paperid: index
+        for index, paperid
+        in enumerate(model.bow_by_paperid.keys())
+    }
 
-    labeled_data_list = []
-    for data in utils.jsonl_reader(inferred_scores_path):
-        forum = data['source_id']
-        reviewer = data['target_id']
-        score = float(data['score'])
-        if not score >= 0.0:
-            score = 0.0
+    score_file_path = os.path.join(config.test_dir, 'test_scores.jsonl')
+    samples_file_path = os.path.join(config.setup_dir, 'test_samples.csv')
 
-        if reviewer in labels_by_reviewer_by_forum[forum]:
-            label = labels_by_reviewer_by_forum[forum][reviewer]
+    scores = {}
 
-            labeled_data = {k:v for k,v in data.items()}
-            labeled_data.update({'label': label, 'score': score})
-            labeled_data_list.append(labeled_data)
+    with open(score_file_path, 'w') as w, open(samples_file_path) as r:
+        sample_reader = csv.reader(r, delimiter='\t')
 
-    config.test_save(labeled_data_list, 'score_labels.jsonl')
+        for paperid, userid, label in sample_reader:
 
-    labels_file = config.test_path('score_labels.jsonl')
+            if userid not in scores:
+                # bow_archive is a list of BOWs.
+                bow_archive = model.bow_archives_by_userid.get(userid, [[]])
+                best_scores = np.amax(model.index[bow_archive], axis=0)
+                scores[userid] = best_scores
 
-    list_of_list_of_labels, list_of_list_of_scores = utils.load_labels(labels_file)
+            if paperid in paperidx_by_id:
+                paper_index = paperidx_by_id[paperid]
+                score = scores[userid][paper_index]
+
+                result = {
+                    'source_id': paperid,
+                    'target_id': userid,
+                    'score': float(score),
+                    'label': int(label)
+                }
+
+                w.write(json.dumps(result) + '\n')
+
+    (list_of_list_of_labels,
+     list_of_list_of_scores) = utils.load_labels(score_file_path)
 
     map_score = float(eval_map(list_of_list_of_labels, list_of_list_of_scores))
     hits_at_1 = float(eval_hits_at_k(list_of_list_of_labels, list_of_list_of_scores, k=1))
