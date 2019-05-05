@@ -70,9 +70,11 @@ class Model(torch.nn.Module):
             ipdb.set_trace()
 
         comparisons = torch.stack(comparisons)
-        if self.config.use_cuda:
-            comparisons.cuda()
         result = torch.max(comparisons)
+
+        if self.config.use_cuda:
+            result.cuda()
+
         return result
 
     def get_loss(self, batch_source, pos_result, neg_result):
@@ -139,7 +141,7 @@ class Model(torch.nn.Module):
         # get all the embeddings for each keyword
         # B x L x d
         embeddings = self.embedding(kw_indices)
-
+        print(type(embeddings))
         # make sure that we don't divide by zero
         kw_lengths[kw_lengths == 0] = 1
 
