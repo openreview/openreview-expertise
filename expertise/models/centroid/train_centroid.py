@@ -43,6 +43,9 @@ def train(config):
 
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.l2penalty)
 
+    if config.use_cuda:
+        optimizer.cuda()
+
     # Stats
     best_map = 0
     sum_loss = 0.0

@@ -112,6 +112,8 @@ class Model(torch.nn.Module):
         #     - utils.row_wise_dot(source_embed, neg_embed, normalize=True),
         #     self.ones[:len(source_embed)])
 
+        print('_bce_loss: output ',output.device,'target', target.device)
+
         loss = self._bce_loss(output, target)
 
         return loss
