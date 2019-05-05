@@ -30,7 +30,6 @@ class Model(torch.nn.Module):
 
         # Keyword embeddings
         self.embedding = nn.Embedding(len(vocab)+1, config.embedding_dim, padding_idx=0)
-
         # Vector of ones (used for loss)
         if self.config.use_cuda:
             self.ones = torch.ones(config.batch_size, 1).cuda()
@@ -50,8 +49,17 @@ class Model(torch.nn.Module):
         lens2_shape[-1] = 1
         lens2_tensor = torch.ones(lens2_shape) * self.config.max_num_keyphrases
 
+        if self.config.use_cuda:
+            lens1_tensor.cuda()
+            lens2_tensor.cuda()
+
         arch1_embedded = self.embed(archive1.long(), lens1_tensor)
         arch2_embedded = self.embed(archive2.long(), lens2_tensor)
+
+        if self.config.use_cuda:
+            arch1_embedded.cuda()
+            arch2_embedded.cuda()
+
 
         for t1 in arch1_embedded:
             for t2 in arch2_embedded:
@@ -62,10 +70,12 @@ class Model(torch.nn.Module):
             ipdb.set_trace()
 
         comparisons = torch.stack(comparisons)
+        if self.config.use_cuda:
+            comparisons.cuda()
         result = torch.max(comparisons)
         return result
 
-    def get_loss(self, batch_source, pos_result, neg_result, use_cuda=False):
+    def get_loss(self, batch_source, pos_result, neg_result):
         """ Compute the loss (BPR) for a batch of examples
         """
 
@@ -77,13 +87,13 @@ class Model(torch.nn.Module):
 
         pos_comparison_tensors = torch.stack(pos_comparisons, dim=0)
         neg_comparison_tensors = torch.stack(neg_comparisons, dim=0)
-        if use_cuda:
+        if self.config.use_cuda:
             pos_comparison_tensors.cuda()
             neg_comparison_tensors.cuda()
 
         output = pos_comparison_tensors - neg_comparison_tensors
         target = torch.ones(pos_comparison_tensors.size())
-        if use_cuda:
+        if self.config.use_cuda:
             target.cuda()
 
         # ipdb.set_trace()
