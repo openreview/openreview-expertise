@@ -13,8 +13,6 @@ from gensim.similarities.docsim import SparseMatrixSimilarity
 import numpy as np
 from tqdm import tqdm
 
-
-
 def infer(config):
     experiment_dir = os.path.abspath(config.experiment_dir)
 
@@ -32,21 +30,29 @@ def infer(config):
     paperid_by_index = {index: paperid \
         for index, paperid in enumerate(model.bow_by_paperid.keys())}
 
-    # appends new scores to an existing file, if possible
     score_file_path = os.path.join(infer_dir, config.name + '-scores.jsonl')
+    samples_file_path = os.path.join(config.setup_dir, 'test_samples.csv')
 
-    with open(score_file_path, 'w') as f:
-        for userid, bow_archive in tqdm(model.bow_archives_by_userid.items(), total=len(dataset.reviewer_ids)):
+    scores = {}
 
-            best_scores = np.amax(model.index[bow_archive], axis=0)
+    with open(score_file_path, 'w') as w, open(samples_file_path) as r:
+        sample_reader = csv.reader(r, delimiter='\t')
 
-            for paper_index, score in enumerate(best_scores):
+        for paperid, userid, label in sample_reader:
+
+            if userid not in scores:
+                bow_archive = model.bow_archives_by_userid[userid]
+                best_scores = np.amax(model.index[bow_archive], axis=0)
+                scores[userid] = best_scores
+
+            for paper_index, score in enumerate(scores[userid]):
                 paperid = paperid_by_index[paper_index]
 
                 result = {
                     'source_id': paperid,
                     'target_id': userid,
-                    'score': float(score)
+                    'score': float(score),
+                    'label': int(label)
                 }
 
-                f.write(json.dumps(result) + '\n')
+                w.write(json.dumps(result) + '\n')

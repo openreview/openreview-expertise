@@ -4,6 +4,7 @@ import json
 import itertools
 import string
 import nltk
+from nltk.stem.porter import PorterStemmer
 
 from .. import utils
 
@@ -70,10 +71,8 @@ def extract_candidate_chunks(text, grammar=r'NP: {<JJ>*<NN>}', delimiter='_', st
 
     # join constituent chunk words into a single chunked phrase
 
-    if stemmer:
-        stem = stemmer.stem
-    else:
-        stem = lambda x: x
+    if not stemmer:
+        stemmer = PorterStemmer()
 
     candidates = []
     for key, group in itertools.groupby(all_chunks, lambda word_pos_chunk_triple: word_pos_chunk_triple[2] != 'O'):
@@ -81,7 +80,7 @@ def extract_candidate_chunks(text, grammar=r'NP: {<JJ>*<NN>}', delimiter='_', st
             words = []
             for word, pos, chunk in group:
                 try:
-                    word = stem(word)
+                    word = stemmer.stem(word)
                 except IndexError:
                     print("word unstemmable:", word)
                 words.append(word)
@@ -99,14 +98,11 @@ def extract_candidate_words(text, good_tags=set(['JJ','JJR','JJS','NN','NNP','NN
     tagged_words = itertools.chain.from_iterable(nltk.pos_tag_sents(nltk.word_tokenize(sent)
                                                                     for sent in nltk.sent_tokenize(text)))
     # filter on certain POS tags and lowercase all words
+    if stemmer == None:
+        stemmer = PorterStemmer()
 
-    if stemmer!=None:
-        candidates = [stemmer.stem(word.lower()) for word, tag in tagged_words
-                      if tag in good_tags and word.lower() not in stop_words
-                      and not all(char in punct for char in word)]
-    else:
-        candidates = [word.lower() for word, tag in tagged_words
-                      if tag in good_tags and word.lower() not in stop_words
-                      and not all(char in punct for char in word)]
+    candidates = [stemmer.stem(word.lower()) for word, tag in tagged_words
+                  if tag in good_tags and word.lower() not in stop_words
+                  and not all(char in punct for char in word)]
 
     return candidates

@@ -11,7 +11,7 @@ from gensim.models import TfidfModel
 from gensim import corpora
 
 from expertise.preprocessors import pos_regex
-
+import ipdb
 
 class Model():
     def __init__(self, kps_by_paperid, kp_archives_by_userid):
@@ -22,8 +22,6 @@ class Model():
         self.bow_by_paperid = defaultdict(Counter)
 
         self.all_documents = []
-
-        self.preprocess_content = pos_regex.extract_candidate_words
 
         self.kps_by_paperid = kps_by_paperid
         self.kp_archives_by_userid = kp_archives_by_userid
@@ -87,19 +85,17 @@ class Model():
 
         return rank_list
 
-    def score(self, archive_content, paper_content):
+    def score(self, reviewer_tokens, paper_tokens):
         """
         Returns a score from 0.0 to 1.0, representing the degree of fit between the paper and the reviewer
 
         """
-        paper_tokens = self.preprocess_content(paper_content)
-        paper_bow = [(t[0], t[1]) for t in self.dictionary.doc2bow(paper_tokens)]
 
-        reviewer_tokens = self.preprocess_content(archive_content)
+        paper_bow = [(t[0], t[1]) for t in self.dictionary.doc2bow(paper_tokens)]
         reviewer_bow = [(t[0], t[1]) for t in self.dictionary.doc2bow(reviewer_tokens)]
 
-        forum_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf_model[paper_bow]})
-        reviewer_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf_model[reviewer_bow]})
+        forum_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf[paper_bow]})
+        reviewer_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf[reviewer_bow]})
 
         return sum([forum_vector[k] * reviewer_vector[k] for k in forum_vector])
 
