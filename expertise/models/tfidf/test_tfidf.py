@@ -23,14 +23,15 @@ def test(config):
     }
 
     score_file_path = os.path.join(config.test_dir, 'test_scores.jsonl')
-    samples_file_path = os.path.join(config.setup_dir, 'test_samples.csv')
+    labels_file_path = os.path.join(config.test_dir, 'test_labels.jsonl')
 
     scores = {}
 
-    with open(score_file_path, 'w') as w, open(samples_file_path) as r:
-        sample_reader = csv.reader(r, delimiter='\t')
-
-        for paperid, userid, label in sample_reader:
+    with open(score_file_path, 'w') as w:
+        for data in utils.jsonl_reader(labels_file_path):
+            paperid = data['source_id']
+            userid = data['target_id']
+            label = data['label']
 
             if userid not in scores:
                 # bow_archive is a list of BOWs.
