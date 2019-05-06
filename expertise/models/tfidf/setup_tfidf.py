@@ -25,10 +25,9 @@ def setup(config):
     # formerly "paper_content_by_id"
 
     kps_by_submission = defaultdict(list)
-    for file_id, text_list in dataset.submissions():
-        for text in text_list:
-            keyphrases = get_keyphrases(text)
-            kps_by_submission[file_id].extend(keyphrases)
+    for file_id, text in dataset.submissions():
+        keyphrases = get_keyphrases(text)
+        kps_by_submission[file_id].extend(keyphrases)
 
     submission_kps_path = os.path.join(setup_dir, 'submission_kps.pkl')
     dump_pkl(submission_kps_path, kps_by_submission)
@@ -37,10 +36,9 @@ def setup(config):
     # formerly "reviewer_content_by_id"
     kps_by_reviewer = defaultdict(list)
 
-    for file_id, text_list in dataset.archives():
-        for text in text_list:
-            keyphrases = get_keyphrases(text)
-            kps_by_reviewer[file_id].append(keyphrases)
+    for file_id, text in dataset.archives():
+        keyphrases = get_keyphrases(text)
+        kps_by_reviewer[file_id].append(keyphrases)
 
     reviewer_kps_path = os.path.join(setup_dir, 'reviewer_kps.pkl')
     dump_pkl(reviewer_kps_path, kps_by_reviewer)
