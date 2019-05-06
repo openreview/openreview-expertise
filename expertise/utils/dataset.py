@@ -17,7 +17,7 @@ class Dataset(object):
         directory=None,
         archive_dirname='archives',
         submissions_dirname='submissions',
-        bids_filename = 'bids.jsonl',
+        bids_dirname = 'bids',
         bid_values=[
             'Very High',
             'High',
@@ -33,8 +33,8 @@ class Dataset(object):
 
         assert directory and os.path.isdir(directory), 'Directory <{}> does not exist.'.format(directory)
 
-        self.reviewer_bids_file = os.path.join(
-            directory, bids_filename)
+        self.bids_path = os.path.join(
+            directory, bids_dirname)
 
         self.archives_path = os.path.join(
             directory,  archive_dirname)
@@ -65,9 +65,16 @@ class Dataset(object):
 
         self.positive_bid_values = positive_bid_values
 
+    # def bids(self):
+    #     for json_line in utils.jsonl_reader(self.reviewer_bids_file):
+    #         yield openreview.Tag.from_json(json_line)
+
     def bids(self):
-        for json_line in utils.jsonl_reader(self.reviewer_bids_file):
-            yield openreview.Tag.from_json(json_line)
+        for filename in os.listdir(self.bids_path):
+            filepath = os.path.join(self.bids_path, filename)
+            file_id = filename.replace('.jsonl','')
+            for json_line in utils.jsonl_reader(filepath):
+                yield openreview.Tag.from_json(json_line)
 
     def _read_json_records(self, data_dir, fields=['title','abstract','fulltext'], sequential=True):
         for filename in os.listdir(data_dir):
