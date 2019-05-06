@@ -33,7 +33,7 @@ def _write_features(lines, outfile, extraction_args):
             embeddings = extraction_args['aggregator_fn'](all_lines_features)
             np.save(outfile, embeddings)
         except RuntimeError as e:
-            print('runtime error encountered for ', outfile.)
+            print('runtime error encountered for ', outfile)
             print(e)
     else:
         print('skipping {}'.format(outfile))
