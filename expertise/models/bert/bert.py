@@ -20,17 +20,21 @@ def _setup_bert_pretrained(bert_model):
 def _write_features(lines, outfile, extraction_args):
 
     if not os.path.exists(outfile):
-        all_lines_features = helpers.extract_features(
-            lines=lines,
-            model=extraction_args['model'],
-            tokenizer=extraction_args['tokenizer'],
-            max_seq_length=extraction_args['max_seq_length'],
-            batch_size=extraction_args['batch_size'],
-            no_cuda=extraction_args['no_cuda']
-        )
+        try:
+            all_lines_features = helpers.extract_features(
+                lines=lines,
+                model=extraction_args['model'],
+                tokenizer=extraction_args['tokenizer'],
+                max_seq_length=extraction_args['max_seq_length'],
+                batch_size=extraction_args['batch_size'],
+                no_cuda=extraction_args['no_cuda']
+            )
 
-        embeddings = extraction_args['aggregator_fn'](all_lines_features)
-        np.save(outfile, embeddings)
+            embeddings = extraction_args['aggregator_fn'](all_lines_features)
+            np.save(outfile, embeddings)
+        except RuntimeError as e:
+            print('runtime error encountered for ', outfile.)
+            print(e)
     else:
         print('skipping {}'.format(outfile))
 
