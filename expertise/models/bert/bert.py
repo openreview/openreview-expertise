@@ -63,8 +63,7 @@ def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
         'partition_id': partition_id,
         'num_partitions': num_partitions,
         'progressbar': False,
-        'sequential': False,
-        'fields': ['title','abstract']
+        'sequential': False
     }
 
     extraction_args = {
