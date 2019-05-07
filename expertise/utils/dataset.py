@@ -3,7 +3,7 @@ import random
 import os
 import openreview
 from tqdm import tqdm
-
+import ipdb
 from . import utils
 
 class Dataset(object):
@@ -76,7 +76,7 @@ class Dataset(object):
             for json_line in utils.jsonl_reader(filepath):
                 yield openreview.Tag.from_json(json_line)
 
-    def _read_json_records(self, data_dir, fields=['title','abstract','fulltext'], sequential=True):
+    def _read_json_records(self, data_dir, fields=['title','abstract'], sequential=True):
         for filename in os.listdir(data_dir):
             filepath = os.path.join(data_dir, filename)
             file_id = filename.replace('.jsonl', '')
@@ -98,7 +98,7 @@ class Dataset(object):
                 yield file_id, all_text
 
 
-    def _items(self, path, num_items, desc='', fields=['title', 'abstract', 'fulltext'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
+    def _items(self, path, num_items, desc='', fields=['title', 'abstract'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
         item_generator = self._read_json_records(path, fields, sequential=sequential)
 
         if num_partitions > 1:
@@ -116,7 +116,7 @@ class Dataset(object):
 
         return item_generator
 
-    def submissions(self, fields=['title', 'abstract', 'fulltext'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
+    def submissions(self, fields=['title', 'abstract'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
 
         submission_generator = self._items(
             path=self.submission_records_path,
@@ -133,7 +133,7 @@ class Dataset(object):
             yield submission_id, submission_items
 
     # def reviewer_archives(self):
-    def archives(self, fields=['title', 'abstract', 'fulltext'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
+    def archives(self, fields=['title', 'abstract'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
 
         archive_generator = self._items(
             path=self.archives_path,
