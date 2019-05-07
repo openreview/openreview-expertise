@@ -26,12 +26,16 @@ class Dataset(object):
             'Very Low',
             'No Bid'
         ],
-        positive_bid_values=[
-            'Very High',
-            'High'
-        ]):
+        positive_bid_values=['Very High', 'High'],
+        fields=['title', 'abstract']):
 
         assert directory and os.path.isdir(directory), 'Directory <{}> does not exist.'.format(directory)
+
+        # TODO: Important! Need to make sure that different bid values get handled properly
+        # across different kinds of datasets.
+        self.bid_values = bid_values
+        self.positive_bid_values = positive_bid_values
+        self.fields = fields
 
         self.bids_path = os.path.join(
             directory, bids_dirname)
@@ -51,23 +55,14 @@ class Dataset(object):
         self.test_set_path = os.path.join(
             directory, 'test_set.tsv')
 
-        self.num_submissions = len(list(self._read_json_records(self.submission_records_path)))
+        self.num_submissions = len(list(self._read_json_records(
+            self.submission_records_path, self.fields)))
 
         self.num_archives = 0
         self.reviewer_ids = set()
-        for userid, archive in self._read_json_records(self.archives_path):
+        for userid, archive in self._read_json_records(self.archives_path, self.fields):
             self.reviewer_ids.add(userid)
             self.num_archives += 1
-
-        # TODO: Important! Need to make sure that different bid values get handled properly
-        # across different kinds of datasets.
-        self.bid_values = bid_values
-
-        self.positive_bid_values = positive_bid_values
-
-    # def bids(self):
-    #     for json_line in utils.jsonl_reader(self.reviewer_bids_file):
-    #         yield openreview.Tag.from_json(json_line)
 
     def bids(self):
         for filename in os.listdir(self.bids_path):
@@ -76,7 +71,7 @@ class Dataset(object):
             for json_line in utils.jsonl_reader(filepath):
                 yield openreview.Tag.from_json(json_line)
 
-    def _read_json_records(self, data_dir, fields=['title','abstract'], sequential=True):
+    def _read_json_records(self, data_dir, fields, sequential=True):
         for filename in os.listdir(data_dir):
             filepath = os.path.join(data_dir, filename)
             file_id = filename.replace('.jsonl', '')
@@ -98,7 +93,7 @@ class Dataset(object):
                 yield file_id, all_text
 
 
-    def _items(self, path, num_items, desc='', fields=['title', 'abstract'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
+    def _items(self, path, num_items, fields, desc='', sequential=True, progressbar=True, partition_id=0, num_partitions=1):
         item_generator = self._read_json_records(path, fields, sequential=sequential)
 
         if num_partitions > 1:
@@ -116,13 +111,13 @@ class Dataset(object):
 
         return item_generator
 
-    def submissions(self, fields=['title', 'abstract'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
+    def submissions(self, sequential=True, progressbar=True, partition_id=0, num_partitions=1):
 
         submission_generator = self._items(
             path=self.submission_records_path,
             num_items=self.num_submissions,
+            fields=self.fields,
             desc='submissions',
-            fields=fields,
             sequential=sequential,
             progressbar=progressbar,
             partition_id=int(partition_id),
@@ -133,13 +128,13 @@ class Dataset(object):
             yield submission_id, submission_items
 
     # def reviewer_archives(self):
-    def archives(self, fields=['title', 'abstract'], sequential=True, progressbar=True, partition_id=0, num_partitions=1):
+    def archives(self, sequential=True, progressbar=True, partition_id=0, num_partitions=1):
 
         archive_generator = self._items(
             path=self.archives_path,
             num_items=self.num_archives,
+            fields=self.fields,
             desc='archives',
-            fields=fields,
             sequential=sequential,
             progressbar=progressbar,
             partition_id=int(partition_id),
