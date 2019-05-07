@@ -23,7 +23,7 @@ def test(config):
     }
 
     score_file_path = os.path.join(config.test_dir, 'test_scores.jsonl')
-    labels_file_path = os.path.join(config.test_dir, 'test_labels.jsonl')
+    labels_file_path = os.path.join(config.setup_dir, 'test_labels.jsonl')
 
     scores = {}
 
