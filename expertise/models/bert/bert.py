@@ -22,7 +22,7 @@ def _write_features(lines, outfile, extraction_args):
     if not os.path.exists(outfile):
         try:
             all_lines_features = helpers.extract_features(
-                lines=lines,
+                lines=lines[:extraction_args['max_lines']],
                 model=extraction_args['model'],
                 tokenizer=extraction_args['tokenizer'],
                 max_seq_length=extraction_args['max_seq_length'],
@@ -73,7 +73,8 @@ def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
         'max_seq_length': config.max_seq_length,
         'batch_size': config.batch_size,
         'no_cuda': not config.use_cuda,
-        'aggregator_fn': helpers.AGGREGATOR_MAP[config.embedding_aggregation_type]
+        'aggregator_fn': helpers.AGGREGATOR_MAP[config.embedding_aggregation_type],
+        'max_lines': 20
     }
 
     for text_id, text_list in dataset.submissions(**dataset_args):
