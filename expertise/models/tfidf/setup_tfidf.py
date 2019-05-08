@@ -16,29 +16,13 @@ def setup(config):
     if not os.path.exists(setup_dir):
         os.mkdir(setup_dir)
 
-    get_keyphrases = importlib.import_module(config.keyphrases).keyphrases
+    (train_set_ids,
+     dev_set_ids,
+     test_set_ids) = utils.split_ids(list(dataset.submission_ids), seed=config.random_seed)
 
-    # bids_by_forum = utils.get_bids_by_forum(dataset)
-    # train_set_ids, dev_set_ids, test_set_ids = utils.split_ids(list(bids_by_forum.keys()))
+    bids_by_forum = utils.get_bids_by_forum(dataset)
 
-    # get submission contents
-    # formerly "paper_content_by_id"
+    test_labels = utils.format_bid_labels(test_set_ids, bids_by_forum)
 
-    kps_by_submission = defaultdict(list)
-    for file_id, text in dataset.submissions():
-        keyphrases = get_keyphrases(text)
-        kps_by_submission[file_id].extend(keyphrases)
+    utils.dump_jsonl(os.path.join(config.setup_dir, 'test_labels.jsonl'), test_labels)
 
-    submission_kps_path = os.path.join(setup_dir, 'submission_kps.pkl')
-    dump_pkl(submission_kps_path, kps_by_submission)
-
-    # write keyphrases for reviewer archives to pickle file
-    # formerly "reviewer_content_by_id"
-    kps_by_reviewer = defaultdict(list)
-
-    for file_id, text in dataset.archives():
-        keyphrases = get_keyphrases(text)
-        kps_by_reviewer[file_id].append(keyphrases)
-
-    reviewer_kps_path = os.path.join(setup_dir, 'reviewer_kps.pkl')
-    dump_pkl(reviewer_kps_path, kps_by_reviewer)

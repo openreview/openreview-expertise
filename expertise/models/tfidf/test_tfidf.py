@@ -19,7 +19,7 @@ def test(config):
     paperidx_by_id = {
         paperid: index
         for index, paperid
-        in enumerate(model.bow_by_paperid.keys())
+        in enumerate(model.bow_archives_by_paperid.keys())
     }
 
     score_file_path = os.path.join(config.test_dir, 'test_scores.jsonl')
@@ -35,13 +35,18 @@ def test(config):
 
             if userid not in scores:
                 # bow_archive is a list of BOWs.
-                bow_archive = model.bow_archives_by_userid.get(userid, [[]])
+                if userid in model.bow_archives_by_userid and len(model.bow_archives_by_userid[userid]) > 0:
+                    bow_archive = model.bow_archives_by_userid[userid]
+                else:
+                    bow_archive = [[]]
+
                 best_scores = np.amax(model.index[bow_archive], axis=0)
                 scores[userid] = best_scores
 
             if paperid in paperidx_by_id:
                 paper_index = paperidx_by_id[paperid]
                 score = scores[userid][paper_index]
+
 
                 result = {
                     'source_id': paperid,

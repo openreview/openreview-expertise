@@ -14,21 +14,22 @@ from expertise.preprocessors import pos_regex
 import ipdb
 
 class Model():
-    def __init__(self, kps_by_paperid, kp_archives_by_userid):
+    def __init__(self, kp_archives_by_paperid, kp_archives_by_userid):
 
         self.dictionary = corpora.Dictionary()
 
-        self.bow_by_userid = defaultdict(Counter)
-        self.bow_by_paperid = defaultdict(Counter)
+        # self.bow_by_userid = defaultdict(Counter)
+        # self.bow_by_paperid = defaultdict(Counter)
 
         self.all_documents = []
 
-        self.kps_by_paperid = kps_by_paperid
+        self.kp_archives_by_paperid = kp_archives_by_paperid
         self.kp_archives_by_userid = kp_archives_by_userid
 
-        for token_list in self.kps_by_paperid.values():
-            self.dictionary.add_documents([token_list])
-            self.all_documents += [token_list]
+        for archive in self.kp_archives_by_paperid.values():
+            for token_list in archive:
+                self.dictionary.add_documents([token_list])
+                self.all_documents += [token_list]
 
         for archive in self.kp_archives_by_userid.values():
             for token_list in archive:
@@ -52,14 +53,17 @@ class Model():
         ]
         """
 
-        self.bow_by_paperid = {paperid: self.dictionary.doc2bow(doc) \
-            for paperid, doc in self.kps_by_paperid.items()}
+        self.bow_archives_by_paperid = {userid: [self.dictionary.doc2bow(doc) for doc in archive] \
+            for userid, archive in self.kp_archives_by_paperid.items()}
 
         self.bow_archives_by_userid = {userid: [self.dictionary.doc2bow(doc) for doc in archive] \
             for userid, archive in self.kp_archives_by_userid.items()}
 
+        flattened_archives = [
+            bow for archive in self.bow_archives_by_paperid.values() for bow in archive]
+
         self.index = SparseMatrixSimilarity(
-            [self.tfidf[bow] for bow in self.bow_by_paperid.values()],
+            [self.tfidf[bow] for bow in flattened_archives],
             num_features=len(self.dictionary)
         )
 

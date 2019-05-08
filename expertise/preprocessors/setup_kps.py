@@ -38,7 +38,7 @@ def setup(config):
         for text in text_list:
             top_tokens, full_tokens = keyphrases(text, include_scores=True, include_tokenlist=True)
             scored_kps.extend(top_tokens)
-            full_kps.extend(full_tokens)
+            full_kps.append(full_tokens)
         sorted_kps = [kp for kp, _ in sorted(scored_kps, key=lambda x: x[1], reverse=True)]
 
         top_kps = []
@@ -51,7 +51,7 @@ def setup(config):
                 break
 
         textrank_vocab.load_items(top_kps)
-        full_vocab.load_items(full_kps)
+        full_vocab.load_items([kp for archive in full_kps for kp in archive])
         assert archive_id not in textrank_kps_by_id
         textrank_kps_by_id[archive_id] = top_kps
         full_kps_by_id[archive_id] = full_kps
