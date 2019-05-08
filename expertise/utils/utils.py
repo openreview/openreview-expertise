@@ -172,7 +172,7 @@ def get_bids_by_forum(dataset):
     for bid in dataset.bids():
         bids_by_forum[bid.forum].append(bid)
 
-    pos_and_neg_signatures_by_forum = {}
+    pos_and_neg_signatures_by_forum = defaultdict(lambda: {'positive': [], 'negative': []})
 
     # Get pos bids for forum
     for forum_id, forum_bids in bids_by_forum.items():

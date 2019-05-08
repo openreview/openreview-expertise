@@ -24,7 +24,7 @@ def train(config):
         if not os.path.exists(train_subdir_path):
             os.mkdir(train_subdir_path)
 
-    vocab_file = os.path.join(config.kp_setup_dir, 'vocab.pkl')
+    vocab_file = os.path.join(config.kp_setup_dir, 'textrank_vocab.pkl')
     vocab = utils.load_pkl(vocab_file)
 
     torch.manual_seed(config.random_seed)

@@ -165,6 +165,9 @@ class TextRank():
         # Get token_pairs from windows
         token_pairs = self.get_token_pairs(window_size, sentences)
 
+        # store sentences
+        self.sentences = sentences
+
         # Get normalized matrix
         g = self.get_matrix(vocab, token_pairs)
 

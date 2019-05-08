@@ -19,46 +19,56 @@ def setup(config):
     '''
     print('starting setup')
     dataset = Dataset(**config.dataset)
-    vocab = Vocab()
+    textrank_vocab = Vocab()
+    full_vocab = Vocab()
     keyphrases = importlib.import_module(config.keyphrases).keyphrases
 
     print('keyphrase extraction')
     bids_by_forum = utils.get_bids_by_forum(dataset)
-    kps_by_id = {}
+    textrank_kps_by_id = {}
+    full_kps_by_id = {}
+
     all_archives = itertools.chain(
         dataset.submissions(sequential=False),
         dataset.archives(sequential=False))
 
     for archive_id, text_list in all_archives:
         scored_kps = []
+        full_kps = []
         for text in text_list:
-            kp_list = keyphrases(text, include_scores=True)
-            scored_kps.extend(kp_list)
+            top_tokens, full_tokens = keyphrases(text, include_scores=True, include_tokenlist=True)
+            scored_kps.extend(top_tokens)
+            full_kps.extend(full_tokens)
         sorted_kps = [kp for kp, _ in sorted(scored_kps, key=lambda x: x[1], reverse=True)]
-        kp_list = []
+
+        top_kps = []
         kp_count = 0
         for kp in sorted_kps:
-            if kp not in kp_list:
-                kp_list.append(kp)
+            if kp not in top_kps:
+                top_kps.append(kp)
                 kp_count += 1
             if kp_count >= config.max_num_keyphrases:
                 break
 
-        vocab.load_items(kp_list)
-        assert archive_id not in kps_by_id
-        kps_by_id[archive_id] = kp_list
+        textrank_vocab.load_items(top_kps)
+        full_vocab.load_items(full_kps)
+        assert archive_id not in textrank_kps_by_id
+        textrank_kps_by_id[archive_id] = top_kps
+        full_kps_by_id[archive_id] = full_kps
 
-    utils.dump_pkl(os.path.join(config.setup_dir, 'kps_by_id.pkl'), kps_by_id)
-    utils.dump_pkl(os.path.join(config.setup_dir, 'vocab.pkl'), vocab)
+    utils.dump_pkl(os.path.join(config.setup_dir, 'textrank_kps_by_id.pkl'), textrank_kps_by_id)
+    utils.dump_pkl(os.path.join(config.setup_dir, 'full_kps_by_id.pkl'), full_kps_by_id)
+    utils.dump_pkl(os.path.join(config.setup_dir, 'textrank_vocab.pkl'), textrank_vocab)
+    utils.dump_pkl(os.path.join(config.setup_dir, 'full_vocab.pkl'), full_vocab)
 
     bids_by_forum = utils.get_bids_by_forum(dataset)
 
-    # why restrict to just bid forums? come back to this later.
+    # this is only for the textrank-based models
     valid_ids = list(dataset.submission_ids)
     formatted_data = utils.format_data_bids(
         valid_ids,
         bids_by_forum,
-        kps_by_id,
+        textrank_kps_by_id,
         max_num_keyphrases=config.max_num_keyphrases,
         sequential=False)
 

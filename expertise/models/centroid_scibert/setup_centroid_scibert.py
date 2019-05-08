@@ -22,7 +22,7 @@ def setup(config):
     print('starting setup')
     dataset = Dataset(**config.dataset)
     bids_by_forum = utils.get_bids_by_forum(dataset)
-    vocab = utils.load_pkl(os.path.join(config.kp_setup_dir, 'vocab.pkl'))
+    vocab = utils.load_pkl(os.path.join(config.kp_setup_dir, 'textrank_vocab.pkl'))
 
     (train_set_ids,
      dev_set_ids,
