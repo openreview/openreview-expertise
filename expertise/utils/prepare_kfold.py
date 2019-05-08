@@ -13,7 +13,7 @@ def prepare_kfold(args, k):
     config = Config(config_path)
 
     old_experiment_dir = os.path.dirname(config.config_file_path)
-    new_experiment_dir = os.path.join(old_experiment_dir, f'k{k}')
+    new_experiment_dir = os.path.join(old_experiment_dir, f'{config.name}{k}')
 
     if not os.path.exists(new_experiment_dir):
     	os.mkdir(new_experiment_dir)
