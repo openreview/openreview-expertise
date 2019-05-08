@@ -42,6 +42,7 @@ class Model(torch.nn.Module):
         :param batch_neg: False aliases of the Mentions
         """
 
+        batch_size = len(batch_source)
         # B by dim
         source_embed = self.embed(batch_source)
         # B by dim
@@ -52,7 +53,7 @@ class Model(torch.nn.Module):
         loss = self._bce_loss(
             utils.row_wise_dot(source_embed, pos_embed )
             - utils.row_wise_dot(source_embed, neg_embed ),
-            self.ones)
+            self.ones[:batch_size])
         return loss
 
     def score_pair(self, source, target, source_len, target_len):
