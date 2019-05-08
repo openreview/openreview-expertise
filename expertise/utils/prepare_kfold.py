@@ -26,7 +26,7 @@ def prepare_kfold(args, k):
     config.test_dir = config.test_dir.replace(old_experiment_dir, new_experiment_dir)
 
     config.kp_setup_dir = os.path.join(old_experiment_dir, 'setup')
-    config.random_seed = random.randint(1,10000)
+    config.random_seed = k
 
     config.save_config()
 
