@@ -32,7 +32,7 @@ def count_keyphrases(reviewer_keyphrase_file, submission_keyphrase_file, outputf
                 kp_index += 1
 
 class Vocab(object):
-    def __init__(self, max_num_keyphrases, min_count=1):
+    def __init__(self, min_count=1):
         self.index_by_item = {}
         self.item_by_index = {}
         self.count_by_item = Counter()
@@ -46,7 +46,6 @@ class Vocab(object):
         self.index_by_item[self.OOV] = self.OOV_INDEX
         self.item_by_index[self.OOV_INDEX] = self.OOV
 
-        self.max_num_keyphrases = int(max_num_keyphrases)
         self.min_count = int(min_count)
 
     def __len__(self):
@@ -86,14 +85,14 @@ class Vocab(object):
 
         self.count_by_item.update(vocab_items)
 
-    def to_ints(self, kp_list, padding=True):
+    def to_ints(self, kp_list, max_num_keyphrases=None, padding=True):
         kp_indices = []
 
-        for kp in kp_list[:self.max_num_keyphrases]:
+        for kp in kp_list[:max_num_keyphrases]:
             kp_indices.append(self.index_by_item.get(kp, self.OOV_INDEX))
 
-        if padding and self.max_num_keyphrases > len(kp_indices):
-            padding_length = self.max_num_keyphrases - len(kp_indices)
+        if padding and max_num_keyphrases > len(kp_indices):
+            padding_length = max_num_keyphrases - len(kp_indices)
             padding = [0] * padding_length
             kp_indices.extend(padding)
 

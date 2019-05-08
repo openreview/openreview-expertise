@@ -3,7 +3,7 @@ import os
 from . import utils
 from .config import Config
 
-def data_to_sample(data, vocab, max_num_keyphrases=10):
+def data_to_sample(data, vocab, max_num_keyphrases):
     '''
     Converts one line of the training data into a training sample.
 
@@ -27,12 +27,12 @@ def data_to_sample(data, vocab, max_num_keyphrases=10):
 
     '''
 
-    source = vocab.to_ints(data['source'])
-    source_length = [min(max_num_keyphrases, len(source))]
-    positive = vocab.to_ints(data['positive'])
-    positive_length = [min(max_num_keyphrases, len(positive))]
-    negative = vocab.to_ints(data['negative'])
-    negative_length = [min(max_num_keyphrases, len(negative))]
+    source = vocab.to_ints(data['source'], max_num_keyphrases=max_num_keyphrases)
+    source_length = [len(source)]
+    positive = vocab.to_ints(data['positive'], max_num_keyphrases=max_num_keyphrases)
+    positive_length = [len(positive)]
+    negative = vocab.to_ints(data['negative'], max_num_keyphrases=max_num_keyphrases)
+    negative_length = [len(negative)]
     sample = {
         'source': source,
         'source_length': source_length,

@@ -132,7 +132,7 @@ class Dataset(object):
 
         archive_generator = self._items(
             path=self.archives_path,
-            num_items=self.num_archives,
+            num_items=self.num_archives if sequential else len(self.reviewer_ids),
             fields=self.fields,
             desc='archives',
             sequential=sequential,

@@ -12,6 +12,7 @@ from expertise.utils import save_dict_to_json
 from expertise.utils.vocab import Vocab
 from expertise.utils.batcher import Batcher
 from expertise.utils.config import Config
+from expertise import utils
 
 current_path = os.path.abspath(os.path.dirname(__file__))
 
@@ -23,11 +24,12 @@ def train(config):
         if not os.path.exists(train_subdir_path):
             os.mkdir(train_subdir_path)
 
-    vocab = config.setup_load('vocab.pkl')
+    vocab_file = os.path.join(config.kp_setup_dir, 'vocab.pkl')
+    vocab = utils.load_pkl(vocab_file)
 
     torch.manual_seed(config.random_seed)
 
-    batcher = Batcher(input_file=config.setup_path('train_samples_permuted.jsonl'))
+    batcher = Batcher(input_file=config.setup_path('train_samples.jsonl'))
     batcher_dev = Batcher(input_file=config.setup_path('dev_samples.jsonl'))
 
     model = centroid.Model(config, vocab)
@@ -94,8 +96,11 @@ def train(config):
 
             predictions = centroid.generate_predictions(config, model, batcher_dev)
 
-            prediction_filename = config.train_save(predictions,
+            prediction_filename = os.path.join(
+                config.train_dir,
                 'dev_predictions/dev.predictions.{}.jsonl'.format(counter))
+
+            utils.dump_jsonl(prediction_filename, predictions)
 
             print('prediction filename', prediction_filename)
             map_score = float(centroid.eval_map_file(prediction_filename))
@@ -113,7 +118,10 @@ def train(config):
                     ('Hits@10', hits_at_10)
                 ]
             ]
-            config.train_save(score_lines, 'dev_scores/dev.scores.{}.tsv'.format(counter))
+            dev_scores_file = os.path.join(
+                config.train_dir,
+                'dev_scores/dev.scores.{}.tsv'.format(counter))
+            utils.dump_csv(dev_scores_file, score_lines)
 
             if map_score > best_map:
                 best_map = map_score
@@ -123,14 +131,13 @@ def train(config):
 
                 torch.save(model, best_model_path)
                 config.best_model_path = best_model_path
-                config.best_map_score = best_map
-                config.hits_at_1 = hits_at_1
-                config.hits_at_3 = hits_at_3
-                config.hits_at_5 = hits_at_5
-                config.hits_at_10 = hits_at_10
                 config.save_config()
 
-                config.train_save(score_lines, 'dev.scores.best.tsv')
+                best_scores_file = os.path.join(
+                    config.train_dir,
+                    'dev.scores.best.tsv')
+
+                utils.dump_csv(best_scores_file, score_lines)
 
         if counter == config.num_minibatches:
             break

@@ -13,6 +13,30 @@ import csv
 from collections import defaultdict
 import math, random
 
+import ipdb
+
+def fixedwidth(item_list, list_len, pad_val=0):
+    '''
+    Given a list `item_list` and an integer `list_len`,
+    return a list that is `list_len` items long.
+    If `item_list` is longer than `list_len` items,
+    truncate the list.
+    If `item_list` is shorter than `list_len` items,
+    pad the returned list with the value in `pad_with`.
+    '''
+
+    list_len = int(list_len)
+    padding_bounds = (0, max(0, list_len - len(item_list)))
+
+    padded = np.pad(
+        item_list,
+        padding_bounds,
+        'constant',
+        constant_values=pad_val)
+
+    truncated = padded[:list_len]
+    return truncated
+
 def partition(list_, partition_id=0, num_partitions=1):
     '''
     Given a list, partitions the list according to `num_partitions`.
@@ -171,8 +195,8 @@ def format_bid_labels(eval_set_ids, bids_by_forum):
         for reviewer in bids_by_forum[forum_id]['negative']:
             yield {'source_id': forum_id, 'target_id': reviewer, 'label': 0}
 
-def split_ids(ids):
-    random.seed(a=3577057385653016827)
+def split_ids(ids, seed):
+    random.seed(a=seed)
 
     forums = sorted(ids)
     random.shuffle(forums)
@@ -185,7 +209,7 @@ def split_ids(ids):
 
     return train_set_ids, dev_set_ids, test_set_ids
 
-def format_data_bids(train_set_ids, bids_by_forum, reviewer_kps, submission_kps, max_num_keyphrases=None):
+def format_data_bids(train_set_ids, bids_by_forum, kps_by_id, max_num_keyphrases=None, sequential=True):
     '''
     Formats bid data into source/positive/negative triplets.
     (This function is written specifically to handle keyphrase-based data.)
@@ -198,8 +222,12 @@ def format_data_bids(train_set_ids, bids_by_forum, reviewer_kps, submission_kps,
 
     '''
 
+    submission_kps = {k:v for k, v in kps_by_id.items() if not k.startswith('~')}
+    reviewer_kps = {k:v for k, v in kps_by_id.items() if k.startswith('~')}
+
     for forum_id in train_set_ids:
         if forum_id in submission_kps:
+            rows = []
 
             forum_kps = [kp for kp in submission_kps[forum_id]][:max_num_keyphrases]
             forum_pos_signatures = sorted(bids_by_forum[forum_id]['positive'])
@@ -216,8 +244,14 @@ def format_data_bids(train_set_ids, bids_by_forum, reviewer_kps, submission_kps,
                         'negative': reviewer_kps[neg][:max_num_keyphrases],
                         'negative_id': neg
                     }
+                    rows.append(data)
 
-                    yield data
+                    if sequential:
+                        yield data
+
+            if not sequential:
+                yield forum_id, rows
+
 
 def format_data_heldout_authors(kp_lists_by_reviewer, kps_by_reviewer):
     '''

@@ -16,7 +16,7 @@ def lazy_reader(filepath):
         for line in f:
             yield line
 
-def build_piles(big_file_path, piles_directory, num_piles):
+def build_folds(sample_iterable, piles_directory, num_piles):
     '''
     First pass
     create empty piles p[0], ..., p[M - 1]
@@ -30,11 +30,11 @@ def build_piles(big_file_path, piles_directory, num_piles):
 
     for pile_index in range(num_piles):
         pile_label = str(pile_index).zfill(len(str(num_piles)))
-        pile_path = os.path.join(piles_directory, 'pile{}.jsonl'.format(pile_label))
+        pile_path = os.path.join(piles_directory, 'fold{}.jsonl'.format(pile_label))
         fp_by_index[pile_index] = open(pile_path, 'w')
 
     print('reading from big file')
-    for line in tqdm(lazy_reader(big_file_path)):
+    for line in sample_iterable:
         pile_index = random.randint(0, num_piles-1)
         fp_by_index[pile_index].write(line)
 
@@ -81,7 +81,7 @@ if __name__ == '__main__':
         os.mkdir(piles_directory)
 
     if args.build:
-        build_piles(args.inputfile, piles_directory, args.num_piles)
+        build_folds(tqdm(lazy_reader(args.inputfile)), piles_directory, args.num_piles)
 
     if args.integrate:
         integrate_piles(piles_directory, args.outputfile)
