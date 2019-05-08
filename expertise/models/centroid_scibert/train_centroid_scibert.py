@@ -30,7 +30,7 @@ def train(config):
     torch.manual_seed(config.random_seed)
 
     train_samples_path = os.path.join(
-        config.setup_dir, 'train_samples_permuted.jsonl')
+        config.setup_dir, 'train_samples.jsonl')
 
     dev_samples_path = os.path.join(
         config.setup_dir, 'dev_samples.jsonl')
