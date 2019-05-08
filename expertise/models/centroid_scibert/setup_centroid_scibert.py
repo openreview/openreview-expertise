@@ -19,6 +19,48 @@ def get_values(doc_feature):
 
 def setup(config):
 
+    print('starting setup')
+    dataset = Dataset(**config.dataset)
+    bids_by_forum = utils.get_bids_by_forum(dataset)
+    vocab = utils.load_pkl(os.path.join(config.kp_setup_dir, 'vocab.pkl'))
+
+    (train_set_ids,
+     dev_set_ids,
+     test_set_ids) = utils.split_ids(list(bids_by_forum.keys()), seed=config.random_seed)
+
+    def fold_reader(id):
+        fold_file = f'{id}.jsonl'
+        fold_path = os.path.join(config.kp_setup_dir, 'folds', fold_file)
+        return utils.jsonl_reader(fold_path)
+
+    train_folds = [fold_reader(i) for i in train_set_ids]
+    dev_folds = [fold_reader(i) for i in dev_set_ids]
+    test_folds = [fold_reader(i) for i in test_set_ids]
+
+    train_samples = (data_to_sample(
+        data, vocab, config.max_num_keyphrases) for data in itertools.chain(*train_folds))
+
+    train_samples_path = os.path.join(
+        config.setup_dir, 'train_samples.jsonl')
+
+    utils.dump_jsonl(train_samples_path, train_samples)
+
+    dev_samples = (data_to_sample(
+        data, vocab, config.max_num_keyphrases) for data in itertools.chain(*dev_folds))
+
+    dev_samples_path = os.path.join(
+        config.setup_dir, 'dev_samples.jsonl')
+
+    utils.dump_jsonl(dev_samples_path, dev_samples)
+
+    test_samples = (data_to_sample(
+        data, vocab, config.max_num_keyphrases) for data in itertools.chain(*test_folds))
+
+    test_samples_path = os.path.join(
+        config.setup_dir, 'test_samples.jsonl')
+
+    utils.dump_jsonl(test_samples_path, test_samples)
+
     # features_dir = './scibert_features/akbc19/setup/archives-features/'
     features_dir = config.bert_features_dir
     archive_features_dir = os.path.join(features_dir, 'archives-features')

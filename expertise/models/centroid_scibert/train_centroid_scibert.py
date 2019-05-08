@@ -24,16 +24,16 @@ def train(config):
             os.mkdir(train_subdir_path)
 
     vocab_path = os.path.join(
-        config.centroid_samples_dir, 'vocab.pkl')
+        config.setup_dir, 'vocab.pkl')
     vocab = utils.load_pkl(vocab_path)
 
     torch.manual_seed(config.random_seed)
 
     train_samples_path = os.path.join(
-        config.centroid_samples_dir, 'train_samples_permuted.jsonl')
+        config.setup_dir, 'train_samples_permuted.jsonl')
 
     dev_samples_path = os.path.join(
-        config.centroid_samples_dir, 'dev_samples.jsonl')
+        config.setup_dir, 'dev_samples.jsonl')
 
     print('reading train samples from ', train_samples_path)
     batcher = Batcher(input_file=train_samples_path)

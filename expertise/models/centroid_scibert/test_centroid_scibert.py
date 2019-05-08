@@ -10,7 +10,7 @@ def test(config):
     model = torch.load(config.best_model_path)
 
     test_samples_path = os.path.join(
-        config.centroid_samples_dir, 'test_samples.jsonl')
+        config.setup_dir, 'test_samples.jsonl')
 
 
     batcher = Batcher(input_file=config.setup_path(test_samples_path))
