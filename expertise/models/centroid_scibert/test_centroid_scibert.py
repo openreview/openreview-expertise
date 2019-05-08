@@ -15,7 +15,7 @@ def test(config):
 
     batcher = Batcher(input_file=config.setup_path(test_samples_path))
     # a lookup table of torch.Tensor objects, keyed by user/paper ID.
-    bert_lookup = utils.load_pkl(os.path.join(config.setup_dir, 'bert_lookup.pkl'))
+    bert_lookup = utils.load_pkl(os.path.join(config.kp_setup_dir, 'bert_lookup.pkl'))
 
     predictions = centroid_scibert.generate_predictions(config, model, batcher, bert_lookup)
 

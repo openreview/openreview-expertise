@@ -66,24 +66,24 @@ def setup(config):
     archive_features_dir = os.path.join(features_dir, 'archives-features')
     submission_features_dir = os.path.join(features_dir, 'submissions-features')
 
-    bert_lookup = {}
+    # bert_lookup = {}
 
-    for target_dir in [archive_features_dir, submission_features_dir]:
-        for filename in os.listdir(target_dir):
-            print(filename)
-            item_id = filename.replace('.npy','')
-            filepath = os.path.join(target_dir, filename)
-            archive_features = np.load(filepath)
+    # for target_dir in [archive_features_dir, submission_features_dir]:
+    #     for filename in os.listdir(target_dir):
+    #         print(filename)
+    #         item_id = filename.replace('.npy','')
+    #         filepath = os.path.join(target_dir, filename)
+    #         archive_features = np.load(filepath)
 
-            archive_values = []
-            for doc_feature in archive_features:
-                archive_values.append(get_values(doc_feature))
+    #         archive_values = []
+    #         for doc_feature in archive_features:
+    #             archive_values.append(get_values(doc_feature))
 
-            if len(archive_values) == 0:
-                archive_values = [np.zeros(768)]
+    #         if len(archive_values) == 0:
+    #             archive_values = [np.zeros(768)]
 
-            result = np.mean(np.array(archive_values), 0)
-            bert_lookup[item_id] = torch.Tensor(result)
+    #         result = np.mean(np.array(archive_values), 0)
+    #         bert_lookup[item_id] = torch.Tensor(result)
 
-    utils.dump_pkl(os.path.join(config.setup_dir, 'bert_lookup.pkl'), bert_lookup)
+    # utils.dump_pkl(os.path.join(config.setup_dir, 'bert_lookup.pkl'), bert_lookup)
 
