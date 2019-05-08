@@ -64,6 +64,12 @@ class Dataset(object):
             self.reviewer_ids.add(userid)
             self.num_archives += 1
 
+        self.submission_ids = set()
+        for filename in os.listdir(self.submission_records_path):
+            filepath = os.path.join(self.submission_records_path, filename)
+            file_id = filename.replace('.jsonl', '')
+            self.submission_ids.add(file_id)
+
     def bids(self):
         for filename in os.listdir(self.bids_path):
             filepath = os.path.join(self.bids_path, filename)

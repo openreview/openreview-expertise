@@ -54,7 +54,7 @@ def setup(config):
     bids_by_forum = utils.get_bids_by_forum(dataset)
 
     # why restrict to just bid forums? come back to this later.
-    valid_ids = list(bids_by_forum.keys())
+    valid_ids = list(dataset.submission_ids)
     formatted_data = utils.format_data_bids(
         valid_ids,
         bids_by_forum,

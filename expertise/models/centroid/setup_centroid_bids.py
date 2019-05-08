@@ -21,7 +21,7 @@ def setup(config):
 
     (train_set_ids,
      dev_set_ids,
-     test_set_ids) = utils.split_ids(list(bids_by_forum.keys()), seed=config.random_seed)
+     test_set_ids) = utils.split_ids(list(dataset.submission_ids), seed=config.random_seed)
 
     def fold_reader(id):
         fold_file = f'{id}.jsonl'
