@@ -44,7 +44,7 @@ def setup(config):
             result = np.array(archive_values)
             bert_lookup[item_id] = torch.Tensor(result)
 
-    utils.dump_pkl(os.path.join(config.setup_dir, 'bert_lookup.pkl'), bert_lookup)
+    utils.dump_pkl(os.path.join(config.setup_dir, 'bert_lookup_cls.pkl'), bert_lookup)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
