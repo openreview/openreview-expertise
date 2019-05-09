@@ -41,7 +41,7 @@ def setup(config):
             if len(archive_values) == 0:
                 archive_values = [np.zeros(768)]
 
-            result = np.mean(np.array(archive_values), 0)
+            result = np.array(archive_values)
             bert_lookup[item_id] = torch.Tensor(result)
 
     utils.dump_pkl(os.path.join(config.setup_dir, 'bert_lookup.pkl'), bert_lookup)
