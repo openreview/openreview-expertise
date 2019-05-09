@@ -42,10 +42,12 @@ def setup(config):
                         kps_seen.append(feature['token'])
                         kp_features.append(feature['layers'][-1]['values'])
 
-            if len(kp_features) == 0:
-                kp_features = [np.zeros(768)]
+            kp_features = kp_features[:config.max_num_keyphrases]
 
-            result = np.mean(np.array(kp_features), 0)
+            while len(kp_features) < config.max_num_keyphrases:
+                kp_features.append(np.zeros(config.bert_dim))
+
+            result = np.array(kp_features)
             bert_lookup[item_id] = torch.Tensor(result)
 
     utils.dump_pkl(os.path.join(config.setup_dir, 'bert_lookup.pkl'), bert_lookup)
