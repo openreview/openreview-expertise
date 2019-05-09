@@ -2,7 +2,7 @@ import torch
 import os
 
 from expertise.utils.batcher import Batcher
-from expertise.models import centroid_scibert
+from expertise.models import centroid_scibert_kps as centroid_scibert
 from expertise import utils
 
 def test(config):
