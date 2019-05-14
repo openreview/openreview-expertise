@@ -17,12 +17,6 @@ class Model(torch.nn.Module):
         self.config = config
         self.vocab = vocab
 
-        # if self.config.fasttext:
-        #     self.cached_ft = ft.load_model(self.config.fasttext)
-        # else:
-        #     self.cached_ft = None
-
-        # Keyword embeddings
         self.embedding = nn.Embedding(len(vocab)+1, config.embedding_dim, padding_idx=0)
 
         # Vector of ones (used for loss)
@@ -76,46 +70,25 @@ class Model(torch.nn.Module):
         :return: batch_size by embedding dim
         """
 
-        '''
-        Keep this here for now.
-        '''
-        if False:
-            pass
-        # if self.cached_ft:
-        #     print('Using fasttext pretrained embeddings')
-        #     D = self.cached_ft.get_dimension()
-        #     # Get the phrases
-        #     summed_emb = np.zeros((keyword_lists.shape[0], D))
-        #     for idx, author_kps in enumerate(keyword_lists):
-        #         embeddings = np.zeros((len(author_kps), D))
-        #         for phr_idx, phrase in enumerate(author_kps):
-        #             if phrase:
-        #                 embeddings[phr_idx, :] = self.cached_ft.get_word_vector(self.vocab.id2item[phrase])
-        #             else:
-        #                 embeddings[phr_idx, :] = np.zeros((D,))
-        #         summed_emb[idx, :] = np.sum(embeddings, axis=0)
-        #     averaged = summed_emb / keyword_lengths
-        #     return torch.from_numpy(averaged)
-        else:
-            kw_indices = torch.from_numpy(keyword_lists).long()
-            kw_lengths = torch.from_numpy(keyword_lengths)
-            if self.config.use_cuda:
-                kw_indices = kw_indices.cuda()
-                kw_lengths = kw_lengths.cuda()
+        kw_indices = torch.from_numpy(keyword_lists).long()
+        kw_lengths = torch.from_numpy(keyword_lengths)
+        if self.config.use_cuda:
+            kw_indices = kw_indices.cuda()
+            kw_lengths = kw_lengths.cuda()
 
-            # get all the embeddings for each keyword
-            # B x L x d
-            embeddings = self.embedding(kw_indices)
+        # get all the embeddings for each keyword
+        # B x L x d
+        embeddings = self.embedding(kw_indices)
 
-            # make sure that we don't divide by zero
-            kw_lengths[kw_lengths == 0] = 1
+        # make sure that we don't divide by zero
+        kw_lengths[kw_lengths == 0] = 1
 
-            # for each sample within the batch, find the average of all of that sample's keyword embeddings
-            summed_emb = torch.sum(embeddings, dim=1)
-            averaged = torch.div(summed_emb, kw_lengths.float())
+        # for each sample within the batch, find the average of all of that sample's keyword embeddings
+        summed_emb = torch.sum(embeddings, dim=1)
+        averaged = torch.div(summed_emb, kw_lengths.float())
 
-            # B x 1 x d
-            return averaged
+        # B x 1 x d
+        return averaged
 
     def embed_dev(self, keyword_lists, keyword_lengths, print_embed=False, batch_size=None):
         """
@@ -261,4 +234,5 @@ def eval_map_file(filename):
 def eval_hits_at_k_file(filename, k=2, oracle=False):
     list_of_list_of_labels,list_of_list_of_scores = utils.load_labels(filename)
     return eval_hits_at_k(list_of_list_of_labels, list_of_list_of_scores, k=k,oracle=oracle)
+
 
