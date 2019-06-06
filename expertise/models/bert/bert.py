@@ -3,7 +3,7 @@ import json
 from collections import defaultdict
 
 from expertise.utils.standard_test import test
-from expertise.utils.dataset import Dataset
+from expertise.dataset import Dataset
 from tqdm import tqdm
 
 import numpy as np

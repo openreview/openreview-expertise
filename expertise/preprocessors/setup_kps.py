@@ -7,7 +7,7 @@ import numpy as np
 import openreview
 from expertise.utils.vocab import Vocab
 from expertise.utils.batcher import Batcher
-from expertise.utils.dataset import Dataset
+from expertise.dataset import Dataset
 from expertise.config import Config
 import expertise.utils as utils
 from expertise.utils.shuffle_big_file import build_folds

@@ -7,7 +7,7 @@ import importlib
 import os
 
 from expertise.config import Config
-from expertise.utils.dataset import Dataset
+from expertise.dataset import Dataset
 
 def test_model(config_path):
     config_path = os.path.abspath(config_path)

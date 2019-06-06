@@ -3,7 +3,7 @@ import csv, json
 from collections import defaultdict
 from expertise.evaluators.mean_avg_precision import eval_map
 from expertise.evaluators.hits_at_k import eval_hits_at_k
-from expertise.utils.dataset import Dataset
+from expertise.dataset import Dataset
 
 from expertise import utils
 import ipdb

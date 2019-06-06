@@ -4,7 +4,7 @@ import itertools
 from collections import defaultdict
 from expertise import utils
 from expertise.utils import dump_pkl
-from expertise.utils.dataset import Dataset
+from expertise.dataset import Dataset
 
 from tqdm import tqdm
 
