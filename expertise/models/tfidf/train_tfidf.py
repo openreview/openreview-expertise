@@ -1,7 +1,7 @@
 import os
 import itertools
 from . import tfidf
-from expertise.utils.config import Config
+from expertise.config import Config
 from expertise import utils
 from datetime import datetime
 

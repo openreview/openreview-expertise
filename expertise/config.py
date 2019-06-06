@@ -5,7 +5,7 @@ import pickle
 
 class Config(object):
     def __init__(self, config):
-        self._config = config # set it to conf
+        self._config = config
         for k, v in self._config.items():
             setattr(self, k, v)
 

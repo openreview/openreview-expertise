@@ -6,7 +6,7 @@ import argparse
 import importlib
 import os
 
-from expertise.utils.config import Config
+from expertise.config import Config
 from expertise.utils.dataset import Dataset
 
 def train_model(config_path):

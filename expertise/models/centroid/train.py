@@ -11,7 +11,7 @@ from expertise.models import centroid
 from expertise.utils import save_dict_to_json
 from expertise.utils.vocab import Vocab
 from expertise.utils.batcher import Batcher
-from expertise.utils.config import Config
+from expertise.config import Config
 from expertise import utils
 
 current_path = os.path.abspath(os.path.dirname(__file__))

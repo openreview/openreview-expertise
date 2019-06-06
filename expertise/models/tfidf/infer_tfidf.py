@@ -2,7 +2,7 @@ import os
 import csv, json
 from collections import defaultdict
 from expertise import utils
-from expertise.utils.config import Config
+from expertise.config import Config
 from expertise.utils.dataset import Dataset
 from datetime import datetime
 import multiprocessing as mp

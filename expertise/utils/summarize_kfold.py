@@ -3,7 +3,7 @@ This script should summarize the results of an experiment across K folds
 '''
 import argparse
 import os
-from expertise.utils.config import Config
+from expertise.config import Config
 import random
 import ipdb
 import csv

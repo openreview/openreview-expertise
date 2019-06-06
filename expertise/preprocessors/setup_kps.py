@@ -8,7 +8,7 @@ import openreview
 from expertise.utils.vocab import Vocab
 from expertise.utils.batcher import Batcher
 from expertise.utils.dataset import Dataset
-from expertise.utils.config import Config
+from expertise.config import Config
 import expertise.utils as utils
 from expertise.utils.shuffle_big_file import build_folds
 from expertise.utils.data_to_sample import data_to_sample

@@ -3,7 +3,7 @@ This script should "multiply" a directory's config file across K folds
 '''
 import argparse
 import os
-from expertise.utils.config import Config
+from expertise.config import Config
 import random
 import ipdb
 def prepare_kfold(args, k):

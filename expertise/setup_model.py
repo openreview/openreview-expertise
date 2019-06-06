@@ -6,7 +6,7 @@ import argparse
 import importlib
 import os
 
-from expertise.utils.config import Config
+from expertise.config import Config
 
 def setup_model(args):
     config_path = os.path.abspath(args.config_path)

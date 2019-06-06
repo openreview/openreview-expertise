@@ -6,7 +6,7 @@ import numpy as np
 import openreview
 from expertise.utils.batcher import Batcher
 from expertise.utils.dataset import Dataset
-from expertise.utils.config import Config
+from expertise.config import Config
 import expertise.utils as utils
 from expertise.utils.data_to_sample import data_to_sample
 import argparse
