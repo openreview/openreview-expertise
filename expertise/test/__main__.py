@@ -23,9 +23,9 @@ def test_model(config_path):
 
     model.test(config)
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('config_path', help="a config file for a model")
-    args = parser.parse_args()
 
-    test_model(args.config_path)
+parser = argparse.ArgumentParser()
+parser.add_argument('config_path', help="a config file for a model")
+args = parser.parse_args()
+
+test_model(args.config_path)

@@ -26,9 +26,8 @@ def train_model(config_path):
 
     model.train(config)
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('config_path', help="a config file for a model")
-    args = parser.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument('config_path', help="a config file for a model")
+args = parser.parse_args()
 
-    train_model(args.config_path)
+train_model(args.config_path)
