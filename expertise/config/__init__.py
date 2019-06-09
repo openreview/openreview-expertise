@@ -1,1 +1,1 @@
-from .config import Config
+from .config import ModelConfig, available_models
