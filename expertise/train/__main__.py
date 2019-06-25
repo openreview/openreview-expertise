@@ -1,33 +1,30 @@
 '''
-Model training
 
 '''
+
 import argparse
-import importlib
 import os
+import json
+from collections import OrderedDict
+import expertise
+from expertise.config import ModelConfig
 
-from expertise.config import Config
-from expertise.dataset import Dataset
+def train_model(args):
+    config_path = os.path.abspath(args.config_path)
 
-def train_model(config_path):
-    config_path = os.path.abspath(config_path)
-    experiment_path = os.path.dirname(config_path)
+    with open(config_path) as f:
+        data = json.load(f, object_pairs_hook=OrderedDict)
 
-    config = Config(config_path)
+    config = ModelConfig(**data)
 
-    model = importlib.import_module(config.model)
-
-    setup_path = os.path.join(experiment_path, 'setup')
-    assert os.path.isdir(setup_path), 'you must run expertise.setup_model first'
-
-    train_path = os.path.join(experiment_path, 'train')
-    if not os.path.isdir(train_path):
-        os.mkdir(train_path)
-
-    model.train(config)
+    model = expertise.load_model(config.model)
+    config = model.train(config, *args.additional_params)
+    config.save(config_path)
+    print(config)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('config_path', help="a config file for a model")
+parser.add_argument('additional_params', nargs=argparse.REMAINDER)
 args = parser.parse_args()
 
-train_model(args.config_path)
+train_model(args)

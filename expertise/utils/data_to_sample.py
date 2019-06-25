@@ -1,7 +1,6 @@
 import argparse
 import os
 from . import utils
-from .config import Config
 
 def data_to_sample(data, vocab, max_num_keyphrases):
     '''
@@ -46,17 +45,17 @@ def data_to_sample(data, vocab, max_num_keyphrases):
     }
     return sample
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('config_path')
-    parser.add_argument('datafile')
-    parser.add_argument('--samples_filename', default='train_samples_permuted.jsonl')
-    args = parser.parse_args()
+# if __name__ == '__main__':
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('config_path')
+#     parser.add_argument('datafile')
+#     parser.add_argument('--samples_filename', default='train_samples_permuted.jsonl')
+#     args = parser.parse_args()
 
-    config_path = os.path.abspath(args.config_path)
-    config = Config(args.config_path)
+#     config_path = os.path.abspath(args.config_path)
+#     config = Config(args.config_path)
 
-    vocab = config.setup_load('vocab.pkl')
-    data_reader = utils.jsonl_reader(args.datafile)
-    train_samples = (data_to_sample(data, vocab) for data in data_reader)
-    config.setup_save(train_samples, args.samples_filename)
+#     vocab = config.setup_load('vocab.pkl')
+#     data_reader = utils.jsonl_reader(args.datafile)
+#     train_samples = (data_to_sample(data, vocab) for data in data_reader)
+#     config.setup_save(train_samples, args.samples_filename)

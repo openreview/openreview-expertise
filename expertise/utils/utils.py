@@ -159,14 +159,14 @@ def load_labels(filename):
     return result_labels, result_scores
 
 def get_bids_by_forum(dataset):
-    binned_bids = {val: [] for val in dataset.bid_values}
+    # binned_bids = {val: [] for val in dataset.bid_values}
 
     positive_labels = dataset.positive_bid_values
 
-    users_w_bids = set()
-    for bid in dataset.bids():
-        binned_bids[bid.tag].append(bid)
-        users_w_bids.update(bid.signatures)
+    # users_w_bids = set()
+    # for bid in dataset.bids():
+    #     binned_bids[bid.tag].append(bid)
+    #     users_w_bids.update(bid.signatures)
 
     bids_by_forum = defaultdict(list)
     for bid in dataset.bids():
@@ -221,6 +221,8 @@ def format_data_bids(train_set_ids, bids_by_forum, kps_by_id, max_num_keyphrases
         the source paper.
 
     '''
+
+    print('WARNING: utils.format_data_bids is deprecated. Use dataset.bpr_bid_samples instead')
 
     submission_kps = {k:v for k, v in kps_by_id.items() if not k.startswith('~')}
     reviewer_kps = {k:v for k, v in kps_by_id.items() if k.startswith('~')}

@@ -3,25 +3,19 @@
 '''
 
 import argparse
-import importlib
 import os
-
-from expertise.config import Config
-
-def setup_model(args):
-    config_path = os.path.abspath(args.config_path)
-
-    with open(config_path) as f:
-        data = json.load(f, object_pairs_hook=OrderedDict)
-
-    config = Config(data)
-
-    model = importlib.import_module(config.model)
-    model.setup(config, *args.additional_params)
+import json
+from collections import OrderedDict
+import expertise
+from expertise.config import ModelConfig
+from .core import setup_model
 
 parser = argparse.ArgumentParser()
 parser.add_argument('config_path', help="a config file for a model")
 parser.add_argument('additional_params', nargs=argparse.REMAINDER)
 args = parser.parse_args()
 
-setup_model(args)
+config = setup_model(args)
+model = expertise.load_model(config.model)
+config = model.setup(config, *args.additional_params)
+config.save(config_path)

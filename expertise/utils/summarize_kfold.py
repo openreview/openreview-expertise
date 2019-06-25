@@ -3,14 +3,14 @@ This script should summarize the results of an experiment across K folds
 '''
 import argparse
 import os
-from expertise.config import Config
+from expertise.config import ModelConfig
 import random
 import ipdb
 import csv
 import numpy as np
 
 def get_scores(config, k):
-    old_experiment_dir = os.path.dirname(config.config_file_path)
+    old_experiment_dir = config.experiment_dir
     new_experiment_dir = os.path.join(old_experiment_dir, f'{config.name}{k}')
 
     data = {}
@@ -31,7 +31,8 @@ if __name__ == '__main__':
     config_path = os.path.abspath(args.config_path)
     experiment_path = os.path.dirname(config_path)
 
-    config = Config(config_path)
+    config = ModelConfig()
+    config.update_from_file(config_path)
 
     all_data = []
     for k in range(args.num_folds):
