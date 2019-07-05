@@ -178,9 +178,9 @@ def get_bids_by_forum(dataset):
     for forum_id, forum_bids in bids_by_forum.items():
         forum_bids_flat = [{"signature": bid.signatures[0], "bid": bid.tag} for bid in forum_bids]
         neg_bids = [bid for bid in forum_bids_flat if bid["bid"] not in positive_labels]
-        neg_signatures = [bid['signature'] for bid in neg_bids]
+        neg_signatures = set([bid['signature'] for bid in neg_bids])
         pos_bids = [bid for bid in forum_bids_flat if bid["bid"] in positive_labels]
-        pos_signatures = [bid['signature'] for bid in pos_bids]
+        pos_signatures = set([bid['signature'] for bid in pos_bids])
         pos_and_neg_signatures_by_forum[forum_id] = {}
         pos_and_neg_signatures_by_forum[forum_id]['positive'] = pos_signatures
         pos_and_neg_signatures_by_forum[forum_id]['negative'] = neg_signatures

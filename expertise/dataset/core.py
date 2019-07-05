@@ -1,10 +1,33 @@
-import json
-import random
 import os
-import openreview
-from tqdm import tqdm
-import ipdb
+import json
+
+from openreview import Tag
 from expertise import utils
+
+from .helpers import filter_by_fields, read_json_records, get_items_generator
+from .helpers import get_bids_generator
+
+default_fields = [
+    'title',
+    'abstract',
+    'fulltext',
+    'keywords',
+    'subject_areas'
+]
+
+default_labels = [
+    'Very High',
+    'High',
+    'Neutral',
+    'Low',
+    'Very Low',
+    'No Bid'
+]
+
+default_positive_labels = [
+    'Very High',
+    'High'
+]
 
 class Dataset(object):
     '''
@@ -17,137 +40,107 @@ class Dataset(object):
         directory=None,
         archive_dirname='archives',
         submissions_dirname='submissions',
-        bids_dirname = 'bids',
-        bid_values=[
-            'Very High',
-            'High',
-            'Neutral',
-            'Low',
-            'Very Low',
-            'No Bid'
-        ],
-        positive_bid_values=['Very High', 'High'],
-        fields=['title', 'abstract']):
+        bids_dirname='bids',
+        bid_labels=default_labels,
+        positive_bid_labels=default_positive_labels
+        ):
 
-        assert directory and os.path.isdir(directory), 'Directory <{}> does not exist.'.format(directory)
+        if not directory or not os.path.isdir(directory):
+            raise ValueError('Directory <{}> does not exist.'.format(directory))
 
-        # TODO: Important! Need to make sure that different bid values get handled properly
-        # across different kinds of datasets.
-        self.bid_values = bid_values
-        self.positive_bid_values = positive_bid_values
-        self.fields = fields
+        self.bid_labels = bid_labels
+        self.positive_bid_labels = positive_bid_labels
 
-        self.bids_path = os.path.join(
+        self.bids_dir = os.path.join(
             directory, bids_dirname)
 
-        self.archives_path = os.path.join(
+        self.archives_dir = os.path.join(
             directory,  archive_dirname)
 
-        self.submission_records_path = os.path.join(
+        self.submissions_dir = os.path.join(
             directory, submissions_dirname)
 
-        self.train_set_path = os.path.join(
-            directory, 'train_set.tsv')
+        with open(os.path.join(directory, 'metadata.json')) as f:
+            self.metadata = json.load(f)
 
-        self.dev_set_path = os.path.join(
-            directory, 'dev_set.tsv')
+        self.num_submissions = self.metadata['submission_count']
+        self.num_archives = self.metadata['archive_count']
+        self.num_bids = self.metadata['bid_count']
+        self.reviewer_ids = sorted(self.metadata['archive_ids'])
+        self.submission_ids = sorted(self.metadata['submission_ids'])
 
-        self.test_set_path = os.path.join(
-            directory, 'test_set.tsv')
+    def get_stats(self):
+        return self.metadata
 
-        self.num_submissions = len(list(self._read_json_records(
-            self.submission_records_path, self.fields)))
-
-        self.num_archives = 0
-        self.reviewer_ids = set()
-        for userid, archive in self._read_json_records(self.archives_path, self.fields):
-            self.reviewer_ids.add(userid)
-            self.num_archives += 1
-
-        self.submission_ids = set()
-        for filename in os.listdir(self.submission_records_path):
-            filepath = os.path.join(self.submission_records_path, filename)
-            file_id = filename.replace('.jsonl', '')
-            self.submission_ids.add(file_id)
-
-    def bids(self):
-        for filename in os.listdir(self.bids_path):
-            filepath = os.path.join(self.bids_path, filename)
+    def _read_bids(self):
+        for filename in os.listdir(self.bids_dir):
+            filepath = os.path.join(self.bids_dir, filename)
             file_id = filename.replace('.jsonl','')
             for json_line in utils.jsonl_reader(filepath):
-                yield openreview.Tag.from_json(json_line)
+                yield Tag.from_json(json_line)
 
-    def _read_json_records(self, data_dir, fields, sequential=True):
-        for filename in os.listdir(data_dir):
-            filepath = os.path.join(data_dir, filename)
-            file_id = filename.replace('.jsonl', '')
+    def bids(self,
+        return_batches=False,
+        progressbar='',
+        partition_id=0,
+        num_partitions=1
+        ):
 
-            if not sequential:
-                all_text = []
+        bids_generator = get_bids_generator(
+            path=self.bids_dir,
+            num_items=self.num_bids if not return_batches else self.num_submissions,
+            return_batches=return_batches,
+            progressbar=progressbar,
+            partition_id=int(partition_id),
+            num_partitions=int(num_partitions)
+        )
 
-            for content in utils.jsonl_reader(filepath):
-                # preprocessing
-                record_text_unfiltered = utils.content_to_text(content, fields)
-                record_text_filtered = utils.strip_nonalpha(record_text_unfiltered)
+        for submission_id, bids in bids_generator:
+            yield submission_id, bids
 
-                if sequential:
-                    yield file_id, record_text_unfiltered
-                else:
-                    all_text.append(record_text_unfiltered)
+    def submissions(self,
+        fields=default_fields,
+        return_batches=False,
+        progressbar='',
+        partition_id=0,
+        num_partitions=1
+        ):
 
-            if not sequential:
-                yield file_id, all_text
-
-
-    def _items(self, path, num_items, fields, desc='', sequential=True, progressbar=True, partition_id=0, num_partitions=1):
-        item_generator = self._read_json_records(path, fields, sequential=sequential)
-
-        if num_partitions > 1:
-            item_generator = utils.partition(
-                item_generator,
-                partition_id=partition_id, num_partitions=num_partitions)
-            num_items = num_items / num_partitions
-            desc = '{} (partition {})'.format(desc, partition_id)
-
-        if progressbar:
-            item_generator = tqdm(
-                item_generator,
-                total=num_items,
-                desc=desc)
-
-        return item_generator
-
-    def submissions(self, sequential=True, progressbar=True, partition_id=0, num_partitions=1):
-
-        submission_generator = self._items(
-            path=self.submission_records_path,
+        submission_generator = get_items_generator(
+            path=self.submissions_dir,
             num_items=self.num_submissions,
-            fields=self.fields,
-            desc='submissions',
-            sequential=sequential,
+            return_batches=return_batches,
             progressbar=progressbar,
             partition_id=int(partition_id),
             num_partitions=int(num_partitions)
         )
 
         for submission_id, submission_items in submission_generator:
-            yield submission_id, submission_items
+            if type(submission_items) == list:
+                yield submission_id, [filter_by_fields(i, fields) for i in submission_items]
+            if type(submission_items) == dict:
+                yield submission_id, filter_by_fields(submission_items, fields)
 
-    # def reviewer_archives(self):
-    def archives(self, sequential=True, progressbar=True, partition_id=0, num_partitions=1):
+    def archives(self,
+        fields=default_fields,
+        return_batches=False,
+        progressbar='',
+        partition_id=0,
+        num_partitions=1
+        ):
 
-        archive_generator = self._items(
-            path=self.archives_path,
-            num_items=self.num_archives if sequential else len(self.reviewer_ids),
-            fields=self.fields,
-            desc='archives',
-            sequential=sequential,
+        archive_generator = get_items_generator(
+            path=self.archives_dir,
+            num_items=self.num_archives if return_batches else len(self.reviewer_ids),
+            return_batches=return_batches,
             progressbar=progressbar,
             partition_id=int(partition_id),
             num_partitions=int(num_partitions)
         )
 
         for archive_id, archive_items in archive_generator:
-            yield archive_id, archive_items
-
+            if type(archive_items) == list:
+                yield archive_id, [filter_by_fields(i, fields) for i in archive_items]
+            if type(archive_items) == dict:
+                yield archive_id, filter_by_fields(archive_items, fields)
 
