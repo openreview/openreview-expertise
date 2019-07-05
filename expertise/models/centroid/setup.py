@@ -6,17 +6,17 @@ import numpy as np
 import openreview
 from expertise.utils.vocab import Vocab
 from expertise.utils.batcher import Batcher
-from expertise.utils.dataset import Dataset
+from expertise.dataset import Dataset
 import expertise.utils as utils
 from expertise.utils.data_to_sample import data_to_sample
 
 def setup(config):
-    '''
-    First define the dataset, vocabulary, and keyphrase extractor
-    '''
     print('starting setup')
+    setup_dir = os.path.join(config.experiment_dir, 'setup')
+    if not os.path.exists(setup_dir):
+        os.mkdir(setup_dir)
+
     dataset = Dataset(**config.dataset)
-    bids_by_forum = utils.get_bids_by_forum(dataset)
     vocab = utils.load_pkl(os.path.join(config.kp_setup_dir, 'textrank_vocab.pkl'))
 
     (train_set_ids,
@@ -25,7 +25,7 @@ def setup(config):
 
     def fold_reader(id):
         fold_file = f'{id}.jsonl'
-        fold_path = os.path.join(config.kp_setup_dir, 'folds', fold_file)
+        fold_path = os.path.join(config.bpr_samples, fold_file)
         return utils.jsonl_reader(fold_path)
 
     train_folds = [fold_reader(i) for i in train_set_ids]
@@ -36,7 +36,7 @@ def setup(config):
         data, vocab, config.max_num_keyphrases) for data in itertools.chain(*train_folds))
 
     train_samples_path = os.path.join(
-        config.setup_dir, 'train_samples.jsonl')
+        setup_dir, 'train_samples.jsonl')
 
     utils.dump_jsonl(train_samples_path, train_samples)
 
@@ -44,7 +44,7 @@ def setup(config):
         data, vocab, config.max_num_keyphrases) for data in itertools.chain(*dev_folds))
 
     dev_samples_path = os.path.join(
-        config.setup_dir, 'dev_samples.jsonl')
+        setup_dir, 'dev_samples.jsonl')
 
     utils.dump_jsonl(dev_samples_path, dev_samples)
 
@@ -52,7 +52,9 @@ def setup(config):
         data, vocab, config.max_num_keyphrases) for data in itertools.chain(*test_folds))
 
     test_samples_path = os.path.join(
-        config.setup_dir, 'test_samples.jsonl')
+        setup_dir, 'test_samples.jsonl')
 
     utils.dump_jsonl(test_samples_path, test_samples)
+
+    return config
 

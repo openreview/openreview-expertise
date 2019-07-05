@@ -11,16 +11,18 @@ from expertise.models import centroid
 from expertise.utils import save_dict_to_json
 from expertise.utils.vocab import Vocab
 from expertise.utils.batcher import Batcher
-from expertise.utils.config import Config
 from expertise import utils
 
 current_path = os.path.abspath(os.path.dirname(__file__))
 
-#def train(setup_path, train_path, config, dataset):
 def train(config):
 
+    train_dir = os.path.join(config.experiment_dir, 'train')
+    if not os.path.isdir(train_dir):
+        os.mkdir(train_dir)
+
     for train_subdir in ['dev_scores', 'dev_predictions']:
-        train_subdir_path = os.path.join(config.train_dir, train_subdir)
+        train_subdir_path = os.path.join(train_dir, train_subdir)
         if not os.path.exists(train_subdir_path):
             os.mkdir(train_subdir_path)
 
@@ -29,8 +31,10 @@ def train(config):
 
     torch.manual_seed(config.random_seed)
 
-    batcher = Batcher(input_file=config.setup_path('train_samples.jsonl'))
-    batcher_dev = Batcher(input_file=config.setup_path('dev_samples.jsonl'))
+    batcher = Batcher(
+        input_file=os.path.join(config.experiment_dir, 'setup', 'train_samples.jsonl'))
+    batcher_dev = Batcher(
+        input_file=os.path.join(config.experiment_dir, 'setup', 'dev_samples.jsonl'))
 
     model = centroid.Model(config, vocab)
     if config.use_cuda:
@@ -46,7 +50,6 @@ def train(config):
 
     # Training loop
     for counter, batch in enumerate(batcher.batches(batch_size=config.batch_size)):
-
         batch_source = []
         batch_pos = []
         batch_neg = []
@@ -97,7 +100,7 @@ def train(config):
             predictions = centroid.generate_predictions(config, model, batcher_dev)
 
             prediction_filename = os.path.join(
-                config.train_dir,
+                train_dir,
                 'dev_predictions/dev.predictions.{}.jsonl'.format(counter))
 
             utils.dump_jsonl(prediction_filename, predictions)
@@ -119,7 +122,7 @@ def train(config):
                 ]
             ]
             dev_scores_file = os.path.join(
-                config.train_dir,
+                train_dir,
                 'dev_scores/dev.scores.{}.tsv'.format(counter))
             utils.dump_csv(dev_scores_file, score_lines)
 
@@ -127,25 +130,17 @@ def train(config):
                 best_map = map_score
 
                 best_model_path = os.path.join(
-                    config.train_dir, 'model_{}_{}.torch'.format(config.name, 'best'))
+                    train_dir, 'model_{}_{}.torch'.format(config.name, 'best'))
 
                 torch.save(model, best_model_path)
-                config.best_model_path = best_model_path
-                config.save_config()
+                config.update(best_model_path=best_model_path)
 
                 best_scores_file = os.path.join(
-                    config.train_dir,
+                    train_dir,
                     'dev.scores.best.tsv')
 
                 utils.dump_csv(best_scores_file, score_lines)
 
         if counter == config.num_minibatches:
-            break
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('config_path', help='a config file for a model')
-    args = parser.parse_args()
-
-    train_model(args.config_path)
+            return config
+    return config

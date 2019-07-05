@@ -1,4 +1,4 @@
-from expertise.preprocessors.textrank import TextRank
+from .textrank import TextRank
 
 def keyphrases(text, include_scores=False, include_tokenlist=False):
 	textrank = TextRank()

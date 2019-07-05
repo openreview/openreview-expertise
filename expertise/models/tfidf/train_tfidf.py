@@ -1,13 +1,15 @@
+import argparse
 import os
 import itertools
 from . import tfidf
-from expertise.utils.config import Config
-from expertise import utils
+
+import expertise
 from datetime import datetime
 
 import ipdb
 
 def train(config):
+    print('running tfidf train')
     experiment_dir = os.path.abspath(config.experiment_dir)
     setup_dir = os.path.join(experiment_dir, 'setup')
 
@@ -20,7 +22,7 @@ def train(config):
     # with open(reviewer_kps_file, 'rb') as f:
     #     kp_archives_by_userid = pickle.load(f)
 
-    kps_by_id = utils.load_pkl(os.path.join(config.kp_setup_dir, 'full_kps_by_id.pkl'))
+    kps_by_id = expertise.utils.load_pkl(os.path.join(config.kp_setup_dir, 'full_kps_by_id.pkl'))
     kps_by_paperid = {k: v for k, v in kps_by_id.items() if not k.startswith('~')}
     kp_archives_by_userid = {k: v for k, v in kps_by_id.items() if k.startswith('~')}
 
@@ -33,4 +35,20 @@ def train(config):
 
     model_out_path = os.path.join(train_dir, 'model.pkl')
 
-    utils.dump_pkl(model_out_path, model)
+    expertise.utils.dump_pkl(model_out_path, model)
+
+    config.update(train_dir=train_dir)
+
+    return config
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('config_path', help="a config file for a model")
+    args = parser.parse_args()
+
+    config = expertise.config.ModelConfig()
+    config.update_from_file(args.config_path)
+
+    updated_config = train(config)
+
+    config.save(args.config_path)

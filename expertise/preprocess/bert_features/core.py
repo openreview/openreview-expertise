@@ -3,7 +3,7 @@ import json
 from collections import defaultdict
 
 from expertise.utils.standard_test import test
-from expertise.utils.dataset import Dataset
+from expertise.dataset import Dataset
 from tqdm import tqdm
 
 import numpy as np
@@ -27,6 +27,7 @@ def _write_features(lines, outfile, extraction_args):
                 tokenizer=extraction_args['tokenizer'],
                 max_seq_length=extraction_args['max_seq_length'],
                 batch_size=extraction_args['batch_size'],
+                layers='-1,-2,-3,-4',
                 no_cuda=extraction_args['no_cuda']
             )
 
@@ -40,7 +41,7 @@ def _write_features(lines, outfile, extraction_args):
 
 def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
     experiment_dir = os.path.abspath(config.experiment_dir)
-    setup_dir = os.path.join(experiment_dir, 'setup')
+    bert_dir = os.path.join(experiment_dir, 'bert')
 
     feature_dirs = [
         'submissions-features',
@@ -48,7 +49,7 @@ def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
     ]
 
     for d in feature_dirs:
-        os.makedirs(os.path.join(setup_dir, d), exist_ok=True)
+        os.makedirs(os.path.join(bert_dir, d), exist_ok=True)
 
     dataset = Dataset(**config.dataset)
 
@@ -62,7 +63,7 @@ def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
     dataset_args = {
         'partition_id': partition_id,
         'num_partitions': num_partitions,
-        'progressbar': False,
+        'progressbar': True,
         'sequential': False
     }
 
@@ -77,17 +78,16 @@ def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
     }
 
     for text_id, text_list in dataset.submissions(**dataset_args):
-        feature_dir = os.path.join(setup_dir, 'submissions-features')
+        feature_dir = os.path.join(bert_dir, 'submissions-features')
         outfile = os.path.join(feature_dir, '{}.npy'.format(text_id))
-        _write_features(
-            text_list, outfile, extraction_args)
+        _write_features(text_list, outfile, extraction_args)
 
     for text_id, text_list in dataset.archives(**dataset_args):
-        feature_dir = os.path.join(setup_dir, 'archives-features')
+        feature_dir = os.path.join(bert_dir, 'archives-features')
         outfile = os.path.join(feature_dir, '{}.npy'.format(text_id))
-        _write_features(
-            text_list, outfile, extraction_args)
+        _write_features(text_list, outfile, extraction_args)
 
+    return config
 
 def train(config):
     pass

@@ -10,7 +10,6 @@ from gensim.similarities import SparseMatrixSimilarity
 from gensim.models import TfidfModel
 from gensim import corpora
 
-from expertise.preprocessors import pos_regex
 import ipdb
 
 class Model():

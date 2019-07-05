@@ -7,7 +7,7 @@ import argparse
 import importlib
 import os
 
-from expertise.utils.config import Config
+from expertise.config import Config
 
 def infer_model(config_path):
     config_path = os.path.abspath(config_path)

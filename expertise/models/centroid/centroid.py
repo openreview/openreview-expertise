@@ -1,10 +1,9 @@
 import numpy as np
 
-# import fastText as ft
-
 import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss
+
 from expertise import utils
 
 from expertise.evaluators.mean_avg_precision import eval_map
@@ -196,6 +195,67 @@ def generate_predictions(config, model, batcher):
 
             yield prediction
 
+
+def generate_scores(config, model, batcher):
+    """
+    Use the model to make predictions on the data in the batcher
+
+    :param model: Model to use to score reviewer-paper pairs
+    :param batcher: Batcher containing data to evaluate (a DevTestBatcher)
+    :return:
+    """
+
+    for idx, batch in enumerate(batcher.batches(batch_size=config.dev_batch_size)):
+        if idx % 100 == 0:
+            print('Predicted {} batches'.format(idx))
+
+        batch_queries = []
+        batch_query_lengths = []
+        batch_query_ids = []
+        batch_targets = []
+        batch_target_lengths = []
+        batch_target_ids = []
+        batch_size = len(batch)
+
+        for data in batch:
+            # append a positive sample
+            batch_queries.append(data['source'])
+            batch_query_lengths.append(data['source_length'])
+            batch_query_ids.append(data['source_id'])
+            batch_targets.append(data['target'])
+            batch_target_lengths.append(data['target_length'])
+            batch_target_ids.append(data['target_id'])
+
+        scores = model.score_dev_test_batch(
+            np.asarray(batch_queries),
+            np.asarray(batch_query_lengths),
+            np.asarray(batch_targets),
+            np.asarray(batch_target_lengths),
+            np.asarray(batch_size)
+        )
+
+        if type(scores) is not list:
+            scores = list(scores.cpu().data.numpy().squeeze())
+
+        for source, source_id, target, target_id, score in zip(
+            batch_queries,
+            batch_query_ids,
+            batch_targets,
+            batch_target_ids,
+            scores
+            ):
+
+            # temporarily commenting out "source" and "target" because I think they are not needed.
+            prediction = {
+                # 'source': source,
+                'source_id': source_id,
+                # 'target': target,
+                'target_id': target_id,
+                'score': float(score)
+            }
+
+            yield prediction
+
 def load_jsonl(filename):
 
     labels_by_forum = defaultdict(dict)
@@ -234,5 +294,3 @@ def eval_map_file(filename):
 def eval_hits_at_k_file(filename, k=2, oracle=False):
     list_of_list_of_labels,list_of_list_of_scores = utils.load_labels(filename)
     return eval_hits_at_k(list_of_list_of_labels, list_of_list_of_scores, k=k,oracle=oracle)
-
-

@@ -75,10 +75,22 @@ def get_cls_vectors(line_features, layer_index=-1):
 
     return cls_vectors
 
+def get_all_vectors(line_features):
+    all_vectors = []
+    for line_f in line_features:
+        for token_feature in line_f['features']:
+            all_layers = []
+            for layer in token_feature['layers']:
+                values = np.array(layer['values'])
+                all_layers.extend(values)
+            all_vectors.append(all_layers)
+
+    return all_vectors
+
 AGGREGATOR_MAP = {
     'avg': get_avg_words,
     'cls': get_cls_vectors,
-    'all': lambda x: x
+    'all': get_all_vectors
 }
 
 
@@ -243,7 +255,7 @@ def extract_features(
     tokenizer,
     no_cuda=True,
     local_rank=-1,
-    layers='-1',
+    layers='-1,-2,-3,-4',
     max_seq_length=128,
     batch_size=32,
     verbose=False):
