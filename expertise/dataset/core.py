@@ -62,12 +62,16 @@ class Dataset(object):
 
         with open(os.path.join(directory, 'metadata.json')) as f:
             self.metadata = json.load(f)
+            self.submission_count = self.metadata['submission_count']
+            self.reviewer_count = self.metadata['reviewer_count']
+            self.archive_counts = self.metadata['archive_counts']
+            self.bid_counts = self.metadata['bid_counts']
 
-        self.num_submissions = self.metadata['submission_count']
-        self.num_archives = self.metadata['archive_count']
-        self.num_bids = self.metadata['bid_count']
-        self.reviewer_ids = sorted(self.metadata['archive_ids'])
-        self.submission_ids = sorted(self.metadata['submission_ids'])
+        self.total_bid_count = sum(self.bid_counts.values())
+        self.total_archive_count = sum([v['arx'] for v in self.archive_counts.values()])
+
+        self.reviewer_ids = sorted(self.archive_counts.keys())
+        self.submission_ids = sorted(self.bid_counts.keys())
 
     def get_stats(self):
         return self.metadata
@@ -88,7 +92,7 @@ class Dataset(object):
 
         bids_generator = get_bids_generator(
             path=self.bids_dir,
-            num_items=self.num_bids if not return_batches else self.num_submissions,
+            num_items=self.submission_count if return_batches else self.total_bid_count,
             return_batches=return_batches,
             progressbar=progressbar,
             partition_id=int(partition_id),
@@ -108,18 +112,18 @@ class Dataset(object):
 
         submission_generator = get_items_generator(
             path=self.submissions_dir,
-            num_items=self.num_submissions,
+            num_items=self.submission_count,
             return_batches=return_batches,
             progressbar=progressbar,
             partition_id=int(partition_id),
             num_partitions=int(num_partitions)
         )
 
-        for submission_id, submission_items in submission_generator:
-            if type(submission_items) == list:
-                yield submission_id, [filter_by_fields(i, fields) for i in submission_items]
-            if type(submission_items) == dict:
-                yield submission_id, filter_by_fields(submission_items, fields)
+        for submission_id, result in submission_generator:
+            if type(result) == list:
+                yield submission_id, [filter_by_fields(i['content'], fields) for i in result]
+            if type(result) == dict:
+                yield submission_id, filter_by_fields(result['content'], fields)
 
     def archives(self,
         fields=default_fields,
@@ -131,16 +135,16 @@ class Dataset(object):
 
         archive_generator = get_items_generator(
             path=self.archives_dir,
-            num_items=self.num_archives if return_batches else len(self.reviewer_ids),
+            num_items=self.reviewer_count if return_batches else self.total_archive_count,
             return_batches=return_batches,
             progressbar=progressbar,
             partition_id=int(partition_id),
             num_partitions=int(num_partitions)
         )
 
-        for archive_id, archive_items in archive_generator:
-            if type(archive_items) == list:
-                yield archive_id, [filter_by_fields(i, fields) for i in archive_items]
-            if type(archive_items) == dict:
-                yield archive_id, filter_by_fields(archive_items, fields)
+        for archive_id, result in archive_generator:
+            if type(result) == list:
+                yield archive_id, [filter_by_fields(i['content'], fields) for i in result]
+            if type(result) == dict:
+                yield archive_id, filter_by_fields(result['content'], fields)
 
