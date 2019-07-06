@@ -40,72 +40,12 @@ logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(messa
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-
-"""
-Vector aggregators
-
-"""
-
-def get_avg_words(line_features, layer_index=-1):
-    lines = []
-    for line_f in line_features:
-        word_embeddings = []
-        for token_feature in line_f['features']:
-            if not (token_feature['token'].startswith('[') and token_feature['token'].endswith(']')):
-
-                for layer in token_feature['layers']:
-                    if layer['index'] == layer_index:
-                        values = np.array(layer['values'])
-                        word_embeddings.append(values)
-
-        lines.append(np.mean(word_embeddings, axis=0))
-    return lines
-
-def get_cls_vectors(line_features, layer_index=-1):
-    cls_vectors = []
-    for line_f in line_features:
-        for token_feature in line_f['features']:
-            if token_feature['token'] == '[CLS]':
-
-                for layer in token_feature['layers']:
-                    if layer['index'] == layer_index:
-                        values = np.array(layer['values'])
-                        cls_vectors.append(values)
-
-    return cls_vectors
-
-def get_all_vectors(line_features):
-    all_vectors = []
-    for line_f in line_features:
-        for token_feature in line_f['features']:
-            all_layers = []
-            for layer in token_feature['layers']:
-                values = np.array(layer['values'])
-                all_layers.extend(values)
-            all_vectors.append(all_layers)
-
-    return all_vectors
-
-AGGREGATOR_MAP = {
-    'avg': get_avg_words,
-    'cls': get_cls_vectors,
-    'all': get_all_vectors
-}
-
-
-"""
-Helpers
-
-"""
-
 class InputExample(object):
 
     def __init__(self, unique_id, text_a, text_b):
         self.unique_id = unique_id
         self.text_a = text_a
         self.text_b = text_b
-
 
 class InputFeatures(object):
     """A single set of features of data."""

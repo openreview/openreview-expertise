@@ -11,137 +11,138 @@ from torch.utils.data import TensorDataset, DataLoader, SequentialSampler
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertModel
 
-from . import helpers
+from .extract_features import extract_features
 
-def _setup_bert_pretrained(bert_model):
-    model = BertModel.from_pretrained(bert_model)
-    return model
+def get_avg_words(line_features, layer_index=-1):
+    lines = []
+    for line_f in line_features:
+        word_embeddings = []
+        for token_feature in line_f['features']:
+            if not (token_feature['token'].startswith('[') and token_feature['token'].endswith(']')):
 
-def _write_features(lines, outfile, extraction_args):
+                for layer in token_feature['layers']:
+                    if layer['index'] == layer_index:
+                        values = np.array(layer['values'])
+                        word_embeddings.append(values)
 
-    if not os.path.exists(outfile):
-        try:
-            all_lines_features = helpers.extract_features(
-                lines=lines[:extraction_args['max_lines']],
-                model=extraction_args['model'],
-                tokenizer=extraction_args['tokenizer'],
-                max_seq_length=extraction_args['max_seq_length'],
-                batch_size=extraction_args['batch_size'],
-                layers='-1,-2,-3,-4',
-                no_cuda=extraction_args['no_cuda']
-            )
+        lines.append(np.mean(word_embeddings, axis=0))
+    return lines
 
-            embeddings = extraction_args['aggregator_fn'](all_lines_features)
-            np.save(outfile, embeddings)
-        except RuntimeError as e:
-            print('runtime error encountered for ', outfile)
-            print(e)
-    else:
-        print('skipping {}'.format(outfile))
+def get_cls_vectors(line_features, layer_index=-1):
+    cls_vectors = []
+    for line_f in line_features:
+        for token_feature in line_f['features']:
+            if token_feature['token'] == '[CLS]':
 
-def setup(config, partition_id=0, num_partitions=1, local_rank=-1):
-    experiment_dir = os.path.abspath(config.experiment_dir)
-    bert_dir = os.path.join(experiment_dir, 'bert')
+                for layer in token_feature['layers']:
+                    if layer['index'] == layer_index:
+                        values = np.array(layer['values'])
+                        cls_vectors.append(values)
 
-    feature_dirs = [
-        'submissions-features',
-        'archives-features'
-    ]
+    return cls_vectors
 
-    for d in feature_dirs:
-        os.makedirs(os.path.join(bert_dir, d), exist_ok=True)
+def get_all_vectors(line_features):
+    all_vectors = []
+    for line_f in line_features:
+        for token_feature in line_f['features']:
+            all_layers = []
+            for layer in token_feature['layers']:
+                values = np.array(layer['values'])
+                all_layers.extend(values)
+            all_vectors.append(all_layers)
 
-    dataset = Dataset(**config.dataset)
+    return all_vectors
 
+def concatenate_layers(embeddings):
+    all_line_features = []
+    for line in embeddings:
+        token_features = line['features']
+        line_features = []
+        for token_data in token_features:
+            token = token_data['token']
+            concatenated_vector = [
+                value for layer in token_data['layers']
+                for value in layer['values']
+            ]
+            line_features.append((token, concatenated_vector))
+        all_line_features.append(line_features)
+
+    return all_line_features
+
+AGGREGATOR_MAP = {
+    'avg': get_avg_words,
+    'cls': get_cls_vectors,
+    'all': get_all_vectors
+}
+
+def get_embeddings(lines, pretrained_bert, **user_args):
     tokenizer = BertTokenizer.from_pretrained(
-        config.bert_model, do_lower_case=config.do_lower_case)
+        pretrained_bert, do_lower_case=True)
 
-    model = _setup_bert_pretrained(config.bert_model)
-
-    # convert submissions and archives to bert feature vectors
-
-    dataset_args = {
-        'partition_id': partition_id,
-        'num_partitions': num_partitions,
-        'progressbar': True,
-        'sequential': False
-    }
+    model = BertModel.from_pretrained(pretrained_bert)
 
     extraction_args = {
+        'lines': lines,
         'model': model,
-        'tokenizer': tokenizer,
-        'max_seq_length': config.max_seq_length,
-        'batch_size': config.batch_size,
-        'no_cuda': not config.use_cuda,
-        'aggregator_fn': helpers.AGGREGATOR_MAP[config.embedding_aggregation_type],
-        'max_lines': 20
+        'tokenizer': tokenizer
     }
+    extraction_args.update(user_args)
 
-    for text_id, text_list in dataset.submissions(**dataset_args):
-        feature_dir = os.path.join(bert_dir, 'submissions-features')
-        outfile = os.path.join(feature_dir, '{}.npy'.format(text_id))
-        _write_features(text_list, outfile, extraction_args)
+    all_lines_features = extract_features(**extraction_args)
+    embeddings = concatenate_layers(all_lines_features)
 
-    for text_id, text_list in dataset.archives(**dataset_args):
-        feature_dir = os.path.join(bert_dir, 'archives-features')
-        outfile = os.path.join(feature_dir, '{}.npy'.format(text_id))
-        _write_features(text_list, outfile, extraction_args)
+    return embeddings
 
-    return config
+# def infer(config):
+#     experiment_dir = os.path.abspath(config.experiment_dir)
+#     setup_dir = os.path.join(experiment_dir, 'setup')
+#     infer_dir = os.path.join(experiment_dir, 'infer')
+#     os.makedirs(infer_dir, exist_ok=True)
 
-def train(config):
-    pass
+#     submissions_dir = os.path.join(
+#         setup_dir,
+#         'submissions-features')
 
-def infer(config):
-    experiment_dir = os.path.abspath(config.experiment_dir)
-    setup_dir = os.path.join(experiment_dir, 'setup')
-    infer_dir = os.path.join(experiment_dir, 'infer')
-    os.makedirs(infer_dir, exist_ok=True)
+#     archives_dir = os.path.join(
+#         setup_dir,
+#         'archives-features')
 
-    submissions_dir = os.path.join(
-        setup_dir,
-        'submissions-features')
+#     submission_embeddings = []
+#     paper_lookup = []
+#     for emb_file in os.listdir(submissions_dir):
+#         embedding_list = np.load(os.path.join(submissions_dir, emb_file))
+#         for emb in embedding_list:
+#             submission_embeddings.append(emb)
+#             paper_lookup.append(emb_file.replace('.npy', ''))
+#     submission_matrix = np.asarray(submission_embeddings)
 
-    archives_dir = os.path.join(
-        setup_dir,
-        'archives-features')
+#     archive_embeddings = []
+#     author_lookup = []
+#     for emb_file in os.listdir(archives_dir):
+#         embedding_list = np.load(os.path.join(archives_dir, emb_file))
+#         for emb in embedding_list:
+#             archive_embeddings.append(emb)
+#             author_lookup.append(emb_file.replace('.npy', ''))
+#     archive_matrix = np.asarray(archive_embeddings)
 
-    submission_embeddings = []
-    paper_lookup = []
-    for emb_file in os.listdir(submissions_dir):
-        embedding_list = np.load(os.path.join(submissions_dir, emb_file))
-        for emb in embedding_list:
-            submission_embeddings.append(emb)
-            paper_lookup.append(emb_file.replace('.npy', ''))
-    submission_matrix = np.asarray(submission_embeddings)
+#     scores = np.dot(submission_matrix, np.transpose(archive_matrix))
 
-    archive_embeddings = []
-    author_lookup = []
-    for emb_file in os.listdir(archives_dir):
-        embedding_list = np.load(os.path.join(archives_dir, emb_file))
-        for emb in embedding_list:
-            archive_embeddings.append(emb)
-            author_lookup.append(emb_file.replace('.npy', ''))
-    archive_matrix = np.asarray(archive_embeddings)
+#     score_file_path = os.path.join(infer_dir, config.name + '-scores.jsonl')
+#     with open(score_file_path, 'w') as f:
+#         for paper_idx, row in enumerate(scores):
+#             paper_id = paper_lookup[paper_idx]
 
-    scores = np.dot(submission_matrix, np.transpose(archive_matrix))
+#             author_max_scores = defaultdict(int)
 
-    score_file_path = os.path.join(infer_dir, config.name + '-scores.jsonl')
-    with open(score_file_path, 'w') as f:
-        for paper_idx, row in enumerate(scores):
-            paper_id = paper_lookup[paper_idx]
+#             for author_idx, score in enumerate(row):
+#                 a = author_lookup[author_idx]
+#                 if author_max_scores[a] < score:
+#                     author_max_scores[a] = score
 
-            author_max_scores = defaultdict(int)
-
-            for author_idx, score in enumerate(row):
-                a = author_lookup[author_idx]
-                if author_max_scores[a] < score:
-                    author_max_scores[a] = score
-
-            for author_id, max_score in author_max_scores.items():
-                result = {
-                    'source_id': paper_id,
-                    'target_id': author_id,
-                    'score': float(max_score)
-                }
-                f.write(json.dumps(result) + '\n')
+#             for author_id, max_score in author_max_scores.items():
+#                 result = {
+#                     'source_id': paper_id,
+#                     'target_id': author_id,
+#                     'score': float(max_score)
+#                 }
+#                 f.write(json.dumps(result) + '\n')
