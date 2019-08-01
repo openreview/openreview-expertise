@@ -161,7 +161,7 @@ def load_labels(filename):
 def get_bids_by_forum(dataset):
     # binned_bids = {val: [] for val in dataset.bid_values}
 
-    positive_labels = dataset.positive_bid_values
+    positive_labels = dataset.positive_bid_labels
 
     # users_w_bids = set()
     # for bid in dataset.bids():

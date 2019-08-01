@@ -38,6 +38,7 @@ def train(config):
     expertise.utils.dump_pkl(model_out_path, model)
 
     config.update(train_dir=train_dir)
+    config.update(tfidf_model=model_out_path)
 
     return config
 

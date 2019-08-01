@@ -3,6 +3,7 @@ import itertools
 import json
 import os
 from collections import OrderedDict
+from tqdm import tqdm
 
 from expertise.utils.vocab import Vocab
 from expertise.dataset import Dataset
@@ -25,13 +26,14 @@ def run_textrank(config):
     full_kps_by_id = {}
 
     all_archives = itertools.chain(
-        dataset.submissions(sequential=False),
-        dataset.archives(sequential=False))
+        dataset.submissions(return_batches=True),
+        dataset.archives(return_batches=True))
 
-    for archive_id, text_list in all_archives:
+    for archive_id, content_list in tqdm(all_archives):
         scored_kps = []
         full_kps = []
-        for text in text_list:
+        for content in content_list:
+            text = utils.content_to_text(content)
             top_tokens, full_tokens = keyphrases(text, include_scores=True, include_tokenlist=True)
             scored_kps.extend(top_tokens)
             full_kps.append(full_tokens)
