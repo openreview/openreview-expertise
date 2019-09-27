@@ -12,8 +12,9 @@ import pickle
 import csv
 from collections import defaultdict
 import math, random
-
+import openreview
 import ipdb
+import numpy as np
 
 def fixedwidth(item_list, list_len, pad_val=0):
     '''
@@ -169,7 +170,8 @@ def get_bids_by_forum(dataset):
     #     users_w_bids.update(bid.signatures)
 
     bids_by_forum = defaultdict(list)
-    for bid in dataset.bids():
+    for id, bid_json in dataset.bids():
+        bid = openreview.Tag(**bid_json)
         bids_by_forum[bid.forum].append(bid)
 
     pos_and_neg_signatures_by_forum = defaultdict(lambda: {'positive': [], 'negative': []})

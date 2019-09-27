@@ -24,10 +24,11 @@ def infer(config):
 
     dataset = Dataset(**config.dataset)
 
+    paperids = list(model.bow_archives_by_paperid.keys())
     paperidx_by_id = {
         paperid: index
         for index, paperid
-        in enumerate(model.bow_archives_by_paperid.keys())
+        in enumerate(paperids)
     }
 
     score_file_path = os.path.join(experiment_dir, config.name + '-scores.csv')
@@ -38,31 +39,31 @@ def infer(config):
     # samples = expertise.utils.format_bid_labels(submission_ids, bids_by_forum)
 
     scores = {}
+    max_score = 0.0
+    for paperid, userid in itertools.product(submission_ids, reviewer_ids):
+        # label = data['label']
+
+        if userid not in scores:
+            # bow_archive is a list of BOWs.
+            if userid in model.bow_archives_by_userid and len(model.bow_archives_by_userid[userid]) > 0:
+                bow_archive = model.bow_archives_by_userid[userid]
+            else:
+                bow_archive = [[]]
+
+            best_scores = np.amax(model.index[bow_archive], axis=0)
+            scores[userid] = best_scores
+
+            user_max_score = max(best_scores)
+            if user_max_score > max_score:
+                max_score = user_max_score
+
+    print('max score', max_score)
 
     with open(score_file_path, 'w') as w:
-        for paperid, userid in itertools.product(submission_ids, reviewer_ids):
-            # label = data['label']
-
-            if userid not in scores:
-                # bow_archive is a list of BOWs.
-                if userid in model.bow_archives_by_userid and len(model.bow_archives_by_userid[userid]) > 0:
-                    bow_archive = model.bow_archives_by_userid[userid]
-                else:
-                    bow_archive = [[]]
-
-                best_scores = np.amax(model.index[bow_archive], axis=0)
-                scores[userid] = best_scores
-
-            if paperid in paperidx_by_id:
-                paper_index = paperidx_by_id[paperid]
-                score = scores[userid][paper_index]
-
-                # result = {
-                #     'source_id': paperid,
-                #     'target_id': userid,
-                #     'score': float(score),
-                #     # 'label': int(label)
-                # }
+        for userid, user_scores in scores.items():
+            for paperidx, paper_score in enumerate(user_scores):
+                paperid = paperids[paperidx]
+                score = scores[userid][paperidx] / max_score
 
                 w.write('{0},{1},{2:.3f}'.format(paperid, userid, score))
                 w.write('\n')

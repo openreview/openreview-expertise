@@ -83,11 +83,12 @@ class Dataset(object):
             for json_line in utils.jsonl_reader(filepath):
                 yield Tag.from_json(json_line)
 
-    def bids(self,
-        return_batches=False,
-        progressbar='',
-        partition_id=0,
-        num_partitions=1
+    def bids(
+            self,
+            return_batches=False,
+            progressbar='',
+            partition_id=0,
+            num_partitions=1
         ):
 
         bids_generator = get_bids_generator(
