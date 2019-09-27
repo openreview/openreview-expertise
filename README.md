@@ -16,9 +16,6 @@ If you plan to actively develop models, it's best to install the package in "edi
 pip install -e <location of this repository>
 ```
 
-The framework requires a valid OpenReview Dataset (see Dataset section below). Contact Michael for access to datasets.
-
-
 ## Quick Start
 
 Start by creating an "experiment directory" (`experiment_dir`), and a JSON config file (e.g. `config.json`) in it.
