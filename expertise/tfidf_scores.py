@@ -5,7 +5,8 @@ from collections import OrderedDict
 from expertise.config import ModelConfig
 
 from .preprocess.textrank import run_textrank
-from .models.tfidf import train_tfidf, infer_tfidf
+from .models.tfidf.train_tfidf import train
+from .models.tfidf.infer_tfidf import infer
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
@@ -21,8 +22,8 @@ if __name__ == '__main__':
 	textrank_config = run_textrank(config)
 	textrank_config.save(args.config_path)
 
-	trained_config = train_tfidf(config)
+	trained_config = train(config)
 	trained_config.save(args.config_path)
 
-	inferred_config = infer_tfidf(config)
+	inferred_config = infer(config)
 	inferred_config.save(args.config_path)

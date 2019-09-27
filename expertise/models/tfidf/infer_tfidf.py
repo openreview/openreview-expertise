@@ -68,6 +68,8 @@ def infer(config):
                 w.write('{0},{1},{2:.3f}'.format(paperid, userid, score))
                 w.write('\n')
 
+    return config
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('config_path', help="a config file for a model")

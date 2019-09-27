@@ -19,6 +19,45 @@ pip install -e <location of this repository>
 The framework requires a valid OpenReview Dataset (see Dataset section below). Contact Michael for access to datasets.
 
 
+## Quick Start
+
+Start by creating an "experiment directory" (`experiment_dir`), and a JSON config file (e.g. `config.json`) in it.
+
+Example configuration for the TF-IDF Sparse Vector Similarity model:
+```
+{
+    "name": "iclr2020_reviewers_tfidf",
+    "match_group": "ICLR.cc/2020/Conference/Reviewers",
+    "paper_invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+    "exclusion_inv": "ICLR.cc/2020/Conference/-/Expertise_Selection",
+    "min_count_for_vocab": 1,
+    "random_seed": 9,
+    "max_num_keyphrases": 25,
+    "do_lower_case": true,
+    "dataset": {
+        "directory": "./"
+    },
+    "experiment_dir": "./"
+}
+
+```
+
+Create a dataset by running the following command:
+```
+python -m expertise.create_dataset config.json \
+	--baseurl <usually https://openreview.net> \
+	--password <your_password> \
+	--username <your_username>\
+```
+
+Generate scores by running the following command:
+```
+python -m expertise.tfidf_scores config.json
+```
+
+The output will generate a `.csv` file with the name pattern `<config_name>-scores.csv`.
+
+
 ## Configuration
 
 **Coming Soon**
@@ -37,11 +76,10 @@ dataset-name/
 		aBc123XyZ.jsonl 		# paper IDs
 		ZYx321Abc.jsonl
 		...
-	extras/
-		bids.jsonl
-		(other dataset-specific files)
+	bids/
+		aBc123XyZ.jsonl 		# should have same IDs as /submissions
+		ZYx321Abc.jsonl
 		...
-	README.md
 
 ```
 

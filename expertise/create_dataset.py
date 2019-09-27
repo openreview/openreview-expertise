@@ -86,7 +86,7 @@ if __name__ == '__main__':
         if 'head' and 'tail' in invitation.reply['content']:
             user_grouped_edges = openreview.tools.iterget_grouped_edges(
                 openreview_client,
-                invitation.id,
+                invitation=invitation.id,
                 groupby='tail',
                 select='id,head,label,weight'
             )

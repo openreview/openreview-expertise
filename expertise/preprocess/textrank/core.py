@@ -18,7 +18,7 @@ def run_textrank(config):
 
     kps_dir = os.path.join(experiment_path, 'keyphrases')
     if not os.path.isdir(kps_dir):
-        os.mkdir(kps_dir)
+        os.makedirs(kps_dir)
     config.update(kp_setup_dir=kps_dir)
 
     print('starting setup')
@@ -34,7 +34,9 @@ def run_textrank(config):
         dataset.submissions(return_batches=True),
         dataset.archives(return_batches=True))
 
-    for archive_id, content_list in tqdm(all_archives):
+    for archive_id, content_list in tqdm(
+            all_archives, total=dataset.total_archive_count + dataset.submission_count):
+
         scored_kps = []
         full_kps = []
         for content in content_list:
