@@ -22,7 +22,7 @@ def run_textrank(config):
     config.update(kp_setup_dir=kps_dir)
 
     print('starting setup')
-    dataset = Dataset(directory=config.dataset_dir)
+    dataset = Dataset(directory=config.dataset['directory'])
     textrank_vocab = Vocab() # vocab used for textrank-based keyphrases
     full_vocab = Vocab() # vocab used on the full text
 
