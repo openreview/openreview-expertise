@@ -70,8 +70,8 @@ def get_bids_generator(path, num_items, return_batches, progressbar='', partitio
 
     if num_partitions > 1:
         items_generator = utils.partition(
-            items_generator,
-            partition_id=partition_id, num_partitions=num_partitions)
+            items_generator, partition_id=partition_id, num_partitions=num_partitions)
+
         num_items = num_items / num_partitions
         desc = '{} (partition {})'.format(progressbar, partition_id)
 

@@ -1,7 +1,10 @@
+import argparse
 import os
 import csv, json
 from collections import defaultdict
+import expertise
 from expertise import utils
+import itertools
 
 from expertise.dataset import Dataset
 from datetime import datetime
@@ -12,47 +15,68 @@ from gensim.similarities.docsim import SparseMatrixSimilarity
 
 import numpy as np
 from tqdm import tqdm
+import ipdb
 
 def infer(config):
     experiment_dir = os.path.abspath(config.experiment_dir)
 
-    infer_dir = os.path.join(experiment_dir, 'infer')
-    if not os.path.exists(infer_dir):
-        os.mkdir(infer_dir)
-
-    train_dir = os.path.join(experiment_dir, 'train')
-    assert os.path.isdir(train_dir), 'Train dir does not exist. Make sure that this model has been trained.'
-
-    model = utils.load_pkl(os.path.join(train_dir, 'model.pkl'))
+    model = utils.load_pkl(config.tfidf_model)
 
     dataset = Dataset(**config.dataset)
 
-    paperid_by_index = {index: paperid \
-        for index, paperid in enumerate(model.bow_by_paperid.keys())}
+    paperids = list(model.bow_archives_by_paperid.keys())
+    paperidx_by_id = {
+        paperid: index
+        for index, paperid
+        in enumerate(paperids)
+    }
 
-    score_file_path = os.path.join(infer_dir, config.name + '-scores.jsonl')
-    samples_file_path = os.path.join(config.setup_dir, 'test_samples.csv')
+    score_file_path = os.path.join(experiment_dir, config.name + '-scores.csv')
+
+    bids_by_forum = expertise.utils.get_bids_by_forum(dataset)
+    submission_ids = [n for n in dataset.submission_ids]
+    reviewer_ids = [r for r in dataset.reviewer_ids]
+    # samples = expertise.utils.format_bid_labels(submission_ids, bids_by_forum)
 
     scores = {}
+    max_score = 0.0
+    for paperid, userid in itertools.product(submission_ids, reviewer_ids):
+        # label = data['label']
 
-    with open(score_file_path, 'w') as w, open(samples_file_path) as r:
-        sample_reader = csv.reader(r, delimiter='\t')
-
-        for paperid, userid, label in sample_reader:
-
-            if userid not in scores:
+        if userid not in scores:
+            # bow_archive is a list of BOWs.
+            if userid in model.bow_archives_by_userid and len(model.bow_archives_by_userid[userid]) > 0:
                 bow_archive = model.bow_archives_by_userid[userid]
-                best_scores = np.amax(model.index[bow_archive], axis=0)
-                scores[userid] = best_scores
+            else:
+                bow_archive = [[]]
 
-            for paper_index, score in enumerate(scores[userid]):
-                paperid = paperid_by_index[paper_index]
+            best_scores = np.amax(model.index[bow_archive], axis=0)
+            scores[userid] = best_scores
 
-                result = {
-                    'source_id': paperid,
-                    'target_id': userid,
-                    'score': float(score),
-                    'label': int(label)
-                }
+            user_max_score = max(best_scores)
+            if user_max_score > max_score:
+                max_score = user_max_score
 
-                w.write(json.dumps(result) + '\n')
+    print('max score', max_score)
+
+    with open(score_file_path, 'w') as w:
+        for userid, user_scores in scores.items():
+            for paperidx, paper_score in enumerate(user_scores):
+                paperid = paperids[paperidx]
+                score = scores[userid][paperidx] / max_score
+
+                w.write('{0},{1},{2:.3f}'.format(paperid, userid, score))
+                w.write('\n')
+
+    return config
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('config_path', help="a config file for a model")
+    args = parser.parse_args()
+
+    config = expertise.config.ModelConfig()
+    config.update_from_file(args.config_path)
+
+    infer(config)
+

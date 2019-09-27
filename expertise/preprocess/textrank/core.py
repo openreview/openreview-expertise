@@ -1,12 +1,10 @@
-import argparse
+
 import itertools
-import json
 import os
-from collections import OrderedDict
+from tqdm import tqdm
 
 from expertise.utils.vocab import Vocab
 from expertise.dataset import Dataset
-from expertise.config import ModelConfig
 import expertise.utils as utils
 
 from .textrank_words import keyphrases
@@ -15,8 +13,16 @@ def run_textrank(config):
     '''
     First define the dataset, vocabulary, and keyphrase extractor
     '''
+
+    experiment_path = os.path.dirname(config.experiment_dir)
+
+    kps_dir = os.path.join(experiment_path, 'keyphrases')
+    if not os.path.isdir(kps_dir):
+        os.makedirs(kps_dir)
+    config.update(kp_setup_dir=kps_dir)
+
     print('starting setup')
-    dataset = Dataset(**config.dataset)
+    dataset = Dataset(directory=config.dataset['directory'])
     textrank_vocab = Vocab() # vocab used for textrank-based keyphrases
     full_vocab = Vocab() # vocab used on the full text
 
@@ -25,13 +31,16 @@ def run_textrank(config):
     full_kps_by_id = {}
 
     all_archives = itertools.chain(
-        dataset.submissions(sequential=False),
-        dataset.archives(sequential=False))
+        dataset.submissions(return_batches=True),
+        dataset.archives(return_batches=True))
 
-    for archive_id, text_list in all_archives:
+    for archive_id, content_list in tqdm(
+            all_archives, total=dataset.total_archive_count + dataset.submission_count):
+
         scored_kps = []
         full_kps = []
-        for text in text_list:
+        for content in content_list:
+            text = utils.content_to_text(content)
             top_tokens, full_tokens = keyphrases(text, include_scores=True, include_tokenlist=True)
             scored_kps.extend(top_tokens)
             full_kps.append(full_tokens)
@@ -57,26 +66,4 @@ def run_textrank(config):
     utils.dump_pkl(os.path.join(config.kp_setup_dir, 'textrank_vocab.pkl'), textrank_vocab)
     utils.dump_pkl(os.path.join(config.kp_setup_dir, 'full_vocab.pkl'), full_vocab)
 
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('config_path', help="a config file for a model")
-    args = parser.parse_args()
-
-    config_path = os.path.abspath(args.config_path)
-
-    with open(config_path) as f:
-        data = json.load(f, object_pairs_hook=OrderedDict)
-    config = ModelConfig(**data)
-
-    experiment_path = os.path.dirname(config_path)
-
-    kps_dir = os.path.join(experiment_path, 'keyphrases')
-    if not os.path.isdir(kps_dir):
-        os.mkdir(kps_dir)
-    config.update(kp_setup_dir=kps_dir)
-
-    run_textrank(config)
-
-    print('saving', config_path, config)
-    config.save(config_path)
+    return config
