@@ -2,7 +2,7 @@
 
 A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
 
-## Installation & Getting Started
+## Installation
 
 Clone this repository and install the package using pip as follows:
 
