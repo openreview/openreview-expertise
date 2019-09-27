@@ -44,7 +44,7 @@ Create a dataset by running the following command:
 python -m expertise.create_dataset config.json \
 	--baseurl <usually https://openreview.net> \
 	--password <your_password> \
-	--username <your_username>\
+	--username <your_username> \
 ```
 
 Generate scores by running the following command:
