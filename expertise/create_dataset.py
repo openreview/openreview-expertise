@@ -81,19 +81,16 @@ if __name__ == '__main__':
     print('minimum_timestamp', minimum_timestamp)
     excluded_ids_by_user = defaultdict(list)
     if 'exclusion_inv' in config:
-        invitation = openreview_client.get_invitation(config['exclusion_inv'])
+        user_grouped_edges = openreview.tools.iterget_grouped_edges(
+            openreview_client,
+            invitation=config['exclusion_inv'],
+            groupby='tail',
+            select='id,head,label,weight'
+        )
 
-        if 'head' and 'tail' in invitation.reply['content']:
-            user_grouped_edges = openreview.tools.iterget_grouped_edges(
-                openreview_client,
-                invitation=invitation.id,
-                groupby='tail',
-                select='id,head,label,weight'
-            )
-
-            for edges in user_grouped_edges:
-                for edge in edges:
-                    excluded_ids_by_user[edge.tail].append(edge.head)
+        for edges in user_grouped_edges:
+            for edge in edges:
+                excluded_ids_by_user[edge.tail].append(edge.head)
 
     # if group ID is supplied, collect archives for every member
     # (except those whose archives already exist)

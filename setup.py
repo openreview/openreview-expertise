@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='openreview-expertise',
-    version='0.0',
+    version='0.1',
     description='OpenReview paper-reviewer affinity modeling',
     url='https://github.com/iesl/openreview-evidence',
     author='Michael Spector',
@@ -12,7 +12,7 @@ setup(
         'expertise'
     ],
     install_requires=[
-        'openreview-py',
+        'openreview-py>=1.0.1',
         'numpy',
         'pandas',
         'nltk',
