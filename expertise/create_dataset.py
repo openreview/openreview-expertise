@@ -42,7 +42,7 @@ if __name__ == '__main__':
 
     print(config)
 
-    dataset_dir = config['dataset']['directory'] if config['dataset']['directory'] else './'
+    dataset_dir = config['dataset']['directory'] if 'dataset' in config else './'
 
     if not os.path.isdir(dataset_dir):
         os.mkdir(dataset_dir)
