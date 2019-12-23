@@ -19,15 +19,20 @@ def get_submissions(client, invitation_ids):
     :return: Dictionary with the forum id of the submission as keys
     :rtype: dict
   """
-  reduced_submissions = {}
+  reduced_submissions = []
   for invitation_id in invitation_ids:
     submissions = openreview.tools.iterget_notes(client, invitation=invitation_id)
     for submission in submissions:
-      reduced_submission = {
+      reduced_submissions.append({
+        'id': submission.id,
+        'invitation': submission.invitation,
         'title': submission.content['title'],
-        'abstract': submission.content['abstract']
-      }
-      reduced_submissions[submission.forum] = reduced_submission
+        'abstract': submission.content['abstract'],
+        'keywords': submission.content.get('keywords'),
+        'TL;DR': submission.content.get('TL;DR'),
+        'authors': submission.content['authors'],
+        'authorids': submission.content['authorids']
+      })
   return reduced_submissions
 
 def get_bids(client, invitation_ids):
@@ -46,22 +51,50 @@ def get_bids(client, invitation_ids):
     :return: Dictionary with the signature of the bids as keys
     :rtype: dict
   """
-  reduced_bids = {}
+  reduced_bids = []
   for invitation_id in invitation_ids:
     bids = openreview.tools.iterget_tags(client, invitation=invitation_id)
     for bid in bids:
-      reduced_bid = {
+      reduced_bids.append({
+        'id': bid.id,
+        'invitation': bid.invitation,
         'forum': bid.forum,
-        'tag': bid.tag
-      }
-      if (bid.signatures[0] in reduced_bids):
-        reduced_bids[bid.signatures[0]].append(reduced_bid)
-      else:
-        reduced_bids[bid.signatures[0]] = [reduced_bid]
+        'tag': bid.tag,
+        'signature': bid.signatures[0]
+      })
   return reduced_bids
-      
 
-def get_profiles(client, group_ids):
+def get_edge_bids(client, invitation_ids):
+  """
+    Returns a dictionary with the signature of the bids as keys. Each key maps to another dictionary containing the keys forum and tag.
+
+    Example:
+
+    >>> get_edge_bids(openreview_client, ['ICLR.cc/2018/Conference/-/Add_Bid', 'ICLR.cc/2019/Conference/-/Add_Bid'])
+
+    :param client: OpenReview Client
+    :type client: Client
+    :param invitation_ids: List of invitation ids of the Bids
+    :type invitation_ids: list[str]
+
+    :return: Dictionary with the signature of the bids as keys
+    :rtype: dict
+  """
+  reduced_bids = []
+  for invitation_id in invitation_ids:
+    bids = openreview.tools.iterget_edges(client, invitation=invitation_id)
+    for bid in bids:
+      reduced_bids.append({
+        'id': bid.id,
+        'invitation': bid.invitation,
+        'forum': bid.head,
+        'tag': bid.label,
+        'signature': bid.tail
+      })
+  return reduced_bids
+
+
+def get_profile_ids(client, group_ids):
   """
     Returns a list of all the tilde id members from a list of groups.
 
@@ -77,19 +110,19 @@ def get_profiles(client, group_ids):
     :return: List of tilde ids
     :rtype: list
   """
+  tilde_members = []
   for group_id in group_ids:
     group = openreview_client.get_group(group_id)
     profile_members = [member for member in group.members if '~' in member]
     email_members = [member for member in group.members if '@' in member]
     profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None)
 
-    tilde_members = []
     if profile_members:
         tilde_members.extend(profile_members)
     if profile_search_results and type(profile_search_results) == dict:
         tilde_members.extend([p.id for p in profile_search_results.values()])
-    
-    return tilde_members
+
+  return tilde_members
 
 def get_publications(client, author_id):
   """
@@ -113,12 +146,16 @@ def get_publications(client, author_id):
   publications = openreview.tools.iterget_notes(client, content=content)
   reduced_publications = []
   for publication in publications:
-    reduced_publication = {
-      'forum': publication.forum,
+    reduced_publications.append({
+      'id': publication.id,
+      'invitation': publication.invitation,
       'title': publication.content['title'],
-      'abstract': publication.content.get('abstract', None)
-    }
-    reduced_publications.append(reduced_publication)
+      'abstract': publication.content.get('abstract'),
+      'keywords': publication.content.get('keywords'),
+      'TL;DR': publication.content.get('TL;DR'),
+      'authors': publication.content['authors'],
+      'authorids': publication.content['authorids']
+    })
   return reduced_publications
 
 if __name__ == '__main__':
@@ -134,11 +171,40 @@ if __name__ == '__main__':
     baseurl=args.baseurl
   )
 
+  print('Get submissions...')
   submissions = get_submissions(openreview_client, ['ICLR.cc/2018/Conference/-/Blind_Submission', 'ICLR.cc/2019/Conference/-/Blind_Submission', 'ICLR.cc/2020/Conference/-/Blind_Submission'])
+
+
+  with open('./submissions.jsonl', 'w') as f:
+    for submission in submissions:
+        f.write(json.dumps(submission) + '\n')
+
+  print('Get bids...')
   bids = get_bids(openreview_client, ['ICLR.cc/2018/Conference/-/Add_Bid', 'ICLR.cc/2019/Conference/-/Add_Bid'])
-  profiles = get_profiles(openreview_client, ['ICLR.cc/2018/Conference/Reviewers', 'ICLR.cc/2019/Conference/Reviewers'])
-  profiles_with_publications = {}
-  for profile in profiles:
-    profiles_with_publications[profile] = get_publications(openreview_client, profile)
-  print(profiles_with_publications)
-  
+  edge_bids = get_edge_bids(openreview_client, ['ICLR.cc/2020/Conference/Reviewers/-/Bid', 'ICLR.cc/2020/Conference/Area_Chairs/-/Bid'])
+
+  with open('./bids.jsonl', 'w') as f:
+    for bid in bids:
+        f.write(json.dumps(bid) + '\n')
+    for bid in edge_bids:
+        f.write(json.dumps(bid) + '\n')
+
+  print('Get reviewer publications...')
+  profile_ids = get_profile_ids(openreview_client, ['ICLR.cc/2018/Conference/Reviewers',
+  'ICLR.cc/2018/Conference/Area_Chairs',
+  'ICLR.cc/2019/Conference/Reviewers',
+  'ICLR.cc/2019/Conference/Area_Chairs',
+  'ICLR.cc/2020/Conference/Reviewers',
+  'ICLR.cc/2020/Conference/Area_Chairs',
+  ])
+
+  profiles_with_publications = []
+  for profile_id in profile_ids:
+    profiles_with_publications.append({
+      'user': profile_id,
+      'publications': get_publications(openreview_client, profile_id)
+    })
+
+  with open('./user_publications.jsonl', 'w') as f:
+    for user_publications in profiles_with_publications:
+        f.write(json.dumps(user_publications) + '\n')
