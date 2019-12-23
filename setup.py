@@ -40,7 +40,8 @@ setup(
         'tqdm',
         'pytorch_pretrained_bert',
         'ipdb',
-        'spacy'
+        'spacy',
+        'python-Levenshtein'
     ],
     cmdclass={
         'develop': PostDevelopCommand,
