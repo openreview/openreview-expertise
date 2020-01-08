@@ -27,6 +27,7 @@ import struct
 from IPython import embed
 
 import numpy as np
+import faiss
 import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
@@ -136,7 +137,7 @@ def train(args, train_dataset, model, tokenizer):
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
     # multi-gpu training (should be after apex fp16 initialization)
-    if args.n_gpu > 1:
+    if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
         model = torch.nn.DataParallel(model)
 
     # Distributed training (should be after apex fp16 initialization)
@@ -157,7 +158,7 @@ def train(args, train_dataset, model, tokenizer):
 
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
-    best_val_acc, best_val_loss = 0.0, 99999999999.0
+    best_val_coref_recall = 0.0
     best_steps = 0
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
@@ -169,7 +170,6 @@ def train(args, train_dataset, model, tokenizer):
             batch = tuple(t.to(args.device) for t in batch)
 
             ## 'mention_id':         batch[0]
-
             inputs = {'input_ids':      batch[1],
                       'attention_mask': batch[2],
                       'token_type_ids': batch[3] if args.model_type in ['bert', 'xlnet'] else None,
@@ -194,10 +194,8 @@ def train(args, train_dataset, model, tokenizer):
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
-            ## TEST: evaluation
-            results = evaluate(args, model, tokenizer)
-
-            exit()
+            ### TEST: evaluation
+            #results = evaluate(args, model, tokenizer)
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
@@ -209,14 +207,15 @@ def train(args, train_dataset, model, tokenizer):
 
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     # Log metrics
-                    if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
-                        results = evaluate(args, model, tokenizer)
+                    if args.evaluate_during_training:
+                        _ = evaluate(args, model, tokenizer, split='train')
+                        results = evaluate(args, model, tokenizer, split='val')
                         for key, value in results.items():
                             tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
-                        if results["eval_acc"] > best_val_acc:
 
-                            best_val_acc = results["eval_acc"]
-                            best_val_loss = results["eval_loss"]
+                        if results["coref_recall"] > best_val_coref_recall:
+
+                            best_val_coref_recall = results["coref_recall"]
                             best_steps = global_step
                             if args.do_test:
                                 results_test = evaluate(args, model, tokenizer, test=True)
@@ -253,11 +252,11 @@ def train(args, train_dataset, model, tokenizer):
     return global_step, tr_loss / global_step, best_steps
 
 
-def evaluate(args, model, tokenizer, prefix="", test=False):
+def evaluate(args, model, tokenizer, prefix="", split=None):
+    assert split == 'train' or split == 'val' or split == 'test'
+
     eval_task_names = (args.task_name,)
     eval_outputs_dirs = (args.output_dir,)
-
-    split = 'val'
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
@@ -272,7 +271,7 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
         # multi-gpu evaluate
-        if args.n_gpu > 1:
+        if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
             model = torch.nn.DataParallel(model)
 
         # Eval!
@@ -303,20 +302,48 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
                 for uid, emb in zip(mention_id, seq_embedding):
                     mention_embeddings[uid] = emb
 
-        eval_candidates = load_and_cache_candidates(args, eval_task, tokenizer, split=split)
+        eval_candidates, eval_labels = load_and_cache_candidates_and_labels(
+                args, eval_task, tokenizer, split=split)
 
-        exit()
+        coref_candidates = {}
+        hits = 0
+        coref_hits = 0
+        total = 0
+        for corpus, corpus_labels in eval_labels.items():
+            mention_ids = list(corpus_labels.keys())
+            X = np.vstack([mention_embeddings[uid] for uid in mention_ids])
 
-        eval_loss = eval_loss / nb_eval_steps
-        preds = np.argmax(preds, axis=1)
-        acc = simple_accuracy(preds, out_label_ids)
-        result = {"eval_acc": acc, "eval_loss": eval_loss}
+            # build kNN index
+            index = faiss.IndexFlatL2(X.shape[1])
+            index.add(X)
+
+            # query the index
+            D, I = index.search(X, args.k+1)
+
+            for i in range(X.shape[0]):
+                coref_candidates[mention_ids[i]] = [mention_ids[j] for j in I[i][1:]]
+
+            for uid in mention_ids:
+                if corpus_labels[uid] in eval_candidates[uid]:
+                    hits += 1
+                    coref_hits += 1
+                else:
+                    for coref_uid in coref_candidates[uid]:
+                        if corpus_labels[uid] in eval_candidates[coref_uid]:
+                            coref_hits += 1
+                            break
+                total += 1
+
+        recall = hits / total
+        coref_recall = coref_hits / total
+
+        result = {"recall": recall, "coref_recall": coref_recall}
         results.update(result)
 
-        output_eval_file = os.path.join(eval_output_dir, "is_test_" + str(test).lower() + "_eval_results.txt")
+        output_eval_file = os.path.join(eval_output_dir, split + "_eval_results.txt")
 
         with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results {} *****".format(str(prefix) + " is test:" + str(test)))
+            logger.info("***** Eval results {} *****".format(str(prefix) + " | split: " + str(split)))
             writer.write("model           =%s\n" % str(args.model_name_or_path))
             writer.write("total batch size=%d\n" % (args.per_gpu_train_batch_size * args.gradient_accumulation_steps *
                          (torch.distributed.get_world_size() if args.local_rank != -1 else 1)))
@@ -329,7 +356,7 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
     return results
 
 
-def load_and_cache_candidates(args, task, tokenizer, split=None):
+def load_and_cache_candidates_and_labels(args, task, tokenizer, split=None):
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
@@ -338,19 +365,21 @@ def load_and_cache_candidates(args, task, tokenizer, split=None):
     processor = processors[task]()
 
     cached_candidates_file = os.path.join(args.data_dir, 'cached-candidates_{}_{}_{}_{}'.format(
-        cached_mode,
+        split,
         list(filter(None, args.model_name_or_path.split('/'))).pop(),
         str(args.max_seq_length),
         str(task)))
 
     if os.path.exists(cached_candidates_file) and not args.overwrite_cache:
-        logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
+        logger.info("Loading features from cached file %s", cached_candidates_file)
+        candidates, labels = torch.load(cached_candidates_file)
     else:
-        candidates = processor.get_eval_candidates(args.data_dir, split)
+        candidates, labels = processor.get_eval_candidates_and_labels(args.data_dir, split)
+        if args.local_rank in [-1, 0]:
+            logger.info("Saving features into cached file %s", cached_candidates_file)
+            torch.save((candidates, labels), cached_candidates_file)
 
-    embed()
-    exit()
+    return candidates, labels
 
 
 def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
@@ -471,6 +500,8 @@ def main():
                         help="size of sets to sample for ranking loss")
     parser.add_argument("--margin", default=None, type=float,
                         help="margin for max-margin loss")
+    parser.add_argument("--k", default=None, type=int,
+                        help="k for kNN for eval of coref candidates")
     parser.add_argument("--sequence_embedding_size", default=None, type=int,
                         help="size of embedding to output from BERT")
 

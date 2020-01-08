@@ -38,17 +38,17 @@ from IPython import embed
 logger = logging.getLogger(__name__)
 
 
-class MentionAffinityExample(object):
+class ExpertiseAffinityExample(object):
 
     def __init__(self, mention):
         raise NotImplementedError()
 
 
-class MentionAffinityTrainExample(MentionAffinityExample):
+class ExpertiseAffinityTrainExample(ExpertiseAffinityExample):
     """A single training example for mention affinity"""
 
     def __init__(self, mention, pos_coref_cand, neg_coref_cand):
-        """Constructs a MentionAffinityTrainExample.
+        """Constructs a ExpertiseAffinityTrainExample.
 
         Args:
             mention: mention object (dict) of interest
@@ -62,11 +62,11 @@ class MentionAffinityTrainExample(MentionAffinityExample):
         self.neg_coref_cand = neg_coref_cand
 
 
-class MentionAffinityEvalExample(MentionAffinityExample):
+class ExpertiseAffinityEvalExample(ExpertiseAffinityExample):
     """A single eval example for mention affinity"""
 
     def __init__(self, mention):
-        """Constructs a MentionAffinityEvalExample.
+        """Constructs a ExpertiseAffinityEvalExample.
 
         Args:
             mention: mention object (dict) of interest
@@ -74,13 +74,13 @@ class MentionAffinityEvalExample(MentionAffinityExample):
         self.mention = mention
 
 
-class MentionAffinityFeatures(object):
+class ExpertiseAffinityFeatures(object):
     """ A single example's worth of features to be fed into deep transformer """
     def __init__(self, mention_id, mention_features):
         raise NotImplementedError()
 
 
-class MentionAffinityTrainFeatures(MentionAffinityFeatures):
+class ExpertiseAffinityTrainFeatures(ExpertiseAffinityFeatures):
     def __init__(self,
                  mention_id,
                  mention_features,
@@ -114,7 +114,7 @@ class MentionAffinityTrainFeatures(MentionAffinityFeatures):
         ]
 
 
-class MentionAffinityEvalFeatures(MentionAffinityFeatures):
+class ExpertiseAffinityEvalFeatures(ExpertiseAffinityFeatures):
     def __init__(self,
                  mention_id,
                  mention_features):
@@ -139,7 +139,7 @@ class DataProcessor(object):
         raise NotImplementedError()
 
 
-class MentionAffinityProcessor(DataProcessor):
+class ExpertiseAffinityProcessor(DataProcessor):
     """Processor for the mention affinity task."""
 
     def get_train_examples(self, data_dir, num_coref, split, domains):
@@ -182,11 +182,11 @@ class MentionAffinityProcessor(DataProcessor):
                             for domain in domains]
         documents = self._read_documents(document_files)
 
-        examples = [MentionAffinityEvalExample(m) for m in mentions]
+        examples = [ExpertiseAffinityEvalExample(m) for m in mentions]
 
         return (examples, documents)
 
-    def get_eval_candidates(self, data_dir, split):
+    def get_eval_candidates_and_labels(self, data_dir, split):
         assert split == 'train' or split == 'val' or split == 'test'
 
         logger.info("LOOKING AT {} | {} eval".format(data_dir, split))
@@ -196,7 +196,15 @@ class MentionAffinityProcessor(DataProcessor):
         candidate_file = os.path.join(data_dir, 'tfidf_candidates', split + '.json')
         candidates = self._read_candidates(candidate_file)
 
-        return candidates
+        # Load all of the mentions
+        mention_file = os.path.join(data_dir, 'mentions', split + '.json')
+        mentions = self._read_mentions(mention_file)
+
+        labels = defaultdict(dict)
+        for m in mentions:
+            labels[m['corpus']][m['mention_id']] = m['label_document_id']
+
+        return candidates, labels
 
     def _read_mentions(self, mention_file):
         mentions = []
@@ -268,7 +276,7 @@ class MentionAffinityProcessor(DataProcessor):
 
             neg_coref_cand = neg_coref_cand[:num_coref]
 
-            examples.append(MentionAffinityTrainExample(mention=m,
+            examples.append(ExpertiseAffinityTrainExample(mention=m,
                                                         pos_coref_cand=pos_coref_cand,
                                                         neg_coref_cand=neg_coref_cand))
             
@@ -315,7 +323,7 @@ def get_mention_context_tokens(context_tokens, start_index, end_index,
 
 
 def convert_examples_to_features(
-    examples: List[MentionAffinityExample],
+    examples: List[ExpertiseAffinityExample],
     documents: dict,
     max_length: int,
     tokenizer: PreTrainedTokenizer,
@@ -324,9 +332,9 @@ def convert_examples_to_features(
     pad_on_left=False,
     pad_token=0,
     mask_padding_with_zero=True,
-) -> List[MentionAffinityFeatures]:
+) -> List[ExpertiseAffinityFeatures]:
     """
-    Loads a data file into a list of `MentionAffintityFeatures`
+    Loads a data file into a list of `ExpertiseAffintityFeatures`
     """
 
     # account for the tokens marking the mention '[unused0]', '[unused1]'
@@ -384,10 +392,10 @@ def convert_examples_to_features(
             example_features.append((input_ids, attention_mask, token_type_ids))
 
         if evaluate:
-            features.append(MentionAffinityEvalFeatures(
+            features.append(ExpertiseAffinityEvalFeatures(
                                 mention_id, [example_features[0]]))
         else:
-            features.append(MentionAffinityTrainFeatures(
+            features.append(ExpertiseAffinityTrainFeatures(
                             mention_id, [example_features[0]],
                             example_features[1:len(example.pos_coref_cand)+1],
                             example_features[len(example.pos_coref_cand)+1:]))
@@ -396,5 +404,5 @@ def convert_examples_to_features(
 
 
 processors = {
-    "mention_affinity": MentionAffinityProcessor
+    "mention_affinity": ExpertiseAffinityProcessor
 }
