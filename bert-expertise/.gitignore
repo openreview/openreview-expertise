@@ -6,3 +6,5 @@ tmp/
 .*.swo
 
 tags
+
+__pycache__

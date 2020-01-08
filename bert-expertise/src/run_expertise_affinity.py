@@ -409,16 +409,16 @@ def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
         logger.info("Creating features from dataset file at %s", args.data_dir)
         if split == 'train' and not evaluate:
             examples, documents = processor.get_train_examples(
-                    args.data_dir, args.sample_size, split, args.train_domains)
+                    args.data_dir, args.sample_size, split)
         elif split == 'train':
             examples, documents = processor.get_eval_examples(
-                    args.data_dir, args.sample_size, split, args.train_domains)
+                    args.data_dir, args.sample_size, split)
         elif split == 'val':
             examples, documents = processor.get_eval_examples(
-                    args.data_dir, args.sample_size, split, args.val_domains)
+                    args.data_dir, args.sample_size, split)
         elif split == 'test':
             examples, documents = processor.get_eval_examples(
-                    args.data_dir, args.sample_size, split, args.test_domains)
+                    args.data_dir, args.sample_size, split)
         else:
             assert False
 

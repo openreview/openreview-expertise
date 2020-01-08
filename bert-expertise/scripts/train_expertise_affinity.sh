@@ -1,4 +1,4 @@
-python src/run_mention_affinity.py \
+python src/run_expertise_affinity.py \
     --data_dir data/iclr-expertise/ \
     --model_type bert \
     --model_name_or_path bert-base-uncased \

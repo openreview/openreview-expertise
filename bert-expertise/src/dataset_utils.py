@@ -142,28 +142,26 @@ class DataProcessor(object):
 class ExpertiseAffinityProcessor(DataProcessor):
     """Processor for the mention affinity task."""
 
-    def get_train_examples(self, data_dir, num_coref, split, domains):
+    def get_train_examples(self, data_dir, sample_size, split):
         """See base class."""
         assert split == 'train'
 
         logger.info("LOOKING AT {} train".format(data_dir))
 
-        # Load all of the mentions
-        mention_file = os.path.join(data_dir, 'mentions', split + '.json')
-        mentions = self._read_mentions(mention_file)
+        # Load all of the submissions
+        sub_file = os.path.join(data_dir, split + '-submissions.jsonl')
+        subs = self._read_jsonl(sub_file)
 
-        # Load all of the documents for the mentions
-        # `documents` is a dictionary with key 'document_id'
-        document_files = [os.path.join(data_dir, 'documents', domain + '.json')
-                            for domain in domains]
-        documents = self._read_documents(document_files)
+        # Load user publications
+        reviewer_file = os.path.join(data_dir, 'user_publications.jsonl')
+        reviewer_pubs = self._read_jsonl(reviewer_file)
 
-        # Load the precomputed candidates for each mention
-        # `candidates` is a dictionary with key 'mention_id'
-        candidate_file = os.path.join(data_dir, 'tfidf_candidates', split + '.json')
-        candidates = self._read_candidates(candidate_file)
+        # Load bids
+        bids_file = os.path.join(data_dir, 'bids.jsonl')
+        bids = self._read_jsonl(bids_file)
 
-        examples = self._create_train_examples(mentions, candidates, num_coref)
+        examples = self._create_train_examples(
+                subs, reviewer_pubs, bids, sample_size)
 
         return (examples, documents)
 
@@ -206,12 +204,19 @@ class ExpertiseAffinityProcessor(DataProcessor):
 
         return candidates, labels
 
-    def _read_mentions(self, mention_file):
-        mentions = []
-        with open(mention_file, encoding='utf-8') as fin:
+    def _read_jsonl(self, jsonl_file):
+        lines = []
+        with open(jsonl_file, encoding='utf-8') as fin:
             for line in fin:
-                mentions.append(json.loads(line))
-        return mentions
+                lines.append(json.loads(line))
+        return lines
+
+    def _read_submissions(self, sub_file):
+        subs = []
+        with open(sub_file, encoding='utf-8') as fin:
+            for line in fin:
+                subs.append(json.loads(line))
+        return subs
 
     def _read_documents(self, document_files):
         documents = {}
@@ -230,8 +235,27 @@ class ExpertiseAffinityProcessor(DataProcessor):
                 candidates[candidate_dict['mention_id']] = candidate_dict['tfidf_candidates']
         return candidates
 
-    def _create_train_examples(self, mentions, candidates, num_coref):
+    def _create_train_examples(self, subs, reviewer_pubs, bids, sample_size):
         """Creates examples for the training and dev sets."""
+
+        reviewer2pubs = {d['user']: d['publications'] for d in reviewer_pubs}
+        sub2bids = defaultdict(list)
+
+        for bid in bids:
+            sub2bids[bid['forum']].append(bid)
+
+        examples = []
+        tags = []
+        for s in subs:
+            sub_bids = sub2bids[s['id']]
+
+            pos_reviewers, neg_reviewers = [], []
+            for bid in sub_bids:
+                tag = bid['tag']
+                tags.append(tag)
+            
+        embed()
+        exit()
 
         # given entity id, store all of the mentions with that ground truth id
         entity2mention = defaultdict(list)
@@ -404,5 +428,5 @@ def convert_examples_to_features(
 
 
 processors = {
-    "mention_affinity": ExpertiseAffinityProcessor
+    "expertise_affinity": ExpertiseAffinityProcessor
 }
