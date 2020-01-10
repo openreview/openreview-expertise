@@ -60,8 +60,6 @@ MODEL_CLASSES = {
 }
 
 def select_field(features, field, evaluate):
-    #if field == 'mention_id':
-    #    return [id_to_bytes(feature.mention_id) for feature in features]
     if evaluate:
         return [
             [
@@ -194,8 +192,8 @@ def train(args, train_dataset, model, tokenizer):
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
-            ### TEST: evaluation
-            #results = evaluate(args, model, tokenizer)
+            ## TEST: evaluation
+            results = evaluate(args, model, tokenizer)
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:

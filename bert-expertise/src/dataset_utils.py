@@ -45,7 +45,7 @@ class ExpertiseAffinityExample(object):
 
 
 class ExpertiseAffinityTrainExample(ExpertiseAffinityExample):
-    """A single training example for mention affinity"""
+    """A single training example for expertise affinity"""
 
     def __init__(self, paper, pos_reviewer_pubs, neg_reviewer_pubs):
         """Constructs a ExpertiseAffinityTrainExample.
@@ -63,13 +63,13 @@ class ExpertiseAffinityTrainExample(ExpertiseAffinityExample):
 
 
 class ExpertiseAffinityEvalExample(ExpertiseAffinityExample):
-    """A single eval example for mention affinity"""
+    """A single eval example for expertise affinity"""
 
-    def __init__(self, mention):
+    def __init__(self, paper):
         """Constructs a ExpertiseAffinityEvalExample.
 
         Args:
-            mention: mention object (dict) of interest
+            paper: paper object (dict) of interest
         """
         self.paper = paper
 
@@ -82,50 +82,57 @@ class ExpertiseAffinityFeatures(object):
 
 class ExpertiseAffinityTrainFeatures(ExpertiseAffinityFeatures):
     def __init__(self,
-                 id,
                  paper_features,
                  pos_features,
                  neg_features):
-
-        self.id = id
         self.paper_features = [
             {
+                'or_id': or_id,
+                'submission': submission,
                 'input_ids': input_ids,
                 'attention_mask': attention_mask,
                 'token_type_ids': token_type_ids
             }
-            for input_ids, attention_mask, token_type_ids in paper_features
+            for (or_id, submission, input_ids,
+                 attention_mask, token_type_ids) in paper_features
         ]
         self.pos_features = [
             {
+                'or_id': or_id,
+                'submission': submission,
                 'input_ids': input_ids,
                 'attention_mask': attention_mask,
                 'token_type_ids': token_type_ids
             }
-            for input_ids, attention_mask, token_type_ids in pos_features
+            for (or_id, submission, input_ids,
+                 attention_mask, token_type_ids) in pos_features
         ]
         self.neg_features = [
             {
+                'or_id': or_id,
+                'submission': submission,
                 'input_ids': input_ids,
                 'attention_mask': attention_mask,
                 'token_type_ids': token_type_ids
             }
-            for input_ids, attention_mask, token_type_ids in neg_features
+            for (or_id, submission, input_ids,
+                 attention_mask, token_type_ids) in neg_features
         ]
 
 
 class ExpertiseAffinityEvalFeatures(ExpertiseAffinityFeatures):
     def __init__(self,
-                 uid,
-                 mention_features):
-        self.uid = uid
-        self.mention_features = [
+                 paper_features):
+        self.paper_features = [
             {
+                'or_id': or_id,
+                'submission': submission,
                 'input_ids': input_ids,
                 'attention_mask': attention_mask,
                 'token_type_ids': token_type_ids
             }
-            for input_ids, attention_mask, token_type_ids in mention_features
+            for (or_id, submission, input_ids,
+                 attention_mask, token_type_ids) in paper_features
         ]
 
 
@@ -170,19 +177,22 @@ class ExpertiseAffinityProcessor(DataProcessor):
 
         logger.info("LOOKING AT {} | {} eval".format(data_dir, split))
 
-        # Load all of the mentions
-        mention_file = os.path.join(data_dir, 'mentions', split + '.json')
-        mentions = self._read_mentions(mention_file)
+        # Load all of the submissions
+        sub_file = os.path.join(data_dir, split + '-submissions.jsonl')
+        subs = self._read_jsonl(sub_file)
 
-        # Load all of the documents for the mentions
-        # `documents` is a dictionary with key 'document_id'
-        document_files = [os.path.join(data_dir, 'documents', domain + '.json')
-                            for domain in domains]
-        documents = self._read_documents(document_files)
+        # Load user publications
+        reviewer_file = os.path.join(data_dir, 'user_publications.jsonl')
+        reviewer_pubs = self._read_jsonl(reviewer_file)
 
-        examples = [ExpertiseAffinityEvalExample(m) for m in mentions]
+        # Load bids
+        bids_file = os.path.join(data_dir, 'bids.jsonl')
+        bids = self._read_jsonl(bids_file)
 
-        return (examples, documents)
+        examples = self._create_eval_examples(
+                subs, reviewer_pubs, bids, sample_size)
+
+        return examples
 
     def get_eval_candidates_and_labels(self, data_dir, split):
         assert split == 'train' or split == 'val' or split == 'test'
@@ -299,12 +309,24 @@ class ExpertiseAffinityProcessor(DataProcessor):
                              neg_pubs[i:i+sample_size])
                                 for i in range(0, list_len, sample_size)]
 
+            # tag objects with submission flag
+            s['submission'] = True
+            for p in (pos_pubs + neg_pubs):
+                p['submission'] = False
+
             for _p_pubs, _n_pubs in chunked_pubs:
                 examples.append(ExpertiseAffinityTrainExample(
                                     s, _p_pubs, _n_pubs))
 
-            
         return examples
+
+    def _create_eval_examples(self, subs, reviewer_pubs, bids, sample_size):
+        reviewer2pubs = {d['user']: d['publications'] for d in reviewer_pubs}
+
+        examples = []
+        for _, pubs in reviewer2pubs.items():
+            for pub in pubs:
+
 
 
 def get_mention_context_tokens(context_tokens, start_index, end_index,
@@ -371,11 +393,12 @@ def convert_examples_to_features(
         example_pubs =  [example.paper]
         if not evaluate:
             example_pubs += example.pos_reviewer_pubs + example.neg_reviewer_pubs
-        id = example.paper['id']
-        
 
         example_features = []
         for pub in example_pubs:
+            or_id = pub['id']
+            submission = pub['submission']
+
             assert 'abstract' in pub.keys()
             abstract_text = pub['abstract'].replace('\n', ' ')
             abstract_text_tokenized = tokenizer.tokenize(abstract_text)
@@ -401,7 +424,11 @@ def convert_examples_to_features(
             assert len(attention_mask) == max_length
             assert len(token_type_ids) == max_length
 
-            example_features.append((input_ids, attention_mask, token_type_ids))
+            example_features.append((or_id,
+                                     submission,
+                                     input_ids,
+                                     attention_mask,
+                                     token_type_ids))
 
         if evaluate:
             assert False
@@ -409,7 +436,7 @@ def convert_examples_to_features(
                                 mention_id, [example_features[0]]))
         else:
             features.append(ExpertiseAffinityTrainFeatures(
-                            id, [example_features[0]],
+                            [example_features[0]],
                             example_features[1:len(example.pos_reviewer_pubs)+1],
                             example_features[len(example.pos_reviewer_pubs)+1:]))
 
