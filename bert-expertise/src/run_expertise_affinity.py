@@ -60,13 +60,13 @@ MODEL_CLASSES = {
 }
 
 def select_field(features, field, evaluate):
-    if field == 'mention_id':
-        return [id_to_bytes(feature.mention_id) for feature in features]
-    elif evaluate:
+    #if field == 'mention_id':
+    #    return [id_to_bytes(feature.mention_id) for feature in features]
+    if evaluate:
         return [
             [
                 choice[field]
-                for choice in feature.mention_features
+                for choice in feature.paper_features
             ]
             for feature in features
         ]
@@ -74,7 +74,7 @@ def select_field(features, field, evaluate):
         return [
             [
                 choice[field]
-                for choice in (feature.mention_features
+                for choice in (feature.paper_features
                                + feature.pos_features
                                + feature.neg_features)
             ]
@@ -170,9 +170,9 @@ def train(args, train_dataset, model, tokenizer):
             batch = tuple(t.to(args.device) for t in batch)
 
             ## 'mention_id':         batch[0]
-            inputs = {'input_ids':      batch[1],
-                      'attention_mask': batch[2],
-                      'token_type_ids': batch[3] if args.model_type in ['bert', 'xlnet'] else None,
+            inputs = {'input_ids':      batch[0],
+                      'attention_mask': batch[1],
+                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
                       'evaluate': False,
                       'sample_size': args.sample_size,
                       'margin': args.margin}
@@ -408,16 +408,16 @@ def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
         if split == 'train' and not evaluate:
-            examples, documents = processor.get_train_examples(
+            examples = processor.get_train_examples(
                     args.data_dir, args.sample_size, split)
         elif split == 'train':
-            examples, documents = processor.get_eval_examples(
+            examples = processor.get_eval_examples(
                     args.data_dir, args.sample_size, split)
         elif split == 'val':
-            examples, documents = processor.get_eval_examples(
+            examples = processor.get_eval_examples(
                     args.data_dir, args.sample_size, split)
         elif split == 'test':
-            examples, documents = processor.get_eval_examples(
+            examples = processor.get_eval_examples(
                     args.data_dir, args.sample_size, split)
         else:
             assert False
@@ -425,7 +425,6 @@ def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
         logger.info("Training number: %s", str(len(examples)))
         features = convert_examples_to_features(
             examples,
-            documents,
             args.max_seq_length,
             tokenizer,
             evaluate,
@@ -440,8 +439,8 @@ def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Convert to Tensors and build dataset
-    all_mention_ids = torch.tensor(
-            select_field(features, 'mention_id', evaluate), dtype=torch.long)
+    #all_mention_ids = torch.tensor(
+    #        select_field(features, 'mention_id', evaluate), dtype=torch.long)
     all_input_ids = torch.tensor(
             select_field(features, 'input_ids', evaluate), dtype=torch.long)
     all_attention_masks = torch.tensor(
@@ -450,8 +449,7 @@ def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
             select_field(features, 'token_type_ids', evaluate),
             dtype=torch.long)
 
-    dataset = TensorDataset(all_mention_ids, all_input_ids,
-                            all_attention_masks, all_token_type_ids)
+    dataset = TensorDataset(all_input_ids, all_attention_masks, all_token_type_ids)
     return dataset
 
 

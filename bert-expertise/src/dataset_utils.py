@@ -47,19 +47,19 @@ class ExpertiseAffinityExample(object):
 class ExpertiseAffinityTrainExample(ExpertiseAffinityExample):
     """A single training example for mention affinity"""
 
-    def __init__(self, mention, pos_coref_cand, neg_coref_cand):
+    def __init__(self, paper, pos_reviewer_pubs, neg_reviewer_pubs):
         """Constructs a ExpertiseAffinityTrainExample.
 
         Args:
-            mention: mention object (dict) of interest
-            pos_coref_cand: list of mention objects that should be close to
-                            mention in the representation space.
-            neg_coref_cand: list of mention objects that should be close to
-                            mention in the representation space.
+            paper: submssion object (dict) of interest
+            pos_reviewer_pubs: list of paper objects that should be close to
+                            paper in the representation space.
+            neg_reviewer_pubs: list of mention objects that should be farther from
+                            paper in the representation space.
         """
-        self.mention = mention
-        self.pos_coref_cand = pos_coref_cand
-        self.neg_coref_cand = neg_coref_cand
+        self.paper = paper
+        self.pos_reviewer_pubs = pos_reviewer_pubs
+        self.neg_reviewer_pubs = neg_reviewer_pubs
 
 
 class ExpertiseAffinityEvalExample(ExpertiseAffinityExample):
@@ -71,7 +71,7 @@ class ExpertiseAffinityEvalExample(ExpertiseAffinityExample):
         Args:
             mention: mention object (dict) of interest
         """
-        self.mention = mention
+        self.paper = paper
 
 
 class ExpertiseAffinityFeatures(object):
@@ -82,19 +82,19 @@ class ExpertiseAffinityFeatures(object):
 
 class ExpertiseAffinityTrainFeatures(ExpertiseAffinityFeatures):
     def __init__(self,
-                 mention_id,
-                 mention_features,
+                 id,
+                 paper_features,
                  pos_features,
                  neg_features):
 
-        self.mention_id = mention_id
-        self.mention_features = [
+        self.id = id
+        self.paper_features = [
             {
                 'input_ids': input_ids,
                 'attention_mask': attention_mask,
                 'token_type_ids': token_type_ids
             }
-            for input_ids, attention_mask, token_type_ids in mention_features
+            for input_ids, attention_mask, token_type_ids in paper_features
         ]
         self.pos_features = [
             {
@@ -116,9 +116,9 @@ class ExpertiseAffinityTrainFeatures(ExpertiseAffinityFeatures):
 
 class ExpertiseAffinityEvalFeatures(ExpertiseAffinityFeatures):
     def __init__(self,
-                 mention_id,
+                 uid,
                  mention_features):
-        self.mention_id = mention_id
+        self.uid = uid
         self.mention_features = [
             {
                 'input_ids': input_ids,
@@ -163,7 +163,7 @@ class ExpertiseAffinityProcessor(DataProcessor):
         examples = self._create_train_examples(
                 subs, reviewer_pubs, bids, sample_size)
 
-        return (examples, documents)
+        return examples
 
     def get_eval_examples(self, data_dir, num_coref, split, domains):
         assert split == 'train' or split == 'val' or split == 'test'
@@ -245,64 +245,64 @@ class ExpertiseAffinityProcessor(DataProcessor):
             sub2bids[bid['forum']].append(bid)
 
         examples = []
-        tags = []
         for s in subs:
             sub_bids = sub2bids[s['id']]
 
-            pos_reviewers, neg_reviewers = [], []
+            pos_reviewers, neg_reviewers, neutral_reviewers = [], [], []
             for bid in sub_bids:
-                tag = bid['tag']
-                tags.append(tag)
-            
-        embed()
-        exit()
+                if bid['signature'] in reviewer2pubs.keys():
+                    tag = bid['tag']
+                    if tag in ['High', 'I can review', 'Very High', 'I want to review']:
+                        pos_reviewers.append(bid['signature'])
+                    elif tag in ['I cannot review', 'Low', 'Very Low']:
+                        neg_reviewers.append(bid['signature'])
+                    else:
+                        assert tag in ['I can probably review but am not an expert',
+                                       'Neutral', 'No Bid', 'No bid']
+                        neutral_reviewers.append(bid['signature'])
 
-        # given entity id, store all of the mentions with that ground truth id
-        entity2mention = defaultdict(list)
+            pos_pubs = [reviewer2pubs[r] for r in pos_reviewers]
+            pos_pubs = [pub for reviewer_pubs in pos_pubs
+                          for pub in reviewer_pubs
+                            if pub['abstract'] is not None]
 
-        # entity2mention except mention does not have candidate as ground truth
-        candidate2mention = defaultdict(list)
+            neg_pubs = [reviewer2pubs[r] for r in neg_reviewers]
+            neg_pubs = [pub for reviewer_pubs in neg_pubs
+                          for pub in reviewer_pubs
+                            if pub['abstract'] is not None]
 
-        for m in mentions:
-            uid = m['mention_id']
-            label_document_id = m['label_document_id']
-            entity2mention[label_document_id].append(m)
-            for c in candidates[uid]:
-                if c != label_document_id:
-                    candidate2mention[c].append(m)
-
-        examples = []
-        for m in mentions:
-            label_document_id = m['label_document_id']
-
-            pos_coref_cand = entity2mention[label_document_id]
-            pos_coref_cand += candidate2mention[label_document_id]
-
-            # filter out `self` mention
-            pos_coref_cand = [x for x in pos_coref_cand if x != m]
-
-            if len(pos_coref_cand) == 0:
+            if len(pos_pubs) == 0:
                 continue
 
-            while len(pos_coref_cand) < num_coref:
-                pos_coref_cand.extend(pos_coref_cand)
+            if len(neg_pubs) == 0 and len(neutral_reviewers) > 0:
+                neutral_pubs = [reviewer2pubs[r] for r in neutral_reviewers]
+                neutral_pubs = [pub for reviewer_pubs in neutral_pubs
+                                  for pub in reviewer_pubs
+                                    if pub['abstract'] is not None]
+                if len(neutral_pubs) == 0:
+                    continue
+                neg_pubs = neutral_pubs
+            elif len(neg_pubs) == 0 and len(neutral_reviewers) == 0:
+                continue
 
-            pos_coref_cand = pos_coref_cand[:num_coref]
+            list_len = math.ceil(max(len(pos_pubs), len(neg_pubs)) / sample_size) * sample_size
 
-            neg_coref_cand = random.choices(mentions, k=num_coref)
-            neg_coref_cand = [x for x in neg_coref_cand
-                                if (x != m and x not in pos_coref_cand)]
+            while len(pos_pubs) < list_len:
+                pos_pubs.extend(pos_pubs)
+            pos_pubs = pos_pubs[:list_len]
 
-            assert len(neg_coref_cand) != 0
+            while len(neg_pubs) < list_len:
+                neg_pubs.extend(neg_pubs)
+            neg_pubs = neg_pubs[:list_len]
 
-            while len(neg_coref_cand) < num_coref:
-                neg_coref_cand.extend(neg_coref_cand)
+            chunked_pubs = [(pos_pubs[i:i+sample_size], 
+                             neg_pubs[i:i+sample_size])
+                                for i in range(0, list_len, sample_size)]
 
-            neg_coref_cand = neg_coref_cand[:num_coref]
+            for _p_pubs, _n_pubs in chunked_pubs:
+                examples.append(ExpertiseAffinityTrainExample(
+                                    s, _p_pubs, _n_pubs))
 
-            examples.append(ExpertiseAffinityTrainExample(mention=m,
-                                                        pos_coref_cand=pos_coref_cand,
-                                                        neg_coref_cand=neg_coref_cand))
             
         return examples
 
@@ -348,7 +348,6 @@ def get_mention_context_tokens(context_tokens, start_index, end_index,
 
 def convert_examples_to_features(
     examples: List[ExpertiseAffinityExample],
-    documents: dict,
     max_length: int,
     tokenizer: PreTrainedTokenizer,
     evaluate: bool,
@@ -361,39 +360,28 @@ def convert_examples_to_features(
     Loads a data file into a list of `ExpertiseAffintityFeatures`
     """
 
-    # account for the tokens marking the mention '[unused0]', '[unused1]'
-    mention_length = max_length - 2
+    # make space for the '[CLS]' and '[SEP]' tokens
+    max_context_length = max_length - 2
 
     features = []
     for (ex_index, example) in tqdm.tqdm(enumerate(examples), desc="convert examples to features"):
         if ex_index % 10000 == 0:
             logger.info("Writing example %d of %d" % (ex_index, len(examples)))
 
-        example_mentions =  [example.mention]
+        example_pubs =  [example.paper]
         if not evaluate:
-            example_mentions += example.pos_coref_cand + example.neg_coref_cand
-        mention_id = example.mention['mention_id']
+            example_pubs += example.pos_reviewer_pubs + example.neg_reviewer_pubs
+        id = example.paper['id']
+        
 
         example_features = []
-        for mention in example_mentions:
-            context_document_id = mention['context_document_id']
-            start_index = mention['start_index']
-            end_index = mention['end_index']
+        for pub in example_pubs:
+            assert 'abstract' in pub.keys()
+            abstract_text = pub['abstract'].replace('\n', ' ')
+            abstract_text_tokenized = tokenizer.tokenize(abstract_text)
+            abstract_text_tokenized = abstract_text_tokenized[:max_context_length]
 
-            context_document = documents[context_document_id]['text']
-
-            context_tokens = context_document.split()
-            extracted_mention = context_tokens[start_index: end_index+1]
-            extracted_mention = ' '.join(extracted_mention)
-            assert extracted_mention == mention['text']
-
-            mention_text_tokenized = tokenizer.tokenize(mention['text'])
-
-            mention_context = get_mention_context_tokens(
-                    context_tokens, start_index, end_index,
-                    mention_length, tokenizer)
-        
-            input_tokens = ['[CLS]'] + mention_context + ['[SEP]']
+            input_tokens = ['[CLS]'] + abstract_text_tokenized + ['[SEP]']
             input_ids = tokenizer.convert_tokens_to_ids(input_tokens)
             token_type_ids = [0] * len(input_ids) # segment_ids
 
@@ -416,13 +404,14 @@ def convert_examples_to_features(
             example_features.append((input_ids, attention_mask, token_type_ids))
 
         if evaluate:
+            assert False
             features.append(ExpertiseAffinityEvalFeatures(
                                 mention_id, [example_features[0]]))
         else:
             features.append(ExpertiseAffinityTrainFeatures(
-                            mention_id, [example_features[0]],
-                            example_features[1:len(example.pos_coref_cand)+1],
-                            example_features[len(example.pos_coref_cand)+1:]))
+                            id, [example_features[0]],
+                            example_features[1:len(example.pos_reviewer_pubs)+1],
+                            example_features[len(example.pos_reviewer_pubs)+1:]))
 
     return features
 
