@@ -81,15 +81,15 @@ def select_field(features, field, evaluate):
 
 
 def id_to_bytes(uid):
-    assert len(uid) <= 16
-    num_pad = 16 - len(uid)
-    uid_bytes = bytes(uid + num_pad * 'n', 'utf-8')
-    uid_bytes = list(struct.unpack('=LLLL', uid_bytes))
+    assert len(uid) <= 20
+    num_pad = 20 - len(uid)
+    uid_bytes = bytes(uid + num_pad * '|', 'utf-8')
+    uid_bytes = list(struct.unpack('=LLLLL', uid_bytes))
     return uid_bytes
 
 
 def bytes_to_id(uid_bytes):
-    return struct.pack('=LLLL', *uid_bytes).decode('utf-8').replace('n', '')
+    return struct.pack('=LLLLL', *uid_bytes).decode('utf-8').replace('|', '')
 
 
 def simple_accuracy(preds, labels):
@@ -193,7 +193,7 @@ def train(args, train_dataset, model, tokenizer):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
             ## TEST: evaluation
-            results = evaluate(args, model, tokenizer)
+            results = evaluate(args, model, tokenizer, split='train')
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
@@ -258,6 +258,7 @@ def evaluate(args, model, tokenizer, prefix="", split=None):
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
+
         eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, split=split, evaluate=True)
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
@@ -400,6 +401,9 @@ def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
         str(args.max_seq_length),
         str(task)))
 
+    embed()
+    exit()
+
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
@@ -437,8 +441,11 @@ def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Convert to Tensors and build dataset
-    #all_mention_ids = torch.tensor(
-    #        select_field(features, 'mention_id', evaluate), dtype=torch.long)
+    or_ids = [[id_to_bytes(x) for x in id_set] for id_set in select_field(features, 'or_id', evaluate)]
+
+    all_or_ids = torch.tensor(or_ids, dtype=torch.long)
+    all_submissions = torch.tensor(
+            select_field(features, 'submission', evaluate), dtype=torch.bool)
     all_input_ids = torch.tensor(
             select_field(features, 'input_ids', evaluate), dtype=torch.long)
     all_attention_masks = torch.tensor(

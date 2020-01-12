@@ -326,7 +326,7 @@ class ExpertiseAffinityProcessor(DataProcessor):
         examples = []
         for _, pubs in reviewer2pubs.items():
             for pub in pubs:
-
+                pass
 
 
 def get_mention_context_tokens(context_tokens, start_index, end_index,
