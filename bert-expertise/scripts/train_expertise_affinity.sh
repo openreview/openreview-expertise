@@ -11,8 +11,10 @@ python src/run_expertise_affinity.py \
     --sample_size 8 \
     --margin 0.5 \
     --sequence_embedding_size 128 \
-    --per_gpu_train_batch=1 \
-    --per_gpu_eval_batch=2 \
+    --per_gpu_train_batch 1 \
+    --per_gpu_eval_batch 96 \
+    --logging_steps 1000 \
+    --save_steps 1000 \
     --num_train_epochs 1.0 \
 
 

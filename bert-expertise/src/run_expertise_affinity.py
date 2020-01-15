@@ -28,6 +28,7 @@ from IPython import embed
 
 import numpy as np
 import faiss
+from scipy import stats
 import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
@@ -168,9 +169,9 @@ def train(args, train_dataset, model, tokenizer):
             batch = tuple(t.to(args.device) for t in batch)
 
             ## 'mention_id':         batch[0]
-            inputs = {'input_ids':      batch[0],
-                      'attention_mask': batch[1],
-                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
+            inputs = {'input_ids':      batch[2],
+                      'attention_mask': batch[3],
+                      'token_type_ids': batch[4] if args.model_type in ['bert', 'xlnet'] else None,
                       'evaluate': False,
                       'sample_size': args.sample_size,
                       'margin': args.margin}
@@ -191,9 +192,6 @@ def train(args, train_dataset, model, tokenizer):
             else:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-
-            ## TEST: evaluation
-            results = evaluate(args, model, tokenizer, split='train')
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
@@ -240,7 +238,9 @@ def train(args, train_dataset, model, tokenizer):
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
                 break
+                
         if args.max_steps > 0 and global_step > args.max_steps:
+
             train_iterator.close()
             break
 
@@ -281,62 +281,93 @@ def evaluate(args, model, tokenizer, prefix="", split=None):
         nb_eval_steps = 0
         preds = None
         out_label_ids = None
-        mention_embeddings = {}
+        submission_embeddings = {}
+        reviewer_paper_embeddings = {}
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             model.eval()
             batch = tuple(t.to(args.device) for t in batch)
 
 
             with torch.no_grad():
-                serialized_mention_id = batch[0].cpu().numpy().tolist()
-                inputs = {'input_ids':      batch[1],
-                          'attention_mask': batch[2],
-                          'token_type_ids': batch[3] if args.model_type in ['bert', 'xlnet'] else None,
+                or_id = batch[0].cpu().numpy().tolist()
+                submission = batch[1].cpu().numpy().tolist()
+                inputs = {'input_ids':      batch[2],
+                          'attention_mask': batch[3],
+                          'token_type_ids': batch[4] if args.model_type in ['bert', 'xlnet'] else None,
                           'evaluate': True}
                 outputs = model(**inputs)
 
-                mention_id = [bytes_to_id(b) for b in serialized_mention_id]
+                or_id = [bytes_to_id(uid[0]) for uid in or_id]
+                submission = [x[0] for x in submission]
+
                 seq_embedding = outputs[0].squeeze(1).cpu().numpy()
 
-                for uid, emb in zip(mention_id, seq_embedding):
-                    mention_embeddings[uid] = emb
+                for uid, sub_flag, emb in zip(or_id, submission, seq_embedding):
+                    if sub_flag:
+                        submission_embeddings[uid] = emb
+                    else:
+                        reviewer_paper_embeddings[uid] = emb
 
-        eval_candidates, eval_labels = load_and_cache_candidates_and_labels(
+        subs, reviewer2pubs, sub2bids = load_and_cache_resources(
                 args, eval_task, tokenizer, split=split)
 
-        coref_candidates = {}
-        hits = 0
-        coref_hits = 0
-        total = 0
-        for corpus, corpus_labels in eval_labels.items():
-            mention_ids = list(corpus_labels.keys())
-            X = np.vstack([mention_embeddings[uid] for uid in mention_ids])
+        missed_papers = 0
+        ranking_scores = []
+        for sub_id, sub_rep in submission_embeddings.items():
+            sub_bids = sub2bids[sub_id]
 
-            # build kNN index
-            index = faiss.IndexFlatL2(X.shape[1])
-            index.add(X)
+            true_relevance = []
+            scores = []
+            for b in sub_bids:
 
-            # query the index
-            D, I = index.search(X, args.k+1)
+                # if we don't have pubs for the reviewer we can't score them
+                if b['signature'] not in reviewer2pubs.keys():
+                    continue
+                elif len([x for x in reviewer2pubs[b['signature']] if x['title'] is not None]) < 1:
+                    continue
 
-            for i in range(X.shape[0]):
-                coref_candidates[mention_ids[i]] = [mention_ids[j] for j in I[i][1:]]
-
-            for uid in mention_ids:
-                if corpus_labels[uid] in eval_candidates[uid]:
-                    hits += 1
-                    coref_hits += 1
+                # get the true score from the bid tag
+                tag = b['tag']
+                tr = None
+                if tag == 'I want to review' or tag == 'Very High':
+                    tr = 1.0
+                elif tag == 'I can review' or tag == 'High':
+                    tr = 0.5
+                elif tag == 'I can probably review but am not an expert' or tag == 'Neutral':
+                    tr = 0.0
+                elif tag == 'I cannot review' or tag == 'Low' or tag == 'Very Low':
+                    tr = -1.0
                 else:
-                    for coref_uid in coref_candidates[uid]:
-                        if corpus_labels[uid] in eval_candidates[coref_uid]:
-                            coref_hits += 1
-                            break
-                total += 1
+                    assert tag == 'No bid' or tag == 'No Bid'
+                    continue
 
-        recall = hits / total
-        coref_recall = coref_hits / total
+                reviewer_reps = np.vstack([reviewer_paper_embeddings[pub['id']]
+                                    for pub in reviewer2pubs[b['signature']]
+                                        if pub['title'] is not None])
 
-        result = {"recall": recall, "coref_recall": coref_recall}
+                _score = np.max(np.matmul(reviewer_reps, sub_rep))
+
+                if np.isnan(_score):
+                    continue
+
+                scores.append(_score)
+                true_relevance.append(tr)
+
+            if len(scores) < 2:
+                missed_papers += 1
+                continue
+
+            _ranking_score = stats.kendalltau(true_relevance, scores).correlation
+
+            if np.isnan(_ranking_score):
+                missed_papers += 1
+                continue
+
+            ranking_scores.append(_ranking_score)
+
+        mean_ranking_score = sum(ranking_scores) / len(ranking_scores)
+
+        result = {"mean_ranking_score": mean_ranking_score, "missed_submissions": missed_papers}
         results.update(result)
 
         output_eval_file = os.path.join(eval_output_dir, split + "_eval_results.txt")
@@ -352,10 +383,11 @@ def evaluate(args, model, tokenizer, prefix="", split=None):
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
+
     return results
 
 
-def load_and_cache_candidates_and_labels(args, task, tokenizer, split=None):
+def load_and_cache_resources(args, task, tokenizer, split=None):
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
@@ -363,22 +395,22 @@ def load_and_cache_candidates_and_labels(args, task, tokenizer, split=None):
 
     processor = processors[task]()
 
-    cached_candidates_file = os.path.join(args.data_dir, 'cached-candidates_{}_{}_{}_{}'.format(
+    cached_resources_file = os.path.join(args.data_dir, 'cached-eval-resources_{}_{}_{}_{}'.format(
         split,
         list(filter(None, args.model_name_or_path.split('/'))).pop(),
         str(args.max_seq_length),
         str(task)))
 
-    if os.path.exists(cached_candidates_file) and not args.overwrite_cache:
-        logger.info("Loading features from cached file %s", cached_candidates_file)
-        candidates, labels = torch.load(cached_candidates_file)
+    if os.path.exists(cached_resources_file) and not args.overwrite_cache:
+        logger.info("Loading features from cached file %s", cached_resources_file)
+        subs, reviewer2pubs, sub2bids = torch.load(cached_resources_file)
     else:
-        candidates, labels = processor.get_eval_candidates_and_labels(args.data_dir, split)
+        subs, reviewer2pubs, sub2bids = processor.get_eval_resources(args.data_dir, split)
         if args.local_rank in [-1, 0]:
-            logger.info("Saving features into cached file %s", cached_candidates_file)
-            torch.save((candidates, labels), cached_candidates_file)
+            logger.info("Saving features into cached file %s", cached_resources_file)
+            torch.save((subs, reviewer2pubs, sub2bids), cached_resources_file)
 
-    return candidates, labels
+    return subs, reviewer2pubs, sub2bids
 
 
 def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
@@ -401,9 +433,6 @@ def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
         str(args.max_seq_length),
         str(task)))
 
-    embed()
-    exit()
-
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
@@ -413,14 +442,11 @@ def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
             examples = processor.get_train_examples(
                     args.data_dir, args.sample_size, split)
         elif split == 'train':
-            examples = processor.get_eval_examples(
-                    args.data_dir, args.sample_size, split)
+            examples = processor.get_eval_examples(args.data_dir, split)
         elif split == 'val':
-            examples = processor.get_eval_examples(
-                    args.data_dir, args.sample_size, split)
+            examples = processor.get_eval_examples(args.data_dir, split)
         elif split == 'test':
-            examples = processor.get_eval_examples(
-                    args.data_dir, args.sample_size, split)
+            examples = processor.get_eval_examples(args.data_dir, split)
         else:
             assert False
 
@@ -454,7 +480,11 @@ def load_and_cache_examples(args, task, tokenizer, split=None, evaluate=False):
             select_field(features, 'token_type_ids', evaluate),
             dtype=torch.long)
 
-    dataset = TensorDataset(all_input_ids, all_attention_masks, all_token_type_ids)
+    dataset = TensorDataset(all_or_ids,
+                            all_submissions,
+                            all_input_ids,
+                            all_attention_masks,
+                            all_token_type_ids)
     return dataset
 
 

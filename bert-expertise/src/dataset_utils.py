@@ -172,7 +172,7 @@ class ExpertiseAffinityProcessor(DataProcessor):
 
         return examples
 
-    def get_eval_examples(self, data_dir, num_coref, split, domains):
+    def get_eval_examples(self, data_dir, split):
         assert split == 'train' or split == 'val' or split == 'test'
 
         logger.info("LOOKING AT {} | {} eval".format(data_dir, split))
@@ -189,30 +189,32 @@ class ExpertiseAffinityProcessor(DataProcessor):
         bids_file = os.path.join(data_dir, 'bids.jsonl')
         bids = self._read_jsonl(bids_file)
 
-        examples = self._create_eval_examples(
-                subs, reviewer_pubs, bids, sample_size)
+        examples = self._create_eval_examples(subs, reviewer_pubs, bids)
 
         return examples
 
-    def get_eval_candidates_and_labels(self, data_dir, split):
+    def get_eval_resources(self, data_dir, split):
         assert split == 'train' or split == 'val' or split == 'test'
 
         logger.info("LOOKING AT {} | {} eval".format(data_dir, split))
 
-        # Load the precomputed candidates for each mention
-        # `candidates` is a dictionary with key 'mention_id'
-        candidate_file = os.path.join(data_dir, 'tfidf_candidates', split + '.json')
-        candidates = self._read_candidates(candidate_file)
+        # Load all of the submissions
+        sub_file = os.path.join(data_dir, split + '-submissions.jsonl')
+        subs = self._read_jsonl(sub_file)
 
-        # Load all of the mentions
-        mention_file = os.path.join(data_dir, 'mentions', split + '.json')
-        mentions = self._read_mentions(mention_file)
+        # Load user publications
+        reviewer_file = os.path.join(data_dir, 'user_publications.jsonl')
+        reviewer_pubs = self._read_jsonl(reviewer_file)
+        reviewer2pubs = {x['user']:x['publications'] for x in reviewer_pubs}
 
-        labels = defaultdict(dict)
-        for m in mentions:
-            labels[m['corpus']][m['mention_id']] = m['label_document_id']
+        # Load bids
+        bids_file = os.path.join(data_dir, 'bids.jsonl')
+        bids = self._read_jsonl(bids_file)
+        sub2bids = defaultdict(list)
+        for b in bids:
+            sub2bids[b['forum']].append(b)
 
-        return candidates, labels
+        return subs, reviewer2pubs, sub2bids
 
     def _read_jsonl(self, jsonl_file):
         lines = []
@@ -274,12 +276,12 @@ class ExpertiseAffinityProcessor(DataProcessor):
             pos_pubs = [reviewer2pubs[r] for r in pos_reviewers]
             pos_pubs = [pub for reviewer_pubs in pos_pubs
                           for pub in reviewer_pubs
-                            if pub['abstract'] is not None]
+                            if pub['title'] is not None]
 
             neg_pubs = [reviewer2pubs[r] for r in neg_reviewers]
             neg_pubs = [pub for reviewer_pubs in neg_pubs
                           for pub in reviewer_pubs
-                            if pub['abstract'] is not None]
+                            if pub['title'] is not None]
 
             if len(pos_pubs) == 0:
                 continue
@@ -288,7 +290,7 @@ class ExpertiseAffinityProcessor(DataProcessor):
                 neutral_pubs = [reviewer2pubs[r] for r in neutral_reviewers]
                 neutral_pubs = [pub for reviewer_pubs in neutral_pubs
                                   for pub in reviewer_pubs
-                                    if pub['abstract'] is not None]
+                                    if pub['title'] is not None]
                 if len(neutral_pubs) == 0:
                     continue
                 neg_pubs = neutral_pubs
@@ -320,14 +322,26 @@ class ExpertiseAffinityProcessor(DataProcessor):
 
         return examples
 
-    def _create_eval_examples(self, subs, reviewer_pubs, bids, sample_size):
+    def _create_eval_examples(self, subs, reviewer_pubs, bids):
         reviewer2pubs = {d['user']: d['publications'] for d in reviewer_pubs}
 
         examples = []
+        # add reviewer publications
         for _, pubs in reviewer2pubs.items():
             for pub in pubs:
-                pass
+                if pub['title'] is not None:
+                    pub['submission'] = False
+                    examples.append(ExpertiseAffinityEvalExample(pub))
 
+        # add conference submissions
+        for sub in subs:
+            if sub['title'] is not None:
+                sub['submission'] = True
+                examples.append(ExpertiseAffinityEvalExample(sub))
+            else:
+                assert False
+
+        return examples
 
 def get_mention_context_tokens(context_tokens, start_index, end_index,
                                max_tokens, tokenizer):
@@ -399,12 +413,12 @@ def convert_examples_to_features(
             or_id = pub['id']
             submission = pub['submission']
 
-            assert 'abstract' in pub.keys()
-            abstract_text = pub['abstract'].replace('\n', ' ')
-            abstract_text_tokenized = tokenizer.tokenize(abstract_text)
-            abstract_text_tokenized = abstract_text_tokenized[:max_context_length]
+            assert 'title' in pub.keys()
+            title_text = pub['title'].replace('\n', ' ')
+            title_text_tokenized = tokenizer.tokenize(title_text)
+            title_text_tokenized = title_text_tokenized[:max_context_length]
 
-            input_tokens = ['[CLS]'] + abstract_text_tokenized + ['[SEP]']
+            input_tokens = ['[CLS]'] + title_text_tokenized + ['[SEP]']
             input_ids = tokenizer.convert_tokens_to_ids(input_tokens)
             token_type_ids = [0] * len(input_ids) # segment_ids
 
@@ -431,9 +445,8 @@ def convert_examples_to_features(
                                      token_type_ids))
 
         if evaluate:
-            assert False
             features.append(ExpertiseAffinityEvalFeatures(
-                                mention_id, [example_features[0]]))
+                                [example_features[0]]))
         else:
             features.append(ExpertiseAffinityTrainFeatures(
                             [example_features[0]],
