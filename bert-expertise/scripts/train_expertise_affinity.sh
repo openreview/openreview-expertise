@@ -7,12 +7,13 @@ python src/run_expertise_affinity.py \
     --do_train \
     --do_eval \
     --do_lower_case \
-    --max_seq_length 256 \
-    --sample_size 8 \
+    --max_seq_length 64 \
+    --sample_size 32 \
     --margin 0.5 \
     --sequence_embedding_size 128 \
     --per_gpu_train_batch 1 \
     --per_gpu_eval_batch 96 \
+    --evaluate_during_training \
     --logging_steps 1000 \
     --save_steps 1000 \
     --num_train_epochs 1.0 \

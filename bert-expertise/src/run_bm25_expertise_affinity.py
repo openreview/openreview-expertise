@@ -8,14 +8,12 @@ import numpy as np
 import os
 import pickle
 import random
+from rank_bm25 import BM25Okapi
 from scipy import stats
 from scipy.spatial.distance import cosine as cosine_dist
 from sklearn.metrics import ndcg_score
 from sklearn.preprocessing import normalize
 from tqdm import tqdm
-
-from allennlp.commands.elmo import ElmoEmbedder
-from sacremoses import MosesTokenizer
 
 from IPython import embed
 
@@ -30,8 +28,8 @@ def read_jsonl(jsonl_file):
 
 def load_test_data(data_dir):
     # Load all of the submissions
-    #sub_file = os.path.join(data_dir, 'test-submissions.jsonl')
-    sub_file = os.path.join(data_dir, 'submissions.jsonl')
+    sub_file = os.path.join(data_dir, 'test-submissions.jsonl')
+    #sub_file = os.path.join(data_dir, 'submissions.jsonl')
     subs = read_jsonl(sub_file)
 
     # Load user publications
@@ -44,18 +42,6 @@ def load_test_data(data_dir):
     bids = read_jsonl(bids_file)
 
     return subs, bids, reviewer2pubs
-
-
-def extract_elmo(papers, tokenizer, elmo):
-    toks_list = []
-    for p in papers:
-        toks_list.append(tokenizer.tokenize(p['title'], escape=False))
-    vecs = elmo.embed_batch(toks_list)
-    content_vecs = []
-    for vec in vecs:
-        new_vec = np.transpose(vec, (1,0,2)).reshape(-1, vec.shape[0]*vec.shape[2])
-        content_vecs.append(new_vec.mean(0))
-    return np.vstack(content_vecs)
 
 
 if __name__ == '__main__':
@@ -74,40 +60,8 @@ if __name__ == '__main__':
     # Load the submissions, bids, and reviewer test data
     submissions, bids, reviewer2pubs = load_test_data(args.data_dir)
 
-    # create tokenizer and ELMo objects
-    tokenizer = MosesTokenizer()
-    elmo = ElmoEmbedder()
-
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-
-    # create submission representations
-    if not os.path.exists(os.path.join(args.output_dir, 'sub2vec.pkl')):
-        sub2vec = {}
-        for sub in tqdm(submissions, desc='Submissions'):
-            sub2vec[sub['id']] = extract_elmo([sub], tokenizer, elmo)
-        with open(os.path.join(args.output_dir, 'sub2vec.pkl'), 'wb') as f:
-            pickle.dump(sub2vec, f, pickle.HIGHEST_PROTOCOL)
-    else:
-        print('Loading cached sub2vec...')
-        with open(os.path.join(args.output_dir, 'sub2vec.pkl'), 'rb') as f:
-            sub2vec = pickle.load(f)
-        print('Done')
-
-    # create author representations
-    if not os.path.exists(os.path.join(args.output_dir, 'reviewer2vec.pkl')):
-        reviewer2vec = {}
-        for signature, pubs in tqdm(reviewer2pubs.items(), desc='Reviewers'):
-            if len(pubs) == 0:
-                continue
-            reviewer2vec[signature] = extract_elmo(pubs, tokenizer, elmo)
-        with open(os.path.join(args.output_dir, 'reviewer2vec.pkl'), 'wb') as f:
-            pickle.dump(reviewer2vec, f, pickle.HIGHEST_PROTOCOL)
-    else:
-        print('Loading cached reviewer2vec...')
-        with open(os.path.join(args.output_dir, 'reviewer2vec.pkl'), 'rb') as f:
-            reviewer2vec = pickle.load(f)
-        print('Done')
 
     # create submissions dict
     sub_dict = {sub['id']: sub for sub in submissions}
@@ -117,19 +71,19 @@ if __name__ == '__main__':
     for b in bids:
         sub2bids[b['forum']].append(b)
 
-    scores_csv_per_bid = []
-
     missed_papers = 0
     ranking_scores = []
-    for sub_id, sub_rep in tqdm(sub2vec.items(), desc='Ranking submissions'):
+    for sub_id, sub in tqdm(sub_dict.items(), desc='Ranking submissions'):
         sub_bids = sub2bids[sub_id]
-
+        
+        reviewer_inverted_index = []
+        reviewer_paper_titles = []
         true_relevance = []
-        scores = []
+
         for b in sub_bids:
 
             # if we don't have a vector for the reviewer we can't score them
-            if b['signature'] not in reviewer2vec.keys():
+            if b['signature'] not in reviewer2pubs.keys():
                 continue
 
             # get the true score from the bid tag
@@ -147,33 +101,26 @@ if __name__ == '__main__':
                 assert tag == 'No bid' or tag == 'No Bid'
                 continue
 
-            if np.any(np.isnan(reviewer2vec[b['signature']])):
+            _bidding_reviewer_paper_titles = list(set([p['abstract']
+                for p in reviewer2pubs[b['signature']] if p['abstract'] is not None]))
+
+            if len(_bidding_reviewer_paper_titles) == 0:
                 continue
 
-            max_score_paper_idx = np.argmax(np.matmul(normalize(reviewer2vec[b['signature']], axis=1),
-                                                      normalize(sub_rep.reshape(1, -1)).reshape(-1,)))
-            reviewer_rep = reviewer2vec[b['signature']][max_score_paper_idx]
+            _global_range = (len(reviewer_paper_titles), 
+                len(reviewer_paper_titles) + len(_bidding_reviewer_paper_titles))
+            reviewer_inverted_index.append(_global_range)
+            reviewer_paper_titles.extend(_bidding_reviewer_paper_titles)
 
-            cosine_sim = 1 - cosine_dist(reviewer_rep, sub_rep)
-
-            if np.isnan(cosine_sim):
-                continue
-
-            embed()
-            exit()
-
-            scores_csv_per_bid.append((b['forum'],
-                                       b['signature'],
-                                       cosine_sim,
-                                       b,
-                                       sub_dict[b['forum']],
-                                       reviewer2pubs[b['signature']][max_score_paper_idx]))
-
-            scores.append(cosine_sim)
             true_relevance.append(tr)
 
-        ## Check random
-        #scores = [random.random() for _ in true_relevance]
+        tokenized_reviewer_paper_titles = [p.split(' ')
+                                           for p in reviewer_paper_titles]
+        tokenized_sub_title = sub['abstract'].split(' ')
+
+        bm25_reviewer_titles = BM25Okapi(tokenized_reviewer_paper_titles)
+        _all_scores = bm25_reviewer_titles.get_scores(tokenized_sub_title)
+        scores = [max(_all_scores[start:end]) for start, end in reviewer_inverted_index]
 
         if len(scores) < 2:
             missed_papers += 1

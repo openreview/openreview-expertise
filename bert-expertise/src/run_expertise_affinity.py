@@ -157,7 +157,7 @@ def train(args, train_dataset, model, tokenizer):
 
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
-    best_val_coref_recall = 0.0
+    best_val_ranking_score = 0.0
     best_steps = 0
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
@@ -209,9 +209,8 @@ def train(args, train_dataset, model, tokenizer):
                         for key, value in results.items():
                             tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
 
-                        if results["coref_recall"] > best_val_coref_recall:
-
-                            best_val_coref_recall = results["coref_recall"]
+                        if results["mean_ranking_score"] > best_val_ranking_score:
+                            best_val_ranking_score = results["mean_ranking_score"]
                             best_steps = global_step
                             if args.do_test:
                                 results_test = evaluate(args, model, tokenizer, test=True)
