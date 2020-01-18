@@ -6,8 +6,10 @@ and that papers have been submitted.
 
 '''
 
-import os, json, argparse
+import json, argparse
 from datetime import datetime
+from pathlib import Path, PurePath
+# from expertise.config import ModelConfig
 
 import openreview
 from tqdm import tqdm
@@ -39,25 +41,29 @@ if __name__ == '__main__':
 
     with open(args.config) as file_handle:
         config = json.load(file_handle)
+    # with open(config_path) as f:
+	#     data = json.load(f, object_pairs_hook=OrderedDict)
+	# config = ModelConfig(**data)
 
     print(config)
 
     dataset_dir = config['dataset']['directory'] if 'dataset' in config else './'
+    dataset_dir = Path(dataset_dir)
 
-    if not os.path.isdir(dataset_dir):
-        os.mkdir(dataset_dir)
+    if not Path.is_dir(dataset_dir):
+        Path.mkdir(dataset_dir)
 
-    archive_dir = os.path.join(dataset_dir, 'archives')
-    if not os.path.isdir(archive_dir):
-        os.mkdir(archive_dir)
+    archive_dir = PurePath.joinpath(dataset_dir, 'archives')
+    if not Path.is_dir(archive_dir):
+        Path.mkdir(archive_dir)
 
-    submission_dir = os.path.join(dataset_dir, 'submissions')
-    if not os.path.isdir(submission_dir):
-        os.mkdir(submission_dir)
+    submission_dir = PurePath.joinpath(dataset_dir, 'submissions')
+    if not Path.is_dir(submission_dir):
+        Path.mkdir(submission_dir)
 
-    bids_dir = os.path.join(dataset_dir, 'bids')
-    if not os.path.isdir(bids_dir):
-        os.mkdir(bids_dir)
+    bids_dir = PurePath.joinpath(dataset_dir, 'bids')
+    if not Path.is_dir(bids_dir):
+        Path.mkdir(bids_dir)
 
     openreview_client = openreview.Client(
         username=args.username,
@@ -120,8 +126,8 @@ if __name__ == '__main__':
             direct_uploads_by_signature[direct_upload.signatures[0]].append(direct_upload)
 
         for member in tqdm(valid_members, total=len(valid_members)):
-            file_path = os.path.join(archive_dir, member + '.jsonl')
-            if args.overwrite or not os.path.exists(file_path):
+            file_path = PurePath.joinpath(archive_dir, member + '.jsonl')
+            if args.overwrite or not Path.exists(file_path):
                 member_papers = search_with_retries(openreview_client, member)
 
                 member_papers.extend(direct_uploads_by_signature[member])
@@ -160,8 +166,8 @@ if __name__ == '__main__':
 
         print('finding records of {} submissions'.format(len(submissions)))
         for paper in tqdm(submissions, total=len(submissions)):
-            file_path = os.path.join(submission_dir, paper.id + '.jsonl')
-            if args.overwrite or not os.path.exists(file_path):
+            file_path = PurePath.joinpath(submission_dir, paper.id + '.jsonl')
+            if args.overwrite or not Path.exists(file_path):
                 with open(file_path, 'w') as f:
                     f.write(json.dumps(paper.to_json()) + '\n')
 
@@ -174,7 +180,7 @@ if __name__ == '__main__':
             openreview_client, invitation=invitation_id)
 
         for bid in tqdm(bids, desc='writing bids'):
-            file_path = os.path.join(bids_dir, bid.forum + '.jsonl')
+            file_path = PurePath.joinpath(bids_dir, bid.forum + '.jsonl')
 
             if bid.forum in metadata['bid_counts']:
                 metadata['bid_counts'][bid.forum] += 1
@@ -192,6 +198,6 @@ if __name__ == '__main__':
     metadata['reviewer_count'] = len(metadata['archive_counts'])
     metadata['submission_count'] = len(submissions)
 
-    metadata_file = os.path.join(dataset_dir, 'metadata.json')
+    metadata_file = PurePath.joinpath(dataset_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=4, ensure_ascii=False)
