@@ -8,7 +8,7 @@ and that papers have been submitted.
 
 import json, argparse
 from datetime import datetime
-from pathlib import Path, PurePath
+from pathlib import Path
 from itertools import chain
 
 import openreview
@@ -96,7 +96,7 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
         direct_uploads_by_signature[direct_upload.signatures[0]].append(direct_upload)
 
     for member in tqdm(valid_members, total=len(valid_members)):
-        file_path = PurePath.joinpath(archive_dir, member + '.jsonl')
+        file_path = Path.joinpath(archive_dir, member + '.jsonl')
 
         if Path.exists(file_path) and not args.overwrite:
             continue
@@ -140,7 +140,7 @@ def get_submissions(openreview_client, config):
 
     print('finding records of {} submissions'.format(len(submissions)))
     for paper in tqdm(submissions, total=len(submissions)):
-        file_path = PurePath.joinpath(submission_dir, paper.id + '.jsonl')
+        file_path = Path.joinpath(submission_dir, paper.id + '.jsonl')
         if args.overwrite or not Path.exists(file_path):
             with open(file_path, 'w') as f:
                 f.write(json.dumps(paper.to_json()) + '\n')
@@ -172,7 +172,7 @@ def get_bids(openreview_client, config):
             'tag': getattr(bid, 'tag', None) or getattr(bid, 'label'),
             'signature': getattr(bid, 'tail', None) or getattr(bid, 'signatures')[0],
         }
-        file_path = PurePath.joinpath(bids_dir, reduced_bid['forum'] + '.jsonl')
+        file_path = Path.joinpath(bids_dir, reduced_bid['forum'] + '.jsonl')
 
         if reduced_bid['forum'] in metadata['bid_counts']:
             metadata['bid_counts'][reduced_bid['forum']] += 1
@@ -201,15 +201,15 @@ if __name__ == '__main__':
     if not Path.is_dir(dataset_dir):
         Path.mkdir(dataset_dir)
 
-    archive_dir = PurePath.joinpath(dataset_dir, 'archives')
+    archive_dir = Path.joinpath(dataset_dir, 'archives')
     if not Path.is_dir(archive_dir):
         Path.mkdir(archive_dir)
 
-    submission_dir = PurePath.joinpath(dataset_dir, 'submissions')
+    submission_dir = Path.joinpath(dataset_dir, 'submissions')
     if not Path.is_dir(submission_dir):
         Path.mkdir(submission_dir)
 
-    bids_dir = PurePath.joinpath(dataset_dir, 'bids')
+    bids_dir = Path.joinpath(dataset_dir, 'bids')
     if not Path.is_dir(bids_dir):
         Path.mkdir(bids_dir)
 
@@ -258,6 +258,6 @@ if __name__ == '__main__':
     metadata['reviewer_count'] = len(metadata['archive_counts'])
     metadata['submission_count'] = len(submissions)
 
-    metadata_file = PurePath.joinpath(dataset_dir, 'metadata.json')
+    metadata_file = Path.joinpath(dataset_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=4, ensure_ascii=False)
