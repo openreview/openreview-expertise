@@ -1,14 +1,19 @@
 from collections import OrderedDict
 import json
 import random
-import os
+from pathlib import Path
 import pickle
 import pkgutil
 import expertise
 
 class ModelConfig(object):
     def __init__(self, **kwargs):
-        self._config = {}
+        if kwargs.get('config_file_path'):
+            config_file_path = Path(kwargs['config_file_path'])
+            with open(config_file_path) as file_handle:
+                self.config = json.load(file_handle)
+        elif kwargs.get('config_dict'):
+            self.config = kwargs['config_dict']
 
         # valid_model_names = expertise.available_models()
         # if not 'model' in kwargs:
@@ -29,25 +34,25 @@ class ModelConfig(object):
 
         # self._config = model_default_config
 
-        self.update(**kwargs)
+        # self.update(**kwargs)
 
     def __repr__(self):
-        return json.dumps(self._config, indent=4)
+        return json.dumps(self.config, indent=4)
+
+    def get(self):
+        return self.config
 
     def update(self, **kwargs):
-        self._config = OrderedDict({**self._config, **kwargs})
-
-        for k, v in self._config.items():
-            setattr(self, k, v)
+        self.config = {**self.config, **kwargs}
 
     def save(self, outfile):
         with open(outfile, 'w') as f:
-            json.dump(self._config, f, indent=4, separators=(',', ': '))
+            json.dump(self.config, f, indent=4, separators=(',', ': '))
 
     def update_from_file(self, file):
-        config_path = os.path.abspath(file)
+        config_path = Path(file).resolve()
 
-        with open(config_path) as f:
-            data = json.load(f, object_pairs_hook=OrderedDict)
+        with open(config_path) as file_handle:
+            data = json.load(file_handle)
 
         self.update(**data)
