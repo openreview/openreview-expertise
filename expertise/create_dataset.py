@@ -149,22 +149,37 @@ def get_submissions(openreview_client, config):
 
     return submissions
 
+# Gets bids, no matter if the invitations are for tags or edges
 def get_bids(openreview_client, config):
-    invitation_id = config['bid_inv']
-    # invitation_ids = convert_to_list(config['bid_inv'])
+    # Get edge and/or tag invitations
+    invitation_ids = convert_to_list(config['bid_inv'])
 
-    bids = openreview.tools.iterget_tags(
-        openreview_client, invitation=invitation_id)
+    # Gather all bid iterators
+    bid_iterators = []
+    for invitation_id in invitation_ids:
+        # try to find the invitation in both collections
+        bid_iterators.append(openreview.tools.iterget_tags(
+            openreview_client, invitation=invitation_id))
+        bid_iterators.append(openreview.tools.iterget_edges(
+            openreview_client, invitation=invitation_id))
 
-    for bid in tqdm(bids, desc='writing bids'):
-        file_path = PurePath.joinpath(bids_dir, bid.forum + '.jsonl')
+    # Use chain to put together bid iterators. Once one is done continue with the next one.
+    for bid in tqdm(chain(*bid_iterators), desc='writing bids'):
+        reduced_bid = {
+            'id': bid.id,
+            'invitation': bid.invitation,
+            'forum': getattr(bid, 'forum', None) or getattr(bid, 'head'),
+            'tag': getattr(bid, 'tag', None) or getattr(bid, 'label'),
+            'signature': getattr(bid, 'tail', None) or getattr(bid, 'signatures')[0],
+        }
+        file_path = PurePath.joinpath(bids_dir, reduced_bid['forum'] + '.jsonl')
 
-        if bid.forum in metadata['bid_counts']:
-            metadata['bid_counts'][bid.forum] += 1
-            metadata['archive_counts'][bid.signatures[0]]['bid'] += 1
+        if reduced_bid['forum'] in metadata['bid_counts']:
+            metadata['bid_counts'][reduced_bid['forum']] += 1
+            metadata['archive_counts'][reduced_bid['signature']]['bid'] += 1
 
             with open(file_path, 'a') as f:
-                f.write(json.dumps(bid.to_json()) + '\n')
+                f.write(json.dumps(reduced_bid) + '\n')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -221,6 +236,8 @@ if __name__ == '__main__':
 
     if 'exclusion_inv' in config:
         excluded_ids_by_user = exclude(openreview_client, config)
+    else:
+        excluded_ids_by_user = defaultdict(list)
 
     if 'match_group' in config:
         retrieve_expertise(openreview_client, config, excluded_ids_by_user)
