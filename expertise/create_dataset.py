@@ -16,6 +16,8 @@ from tqdm import tqdm
 
 from collections import defaultdict, OrderedDict
 
+from config import ModelConfig
+
 def convert_to_list(config_invitations):
     if (isinstance(config_invitations, str)):
         invitations = [config_invitations]
@@ -190,10 +192,13 @@ if __name__ == '__main__':
     parser.add_argument('--baseurl')
     args = parser.parse_args()
 
-    with open(args.config) as file_handle:
-        config = json.load(file_handle)
+    config = ModelConfig(config_file_path=args.config)
 
-    print(json.dumps(config, indent=4))
+    # with open(args.config) as file_handle:
+    #     config = json.load(file_handle)
+
+    # print(json.dumps(config, indent=4))
+    print(config)
 
     dataset_dir = config['dataset']['directory'] if 'dataset' in config else './'
     dataset_dir = Path(dataset_dir)

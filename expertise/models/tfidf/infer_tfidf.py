@@ -19,11 +19,11 @@ from tqdm import tqdm
 import ipdb
 
 def infer(config):
-    experiment_dir = Path(config.get()['experiment_dir']).resolve()
+    experiment_dir = Path(config['experiment_dir']).resolve()
 
-    model = utils.load_pkl(config.get()['tfidf_model'])
+    model = utils.load_pkl(config['tfidf_model'])
 
-    dataset = Dataset(**config.get()['dataset'])
+    dataset = Dataset(**config['dataset'])
 
     paperids = list(model.bow_archives_by_paperid.keys())
     paperidx_by_id = {
@@ -32,7 +32,7 @@ def infer(config):
         in enumerate(paperids)
     }
 
-    score_file_path = experiment_dir.joinpath(config.get()['name'] + '-scores.csv')
+    score_file_path = experiment_dir.joinpath(config['name'] + '-scores.csv')
 
     bids_by_forum = expertise.utils.get_bids_by_forum(dataset)
     submission_ids = [n for n in dataset.submission_ids]

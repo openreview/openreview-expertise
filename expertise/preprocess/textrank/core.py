@@ -14,7 +14,7 @@ def run_textrank(config):
     First define the dataset, vocabulary, and keyphrase extractor
     '''
 
-    experiment_path = Path(config.get()['experiment_dir']).parent
+    experiment_path = Path(config['experiment_dir']).parent
 
     kps_dir = experiment_path.joinpath('keyphrases')
     if not kps_dir.is_dir():
@@ -22,7 +22,7 @@ def run_textrank(config):
     config.update(kp_setup_dir=str(kps_dir))
 
     print('starting setup')
-    dataset = Dataset(directory=config.get()['dataset']['directory'])
+    dataset = Dataset(directory=config['dataset']['directory'])
     textrank_vocab = Vocab() # vocab used for textrank-based keyphrases
     full_vocab = Vocab() # vocab used on the full text
 
@@ -52,7 +52,7 @@ def run_textrank(config):
             if kp not in top_kps:
                 top_kps.append(kp)
                 kp_count += 1
-            if kp_count >= config.get()['max_num_keyphrases']:
+            if kp_count >= config['max_num_keyphrases']:
                 break
 
         textrank_vocab.load_items(top_kps)
