@@ -194,10 +194,6 @@ if __name__ == '__main__':
 
     config = ModelConfig(config_file_path=args.config)
 
-    # with open(args.config) as file_handle:
-    #     config = json.load(file_handle)
-
-    # print(json.dumps(config, indent=4))
     print(config)
 
     dataset_dir = config['dataset']['directory'] if 'dataset' in config else './'
