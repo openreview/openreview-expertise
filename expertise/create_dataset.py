@@ -126,6 +126,9 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
                 seen_keys.append(paperhash)
 
         metadata['archive_counts'][member]['arx'] = len(filtered_papers)
+        if len(filtered_papers) == 0:
+            metadata['no_publications_count'] += 1
+            metadata['no_publications'].append(member)
 
         with open(file_path, 'w') as f:
             for paper in filtered_papers:
@@ -223,6 +226,8 @@ if __name__ == '__main__':
     metadata = {
         "reviewer_count": 0,
         "submission_count": 0,
+        "no_publications_count": 0,
+        "no_publications": [],
         "archive_counts": defaultdict(lambda: {'arx': 0, 'bid': 0}),
         "bid_counts": {},
     }
