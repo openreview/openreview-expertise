@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from collections import defaultdict, OrderedDict
 
-from config import ModelConfig
+from .config import ModelConfig
 
 def convert_to_list(config_invitations):
     if (isinstance(config_invitations, str)):
