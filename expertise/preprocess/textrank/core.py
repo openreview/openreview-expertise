@@ -1,6 +1,6 @@
 
 import itertools
-import os
+from pathlib import Path
 from tqdm import tqdm
 
 from expertise.utils.vocab import Vocab
@@ -14,15 +14,15 @@ def run_textrank(config):
     First define the dataset, vocabulary, and keyphrase extractor
     '''
 
-    experiment_path = os.path.dirname(config.experiment_dir)
+    experiment_path = Path(config['experiment_dir']).parent
 
-    kps_dir = os.path.join(experiment_path, 'keyphrases')
-    if not os.path.isdir(kps_dir):
-        os.makedirs(kps_dir)
-    config.update(kp_setup_dir=kps_dir)
+    kps_dir = experiment_path.joinpath('keyphrases')
+    if not kps_dir.is_dir():
+        kps_dir.mkdir(parents=True, exist_ok=True)
+    config.update(kp_setup_dir=str(kps_dir))
 
     print('starting setup')
-    dataset = Dataset(directory=config.dataset['directory'])
+    dataset = Dataset(directory=config['dataset']['directory'])
     textrank_vocab = Vocab() # vocab used for textrank-based keyphrases
     full_vocab = Vocab() # vocab used on the full text
 
@@ -52,7 +52,7 @@ def run_textrank(config):
             if kp not in top_kps:
                 top_kps.append(kp)
                 kp_count += 1
-            if kp_count >= config.max_num_keyphrases:
+            if kp_count >= config['max_num_keyphrases']:
                 break
 
         textrank_vocab.load_items(top_kps)
@@ -61,9 +61,9 @@ def run_textrank(config):
         textrank_kps_by_id[archive_id] = top_kps
         full_kps_by_id[archive_id] = full_kps
 
-    utils.dump_pkl(os.path.join(config.kp_setup_dir, 'textrank_kps_by_id.pkl'), textrank_kps_by_id)
-    utils.dump_pkl(os.path.join(config.kp_setup_dir, 'full_kps_by_id.pkl'), full_kps_by_id)
-    utils.dump_pkl(os.path.join(config.kp_setup_dir, 'textrank_vocab.pkl'), textrank_vocab)
-    utils.dump_pkl(os.path.join(config.kp_setup_dir, 'full_vocab.pkl'), full_vocab)
+    utils.dump_pkl(kps_dir.joinpath('textrank_kps_by_id.pkl'), textrank_kps_by_id)
+    utils.dump_pkl(kps_dir.joinpath('full_kps_by_id.pkl'), full_kps_by_id)
+    utils.dump_pkl(kps_dir.joinpath('textrank_vocab.pkl'), textrank_vocab)
+    utils.dump_pkl(kps_dir.joinpath('full_vocab.pkl'), full_vocab)
 
     return config

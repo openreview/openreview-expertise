@@ -4,6 +4,7 @@ A key part of matching papers to reviewers is having a good model of paper-revie
 
 ## Installation
 
+This repository only supports Python 3.6 and above.
 Clone this repository and install the package using pip as follows:
 
 ```

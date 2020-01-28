@@ -6,27 +6,185 @@ and that papers have been submitted.
 
 '''
 
-import os, json, argparse
+import json, argparse
 from datetime import datetime
+from pathlib import Path
+from itertools import chain
 
 import openreview
 from tqdm import tqdm
 
 from collections import defaultdict, OrderedDict
 
-def search_with_retries(client, term, max_retries=5):
-    results = []
-    for iteration in range(max_retries):
-        try:
-            results = openreview_client.search_notes(
-                term=term, content='authors', group='all',source='forum')
+from .config import ModelConfig
 
-            return results
+def convert_to_list(config_invitations):
+    if (isinstance(config_invitations, str)):
+        invitations = [config_invitations]
+    else:
+        invitations = config_invitations
+    assert isinstance(invitations, list), 'Input should be a str or a list'
+    return invitations
 
-        except requests.exceptions.RequestException:
-            pass
+def get_publications(openreview_client, author_id):
+    content = {
+        'authorids': author_id
+    }
+    publications = openreview.tools.iterget_notes(openreview_client, content=content)
+    return [publication for publication in publications]
 
-    print('search failed: ', term)
+def get_profile_ids(client, group_ids):
+    """
+    Returns a list of all the tilde id members from a list of groups.
+
+    Example:
+
+    >>> get_profiles(openreview_client, ['ICLR.cc/2018/Conference/Reviewers'])
+
+    :param client: OpenReview Client
+    :type client: Client
+    :param group_ids: List of group ids
+    :type group_ids: list[str]
+
+    :return: List of tilde ids
+    :rtype: list
+    """
+    tilde_members = []
+    for group_id in group_ids:
+        group = openreview_client.get_group(group_id)
+        profile_members = [member for member in group.members if '~' in member]
+        email_members = [member for member in group.members if '@' in member]
+        profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None)
+
+        if profile_members:
+            tilde_members.extend(profile_members)
+        if profile_search_results and type(profile_search_results) == dict:
+            tilde_members.extend([p.id for p in profile_search_results.values()])
+
+    return tilde_members
+
+def exclude(openreview_client, config):
+    exclusion_invitations = convert_to_list(config['exclusion_inv'])
+
+    for invitation in exclusion_invitations:
+        excluded_ids_by_user = defaultdict(list)
+        user_grouped_edges = openreview.tools.iterget_grouped_edges(
+            openreview_client,
+            invitation=invitation,
+            groupby='tail',
+            select='id,head,label,weight'
+        )
+
+        for edges in user_grouped_edges:
+            for edge in edges:
+                excluded_ids_by_user[edge.tail].append(edge.head)
+
+    return excluded_ids_by_user
+
+def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
+    # if group ID is supplied, collect archives for every member
+    # (except those whose archives already exist)
+    group_ids = convert_to_list(config['match_group'])
+    valid_members = get_profile_ids(openreview_client, group_ids)
+
+    print('finding archives for {} valid members'.format(len(valid_members)))
+
+    archive_direct_uploads = openreview.tools.iterget_notes(
+        openreview_client, invitation='OpenReview.net/Archive/-/Direct_Upload')
+
+    direct_uploads_by_signature = defaultdict(list)
+
+    for direct_upload in archive_direct_uploads:
+        direct_uploads_by_signature[direct_upload.signatures[0]].append(direct_upload)
+
+    for member in tqdm(valid_members, total=len(valid_members)):
+        file_path = Path(archive_dir).joinpath(member + '.jsonl')
+
+        if Path(file_path).exists() and not args.overwrite:
+            continue
+
+        member_papers = get_publications(openreview_client, member)
+
+        member_papers.extend(direct_uploads_by_signature[member])
+
+        filtered_papers = [
+            n for n in member_papers \
+            if n.id not in excluded_ids_by_user[member] \
+        ]
+
+        seen_keys = []
+        filtered_papers = []
+        for n in member_papers:
+            paperhash = openreview.tools.get_paperhash('', n.content['title'])
+
+            timestamp = n.cdate if n.cdate else n.tcdate
+
+            if n.id not in excluded_ids_by_user[member] \
+            and timestamp > minimum_timestamp \
+            and paperhash not in seen_keys:
+                filtered_papers.append(n)
+                seen_keys.append(paperhash)
+
+        metadata['archive_counts'][member]['arx'] = len(filtered_papers)
+        if len(filtered_papers) == 0:
+            metadata['no_publications_count'] += 1
+            metadata['no_publications'].append(member)
+
+        with open(file_path, 'w') as f:
+            for paper in filtered_papers:
+                f.write(json.dumps(paper.to_json()) + '\n')
+
+def get_submissions(openreview_client, config):
+
+    invitation_ids = convert_to_list(config['paper_invitation'])
+    submissions = []
+
+    for invitation_id in invitation_ids:
+        submissions.extend(list(openreview.tools.iterget_notes(
+            openreview_client, invitation=invitation_id)))
+
+    print('finding records of {} submissions'.format(len(submissions)))
+    for paper in tqdm(submissions, total=len(submissions)):
+        file_path = Path(submission_dir).joinpath(paper.id + '.jsonl')
+        if args.overwrite or not file_path.exists():
+            with open(file_path, 'w') as f:
+                f.write(json.dumps(paper.to_json()) + '\n')
+
+        metadata['bid_counts'][paper.forum] = 0
+
+    return submissions
+
+# Gets bids, no matter if the invitations are for tags or edges
+def get_bids(openreview_client, config):
+    # Get edge and/or tag invitations
+    invitation_ids = convert_to_list(config['bid_inv'])
+
+    # Gather all bid iterators
+    bid_iterators = []
+    for invitation_id in invitation_ids:
+        # try to find the invitation in both collections
+        bid_iterators.append(openreview.tools.iterget_tags(
+            openreview_client, invitation=invitation_id))
+        bid_iterators.append(openreview.tools.iterget_edges(
+            openreview_client, invitation=invitation_id))
+
+    # Use chain to put together bid iterators. Once one is done continue with the next one.
+    for bid in tqdm(chain(*bid_iterators), desc='writing bids'):
+        reduced_bid = {
+            'id': bid.id,
+            'invitation': bid.invitation,
+            'forum': getattr(bid, 'forum', None) or getattr(bid, 'head'),
+            'tag': getattr(bid, 'tag', None) or getattr(bid, 'label'),
+            'signature': getattr(bid, 'tail', None) or getattr(bid, 'signatures')[0],
+        }
+        file_path = Path(bids_dir).joinpath(reduced_bid['forum'] + '.jsonl')
+
+        if reduced_bid['forum'] in metadata['bid_counts']:
+            metadata['bid_counts'][reduced_bid['forum']] += 1
+            metadata['archive_counts'][reduced_bid['signature']]['bid'] += 1
+
+            with open(file_path, 'a') as f:
+                f.write(json.dumps(reduced_bid) + '\n')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -37,27 +195,27 @@ if __name__ == '__main__':
     parser.add_argument('--baseurl')
     args = parser.parse_args()
 
-    with open(args.config) as file_handle:
-        config = json.load(file_handle)
+    config = ModelConfig(config_file_path=args.config)
 
     print(config)
 
     dataset_dir = config['dataset']['directory'] if 'dataset' in config else './'
+    dataset_dir = Path(dataset_dir)
 
-    if not os.path.isdir(dataset_dir):
-        os.mkdir(dataset_dir)
+    if not dataset_dir.is_dir():
+        dataset_dir.mkdir()
 
-    archive_dir = os.path.join(dataset_dir, 'archives')
-    if not os.path.isdir(archive_dir):
-        os.mkdir(archive_dir)
+    archive_dir = dataset_dir.joinpath('archives')
+    if not archive_dir.is_dir():
+        archive_dir.mkdir()
 
-    submission_dir = os.path.join(dataset_dir, 'submissions')
-    if not os.path.isdir(submission_dir):
-        os.mkdir(submission_dir)
+    submission_dir = dataset_dir.joinpath('submissions')
+    if not submission_dir.is_dir():
+        submission_dir.mkdir()
 
-    bids_dir = os.path.join(dataset_dir, 'bids')
-    if not os.path.isdir(bids_dir):
-        os.mkdir(bids_dir)
+    bids_dir = dataset_dir.joinpath('bids')
+    if not bids_dir.is_dir():
+        bids_dir.mkdir()
 
     openreview_client = openreview.Client(
         username=args.username,
@@ -68,6 +226,8 @@ if __name__ == '__main__':
     metadata = {
         "reviewer_count": 0,
         "submission_count": 0,
+        "no_publications_count": 0,
+        "no_publications": [],
         "archive_counts": defaultdict(lambda: {'arx': 0, 'bid': 0}),
         "bid_counts": {},
     }
@@ -79,109 +239,21 @@ if __name__ == '__main__':
         minimum_timestamp = (date - epoch).total_seconds() * 1000.0
 
     print('minimum_timestamp', minimum_timestamp)
-    excluded_ids_by_user = defaultdict(list)
+
     if 'exclusion_inv' in config:
-        user_grouped_edges = openreview.tools.iterget_grouped_edges(
-            openreview_client,
-            invitation=config['exclusion_inv'],
-            groupby='tail',
-            select='id,head,label,weight'
-        )
+        excluded_ids_by_user = exclude(openreview_client, config)
+    else:
+        excluded_ids_by_user = defaultdict(list)
 
-        for edges in user_grouped_edges:
-            for edge in edges:
-                excluded_ids_by_user[edge.tail].append(edge.head)
-
-    # if group ID is supplied, collect archives for every member
-    # (except those whose archives already exist)
     if 'match_group' in config:
-        group_id = config['match_group']
-        group = openreview_client.get_group(group_id)
-
-        profile_members = [member for member in group.members if '~' in member]
-        email_members = [member for member in group.members if '@' in member]
-        profile_search_results = openreview_client.search_profiles(
-            emails=email_members, ids=None, term=None)
-
-        valid_members = []
-        if profile_members:
-            valid_members.extend(profile_members)
-        if profile_search_results and type(profile_search_results) == dict:
-            valid_members.extend([p.id for p in profile_search_results.values()])
-
-        print('finding archives for {} valid members'.format(len(valid_members)))
-
-        archive_direct_uploads = openreview.tools.iterget_notes(
-            openreview_client, invitation='OpenReview.net/Archive/-/Direct_Upload')
-
-        direct_uploads_by_signature = defaultdict(list)
-
-        for direct_upload in archive_direct_uploads:
-            direct_uploads_by_signature[direct_upload.signatures[0]].append(direct_upload)
-
-        for member in tqdm(valid_members, total=len(valid_members)):
-            file_path = os.path.join(archive_dir, member + '.jsonl')
-            if args.overwrite or not os.path.exists(file_path):
-                member_papers = search_with_retries(openreview_client, member)
-
-                member_papers.extend(direct_uploads_by_signature[member])
-
-                filtered_papers = [
-                    n for n in member_papers \
-                    if n.id not in excluded_ids_by_user[member] \
-                ]
-
-                seen_keys = []
-                filtered_papers = []
-                for n in member_papers:
-                    paperhash = openreview.tools.get_paperhash('', n.content['title'])
-
-                    timestamp = n.cdate if n.cdate else n.tcdate
-
-                    if n.id not in excluded_ids_by_user[member] \
-                    and timestamp > minimum_timestamp \
-                    and paperhash not in seen_keys:
-                        filtered_papers.append(n)
-                        seen_keys.append(paperhash)
-
-                metadata['archive_counts'][member]['arx'] = len(filtered_papers)
-
-                with open(file_path, 'w') as f:
-                    for paper in filtered_papers:
-                        f.write(json.dumps(paper.to_json()) + '\n')
+        retrieve_expertise(openreview_client, config, excluded_ids_by_user)
 
     # if invitation ID is supplied, collect records for each submission
     if 'paper_invitation' in config:
-        invitation_id = config['paper_invitation']
-
-        # (1) get submissions from OpenReview
-        submissions = list(openreview.tools.iterget_notes(
-            openreview_client, invitation=invitation_id))
-
-        print('finding records of {} submissions'.format(len(submissions)))
-        for paper in tqdm(submissions, total=len(submissions)):
-            file_path = os.path.join(submission_dir, paper.id + '.jsonl')
-            if args.overwrite or not os.path.exists(file_path):
-                with open(file_path, 'w') as f:
-                    f.write(json.dumps(paper.to_json()) + '\n')
-
-            metadata['bid_counts'][paper.forum] = 0
+        submissions = get_submissions(openreview_client, config)
 
     if 'bid_inv' in config:
-        invitation_id = config['bid_inv']
-
-        bids = openreview.tools.iterget_tags(
-            openreview_client, invitation=invitation_id)
-
-        for bid in tqdm(bids, desc='writing bids'):
-            file_path = os.path.join(bids_dir, bid.forum + '.jsonl')
-
-            if bid.forum in metadata['bid_counts']:
-                metadata['bid_counts'][bid.forum] += 1
-                metadata['archive_counts'][bid.signatures[0]]['bid'] += 1
-
-                with open(file_path, 'a') as f:
-                    f.write(json.dumps(bid.to_json()) + '\n')
+        get_bids(openreview_client, config)
 
     metadata['bid_counts'] = OrderedDict(
         sorted(metadata['bid_counts'].items(), key=lambda t: t[0]))
@@ -192,6 +264,6 @@ if __name__ == '__main__':
     metadata['reviewer_count'] = len(metadata['archive_counts'])
     metadata['submission_count'] = len(submissions)
 
-    metadata_file = os.path.join(dataset_dir, 'metadata.json')
+    metadata_file = dataset_dir.joinpath('metadata.json')
     with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=4, ensure_ascii=False)

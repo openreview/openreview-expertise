@@ -12,7 +12,6 @@ import pickle
 import csv
 from collections import defaultdict
 import math, random
-import openreview
 import ipdb
 import numpy as np
 
@@ -170,18 +169,17 @@ def get_bids_by_forum(dataset):
     #     users_w_bids.update(bid.signatures)
 
     bids_by_forum = defaultdict(list)
-    for id, bid_json in dataset.bids():
-        bid = openreview.Tag(**bid_json)
-        bids_by_forum[bid.forum].append(bid)
+    for id, bid in dataset.bids():
+        bids_by_forum[bid['forum']].append(bid)
 
     pos_and_neg_signatures_by_forum = defaultdict(lambda: {'positive': [], 'negative': []})
 
     # Get pos bids for forum
     for forum_id, forum_bids in bids_by_forum.items():
-        forum_bids_flat = [{"signature": bid.signatures[0], "bid": bid.tag} for bid in forum_bids]
-        neg_bids = [bid for bid in forum_bids_flat if bid["bid"] not in positive_labels]
+        forum_bids_flat = [{'signature': bid['signature'], 'bid': bid['tag']} for bid in forum_bids]
+        neg_bids = [bid for bid in forum_bids_flat if bid['bid'] not in positive_labels]
         neg_signatures = set([bid['signature'] for bid in neg_bids])
-        pos_bids = [bid for bid in forum_bids_flat if bid["bid"] in positive_labels]
+        pos_bids = [bid for bid in forum_bids_flat if bid['bid'] in positive_labels]
         pos_signatures = set([bid['signature'] for bid in pos_bids])
         pos_and_neg_signatures_by_forum[forum_id] = {}
         pos_and_neg_signatures_by_forum[forum_id]['positive'] = pos_signatures
