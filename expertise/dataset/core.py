@@ -1,5 +1,8 @@
 import os
 import json
+import torch
+from pathlib import Path
+from collections import defaultdict
 
 from openreview import Tag
 from expertise import utils
@@ -28,6 +31,67 @@ default_positive_labels = [
     'Very High',
     'High'
 ]
+
+class ArchivesDataset(torch.utils.data.Dataset):
+    '''
+    This class maps a tilde id to its list of publications
+    '''
+    def __init__(self, archives_path):
+        print('Loading Archives dataset...')
+        self.author_archives = defaultdict(list)
+        for author_file in Path(archives_path).iterdir():
+            dot_location = str(author_file.name).rindex('.')
+            # author_id is the tilde id of the people that will review papers
+            author_id = str(author_file.name)[:dot_location]
+            with open(author_file) as file_handle:
+                for line in file_handle:
+                    self.author_archives[author_id].append(json.loads(line.rstrip()))
+
+    def __len__(self):
+        return len(self.author_archives)
+
+    def __getitem__(self, author_id):
+        return self.author_archives[author_id]
+
+class SubmissionsDataset(torch.utils.data.Dataset):
+    '''
+    This class maps a Note id to its Note
+    '''
+    def __init__(self, submissions_path):
+        print('Loading Submissions dataset...')
+        self.submissions = {}
+        for submission_file in Path(submissions_path).iterdir():
+            dot_location = str(submission_file.name).rindex('.')
+            note_id = str(submission_file.name)[:dot_location]
+            with open(submission_file) as file_handle:
+                for line in file_handle:
+                    self.submissions[note_id] = json.loads(line.rstrip())
+
+    def __len__(self):
+        return len(self.submissions)
+
+    def __getitem__(self, note_id):
+        return self.submissions[note_id]
+
+class BidsDataset(torch.utils.data.Dataset):
+    '''
+    This class maps a Note id to its Bids
+    '''
+    def __init__(self, bids_path):
+        print('Loading Bids dataset...')
+        self.submission_bids = defaultdict(list)
+        for submission_file in Path(bids_path).iterdir():
+            dot_location = str(submission_file.name).rindex('.')
+            note_id = str(submission_file.name)[:dot_location]
+            with open(submission_file) as file_handle:
+                for line in file_handle:
+                    self.submission_bids[note_id].append(json.loads(line.rstrip()))
+
+    def __len__(self):
+        return len(self.submission_bids)
+
+    def __getitem__(self, note_id):
+        return self.submission_bids[note_id]
 
 class Dataset(object):
     '''
