@@ -1,5 +1,7 @@
 import os
 import json
+from pathlib import Path
+from collections import defaultdict, UserDict
 
 from openreview import Tag
 from expertise import utils
@@ -28,6 +30,52 @@ default_positive_labels = [
     'Very High',
     'High'
 ]
+
+class ArchivesDataset(UserDict):
+    '''
+    This class maps a tilde id to its list of publications
+    '''
+    def __init__(self, archives_path):
+        print('Loading Archives dataset...')
+        author_archives = defaultdict(list)
+        for author_file in Path(archives_path).iterdir():
+            dot_location = str(author_file.name).rindex('.')
+            # author_id is the tilde id of the people that will review papers
+            author_id = str(author_file.name)[:dot_location]
+            with open(author_file) as file_handle:
+                for line in file_handle:
+                    author_archives[author_id].append(json.loads(line.rstrip()))
+        self.data = author_archives
+
+class SubmissionsDataset(UserDict):
+    '''
+    This class maps a Note id to its Note
+    '''
+    def __init__(self, submissions_path):
+        print('Loading Submissions dataset...')
+        submissions = {}
+        for submission_file in Path(submissions_path).iterdir():
+            dot_location = str(submission_file.name).rindex('.')
+            note_id = str(submission_file.name)[:dot_location]
+            with open(submission_file) as file_handle:
+                for line in file_handle:
+                    submissions[note_id] = json.loads(line.rstrip())
+        self.data = submissions
+
+class BidsDataset(UserDict):
+    '''
+    This class maps a Note id to its Bids
+    '''
+    def __init__(self, bids_path):
+        print('Loading Bids dataset...')
+        submission_bids = defaultdict(list)
+        for submission_file in Path(bids_path).iterdir():
+            dot_location = str(submission_file.name).rindex('.')
+            note_id = str(submission_file.name)[:dot_location]
+            with open(submission_file) as file_handle:
+                for line in file_handle:
+                    submission_bids[note_id].append(json.loads(line.rstrip()))
+        self.data = submission_bids
 
 class Dataset(object):
     '''
