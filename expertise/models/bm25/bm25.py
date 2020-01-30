@@ -8,6 +8,10 @@ class Model(object):
             raise ValueError('average_score and max_score cannot both be False')
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
+        self.metadata = {
+            'closest_match': {},
+            'no_expertise': []
+        }
         self.use_title = use_title
         self.use_abstract = use_abstract
         self.average_score = average_score
@@ -54,17 +58,25 @@ class Model(object):
         elif self.use_title:
             tokenized_title = submission['content']['title'].lower().split(' ')
             submission_scores = torch.tensor(self.bm25_titles.get_scores(tokenized_title), dtype=torch.float32)
-        self.closest_match.append((submission['content']['title'], self.raw_publications[submission_scores.max(dim=0)[1]]['content']['title']))
+        self.metadata['closest_match'][submission['id']] = (submission, self.raw_publications[submission_scores.max(dim=0)[1]])
         submission_scores = self.normalize_tensor(submission_scores)
         if self.average_score:
             for profile_id, (start_index, end_index) in self.profie_id_to_indices.items():
-                reviewer_scores[profile_id] = submission_scores[start_index:end_index].mean().item()
+                if (start_index == end_index):
+                    reviewer_scores[profile_id] = 0.
+                    self.metadata['no_expertise'].append(profile_id)
+                else:
+                    reviewer_scores[profile_id] = submission_scores[start_index:end_index].mean().item()
         if self.max_score:
             for profile_id, (start_index, end_index) in self.profie_id_to_indices.items():
-                reviewer_scores[profile_id] = submission_scores[start_index:end_index].max().item()
+                if (start_index == end_index):
+                    reviewer_scores[profile_id] = 0.
+                    self.metadata['no_expertise'].append(profile_id)
+                else:
+                    reviewer_scores[profile_id] = submission_scores[start_index:end_index].max().item()
         return reviewer_scores
 
-    def all_scores(self):
+    def all_scores(self, scores_path):
         print('Computing all scores...')
         csv_scores = []
         for note_id, submission in tqdm(self.submissions_dataset.items(), total=len(self.submissions_dataset)):
@@ -72,6 +84,7 @@ class Model(object):
             for profile_id, score in reviewer_scores.items():
                 csv_line = '{reviewer},{note_id},{score}'.format(reviewer=profile_id, note_id=note_id, score=score)
                 csv_scores.append(csv_line)
-                with open('./scores.csv', 'a') as f:
-                    f.write(csv_line + '\n')
+        with open(scores_path, 'w') as f:
+            for csv_line in csv_scores:
+                f.write(csv_line + '\n')
         return csv_scores
