@@ -76,7 +76,7 @@ class Model(object):
                     reviewer_scores[profile_id] = submission_scores[start_index:end_index].max().item()
         return reviewer_scores
 
-    def all_scores(self, scores_path):
+    def all_scores(self, scores_path=None):
         print('Computing all scores...')
         csv_scores = []
         for note_id, submission in tqdm(self.submissions_dataset.items(), total=len(self.submissions_dataset)):
@@ -84,7 +84,8 @@ class Model(object):
             for profile_id, score in reviewer_scores.items():
                 csv_line = '{reviewer},{note_id},{score}'.format(reviewer=profile_id, note_id=note_id, score=score)
                 csv_scores.append(csv_line)
-        with open(scores_path, 'w') as f:
-            for csv_line in csv_scores:
-                f.write(csv_line + '\n')
+        if scores_path:
+            with open(scores_path, 'w') as f:
+                for csv_line in csv_scores:
+                    f.write(csv_line + '\n')
         return csv_scores
