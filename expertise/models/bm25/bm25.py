@@ -11,7 +11,7 @@ class Model(object):
             raise ValueError('use_title and use_abstract cannot both be False')
         self.metadata = {
             'closest_match': {},
-            'no_expertise': []
+            'no_expertise': set()
         }
         self.workers = workers
         self.use_title = use_title
@@ -66,14 +66,14 @@ class Model(object):
             for profile_id, (start_index, end_index) in self.profie_id_to_indices.items():
                 if (start_index == end_index):
                     reviewer_scores[profile_id] = 0.
-                    self.metadata['no_expertise'].append(profile_id)
+                    self.metadata['no_expertise'].add(profile_id)
                 else:
                     reviewer_scores[profile_id] = submission_scores[start_index:end_index].mean().item()
         if self.max_score:
             for profile_id, (start_index, end_index) in self.profie_id_to_indices.items():
                 if (start_index == end_index):
                     reviewer_scores[profile_id] = 0.
-                    self.metadata['no_expertise'].append(profile_id)
+                    self.metadata['no_expertise'].add(profile_id)
                 else:
                     reviewer_scores[profile_id] = submission_scores[start_index:end_index].max().item()
         return reviewer_scores

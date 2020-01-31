@@ -3,15 +3,14 @@ from pathlib import Path
 from tqdm import tqdm
 from collections import OrderedDict, defaultdict
 import multiprocessing
+import pickle
 
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
 from .models import bm25
 
 def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id):
-    rank = 50
-    good = []
-    counter = 0
+    # counter = 0
     for note_id, submission in tqdm(submissions_dataset.items(), total=len(submissions_dataset)):
         removed_publications = []
         for profile_id in publication_id_to_profile_id[note_id]:
@@ -20,16 +19,30 @@ def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id)
         reviewer_scores = bm25Model.score(submission)
 
         sorted_profile_ids = [(profile_id, value) for profile_id, value in sorted(reviewer_scores.items(), key=lambda item: item[1], reverse=True)]
-        for idx, (sorted_profile_id, value) in enumerate(sorted_profile_ids):
-            if sorted_profile_id in publication_id_to_profile_id[note_id]:
-                if idx < rank:
-                    good.append(profile_id)
-                break
-            if idx >= rank:
-                break
+        with open(Path('./test/' + note_id + '.pkl'), 'wb') as f:
+            pickle.dump(sorted_profile_ids, f, protocol=pickle.HIGHEST_PROTOCOL)
         for removed_publication in removed_publications:
             archives_dataset.add_publication(removed_publication, profile_id)
-    print('{good}/{all}'.format(good=len(good), all=len(submissions_dataset)))
+        # counter += 1
+        # if counter == 20:
+        #     break
+
+def evaluate_scores(scores_path, publication_id_to_profile_id, rank):
+    within_rank = 0
+    for submission_file in scores_path.iterdir():
+        dot_location = str(submission_file.name).rindex('.')
+        note_id = str(submission_file.name)[:dot_location]
+        print(note_id)
+        with open(submission_file, 'rb') as file_handle:
+            sorted_profile_ids = pickle.load(file_handle)
+            for idx, (sorted_profile_id, value) in enumerate(sorted_profile_ids):
+                if sorted_profile_id in publication_id_to_profile_id[note_id]:
+                    if idx < rank:
+                        within_rank += 1
+                    break
+                if idx >= rank:
+                    break
+    return within_rank
 
 
 if __name__ == '__main__':
@@ -41,7 +54,7 @@ if __name__ == '__main__':
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
 
     if config['model'] == 'bm25':
-        workers = 5
+        workers = 1
         submissions_dicts = []
         submissions_dict = {}
         publication_id_to_profile_id = defaultdict(list)
@@ -56,7 +69,6 @@ if __name__ == '__main__':
                     publication_id_set.add(publication['id'])
                 publication_id_to_profile_id[publication['id']].append(profile_id)
         submissions_dicts.append(submissions_dict)
-        # submissions_dataset = SubmissionsDataset(submissions_dict=submissions_dict)
 
         processes = []
         for worker in range(workers):
@@ -67,3 +79,5 @@ if __name__ == '__main__':
 
         for process in processes:
             process.join()
+
+        print(evaluate_scores(Path('./test'), publication_id_to_profile_id, 50))
