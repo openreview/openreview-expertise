@@ -12,16 +12,16 @@ from .models import bm25
 def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id, worker):
     # counter = 0
     for note_id, submission in tqdm(submissions_dataset.items(), total=len(submissions_dataset), position=worker):
-        removed_publications = []
+        removed_publication = None
         for profile_id in publication_id_to_profile_id[note_id]:
-            removed_publications.append(archives_dataset.remove_publication(note_id, profile_id))
+            removed_publication = removed_publication or archives_dataset.remove_publication(note_id, profile_id)
         bm25Model = bm25.Model(archives_dataset, submissions_dataset, use_title=config['model_params']['use_title'], use_abstract=config['model_params']['use_abstract'])
         reviewer_scores = bm25Model.score(submission)
 
         sorted_profile_ids = [(profile_id, value) for profile_id, value in sorted(reviewer_scores.items(), key=lambda item: item[1], reverse=True)]
         with open(Path('./test/' + note_id + '.pkl'), 'wb') as f:
             pickle.dump(sorted_profile_ids, f, protocol=pickle.HIGHEST_PROTOCOL)
-        for removed_publication in removed_publications:
+        for profile_id in publication_id_to_profile_id[note_id]:
             archives_dataset.add_publication(removed_publication, profile_id)
         # counter += 1
         # if counter == 20:
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
 
     if config['model'] == 'bm25':
-        workers = 5
+        workers = config['test_params']['workers']
         submissions_dicts = []
         submissions_dict = {}
         publication_id_to_profile_id = defaultdict(list)
