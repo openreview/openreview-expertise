@@ -14,7 +14,7 @@ def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id,
     for note_id, submission in tqdm(submissions_dataset.items(), total=len(submissions_dataset), position=worker):
         removed_publication = None
         for profile_id in publication_id_to_profile_id[note_id]:
-            removed_publication = removed_publication or archives_dataset.remove_publication(note_id, profile_id)
+            removed_publication = archives_dataset.remove_publication(note_id, profile_id) or removed_publication
         bm25Model = bm25.Model(archives_dataset, submissions_dataset, use_title=config['model_params']['use_title'], use_abstract=config['model_params']['use_abstract'])
         reviewer_scores = bm25Model.score(submission)
 
@@ -83,4 +83,4 @@ if __name__ == '__main__':
         for process in processes:
             process.join()
 
-        print(evaluate_scores(Path('./test'), publication_id_to_profile_id, 50))
+        print(evaluate_scores(Path('./test'), publication_id_to_profile_id, config['test_params']['rank']))
