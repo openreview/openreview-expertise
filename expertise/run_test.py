@@ -9,9 +9,9 @@ from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
 from .models import bm25
 
-def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id):
+def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id, worker):
     # counter = 0
-    for note_id, submission in tqdm(submissions_dataset.items(), total=len(submissions_dataset)):
+    for note_id, submission in tqdm(submissions_dataset.items(), total=len(submissions_dataset), position=worker):
         removed_publications = []
         for profile_id in publication_id_to_profile_id[note_id]:
             removed_publications.append(archives_dataset.remove_publication(note_id, profile_id))
@@ -32,7 +32,6 @@ def evaluate_scores(scores_path, publication_id_to_profile_id, rank):
     for submission_file in scores_path.iterdir():
         dot_location = str(submission_file.name).rindex('.')
         note_id = str(submission_file.name)[:dot_location]
-        print(note_id)
         with open(submission_file, 'rb') as file_handle:
             sorted_profile_ids = pickle.load(file_handle)
             for idx, (sorted_profile_id, value) in enumerate(sorted_profile_ids):
@@ -54,7 +53,7 @@ if __name__ == '__main__':
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
 
     if config['model'] == 'bm25':
-        workers = 1
+        workers = 5
         submissions_dicts = []
         submissions_dict = {}
         publication_id_to_profile_id = defaultdict(list)
@@ -64,6 +63,10 @@ if __name__ == '__main__':
                 submissions_dicts.append(submissions_dict)
                 submissions_dict = {}
             for publication in publications:
+                if config['model_params']['use_title'] and 'title' not in publication['content']:
+                    continue
+                if config['model_params']['use_abstract'] and 'abstract' not in publication['content']:
+                    continue
                 if publication['id'] not in publication_id_set:
                     submissions_dict[publication['id']] = publication
                     publication_id_set.add(publication['id'])
@@ -72,7 +75,7 @@ if __name__ == '__main__':
 
         processes = []
         for worker in range(workers):
-            processes.append(multiprocessing.Process(target=ranking, args=(archives_dataset, SubmissionsDataset(submissions_dict=submissions_dicts[worker]), publication_id_to_profile_id, )))
+            processes.append(multiprocessing.Process(target=ranking, args=(archives_dataset, SubmissionsDataset(submissions_dict=submissions_dicts[worker]), publication_id_to_profile_id, worker, )))
 
         for process in processes:
             process.start()
