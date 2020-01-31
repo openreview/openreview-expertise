@@ -13,7 +13,10 @@ from scipy.spatial.distance import cosine as cosine_dist
 from sklearn.metrics import ndcg_score
 from sklearn.preprocessing import normalize
 from tqdm import tqdm
+import math
+import faiss
 
+import torch
 from allennlp.commands.elmo import ElmoEmbedder
 from sacremoses import MosesTokenizer
 
@@ -29,27 +32,35 @@ def read_jsonl(jsonl_file):
 
 
 def load_test_data(data_dir):
-    # Load all of the submissions
-    #sub_file = os.path.join(data_dir, 'test-submissions.jsonl')
-    sub_file = os.path.join(data_dir, 'submissions.jsonl')
-    subs = read_jsonl(sub_file)
+    ## Load all of the submissions
+    ##sub_file = os.path.join(data_dir, 'test-submissions.jsonl')
+    #sub_file = os.path.join(data_dir, 'submissions.jsonl')
+    #subs = read_jsonl(sub_file)
 
     # Load user publications
     reviewer_file = os.path.join(data_dir, 'user_publications.jsonl')
     reviewer_pubs = read_jsonl(reviewer_file)
     reviewer2pubs = {x['user']: x['publications'] for x in reviewer_pubs}
 
-    # Load bids
-    bids_file = os.path.join(data_dir, 'bids.jsonl')
-    bids = read_jsonl(bids_file)
+    uid2pub = {}
+    uid2signatures = defaultdict(list)
+    for signature, pubs in reviewer2pubs.items():
+        for p in pubs:
+            if p['abstract'] is not None:
+                uid2pub[p['id']] = p
+                uid2signatures[p['id']].append(signature)
 
-    return subs, bids, reviewer2pubs
+    ## Load bids
+    #bids_file = os.path.join(data_dir, 'bids.jsonl')
+    #bids = read_jsonl(bids_file)
+
+    return uid2pub, uid2signatures
 
 
 def extract_elmo(papers, tokenizer, elmo):
     toks_list = []
     for p in papers:
-        toks_list.append(tokenizer.tokenize(p['title'], escape=False))
+        toks_list.append(tokenizer.tokenize(p['abstract'], escape=False))
     vecs = elmo.embed_batch(toks_list)
     content_vecs = []
     for vec in vecs:
@@ -72,42 +83,98 @@ if __name__ == '__main__':
     random.seed(42)
 
     # Load the submissions, bids, and reviewer test data
-    submissions, bids, reviewer2pubs = load_test_data(args.data_dir)
+    uid2pub, uid2signatures = load_test_data(args.data_dir)
 
     # create tokenizer and ELMo objects
     tokenizer = MosesTokenizer()
-    elmo = ElmoEmbedder()
+    elmo = ElmoEmbedder(cuda_device=0)
 
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
-    # create submission representations
-    if not os.path.exists(os.path.join(args.output_dir, 'sub2vec.pkl')):
-        sub2vec = {}
-        for sub in tqdm(submissions, desc='Submissions'):
-            sub2vec[sub['id']] = extract_elmo([sub], tokenizer, elmo)
-        with open(os.path.join(args.output_dir, 'sub2vec.pkl'), 'wb') as f:
-            pickle.dump(sub2vec, f, pickle.HIGHEST_PROTOCOL)
-    else:
-        print('Loading cached sub2vec...')
-        with open(os.path.join(args.output_dir, 'sub2vec.pkl'), 'rb') as f:
-            sub2vec = pickle.load(f)
-        print('Done')
+    ## create submission representations
+    #if not os.path.exists(os.path.join(args.output_dir, 'sub2vec.pkl')):
+    #    sub2vec = {}
+    #    for sub in tqdm(submissions, desc='Submissions'):
+    #        sub2vec[sub['id']] = extract_elmo([sub], tokenizer, elmo)
+    #    with open(os.path.join(args.output_dir, 'sub2vec.pkl'), 'wb') as f:
+    #        pickle.dump(sub2vec, f, pickle.HIGHEST_PROTOCOL)
+    #else:
+    #    print('Loading cached sub2vec...')
+    #    with open(os.path.join(args.output_dir, 'sub2vec.pkl'), 'rb') as f:
+    #        sub2vec = pickle.load(f)
+    #    print('Done')
 
     # create author representations
-    if not os.path.exists(os.path.join(args.output_dir, 'reviewer2vec.pkl')):
-        reviewer2vec = {}
-        for signature, pubs in tqdm(reviewer2pubs.items(), desc='Reviewers'):
-            if len(pubs) == 0:
-                continue
-            reviewer2vec[signature] = extract_elmo(pubs, tokenizer, elmo)
-        with open(os.path.join(args.output_dir, 'reviewer2vec.pkl'), 'wb') as f:
-            pickle.dump(reviewer2vec, f, pickle.HIGHEST_PROTOCOL)
+
+    if not os.path.exists(os.path.join(args.output_dir, 'uid2vec.pkl')):
+        batch_size = 8
+        all_pubs = [(uid, pub) for uid, pub in uid2pub.items()]
+        batched_pubs = []
+        for i in range(math.ceil(len(all_pubs)/batch_size)):
+            batched_pubs.append(all_pubs[i*batch_size:(i+1)*batch_size])
+
+        uids = []
+        vecs = []
+        for batch in tqdm(batched_pubs, desc='embedding pubs'):
+            _uids = [x[0] for x in batch]
+            _pubs = [x[1] for x in batch]
+            _vecs = extract_elmo(_pubs, tokenizer, elmo)
+            uids.extend(_uids)
+            vecs.append(_vecs)
+
+        vecs = np.vstack(vecs)
+        uid2vec = {_uid : _vec for _uid, _vec in zip(uids, vecs)}
+
+        with open(os.path.join(args.output_dir, 'uid2vec.pkl'), 'wb') as f:
+            pickle.dump(uid2vec, f, pickle.HIGHEST_PROTOCOL)
     else:
-        print('Loading cached reviewer2vec...')
-        with open(os.path.join(args.output_dir, 'reviewer2vec.pkl'), 'rb') as f:
-            reviewer2vec = pickle.load(f)
+        print('Loading cached uid2vec...')
+        with open(os.path.join(args.output_dir, 'uid2vec.pkl'), 'rb') as f:
+            uid2vec = pickle.load(f)
         print('Done')
+
+    print('Finished computing vectors')
+
+    # Quick hold-one-out experiment
+    _k = 100
+    uid_index = []
+    all_paper_vecs = []
+
+    for uid, paper_vec in uid2vec.items():
+        if ~np.isnan(paper_vec).any():
+            uid_index.append(uid)
+            all_paper_vecs.append(paper_vec)
+
+    all_papers_tensor = normalize(np.vstack(all_paper_vecs), axis=1)
+    all_papers_tensor = all_papers_tensor.astype(np.float32)
+
+    print('Creating k-NN index...')
+    index = faiss.IndexFlatL2(all_papers_tensor.shape[1])
+    index.add(all_papers_tensor)
+
+    print('Querying the index...')
+    D, I = index.search(all_papers_tensor, _k+1)
+
+    hits = 0
+    total = 0
+
+    for paper_index, match_indices in enumerate(I[:, 1:]):
+        closest_uids = [uid_index[x] for x in match_indices]
+        closest_signatures = []
+        for uid in closest_uids:
+            closest_signatures.extend(uid2signatures[uid])
+        
+        for signature in uid2signatures[uid_index[paper_index]]:
+            if signature in closest_signatures:
+                hits += 1
+            total += 1
+
+
+    print('Recall @ {}: {}'.format(_k, hits/total))
+    exit()
+
+###############################################################################
 
     # create submissions dict
     sub_dict = {sub['id']: sub for sub in submissions}
