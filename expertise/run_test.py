@@ -4,6 +4,7 @@ from tqdm import tqdm
 from collections import OrderedDict, defaultdict
 import multiprocessing
 import pickle
+import copy
 
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
@@ -75,7 +76,7 @@ if __name__ == '__main__':
 
         processes = []
         for worker in range(workers):
-            processes.append(multiprocessing.Process(target=ranking, args=(archives_dataset, SubmissionsDataset(submissions_dict=submissions_dicts[worker]), publication_id_to_profile_id, worker, )))
+            processes.append(multiprocessing.Process(target=ranking, args=(copy.deepcopy(archives_dataset), SubmissionsDataset(submissions_dict=copy.deepcopy(submissions_dicts[worker])), copy.deepcopy(publication_id_to_profile_id), worker, )))
 
         for process in processes:
             process.start()
