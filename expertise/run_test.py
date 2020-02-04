@@ -12,6 +12,7 @@ from .models import bm25
 
 def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id, worker):
     # counter = 0
+    note_id_to_reviewer_scores = {}
     for note_id, submission in tqdm(submissions_dataset.items(), total=len(submissions_dataset), position=worker):
         removed_publication = None
         for profile_id in publication_id_to_profile_id[note_id]:
@@ -20,13 +21,16 @@ def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id,
         reviewer_scores = bm25Model.score(submission)
 
         sorted_profile_ids = [(profile_id, value) for profile_id, value in sorted(reviewer_scores.items(), key=lambda item: item[1], reverse=True)]
-        with open(Path('./test/' + note_id + '.pkl'), 'wb') as f:
-            pickle.dump(sorted_profile_ids, f, protocol=pickle.HIGHEST_PROTOCOL)
+        note_id_to_reviewer_scores[note_id] = sorted_profile_ids
+
         for profile_id in publication_id_to_profile_id[note_id]:
             archives_dataset.add_publication(removed_publication, profile_id)
         # counter += 1
         # if counter == 20:
         #     break
+    for note_id, (profile_id, value) in note_id_to_reviewer_scores.items():
+        with open(Path('./test/' + note_id + '.pkl'), 'wb') as f:
+            pickle.dump(sorted_profile_ids, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 def evaluate_scores(scores_path, publication_id_to_profile_id, rank):
     within_rank = 0
