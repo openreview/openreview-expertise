@@ -1,17 +1,19 @@
 import torch
 from tqdm import tqdm
 from rank_bm25 import BM25Okapi
+import multiprocessing
 
 class Model(object):
-    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, average_score=False, max_score=True):
+    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, average_score=False, max_score=True, workers=1):
         if not average_score and not max_score:
             raise ValueError('average_score and max_score cannot both be False')
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
         self.metadata = {
             'closest_match': {},
-            'no_expertise': []
+            'no_expertise': set()
         }
+        self.workers = workers
         self.use_title = use_title
         self.use_abstract = use_abstract
         self.average_score = average_score
@@ -64,27 +66,45 @@ class Model(object):
             for profile_id, (start_index, end_index) in self.profie_id_to_indices.items():
                 if (start_index == end_index):
                     reviewer_scores[profile_id] = 0.
-                    self.metadata['no_expertise'].append(profile_id)
+                    self.metadata['no_expertise'].add(profile_id)
                 else:
                     reviewer_scores[profile_id] = submission_scores[start_index:end_index].mean().item()
         if self.max_score:
             for profile_id, (start_index, end_index) in self.profie_id_to_indices.items():
                 if (start_index == end_index):
                     reviewer_scores[profile_id] = 0.
-                    self.metadata['no_expertise'].append(profile_id)
+                    self.metadata['no_expertise'].add(profile_id)
                 else:
                     reviewer_scores[profile_id] = submission_scores[start_index:end_index].max().item()
         return reviewer_scores
 
-    def all_scores(self, scores_path):
-        print('Computing all scores...')
+    def all_scores_helper(self, submissions_dataset):
         csv_scores = []
-        for note_id, submission in tqdm(self.submissions_dataset.items(), total=len(self.submissions_dataset)):
+        for note_id, submission in tqdm(submissions_dataset.items(), total=len(submissions_dataset)):
             reviewer_scores = self.score(submission)
             for profile_id, score in reviewer_scores.items():
-                csv_line = '{reviewer},{note_id},{score}'.format(reviewer=profile_id, note_id=note_id, score=score)
+                csv_line = '{note_id},{reviewer},{score}'.format(reviewer=profile_id, note_id=note_id, score=score)
                 csv_scores.append(csv_line)
-        with open(scores_path, 'w') as f:
-            for csv_line in csv_scores:
-                f.write(csv_line + '\n')
         return csv_scores
+
+    def all_scores(self, scores_path=None):
+        print('Computing all scores...')
+        submissions_dicts = []
+        submissions_dict = {}
+        for idx, (note_id, submission) in enumerate(self.submissions_dataset.items()):
+            submissions_dict[note_id] = submission
+            if idx % (len(self.submissions_dataset) // self.workers + 1) >= len(self.submissions_dataset) // self.workers:
+                submissions_dicts.append(submissions_dict)
+                submissions_dict = {}
+        submissions_dicts.append(submissions_dict)
+        pool = multiprocessing.Pool(processes=self.workers)
+        csv_scores_list = pool.map(self.all_scores_helper, submissions_dicts)
+
+        all_scores = []
+        if scores_path:
+            with open(scores_path, 'w') as f:
+                for csv_scores in csv_scores_list:
+                    all_scores += csv_scores
+                    for csv_line in csv_scores:
+                        f.write(csv_line + '\n')
+        return all_scores
