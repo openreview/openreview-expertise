@@ -5,6 +5,7 @@ from collections import OrderedDict, defaultdict
 import multiprocessing
 import pickle
 import copy
+import time
 
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
@@ -14,17 +15,34 @@ def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id,
     # counter = 0
     note_id_to_reviewer_scores = {}
     for note_id, submission in tqdm(submissions_dataset.items(), total=len(submissions_dataset), position=worker):
+        start = time.time()
         removed_publication = None
         for profile_id in publication_id_to_profile_id[note_id]:
             removed_publication = archives_dataset.remove_publication(note_id, profile_id) or removed_publication
+        end = time.time()
+        if end - start > 2:
+            print('Remove publicatons', end - start)
+
+        start = time.time()
         bm25Model = bm25.Model(archives_dataset, submissions_dataset, use_title=config['model_params']['use_title'], use_abstract=config['model_params']['use_abstract'])
         reviewer_scores = bm25Model.score(submission)
+        end = time.time()
+        if end - start > 2:
+            print('Get scores', end - start)
 
+        start = time.time()
         sorted_profile_ids = [(profile_id, value) for profile_id, value in sorted(reviewer_scores.items(), key=lambda item: item[1], reverse=True)]
         note_id_to_reviewer_scores[note_id] = sorted_profile_ids
+        end = time.time()
+        if end - start > 2:
+            print('Sort scores', end - start)
 
+        start = time.time()
         for profile_id in publication_id_to_profile_id[note_id]:
             archives_dataset.add_publication(removed_publication, profile_id)
+        end = time.time()
+        if end - start > 2:
+            print('Add publication', end - start)
         # counter += 1
         # if counter == 20:
         #     break
