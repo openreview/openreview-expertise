@@ -57,11 +57,6 @@ if __name__ == '__main__':
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
 
     if config['model'] == 'bm25':
-        only_evaluate = config['test_params']['only_evaluate']
-        if only_evaluate:
-            print(evaluate_scores(Path('./test'), publication_id_to_profile_id, config['test_params']['rank']))
-            sys.exit(0)
-
         workers = config['test_params']['workers']
         submissions_dicts = []
         submissions_dict = {}
@@ -81,6 +76,11 @@ if __name__ == '__main__':
                     publication_id_set.add(publication['id'])
                 publication_id_to_profile_id[publication['id']].append(profile_id)
         submissions_dicts.append(submissions_dict)
+
+        only_evaluate = config['test_params']['only_evaluate']
+        if only_evaluate:
+            print(evaluate_scores(Path('./test'), publication_id_to_profile_id, config['test_params']['rank']))
+            sys.exit(0)
 
         processes = []
         for worker in range(workers):
