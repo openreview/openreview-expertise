@@ -5,6 +5,7 @@ from collections import OrderedDict, defaultdict
 import multiprocessing
 import pickle
 import copy
+import sys
 
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
@@ -30,7 +31,9 @@ def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id,
 
 def evaluate_scores(scores_path, publication_id_to_profile_id, rank):
     within_rank = 0
+    total = 0
     for submission_file in scores_path.iterdir():
+        total += 1
         dot_location = str(submission_file.name).rindex('.')
         note_id = str(submission_file.name)[:dot_location]
         with open(submission_file, 'rb') as file_handle:
@@ -42,7 +45,7 @@ def evaluate_scores(scores_path, publication_id_to_profile_id, rank):
                     break
                 if idx >= rank:
                     break
-    return within_rank
+    return within_rank / total
 
 
 if __name__ == '__main__':
@@ -54,6 +57,11 @@ if __name__ == '__main__':
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
 
     if config['model'] == 'bm25':
+        only_evaluate = config['test_params']['only_evaluate']
+        if only_evaluate:
+            print(evaluate_scores(Path('./test'), publication_id_to_profile_id, config['test_params']['rank']))
+            sys.exit(0)
+
         workers = config['test_params']['workers']
         submissions_dicts = []
         submissions_dict = {}
@@ -83,5 +91,3 @@ if __name__ == '__main__':
 
         for process in processes:
             process.join()
-
-        print(evaluate_scores(Path('./test'), publication_id_to_profile_id, config['test_params']['rank']))
