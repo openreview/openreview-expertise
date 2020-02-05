@@ -32,7 +32,7 @@ def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id,
 def evaluate_scores(scores_path, publication_id_to_profile_id, rank):
     within_rank = 0
     total = 0
-    for submission_file in scores_path.iterdir():
+    for submission_file in tqdm(scores_path.iterdir(), total=len(list(scores_path.glob('*')))):
         total += 1
         dot_location = str(submission_file.name).rindex('.')
         note_id = str(submission_file.name)[:dot_location]
@@ -45,7 +45,7 @@ def evaluate_scores(scores_path, publication_id_to_profile_id, rank):
                     break
                 if idx >= rank:
                     break
-    return within_rank / total
+    return 'Within top {rank}: {within_rank}, Total: {total}, Ratio: {ratio}'.format(rank=rank, within_rank=within_rank, total=total, ratio=(within_rank / total))
 
 
 if __name__ == '__main__':
