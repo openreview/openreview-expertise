@@ -7,9 +7,10 @@ from tqdm import tqdm
 import pickle
 import math
 from collections import defaultdict
+import faiss
 
 class Model(object):
-    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, use_cuda=False, batch_size=8):
+    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True):
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
         if use_title and use_abstract:
@@ -48,6 +49,9 @@ class Model(object):
             self.elmo = ElmoEmbedder(cuda_device=0)
         else:
             self.elmo = ElmoEmbedder()
+
+        self.average_score = average_score
+        self.max_score = max_score
 
     def _extract_elmo(self, papers, tokenizer, elmo):
         toks_list = []
@@ -88,7 +92,7 @@ class Model(object):
         all_papers_tensor = normalize(np.vstack(all_paper_vecs), axis=1)
         all_papers_tensor = all_papers_tensor.astype(np.float32)
 
-        return {note_id: vector for note_id, vector in zip(uid_index, all_papers_tensor)}
+        return uid_index, all_papers_tensor
 
     def embed_submssions(self, submissions_path=None):
         print('Embedding submissions...')
@@ -113,5 +117,51 @@ class Model(object):
     def score(self, submission):
         pass
 
-    def all_scores(self, scores_path=None):
+    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
+        csv_scores = []
+        print('Loading cached publications...')
+        with open(publications_path, 'rb') as f:
+            self.pub_note_id_to_vec = pickle.load(f)
+        print('Loading cached submissions...')
+        with open(submissions_path, 'rb') as f:
+            self.sub_note_id_to_vec = pickle.load(f)
+
         print('Computing all scores...')
+        index = faiss.IndexFlatL2(self.pub_note_id_to_vec[1].shape[1])
+        index.add(self.pub_note_id_to_vec[1])
+
+        _k = 100
+
+        print('Querying the index...')
+        D, I = index.search(self.sub_note_id_to_vec[1], _k)
+        preliminary_scores = (2 - D) / 2
+
+        submission_scores = {}
+        for row, publication_indexes in enumerate(I):
+            note_id = self.sub_note_id_to_vec[0][row]
+            submission_scores[note_id] = defaultdict(list)
+            for col, publication_index in enumerate(publication_indexes):
+                publication_id = self.pub_note_id_to_vec[0][publication_index]
+                profile_ids = self.pub_note_id_to_author_ids[publication_id]
+                for reviewer_id in profile_ids:
+                    submission_scores[note_id][reviewer_id].append(preliminary_scores[row][col])
+
+        csv_scores = []
+        if self.average_score:
+            for note_id, reviewer_scores in submission_scores.items():
+                for reviewer_id, scores in reviewer_scores.items():
+                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=np.average(scores))
+                    csv_scores.append(csv_line)
+
+        if self.max_score:
+            for note_id, reviewer_scores in submission_scores.items():
+                for reviewer_id, scores in reviewer_scores.items():
+                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=np.max(scores))
+                    csv_scores.append(csv_line)
+
+        all_scores = []
+        if scores_path:
+            with open(scores_path, 'w') as f:
+                for csv_line in csv_scores:
+                    f.write(csv_line + '\n')
+        return all_scores

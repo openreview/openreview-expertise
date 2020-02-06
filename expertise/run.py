@@ -20,5 +20,10 @@ if __name__ == '__main__':
 
     if config['model'] == 'elmo':
         elmoModel = elmo.Model(archives_dataset, submissions_dataset, use_title=config['model_params']['use_title'], use_abstract=config['model_params']['use_abstract'], use_cuda=config['model_params']['use_cuda'], batch_size=config['model_params']['batch_size'])
-        elmoModel.embed_publications(publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.pkl'))
-        elmoModel.embed_submssions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'))
+        # elmoModel.embed_publications(publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.pkl'))
+        # elmoModel.embed_submssions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'))
+        elmoModel.all_scores(
+            publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.pkl'),
+            submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'),
+            scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+        )
