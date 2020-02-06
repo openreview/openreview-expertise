@@ -3,7 +3,7 @@ from pathlib import Path
 
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
-from .models import bm25
+from .models import bm25, elmo
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -17,3 +17,8 @@ if __name__ == '__main__':
     if config['model'] == 'bm25':
         bm25Model = bm25.Model(archives_dataset, submissions_dataset, use_title=config['model_params']['use_title'], use_abstract=config['model_params']['use_abstract'])
         bm25Model.all_scores(Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'))
+
+    if config['model'] == 'elmo':
+        elmoModel = elmo.Model(archives_dataset, submissions_dataset, use_title=config['model_params']['use_title'], use_abstract=config['model_params']['use_abstract'], use_cuda=config['model_params']['use_cuda'], batch_size=config['model_params']['batch_size'])
+        elmoModel.embed_publications(publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.pkl'))
+        elmoModel.embed_submssions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'))

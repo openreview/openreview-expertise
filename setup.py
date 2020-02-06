@@ -41,7 +41,9 @@ setup(
         'pytorch_pretrained_bert',
         'ipdb',
         'spacy',
-        'python-Levenshtein'
+        'python-Levenshtein',
+        'allennlp',
+        'sacremoses'
     ],
     cmdclass={
         'develop': PostDevelopCommand,

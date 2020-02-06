@@ -35,11 +35,11 @@ class Model(object):
 
         self.sub_note_id_to_abstract = {}
         self.sub_note_id_to_title = {}
-        for note_id, submission in submissions_dataset:
+        for note_id, submission in submissions_dataset.items():
             if self.use_abstract and 'abstract' in submission['content']:
-                self.sub_note_id_to_abstract[subsubmission['id']] =submission['content']['abstract']
+                self.sub_note_id_to_abstract[submission['id']] = submission['content']['abstract']
             elif self.use_title and 'title' in submission['content']:
-                self.sub_note_id_to_title[subsubmission['id']] =submission['content']['title']
+                self.sub_note_id_to_title[submission['id']] = submission['content']['title']
 
         self.batch_size = batch_size
         # create tokenizer and ELMo objects
@@ -49,18 +49,29 @@ class Model(object):
         else:
             self.elmo = ElmoEmbedder()
 
+    def _extract_elmo(self, papers, tokenizer, elmo):
+        toks_list = []
+        for p in papers:
+            toks_list.append(tokenizer.tokenize(p, escape=False))
+        vecs = elmo.embed_batch(toks_list)
+        content_vecs = []
+        for vec in vecs:
+            new_vec = np.transpose(vec, (1,0,2)).reshape(-1, vec.shape[0]*vec.shape[2])
+            content_vecs.append(new_vec.mean(0))
+        return np.vstack(content_vecs)
+
     def _embed(self, uid2pub):
         all_pubs = [(uid, pub) for uid, pub in uid2pub.items()]
         batched_pubs = []
-        for i in range(math.ceil(len(all_pubs) / batch_size)):
-            batched_pubs.append(all_pubs[i * batch_size:(i + 1) * batch_size])
+        for i in range(math.ceil(len(all_pubs) / self.batch_size)):
+            batched_pubs.append(all_pubs[i * self.batch_size:(i + 1) * self.batch_size])
 
         uids = []
         vecs = []
         for batch in tqdm(batched_pubs, total=len(batched_pubs), desc='Embedding'):
             _uids = [x[0] for x in batch]
             _pubs = [x[1] for x in batch]
-            _vecs = extract_elmo(_pubs, tokenizer, elmo)
+            _vecs = self._extract_elmo(_pubs, self.tokenizer, self.elmo)
             uids.extend(_uids)
             vecs.append(_vecs)
 
@@ -79,7 +90,7 @@ class Model(object):
 
         return {note_id: vector for note_id, vector in zip(uid_index, all_papers_tensor)}
 
-    def embed_submssions(self, submissions_path=None)
+    def embed_submssions(self, submissions_path=None):
         print('Embedding submissions...')
         if self.use_title:
             self.sub_note_id_to_vec = self._embed(self.sub_note_id_to_title)
