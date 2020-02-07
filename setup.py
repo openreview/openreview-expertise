@@ -22,8 +22,8 @@ setup(
     version='0.1',
     description='OpenReview paper-reviewer affinity modeling',
     url='https://github.com/iesl/openreview-evidence',
-    author='Michael Spector',
-    author_email='spector@cs.umass.edu',
+    author='Michael Spector, Carlos Mondragon',
+    author_email='spector@cs.umass.edu, carlos@openreview.net',
     license='MIT',
     packages=[
         'expertise'
