@@ -66,8 +66,57 @@ The output will generate a `.csv` file with the name pattern `<config_name>-scor
 ## Configuration File
 
 The configuration file or `config.json` is the file that contains all the parameters to calculate affinity scores.
-Below is an example of a possible configuration. You may have a config file for creating the dataset and another for generating the affinity scores, something like `dataset-config.json` and `affinity-config.json`. However you can have everything in a single file like in the example below:
+Below you will find examples of possible configurations depending on the Model that you want to use. You may have a config file for creating the dataset and another for generating the affinity scores, something like `dataset-config.json` and `affinity-config.json`. However you can have everything in a single file like in the examples below:
 
+### Create Dataset Configuration Options
+This parameters could be included in a separate file, like `dataset-config.json`, as was mentioned before.
+- `match_group`: String or array of strings containing the groups of Reviewers or Area Chairs. The Reviewers (and Area Chairs) will get affinity scores with respect to the submitted papers based on their expertise. This expertise is obtained based on the publications available in OpenReview.
+- `paper_invitation`: String or array of strings with the submission invitations. This is the invitation for Submissions, all the submissions in OpenReview for a particular venue have an invitation and that is how they are grouped together.
+- `exclusion_inv`: String or array of strings with the exclusion invitations. Reviewers (and Area Chairs) can choose to exclude some of their papers before the affinity scores are calculated so that they get papers that are more aligned to their current expertise/interest. Papers included here will not be taken into consideration when calculating the affinity scores.
+- `bid_inv`: String or array of strings with the bid invitations. Bids are used by the reviewers in OpenReview to select papers that they would or would not like to review. These bids are then used to compute a final affinity score to be more fair with the reviewers.
+- `dataset.directory`: This is the directory where the data will be dumped. Once `create_dataset` finishes running, all the folders with the files inside will be in there.
+
+### Affinity Scores Configuration Options
+These parameters could be included in a separate file, like `affinity-config.json`, as was mentioned before.
+
+- `name`: This is the name that the `.csv` file containing the affinity scores will have.
+- `model_params.scores_path`: This is the directory where the `.csv` file with the scores will be dumped.
+- `model_params.use_title`: Boolean that indicates whether to use the title for the affinity scores or not. If this is `true` then `model_params.use_abstract` must be `false`.
+- `model_params.use_abstract`: Boolean that indicates whether to use the abstract for the affinity scores or not. If this is `true` then `model_params.use_title` must be `false`.
+
+#### BM25Okapi specific parameters:
+- `model_params.workers`: This is the number of processes that for BM25Okapi. This depends on your machine, but 4 is usually a safe value.
+
+Here is an example:
+```
+{
+    "name": "iclr2020_bm25_abstracts",
+    "match_group": ["ICLR.cc/2020/Conference/Reviewers", "ICLR.cc/2020/Conference/Area_Chairs"],
+    "paper_invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+    "exclusion_inv": "ICLR.cc/2020/Conference/-/Expertise_Selection",
+    "bid_inv": "ICLR.cc/2020/Conference/-/Add_Bid",
+    "dataset": {
+        "directory": "./"
+    },
+    "model": "bm25",
+    "model_params": {
+        "scores_path": "./",
+        "use_title": false,
+        "use_abstract": true,
+        "workers": 4,
+        "publications_path": "./",
+        "submissions_path": "./"
+    }
+}
+```
+
+#### ELMo specific parameters:
+- `model_params.use_cuda`: Boolean to indicate whether to use GPU (`true`) or CPU (`false`) when running ELMo. Currently, only 1 GPU is supported, but there does not seem to be necessary to have more.
+- `model_params.batch_size`: Batch size when running ELMo. This defaults to 8, but depending on your machine, this value could be different.
+- `model_params.publications_path`: When running ELMo, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
+- `model_params.submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the Submissions are stored.
+
+Here is an example:
 ```
 {
     "name": "iclr2020_elmo_abstracts",
@@ -91,36 +140,31 @@ Below is an example of a possible configuration. You may have a config file for 
 }
 ```
 
-### Create Dataset Configuration Options
-This parameters could be included in a separate file, like `dataset-config.json`, as was mentioned before.
-- `match_group`: String or array of strings containing the groups of Reviewers or Area Chairs. The Reviewers (and Area Chairs) will get affinity scores with respect to the submitted papers based on their expertise. This expertise is obtained based on the publications available in OpenReview.
-- `paper_invitation`: String or array of strings with the submission invitations. This is the invitation for Submissions, all the submissions in OpenReview for a particular venue have an invitation and that is how they are grouped together.
-- `exclusion_inv`: String or array of strings with the exclusion invitations. Reviewers (and Area Chairs) can choose to exclude some of their papers before the affinity scores are calculated so that they get papers that are more aligned to their current expertise/interest. Papers included here will not be taken into consideration when calculating the affinity scores.
-- `bid_inv`: String or array of strings with the bid invitations. Bids are used by the reviewers in OpenReview to select papers that they would or would not like to review. These bids are then used to compute a final affinity score to be more fair with the reviewers.
-- `dataset.directory`: This is the directory where the data will be dumped. Once `create_dataset` finishes running, all the folders with the files inside will be in there.
-
-### Affinity Scores Configuration Options
-This parameters could be included in a separate file, like `affinity-config.json`, as was mentioned before.
-- `name`: This is the name that the `.csv` file containing the affinity scores will have.
-- `model_params.scores_path`: This is the directory where the `.csv` file with the scores will be dumped.
-- `model_params.use_title`: Boolean that indicates whether to use the title for the affinity scores or not. If this is `true` then `model_params.use_abstract` must be `false`.
-- `model_params.use_abstract`: Boolean that indicates whether to use the abstract for the affinity scores or not. If this is `true` then `model_params.use_title` must be `false`.
-
-BM25Okapi specific parameters:
-- `model_params.workers`: This is the number of processes that for BM25Okapi. This depends on your machine, but 4 is usually a safe value.
-
-ELMo specific parameters:
-- `model_params.use_cuda`: Boolean to indicate whether to use GPU (`true`) or CPU (`false`) when running ELMo. Currently, only 1 GPU is supported, but there does not seem to be necessary to have more.
-- `model_params.batch_size`: Batch size when running ELMo. This defaults to 8, but depending on your machine, this value could be different.
-- `model_params.publications_path`: When running ELMo, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
-- `model_params.submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the Submissions are stored.
-
-TF-IDF Sparse Vector Similarity specific parameters with suggested values:
+#### TF-IDF Sparse Vector Similarity specific parameters with suggested values:
 - `min_count_for_vocab`: 1,
 - `random_seed`: 9,
 - `max_num_keyphrases`: 25,
 - `do_lower_case`: true,
 - `experiment_dir`: "./"
+
+Here is an example:
+
+```
+{
+    "name": "iclr2020_reviewers_tfidf",
+    "match_group": ["ICLR.cc/2020/Conference/Reviewers", "ICLR.cc/2020/Conference/Area_Chairs"],
+    "paper_invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+    "exclusion_inv": "ICLR.cc/2020/Conference/-/Expertise_Selection",
+    "min_count_for_vocab": 1,
+    "random_seed": 9,
+    "max_num_keyphrases": 25,
+    "do_lower_case": true,
+    "dataset": {
+        "directory": "./"
+    },
+    "experiment_dir": "./"
+}
+```
 
 ## Datasets
 
