@@ -41,7 +41,8 @@ setup(
         'pytorch_pretrained_bert',
         'ipdb',
         'spacy',
-        'python-Levenshtein'
+        'python-Levenshtein',
+        'rank_bm25'
     ],
     cmdclass={
         'develop': PostDevelopCommand,

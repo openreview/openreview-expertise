@@ -1,0 +1,110 @@
+import torch
+from tqdm import tqdm
+from rank_bm25 import BM25Okapi
+import multiprocessing
+
+class Model(object):
+    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, average_score=False, max_score=True, workers=1):
+        if not average_score and not max_score:
+            raise ValueError('average_score and max_score cannot both be False')
+        if not use_title and not use_abstract:
+            raise ValueError('use_title and use_abstract cannot both be False')
+        self.metadata = {
+            'closest_match': {},
+            'no_expertise': set()
+        }
+        self.workers = workers
+        self.use_title = use_title
+        self.use_abstract = use_abstract
+        self.average_score = average_score
+        self.max_score = max_score
+        self.submissions_dataset = submissions_dataset
+        self.title_corpus = []
+        self.abstract_corpus = []
+        self.raw_publications = []
+        self.closest_match = []
+        self.profie_id_to_indices = {}
+        start_index = 0
+        counter = 0
+        for profile_id, publications in archives_dataset.items():
+            for publication in publications:
+                if self.use_abstract and 'abstract' in publication['content']:
+                    tokenized_abstract = publication['content']['abstract'].lower().split(' ')
+                    self.abstract_corpus.append(tokenized_abstract)
+                    self.raw_publications.append(publication)
+                    counter += 1
+                elif self.use_title and 'title' in publication['content']:
+                    tokenized_title = publication['content']['title'].lower().split(' ')
+                    self.title_corpus.append(tokenized_title)
+                    self.raw_publications.append(publication)
+                    counter += 1
+            self.profie_id_to_indices[profile_id] = (start_index, counter)
+            start_index = counter
+
+        if use_title:
+            self.bm25_titles = BM25Okapi(self.title_corpus)
+        if use_abstract:
+            self.bm25_abstracts = BM25Okapi(self.abstract_corpus)
+
+    def normalize_tensor(self, tensor):
+        maxValue = tensor.max()
+        minValue = tensor.min()
+        return (tensor - minValue) / (maxValue - minValue)
+
+    def score(self, submission):
+        submission_scores = None
+        reviewer_scores = {}
+        if self.use_abstract:
+            tokenized_abstract = submission['content']['abstract'].lower().split(' ')
+            submission_scores = torch.tensor(self.bm25_abstracts.get_scores(tokenized_abstract), dtype=torch.float32)
+        elif self.use_title:
+            tokenized_title = submission['content']['title'].lower().split(' ')
+            submission_scores = torch.tensor(self.bm25_titles.get_scores(tokenized_title), dtype=torch.float32)
+        self.metadata['closest_match'][submission['id']] = (submission, self.raw_publications[submission_scores.max(dim=0)[1]])
+        submission_scores = self.normalize_tensor(submission_scores)
+        if self.average_score:
+            for profile_id, (start_index, end_index) in self.profie_id_to_indices.items():
+                if (start_index == end_index):
+                    reviewer_scores[profile_id] = 0.
+                    self.metadata['no_expertise'].add(profile_id)
+                else:
+                    reviewer_scores[profile_id] = submission_scores[start_index:end_index].mean().item()
+        if self.max_score:
+            for profile_id, (start_index, end_index) in self.profie_id_to_indices.items():
+                if (start_index == end_index):
+                    reviewer_scores[profile_id] = 0.
+                    self.metadata['no_expertise'].add(profile_id)
+                else:
+                    reviewer_scores[profile_id] = submission_scores[start_index:end_index].max().item()
+        return reviewer_scores
+
+    def all_scores_helper(self, submissions_dataset):
+        csv_scores = []
+        for note_id, submission in tqdm(submissions_dataset.items(), total=len(submissions_dataset)):
+            reviewer_scores = self.score(submission)
+            for profile_id, score in reviewer_scores.items():
+                csv_line = '{note_id},{reviewer},{score}'.format(reviewer=profile_id, note_id=note_id, score=score)
+                csv_scores.append(csv_line)
+        return csv_scores
+
+    def all_scores(self, scores_path=None):
+        print('Computing all scores...')
+        submissions_dicts = []
+        submissions_dict = {}
+        for idx, (note_id, submission) in enumerate(self.submissions_dataset.items()):
+            submissions_dict[note_id] = submission
+            if idx % (len(self.submissions_dataset) // self.workers + 1) >= len(self.submissions_dataset) // self.workers:
+                submissions_dicts.append(submissions_dict)
+                submissions_dict = {}
+        submissions_dicts.append(submissions_dict)
+        pool = multiprocessing.Pool(processes=self.workers)
+        csv_scores_list = pool.map(self.all_scores_helper, submissions_dicts)
+
+        all_scores = []
+        if scores_path:
+            with open(scores_path, 'w') as f:
+                for csv_scores in csv_scores_list:
+                    all_scores += csv_scores
+                    for csv_line in csv_scores:
+                        f.write(csv_line + '\n')
+        return all_scores
