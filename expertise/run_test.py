@@ -12,7 +12,6 @@ from .config import ModelConfig
 from .models import bm25
 
 def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id, worker):
-    # counter = 0
     for note_id, submission in tqdm(submissions_dataset.items(), total=len(submissions_dataset), position=worker):
         removed_publication = None
         for profile_id in publication_id_to_profile_id[note_id]:
@@ -25,9 +24,6 @@ def ranking(archives_dataset, submissions_dataset, publication_id_to_profile_id,
             pickle.dump(sorted_profile_ids, f, protocol=pickle.HIGHEST_PROTOCOL)
         for profile_id in publication_id_to_profile_id[note_id]:
             archives_dataset.add_publication(removed_publication, profile_id)
-        # counter += 1
-        # if counter == 20:
-        #     break
 
 def evaluate_scores(scores_path, publication_id_to_profile_id, rank):
     within_rank = 0
