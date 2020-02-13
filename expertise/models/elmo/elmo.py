@@ -10,7 +10,7 @@ from collections import defaultdict
 import faiss
 
 class Model(object):
-    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True):
+    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None):
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
         if use_title and use_abstract:
@@ -52,6 +52,8 @@ class Model(object):
 
         self.average_score = average_score
         self.max_score = max_score
+
+        self.knn = knn
 
     def _extract_elmo(self, papers, tokenizer, elmo):
         toks_list = []
@@ -130,10 +132,11 @@ class Model(object):
         index = faiss.IndexFlatL2(self.pub_note_id_to_vec[1].shape[1])
         index.add(self.pub_note_id_to_vec[1])
 
-        _k = 100
+        if self.knn is None:
+            self.knn = self.pub_note_id_to_vec[1].shape[0]
 
         print('Querying the index...')
-        D, I = index.search(self.sub_note_id_to_vec[1], _k)
+        D, I = index.search(self.sub_note_id_to_vec[1], self.knn)
         preliminary_scores = (2 - D) / 2
 
         submission_scores = {}
