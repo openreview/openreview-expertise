@@ -115,6 +115,10 @@ Here is an example:
 - `model_params.batch_size`: Batch size when running ELMo. This defaults to 8, but depending on your machine, this value could be different.
 - `model_params.publications_path`: When running ELMo, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
 - `model_params.submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the Submissions are stored.
+- `model_params.publications_path`: When running ELMo, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
+- `model_params.submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the Submissions are stored.
+- `model_params.knn`: This parameter specifies the k Nearest Neighbors that will be printed to the csv file. For instance, if the value is 10, then only the first 10 authors with the highest affinity score will be printed for each submission. You may see that if the value is 10, more than 10 values are printed, that is because there are ties in the scores.
+- `model_params.skip_elmo`: Since running ELMo can take a significant amount of time, the vectors are saved in `model_params.submissions_path` and `model_params.publications_path`. If you want to run other operations with these results, like changing the value of `model_params.knn`, you may do so without running ELMo again by setting `model_params.skip_elmo` to true. The pickle files will be loaded with all the vectors.
 
 Here is an example:
 ```
@@ -134,6 +138,8 @@ Here is an example:
         "use_abstract": true,
         "use_cuda": true,
         "batch_size": 8,
+        "skip_elmo": false,
+        "knn": 500,
         "publications_path": "./",
         "submissions_path": "./"
     }
