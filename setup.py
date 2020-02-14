@@ -43,7 +43,8 @@ setup(
         'spacy',
         'python-Levenshtein',
         'allennlp',
-        'sacremoses'
+        'sacremoses',
+        'rank_bm25'
     ],
     cmdclass={
         'develop': PostDevelopCommand,
