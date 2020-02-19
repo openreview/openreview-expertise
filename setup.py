@@ -42,6 +42,8 @@ setup(
         'ipdb',
         'spacy',
         'python-Levenshtein',
+        'allennlp',
+        'sacremoses',
         'rank_bm25'
     ],
     cmdclass={
