@@ -46,22 +46,32 @@ def get_profile_ids(client, group_ids):
     :param group_ids: List of group ids
     :type group_ids: list[str]
 
-    :return: List of tilde ids
+    :return: List of tuples containing (tilde_id, email)
     :rtype: list
     """
     tilde_members = []
+    members = []
     for group_id in group_ids:
         group = openreview_client.get_group(group_id)
+
         profile_members = [member for member in group.members if '~' in member]
-        email_members = [member for member in group.members if '@' in member]
-        profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None)
-
-        if profile_members:
-            tilde_members.extend(profile_members)
+        profile_search_results = openreview_client.search_profiles(emails=None, ids=profile_members, term=None)
         if profile_search_results and type(profile_search_results) == dict:
-            tilde_members.extend([p.id for p in profile_search_results.values()])
+            members.extend([(p.id, p.content['preferredEmail']) for p in profile_search_results.values()])
 
-    return tilde_members
+        email_members = [member for member in group.members if '@' in member]
+        email_set = set(email_members)
+        profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None)
+        if profile_search_results and type(profile_search_results) == dict:
+            email_profiles = []
+            for profile in profile_search_results.values():
+                for email in profile.content['emails']:
+                    if email in email_set:
+                        email_profiles.append((profile.id, email))
+                        break
+            members.extend(email_profiles)
+
+    return members
 
 def exclude(openreview_client, config):
     exclusion_invitations = convert_to_list(config['exclusion_inv'])
@@ -84,6 +94,7 @@ def exclude(openreview_client, config):
 def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
     # if group ID is supplied, collect archives for every member
     # (except those whose archives already exist)
+    use_email_ids = config.get('use_email_ids') or False
     group_ids = convert_to_list(config['match_group'])
     valid_members = get_profile_ids(openreview_client, group_ids)
 
@@ -97,8 +108,8 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
     for direct_upload in archive_direct_uploads:
         direct_uploads_by_signature[direct_upload.signatures[0]].append(direct_upload)
 
-    for member in tqdm(valid_members, total=len(valid_members)):
-        file_path = Path(archive_dir).joinpath(member + '.jsonl')
+    for (member, email) in tqdm(valid_members, total=len(valid_members)):
+        file_path = Path(archive_dir).joinpath((email if use_email_ids else member) + '.jsonl')
 
         if Path(file_path).exists() and not args.overwrite:
             continue
@@ -128,7 +139,7 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
         metadata['archive_counts'][member]['arx'] = len(filtered_papers)
         if len(filtered_papers) == 0:
             metadata['no_publications_count'] += 1
-            metadata['no_publications'].append(member)
+            metadata['no_publications'].append(email if use_email_ids else member)
 
         with open(file_path, 'w') as f:
             for paper in filtered_papers:
@@ -205,18 +216,6 @@ if __name__ == '__main__':
     if not dataset_dir.is_dir():
         dataset_dir.mkdir()
 
-    archive_dir = dataset_dir.joinpath('archives')
-    if not archive_dir.is_dir():
-        archive_dir.mkdir()
-
-    submission_dir = dataset_dir.joinpath('submissions')
-    if not submission_dir.is_dir():
-        submission_dir.mkdir()
-
-    bids_dir = dataset_dir.joinpath('bids')
-    if not bids_dir.is_dir():
-        bids_dir.mkdir()
-
     openreview_client = openreview.Client(
         username=args.username,
         password=args.password,
@@ -246,13 +245,23 @@ if __name__ == '__main__':
         excluded_ids_by_user = defaultdict(list)
 
     if 'match_group' in config:
+        archive_dir = dataset_dir.joinpath('archives')
+        if not archive_dir.is_dir():
+            archive_dir.mkdir()
         retrieve_expertise(openreview_client, config, excluded_ids_by_user)
 
     # if invitation ID is supplied, collect records for each submission
     if 'paper_invitation' in config:
+        submission_dir = dataset_dir.joinpath('submissions')
+        if not submission_dir.is_dir():
+            submission_dir.mkdir()
         submissions = get_submissions(openreview_client, config)
+        metadata['submission_count'] = len(submissions)
 
     if 'bid_inv' in config:
+        bids_dir = dataset_dir.joinpath('bids')
+        if not bids_dir.is_dir():
+            bids_dir.mkdir()
         get_bids(openreview_client, config)
 
     metadata['bid_counts'] = OrderedDict(
@@ -262,7 +271,6 @@ if __name__ == '__main__':
         sorted(metadata['archive_counts'].items(), key=lambda t: t[0]))
 
     metadata['reviewer_count'] = len(metadata['archive_counts'])
-    metadata['submission_count'] = len(submissions)
 
     metadata_file = dataset_dir.joinpath('metadata.json')
     with open(metadata_file, 'w') as f:
