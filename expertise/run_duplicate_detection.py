@@ -11,8 +11,15 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     config = ModelConfig(config_file_path=args.config)
-    submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
-    other_submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('other_submissions'))
+    if Path(config['dataset']['directory']).joinpath('submissions').exists():
+        submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
+    elif Path(config['dataset']['directory']).joinpath('submissions.jsonl').exists():
+        submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.jsonl'))
+
+    if Path(config['dataset']['directory']).joinpath('other_submissions').exists():
+        other_submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('other_submissions'))
+    elif Path(config['dataset']['directory']).joinpath('other_submissions.jsonl').exists()
+        other_submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('other_submissions.jsonl'))
 
     if config['model'] == 'elmo':
         elmoModel = elmo.Model(
