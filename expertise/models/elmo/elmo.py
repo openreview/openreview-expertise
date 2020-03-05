@@ -13,8 +13,6 @@ class Model(object):
     def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None):
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
-        if use_title and use_abstract:
-            raise ValueError('use_title and use_abstract cannot both be True')
         self.metadata = {
             'closest_match': {},
             'no_expertise': set()
@@ -98,20 +96,20 @@ class Model(object):
 
     def embed_submssions(self, submissions_path=None):
         print('Embedding submissions...')
-        if self.use_title:
-            self.sub_note_id_to_vec = self._embed(self.sub_note_id_to_title)
-        elif self.use_abstract:
+        if self.use_abstract:
             self.sub_note_id_to_vec = self._embed(self.sub_note_id_to_abstract)
+        elif self.use_title:
+            self.sub_note_id_to_vec = self._embed(self.sub_note_id_to_title)
 
         with open(submissions_path, 'wb') as f:
             pickle.dump(self.sub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
 
     def embed_publications(self, publications_path=None):
         print('Embedding publications...')
-        if self.use_title:
-            self.pub_note_id_to_vec = self._embed(self.pub_note_id_to_title)
-        elif self.use_abstract:
+        if self.use_abstract:
             self.pub_note_id_to_vec = self._embed(self.pub_note_id_to_abstract)
+        elif self.use_title:
+            self.pub_note_id_to_vec = self._embed(self.pub_note_id_to_title)
 
         with open(publications_path, 'wb') as f:
             pickle.dump(self.pub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
