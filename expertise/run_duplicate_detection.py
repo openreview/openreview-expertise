@@ -11,18 +11,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     config = ModelConfig(config_file_path=args.config)
-    archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
     submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
-
-    if config['model'] == 'bm25':
-        bm25Model = bm25.Model(
-            use_title=config['model_params'].get('use_title'),
-            use_abstract=config['model_params'].get('use_abstract'),
-            workers=config['model_params'].get('workers')
-        )
-        bm25Model.set_archives_dataset(archives_dataset)
-        bm25Model.set_submissions_dataset(submissions_dataset)
-        bm25Model.all_scores(Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'))
+    other_submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('other_submissions'))
 
     if config['model'] == 'elmo':
         elmoModel = elmo.Model(
@@ -32,13 +22,13 @@ if __name__ == '__main__':
             batch_size=config['model_params'].get('batch_size'),
             knn=config['model_params'].get('knn')
         )
-        elmoModel.set_archives_dataset(archives_dataset)
         elmoModel.set_submissions_dataset(submissions_dataset)
+        elmoModel.set_other_submissions_dataset(other_submissions_dataset)
         if config['model_params'].get('skip_elmo') is None or not config['model_params'].get('skip_elmo'):
-            elmoModel.embed_publications(publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.pkl'))
             elmoModel.embed_submssions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'))
-        elmoModel.all_scores(
-            publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.pkl'),
+            elmoModel.embed_other_submssions(other_submissions_path=Path(config['model_params']['other_submissions_path']).joinpath('osub2vec.pkl'))
+        elmoModel.find_duplicates(
             submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'),
+            other_submissions_path=Path(config['model_params']['other_submissions_path']).joinpath('osub2vec.pkl'),
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
         )
