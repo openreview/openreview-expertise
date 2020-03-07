@@ -10,7 +10,7 @@ from collections import defaultdict
 import faiss
 
 class Model(object):
-    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None):
+    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None, sparse_value=None):
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
         if use_title and use_abstract:
@@ -52,7 +52,7 @@ class Model(object):
 
         self.average_score = average_score
         self.max_score = max_score
-
+        self.sparse_value = sparse_value
         self.knn = knn
 
     def _extract_elmo(self, papers, tokenizer, elmo):
@@ -149,22 +149,65 @@ class Model(object):
                 for reviewer_id in profile_ids:
                     submission_scores[note_id][reviewer_id].append(preliminary_scores[row][col])
 
+        self.preliminary_scores = []
         csv_scores = []
         if self.average_score:
             for note_id, reviewer_scores in submission_scores.items():
                 for reviewer_id, scores in reviewer_scores.items():
-                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=np.average(scores))
+                    average_score = np.average(scores)
+                    self.preliminary_scores.append((note_id, reviewer_id, average_score))
+                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=average_score)
                     csv_scores.append(csv_line)
 
         if self.max_score:
             for note_id, reviewer_scores in submission_scores.items():
                 for reviewer_id, scores in reviewer_scores.items():
-                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=np.max(scores))
+                    max_score = np.max(scores)
+                    self.preliminary_scores.append((note_id, reviewer_id, max_score))
+                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=max_score)
                     csv_scores.append(csv_line)
 
-        all_scores = []
         if scores_path:
             with open(scores_path, 'w') as f:
                 for csv_line in csv_scores:
                     f.write(csv_line + '\n')
+        return self.preliminary_scores
+
+    def _sparse_scores_helper(self, all_scores, id_index):
+        counter = 0
+        # Get the first note_id or profile_id
+        current_id = self.preliminary_scores[0][id_index]
+        if id_index == 0:
+            desc = 'Note IDs'
+        else:
+            desc = 'Profiles IDs'
+        for note_id, profile_id, score in tqdm(self.preliminary_scores, total=len(self.preliminary_scores), desc=desc):
+            if counter < self.sparse_value:
+                all_scores.add((note_id, profile_id, score))
+            elif (note_id, profile_id)[id_index] != current_id:
+                counter = 0
+                all_scores.add((note_id, profile_id, score))
+                current_id = (note_id, profile_id)[id_index]
+            counter += 1
+        return all_scores
+
+    def sparse_scores(self, scores_path=None):
+        print('Sorting...')
+        self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
+        all_scores = set()
+        # They are first sorted by note_id
+        all_scores = self._sparse_scores_helper(all_scores, 0)
+
+        # Sort by profile_id
+        print('Sorting...')
+        self.preliminary_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        all_scores = self._sparse_scores_helper(all_scores, 1)
+
+        print('Final Sort...')
+        all_scores = sorted(list(all_scores), key=lambda x: (x[0], x[2]), reverse=True)
+        if scores_path:
+            with open(scores_path, 'w') as f:
+                for note_id, profile_id, score in all_scores:
+                    f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
+
         return all_scores

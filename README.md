@@ -83,6 +83,7 @@ These parameters could be included in a separate file, like `affinity-config.jso
 - `model_params.scores_path`: This is the directory where the `.csv` file with the scores will be dumped.
 - `model_params.use_title`: Boolean that indicates whether to use the title for the affinity scores or not. If this is `true` then `model_params.use_abstract` must be `false`.
 - `model_params.use_abstract`: Boolean that indicates whether to use the abstract for the affinity scores or not. If this is `true` then `model_params.use_title` must be `false`.
+- `model_params.sparse_value`: Optional numerical value. If passed, instead of returning all the possible publication-submission combinations, only the top scores will be returned. The number of top scores will be determined by the `sparse_value`. That does not mean that the number of scores per submission will be equal to the `sparse_value`.
 
 #### BM25Okapi specific parameters:
 - `model_params.workers`: This is the number of processes that for BM25Okapi. This depends on your machine, but 4 is usually a safe value.
