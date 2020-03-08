@@ -3,7 +3,6 @@ from pathlib import Path
 
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
-from .models import bm25, elmo
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -15,6 +14,7 @@ if __name__ == '__main__':
     submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
 
     if config['model'] == 'bm25':
+        from .models import bm25
         bm25Model = bm25.Model(
             archives_dataset,
             submissions_dataset,
@@ -35,6 +35,7 @@ if __name__ == '__main__':
             )
 
     if config['model'] == 'elmo':
+        from .models import elmo
         elmoModel = elmo.Model(
             archives_dataset,
             submissions_dataset,
