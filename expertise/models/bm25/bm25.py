@@ -30,12 +30,12 @@ class Model(object):
         counter = 0
         for profile_id, publications in archives_dataset.items():
             for publication in publications:
-                if self.use_abstract and 'abstract' in publication['content']:
+                if self.use_abstract and self._is_valid_field(publication['content'], 'abstract'):
                     tokenized_abstract = publication['content']['abstract'].lower().split(' ')
                     self.abstract_corpus.append(tokenized_abstract)
                     self.raw_publications.append(publication)
                     counter += 1
-                elif self.use_title and 'title' in publication['content']:
+                elif self.use_title and self._is_valid_field(publication['content'], 'title'):
                     tokenized_title = publication['content']['title'].lower().split(' ')
                     self.title_corpus.append(tokenized_title)
                     self.raw_publications.append(publication)
@@ -48,6 +48,9 @@ class Model(object):
         if use_abstract:
             self.bm25_abstracts = BM25Okapi(self.abstract_corpus)
 
+    def _is_valid_field(self, obj, field):
+        return field in obj and len(obj.get(field)) > 0
+
     def normalize_tensor(self, tensor):
         maxValue = tensor.max()
         minValue = tensor.min()
@@ -56,16 +59,14 @@ class Model(object):
     def score(self, submission):
         submission_scores = None
         reviewer_scores = {}
-        if self.use_abstract:
-            if 'abstract' not in submission['content']:
-                return None
+        if self.use_abstract and self._is_valid_field(submission['content'], 'abstract'):
             tokenized_abstract = submission['content']['abstract'].lower().split(' ')
             submission_scores = torch.tensor(self.bm25_abstracts.get_scores(tokenized_abstract), dtype=torch.float32)
-        elif self.use_title:
-            if 'title' not in submission['content']:
-                return None
+        elif self.use_title: and self._is_valid_field(submission['content'], 'title'):
             tokenized_title = submission['content']['title'].lower().split(' ')
             submission_scores = torch.tensor(self.bm25_titles.get_scores(tokenized_title), dtype=torch.float32)
+        else:
+            return None
         self.metadata['closest_match'][submission['id']] = (submission, self.raw_publications[submission_scores.max(dim=0)[1]])
         submission_scores = self.normalize_tensor(submission_scores)
         if self.average_score:
@@ -119,7 +120,7 @@ class Model(object):
 
         if scores_path:
             with open(scores_path, 'w') as f:
-                for note_id, profile_id, score in self.preliminary_scores:
+                for note_id, profile_id, score in tqdm(self.preliminary_scores, desc='Saving preliminary scores'):
                     f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
         return self.preliminary_scores
 

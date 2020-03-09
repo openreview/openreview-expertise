@@ -13,8 +13,6 @@ class Model(object):
     def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None, sparse_value=None):
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
-        if use_title and use_abstract:
-            raise ValueError('use_title and use_abstract cannot both be True')
         self.metadata = {
             'closest_match': {},
             'no_expertise': set()
@@ -27,19 +25,19 @@ class Model(object):
         self.pub_note_id_to_title = {}
         for profile_id, publications in archives_dataset.items():
             for publication in publications:
-                if self.use_abstract and 'abstract' in publication['content']:
+                if self.use_abstract and self._is_valid_field(publication['content'], 'abstract'):
                     self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
                     self.pub_note_id_to_abstract[publication['id']] = publication['content']['abstract']
-                elif self.use_title and 'title' in publication['content']:
+                elif self.use_title and self._is_valid_field(publication['content'], 'title'):
                     self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
                     self.pub_note_id_to_title[publication['id']] = publication['content']['title']
 
         self.sub_note_id_to_abstract = {}
         self.sub_note_id_to_title = {}
         for note_id, submission in submissions_dataset.items():
-            if self.use_abstract and 'abstract' in submission['content']:
+            if self.use_abstract and self._is_valid_field(submission['content'], 'abstract'):
                 self.sub_note_id_to_abstract[submission['id']] = submission['content']['abstract']
-            elif self.use_title and 'title' in submission['content']:
+            elif self.use_title and self._is_valid_field(submission['content'], 'title'):
                 self.sub_note_id_to_title[submission['id']] = submission['content']['title']
 
         self.batch_size = batch_size
@@ -54,6 +52,9 @@ class Model(object):
         self.max_score = max_score
         self.sparse_value = sparse_value
         self.knn = knn
+
+    def _is_valid_field(self, obj, field):
+        return field in obj and len(obj.get(field)) > 0
 
     def _extract_elmo(self, papers, tokenizer, elmo):
         toks_list = []
@@ -77,7 +78,10 @@ class Model(object):
         for batch in tqdm(batched_pubs, total=len(batched_pubs), desc='Embedding'):
             _uids = [x[0] for x in batch]
             _pubs = [x[1] for x in batch]
-            _vecs = self._extract_elmo(_pubs, self.tokenizer, self.elmo)
+            try:
+                _vecs = self._extract_elmo(_pubs, self.tokenizer, self.elmo)
+            except:
+                print(_uids)
             uids.extend(_uids)
             vecs.append(_vecs)
 
