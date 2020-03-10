@@ -62,7 +62,7 @@ class Model(object):
         if self.use_abstract and self._is_valid_field(submission['content'], 'abstract'):
             tokenized_abstract = submission['content']['abstract'].lower().split(' ')
             submission_scores = torch.tensor(self.bm25_abstracts.get_scores(tokenized_abstract), dtype=torch.float32)
-        elif self.use_title: and self._is_valid_field(submission['content'], 'title'):
+        elif self.use_title and self._is_valid_field(submission['content'], 'title'):
             tokenized_title = submission['content']['title'].lower().split(' ')
             submission_scores = torch.tensor(self.bm25_titles.get_scores(tokenized_title), dtype=torch.float32)
         else:
