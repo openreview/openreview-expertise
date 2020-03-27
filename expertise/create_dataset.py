@@ -19,7 +19,7 @@ from collections import defaultdict, OrderedDict
 from .config import ModelConfig
 
 def convert_to_list(config_invitations):
-    if (isinstance(config_invitations, str)):
+    if (isinstance(config_invitations, str) or isinstance(config_invitations, dict)):
         invitations = [config_invitations]
     else:
         invitations = config_invitations
@@ -168,23 +168,84 @@ def get_bids(openreview_client, config):
         bid_iterators.append(openreview.tools.iterget_edges(
             openreview_client, invitation=invitation_id))
 
+    all_bids = defaultdict(list)
+
     # Use chain to put together bid iterators. Once one is done continue with the next one.
     for bid in tqdm(chain(*bid_iterators), desc='writing bids'):
         reduced_bid = {
             'id': bid.id,
-            'invitation': bid.invitation,
             'forum': getattr(bid, 'forum', None) or getattr(bid, 'head'),
             'tag': getattr(bid, 'tag', None) or getattr(bid, 'label'),
             'signature': getattr(bid, 'tail', None) or getattr(bid, 'signatures')[0],
         }
-        file_path = Path(bids_dir).joinpath(reduced_bid['forum'] + '.jsonl')
+        all_bids[reduced_bid['signature']].append(reduced_bid)
 
         if reduced_bid['forum'] in metadata['bid_counts']:
             metadata['bid_counts'][reduced_bid['forum']] += 1
             metadata['archive_counts'][reduced_bid['signature']]['bid'] += 1
 
-            with open(file_path, 'a') as f:
-                f.write(json.dumps(reduced_bid) + '\n')
+    file_path = Path(bids_dir).joinpath('bids.json')
+    with open(file_path, 'w') as f:
+        json.dump(all_bids, f, indent=4)
+
+def get_assignments(openreview_client, config):
+    # Get edge and/or tag invitations
+    invitations = convert_to_list(config['assignment_inv'])
+
+    assignment_iterators = []
+    for invitation in invitations:
+        if isinstance(invitation, dict):
+            invitation_id = invitation['invitation']
+            label = invitation['label']
+            assignment_iterators.append(openreview.tools.iterget_edges(
+                openreview_client, invitation=invitation_id, label=label))
+        else:
+            invitation_id = invitation
+            assignment_iterators.append(openreview.tools.iterget_edges(
+                openreview_client, invitation=invitation_id))
+            assignment_iterators.append(openreview.tools.iterget_notes(
+                openreview_client, invitation=invitation_id))
+
+    all_assignments = defaultdict(list)
+    # Use chain to put together bid iterators. Once one is done continue with the next one.
+    for assignment in tqdm(chain(*assignment_iterators), desc='writing assignments'):
+        reduced_assignment = {
+            'id': assignment.id,
+            'head': getattr(assignment, 'head', None) or getattr(assignment, 'forum')
+        }
+        tail = getattr(assignment, 'tail', None)
+        # If tail is None then the assignment is in a Note
+        if tail is None:
+            if assignment.content.get('assignedGroups', None):
+                for group in assignment.content.get('assignedGroups'):
+                    reduced_assignment['tail'] = group['userId']
+                    reduced_assignment['weight'] = group['finalScore']
+                    all_assignments[reduced_assignment['tail']].append(reduced_assignment)
+        else:
+            reduced_assignment['tail'] = assignment.tail,
+            reduced_assignment['weight'] = assignment.weight
+
+            all_assignments[reduced_assignment['tail']].append(reduced_assignment)
+
+    file_path = Path(assignments_dir).joinpath('assignments.json')
+
+    with open(file_path, 'w') as f:
+        json.dump(all_assignments, f, indent=4)
+
+def get_profile_expertise(openreview_client, config):
+    group_ids = convert_to_list(config['match_group'])
+    valid_members = get_profile_ids(openreview_client, group_ids)
+
+    profiles = openreview_client.search_profiles(ids=valid_members, term=None)
+
+    profiles_expertise = {}
+    for profile in profiles:
+        profiles_expertise[profile.id] = profile.content.get('expertise', None)
+
+    file_path = Path(profiles_expertise_dir).joinpath('profiles_expertise.json')
+
+    with open(file_path, 'w') as f:
+        json.dump(profiles_expertise, f, indent=4)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -217,6 +278,14 @@ if __name__ == '__main__':
     if not bids_dir.is_dir():
         bids_dir.mkdir()
 
+    assignments_dir = dataset_dir.joinpath('assignments')
+    if not assignments_dir.is_dir():
+        assignments_dir.mkdir()
+
+    profiles_expertise_dir = dataset_dir.joinpath('profiles_expertise')
+    if not profiles_expertise_dir.is_dir():
+        profiles_expertise_dir.mkdir()
+
     openreview_client = openreview.Client(
         username=args.username,
         password=args.password,
@@ -247,6 +316,7 @@ if __name__ == '__main__':
 
     if 'match_group' in config:
         retrieve_expertise(openreview_client, config, excluded_ids_by_user)
+        get_profile_expertise(openreview_client, config)
 
     # if invitation ID is supplied, collect records for each submission
     if 'paper_invitation' in config:
@@ -254,6 +324,9 @@ if __name__ == '__main__':
 
     if 'bid_inv' in config:
         get_bids(openreview_client, config)
+
+    if 'assignment_inv' in config:
+        get_assignments(openreview_client, config)
 
     metadata['bid_counts'] = OrderedDict(
         sorted(metadata['bid_counts'].items(), key=lambda t: t[0]))
