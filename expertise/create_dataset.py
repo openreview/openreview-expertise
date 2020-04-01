@@ -49,27 +49,25 @@ def get_profile_ids(client, group_ids):
     :return: List of tuples containing (tilde_id, email)
     :rtype: list
     """
-    tilde_members = []
     members = []
     for group_id in group_ids:
         group = openreview_client.get_group(group_id)
 
         profile_members = [member for member in group.members if '~' in member]
         profile_search_results = openreview_client.search_profiles(emails=None, ids=profile_members, term=None)
-        if profile_search_results and type(profile_search_results) == dict:
-            members.extend([(p.id, p.content['preferredEmail']) for p in profile_search_results.values()])
+        tilde_members = []
+        for profile in profile_search_results:
+            preferredEmail = profile.content.get('preferredEmail') or profile.content.get('emails')[0]
+            tilde_members.append((profile.id, preferredEmail))
+        members.extend(tilde_members)
 
         email_members = [member for member in group.members if '@' in member]
         email_set = set(email_members)
         profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None)
-        if profile_search_results and type(profile_search_results) == dict:
-            email_profiles = []
-            for profile in profile_search_results.values():
-                for email in profile.content['emails']:
-                    if email in email_set:
-                        email_profiles.append((profile.id, email))
-                        break
-            members.extend(email_profiles)
+        email_profiles = []
+        for email, profile in profile_search_results.items():
+            email_profiles.append((profile.id, email))
+        members.extend(email_profiles)
 
     return members
 
