@@ -171,10 +171,12 @@ Here is an example:
 #### ELMo specific parameters (duplicate detection):
 - `model_params.other_submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the other Submissions are stored.
 All the other parameters are the same as in the affinity scores.
+- `model_params.skip_same_id`: Boolean value. If `true` Submissions with the same ID are skipped. This parameter is useful when trying to identify duplicates within the same Submissions. In those cases, if the ID is the same, the Subission is the same but it's not a duplicate.
 
 Here is an example:
 ```
 {
+    "name": "duplicate_detection",
     "dataset": {
         "directory": "./"
     },
@@ -183,7 +185,9 @@ Here is an example:
         "use_title": false,
         "use_abstract": true,
         "use_cuda": true,
-        "batch_size": 8,
+        "batch_size": 4,
+        "knn": 10,
+        "skip_same_id": false,
         "skip_elmo": false,
         "submissions_path": "./",
         "other_submissions_path": "./"

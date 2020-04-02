@@ -10,7 +10,7 @@ from collections import defaultdict
 import faiss
 
 class Model(object):
-    def __init__(self, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None):
+    def __init__(self, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None, skip_same_id=True):
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
         self.metadata = {
@@ -32,6 +32,7 @@ class Model(object):
         self.max_score = max_score
 
         self.knn = knn
+        self.skip_same_id = skip_same_id
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
@@ -212,8 +213,9 @@ class Model(object):
             note_id = self.sub_note_id_to_vec[0][row]
             for col, other_submission_index in enumerate(other_submission_indexes):
                 other_note_id = self.other_sub_note_id_to_vec[0][other_submission_index]
-                csv_line = '{note_id},{other_note_id},{score}'.format(note_id=note_id,, other_note_id=other_note_id score=scores[row][col])
-                csv_scores.append(csv_line)
+                if not self.skip_same_id or note_id != other_note_id:
+                    csv_line = '{note_id},{other_note_id},{score}'.format(note_id=note_id, other_note_id=other_note_id, score=scores[row][col])
+                    csv_scores.append(csv_line)
 
         all_scores = []
         if scores_path:
