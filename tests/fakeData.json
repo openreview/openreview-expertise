@@ -1,0 +1,374 @@
+{
+  "groups": {
+    "ABC.cc": {
+      "members": [
+        "~Marley_Bashirian1",
+        "~Tia_Lynch1",
+        "~Marcos_Hilpert1",
+        "~Conner_Berge1",
+        "~Rhianna_Heaney1",
+        "~Cedrick_Ullrich1",
+        "~Myrtis_Hoeger1",
+        "~Elliot_Parker1",
+        "~Nola_Rodriguez1",
+        "~Newell_Hirthe1",
+        "earl.pagac@example.com",
+        "jalen.moore@example.com",
+        "zconnelly@example.org",
+        "zachariah19@example.com",
+        "beaulah67@example.org",
+        "lucious13@example.com",
+        "lelah63@example.net",
+        "destiny66@example.org",
+        "silas.wolf@example.org",
+        "yryan@example.com"
+      ]
+    }
+  },
+  "profiles": {
+    "~Marley_Bashirian1": {
+      "id": "~Marley_Bashirian1",
+      "content": {
+        "preferredEmail": "earl.pagac@example.com",
+        "emails": [
+          "earl.pagac@example.com"
+        ]
+      }
+    },
+    "~Tia_Lynch1": {
+      "id": "~Tia_Lynch1",
+      "content": {
+        "preferredEmail": "keanu86@example.com",
+        "emails": [
+          "keanu86@example.com"
+        ]
+      }
+    },
+    "~Marcos_Hilpert1": {
+      "id": "~Marcos_Hilpert1",
+      "content": {
+        "preferredEmail": "jonas.wehner@example.org",
+        "emails": [
+          "jonas.wehner@example.org"
+        ]
+      }
+    },
+    "~Conner_Berge1": {
+      "id": "~Conner_Berge1",
+      "content": {
+        "preferredEmail": "hherman@example.com",
+        "emails": [
+          "hherman@example.com"
+        ]
+      }
+    },
+    "~Rhianna_Heaney1": {
+      "id": "~Rhianna_Heaney1",
+      "content": {
+        "preferredEmail": "tito74@example.com",
+        "emails": [
+          "tito74@example.com"
+        ]
+      }
+    },
+    "~Cedrick_Ullrich1": {
+      "id": "~Cedrick_Ullrich1",
+      "content": {
+        "preferredEmail": "harber.lola@example.org",
+        "emails": [
+          "harber.lola@example.org"
+        ]
+      }
+    },
+    "~Myrtis_Hoeger1": {
+      "id": "~Myrtis_Hoeger1",
+      "content": {
+        "preferredEmail": "jerad.miller@example.com",
+        "emails": [
+          "jerad.miller@example.com"
+        ]
+      }
+    },
+    "~Elliot_Parker1": {
+      "id": "~Elliot_Parker1",
+      "content": {
+        "preferredEmail": "twaters@example.com",
+        "emails": [
+          "twaters@example.com"
+        ]
+      }
+    },
+    "~Nola_Rodriguez1": {
+      "id": "~Nola_Rodriguez1",
+      "content": {
+        "preferredEmail": "kristina.frami@example.net",
+        "emails": [
+          "kristina.frami@example.net"
+        ]
+      }
+    },
+    "~Newell_Hirthe1": {
+      "id": "~Newell_Hirthe1",
+      "content": {
+        "preferredEmail": "kennedy.nienow@example.org",
+        "emails": [
+          "kennedy.nienow@example.org"
+        ]
+      }
+    },
+    "~Camille_Hoppe1": {
+      "id": "~Camille_Hoppe1",
+      "content": {
+        "preferredEmail": "jalen.moore@example.com",
+        "emails": [
+          "jalen.moore@example.com"
+        ]
+      }
+    },
+    "~Audrey_Mosciski1": {
+      "id": "~Audrey_Mosciski1",
+      "content": {
+        "preferredEmail": "zconnelly@example.org",
+        "emails": [
+          "zconnelly@example.org"
+        ]
+      }
+    },
+    "~Carolyne_Effertz1": {
+      "id": "~Carolyne_Effertz1",
+      "content": {
+        "preferredEmail": "zachariah19@example.com",
+        "emails": [
+          "zachariah19@example.com"
+        ]
+      }
+    },
+    "~Willis_Schowalter1": {
+      "id": "~Willis_Schowalter1",
+      "content": {
+        "preferredEmail": "beaulah67@example.org",
+        "emails": [
+          "beaulah67@example.org"
+        ]
+      }
+    },
+    "~Harmon_Hill1": {
+      "id": "~Harmon_Hill1",
+      "content": {
+        "preferredEmail": "lucious13@example.com",
+        "emails": [
+          "lucious13@example.com"
+        ]
+      }
+    },
+    "~Phyllis_Koepp1": {
+      "id": "~Phyllis_Koepp1",
+      "content": {
+        "preferredEmail": "lelah63@example.net",
+        "emails": [
+          "lelah63@example.net"
+        ]
+      }
+    },
+    "~Caterina_Green1": {
+      "id": "~Caterina_Green1",
+      "content": {
+        "preferredEmail": "destiny66@example.org",
+        "emails": [
+          "destiny66@example.org"
+        ]
+      }
+    },
+    "~Lafayette_Monahan1": {
+      "id": "~Lafayette_Monahan1",
+      "content": {
+        "preferredEmail": "silas.wolf@example.org",
+        "emails": [
+          "silas.wolf@example.org"
+        ]
+      }
+    },
+    "~Brisa_Smitham1": {
+      "id": "~Brisa_Smitham1",
+      "content": {
+        "preferredEmail": "yryan@example.com",
+        "emails": [
+          "yryan@example.com"
+        ]
+      }
+    }
+  },
+  "emailsToProfiles": {
+    "earl.pagac@example.com": {
+      "id": "~Marley_Bashirian1",
+      "content": {
+        "preferredEmail": "earl.pagac@example.com",
+        "emails": [
+          "earl.pagac@example.com"
+        ]
+      }
+    },
+    "keanu86@example.com": {
+      "id": "~Tia_Lynch1",
+      "content": {
+        "preferredEmail": "keanu86@example.com",
+        "emails": [
+          "keanu86@example.com"
+        ]
+      }
+    },
+    "jonas.wehner@example.org": {
+      "id": "~Marcos_Hilpert1",
+      "content": {
+        "preferredEmail": "jonas.wehner@example.org",
+        "emails": [
+          "jonas.wehner@example.org"
+        ]
+      }
+    },
+    "hherman@example.com": {
+      "id": "~Conner_Berge1",
+      "content": {
+        "preferredEmail": "hherman@example.com",
+        "emails": [
+          "hherman@example.com"
+        ]
+      }
+    },
+    "tito74@example.com": {
+      "id": "~Rhianna_Heaney1",
+      "content": {
+        "preferredEmail": "tito74@example.com",
+        "emails": [
+          "tito74@example.com"
+        ]
+      }
+    },
+    "harber.lola@example.org": {
+      "id": "~Cedrick_Ullrich1",
+      "content": {
+        "preferredEmail": "harber.lola@example.org",
+        "emails": [
+          "harber.lola@example.org"
+        ]
+      }
+    },
+    "jerad.miller@example.com": {
+      "id": "~Myrtis_Hoeger1",
+      "content": {
+        "preferredEmail": "jerad.miller@example.com",
+        "emails": [
+          "jerad.miller@example.com"
+        ]
+      }
+    },
+    "twaters@example.com": {
+      "id": "~Elliot_Parker1",
+      "content": {
+        "preferredEmail": "twaters@example.com",
+        "emails": [
+          "twaters@example.com"
+        ]
+      }
+    },
+    "kristina.frami@example.net": {
+      "id": "~Nola_Rodriguez1",
+      "content": {
+        "preferredEmail": "kristina.frami@example.net",
+        "emails": [
+          "kristina.frami@example.net"
+        ]
+      }
+    },
+    "kennedy.nienow@example.org": {
+      "id": "~Newell_Hirthe1",
+      "content": {
+        "preferredEmail": "kennedy.nienow@example.org",
+        "emails": [
+          "kennedy.nienow@example.org"
+        ]
+      }
+    },
+    "jalen.moore@example.com": {
+      "id": "~Camille_Hoppe1",
+      "content": {
+        "preferredEmail": "jalen.moore@example.com",
+        "emails": [
+          "jalen.moore@example.com"
+        ]
+      }
+    },
+    "zconnelly@example.org": {
+      "id": "~Audrey_Mosciski1",
+      "content": {
+        "preferredEmail": "zconnelly@example.org",
+        "emails": [
+          "zconnelly@example.org"
+        ]
+      }
+    },
+    "zachariah19@example.com": {
+      "id": "~Carolyne_Effertz1",
+      "content": {
+        "preferredEmail": "zachariah19@example.com",
+        "emails": [
+          "zachariah19@example.com"
+        ]
+      }
+    },
+    "beaulah67@example.org": {
+      "id": "~Willis_Schowalter1",
+      "content": {
+        "preferredEmail": "beaulah67@example.org",
+        "emails": [
+          "beaulah67@example.org"
+        ]
+      }
+    },
+    "lucious13@example.com": {
+      "id": "~Harmon_Hill1",
+      "content": {
+        "preferredEmail": "lucious13@example.com",
+        "emails": [
+          "lucious13@example.com"
+        ]
+      }
+    },
+    "lelah63@example.net": {
+      "id": "~Phyllis_Koepp1",
+      "content": {
+        "preferredEmail": "lelah63@example.net",
+        "emails": [
+          "lelah63@example.net"
+        ]
+      }
+    },
+    "destiny66@example.org": {
+      "id": "~Caterina_Green1",
+      "content": {
+        "preferredEmail": "destiny66@example.org",
+        "emails": [
+          "destiny66@example.org"
+        ]
+      }
+    },
+    "silas.wolf@example.org": {
+      "id": "~Lafayette_Monahan1",
+      "content": {
+        "preferredEmail": "silas.wolf@example.org",
+        "emails": [
+          "silas.wolf@example.org"
+        ]
+      }
+    },
+    "yryan@example.com": {
+      "id": "~Brisa_Smitham1",
+      "content": {
+        "preferredEmail": "yryan@example.com",
+        "emails": [
+          "yryan@example.com"
+        ]
+      }
+    }
+  }
+}
