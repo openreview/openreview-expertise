@@ -4,7 +4,7 @@ jobs:
   build:
     working_directory: ~/openreview-expertise
     docker:
-      - image: ubuntu:bionic
+      - image: ubuntu:18.04
     environment:
       PYTHON_VERSION: 3.7
     steps:
