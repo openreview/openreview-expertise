@@ -20,13 +20,13 @@ def mock_client():
     client = MagicMock(openreview.Client)
 
     def get_group(group_id):
-        with open('tests/fakeData.json') as json_file:
+        with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         group = openreview.Group.from_json(data['groups'][group_id])
         return group
 
     def search_profiles(emails=None, ids=None, term=None):
-        with open('tests/fakeData.json') as json_file:
+        with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         profiles = data['profiles']
         profiles_dict_emails = {}
@@ -48,9 +48,6 @@ def mock_client():
 
     client.get_group = MagicMock(side_effect=get_group)
     client.search_profiles = MagicMock(side_effect=search_profiles)
-    # client.get_notes = MagicMock(side_effect=get_notes)
-    # client.post_note = MagicMock(side_effect=post_note)
-    # client.get_grouped_edges = MagicMock(side_effect=get_grouped_edges)
 
     return client
 
@@ -58,5 +55,3 @@ def test_get_profile_ids():
     openreview_client = mock_client()
     ids = create_dataset.get_profile_ids(openreview_client, ['ABC.cc'])
     assert len(ids) == 100
-
-
