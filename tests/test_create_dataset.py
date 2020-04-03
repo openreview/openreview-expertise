@@ -16,18 +16,47 @@ def test_get_publications(mock_iterget_notes):
     publications = create_dataset.get_publications(MagicMock(openreview.Client), '~Carlos_Mondragon1')
     assert publications == [1,2,3]
 
-def search_profiles(emails=None, ids=None):
-    if emails:
-        with open('fakeData.json') as json_file:
+def mock_client():
+    client = MagicMock(openreview.Client)
+
+    def get_group(group_id):
+        with open('tests/fakeData.json') as json_file:
             data = json.load(json_file)
-        data['profiles']
+        group = openreview.Group.from_json(data['groups'][group_id])
+        return group
 
-def get_group(group_id):
-    with open('fakeData.json') as json_file:
-        data = json.load(json_file)
-    return data['groups'][group_id]
+    def search_profiles(emails=None, ids=None, term=None):
+        with open('tests/fakeData.json') as json_file:
+            data = json.load(json_file)
+        profiles = data['profiles']
+        profiles_dict_emails = {}
+        profiles_dict_tilde = {}
+        for profile in profiles:
+            profile = openreview.Profile.from_json(profile)
+            profiles_dict_emails[profile.content['emails'][0]] = profile
+            profiles_dict_tilde[profile.id] = profile
+        if emails:
+            return_value = {}
+            for email in emails:
+                return_value[email] = profiles_dict_emails[email]
 
-@patch('openreview_client.search_profiles', side_effect=)
-@patch('openreview_client.get_group', side_effect=get_group)
-def test_get_profile_ids(mock_get_group):
+        if ids:
+            return_value = []
+            for tilde_id in ids:
+                return_value.append(profiles_dict_tilde[tilde_id])
+        return return_value
+
+    client.get_group = MagicMock(side_effect=get_group)
+    client.search_profiles = MagicMock(side_effect=search_profiles)
+    # client.get_notes = MagicMock(side_effect=get_notes)
+    # client.post_note = MagicMock(side_effect=post_note)
+    # client.get_grouped_edges = MagicMock(side_effect=get_grouped_edges)
+
+    return client
+
+def test_get_profile_ids():
+    openreview_client = mock_client()
+    ids = create_dataset.get_profile_ids(openreview_client, ['ABC.cc'])
+    assert len(ids) == 100
+
 
