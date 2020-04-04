@@ -35,6 +35,7 @@ jobs:
       - run:
           name: Run tests
           command: |
+            source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-expertise
             mkdir reports
