@@ -116,8 +116,14 @@ class Model(object):
         with open(publications_path, 'wb') as f:
             pickle.dump(self.pub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
 
-    def score(self, submission):
-        pass
+    def normalize_scores(self, score_matrix, axis=1):
+        '''
+        If axis is 0, we normalize over the submissions
+        If axis is 1, we normalize over the publications (recommended)
+        '''
+        minValues = np.nanmin(score_matrix, axis=axis, keepdims=True)
+        maxValues = np.nanmax(score_matrix, axis=axis, keepdims=True)
+        return (score_matrix - minValues) / (maxValues - minValues)
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
         csv_scores = []
@@ -136,8 +142,20 @@ class Model(object):
             self.knn = self.pub_note_id_to_vec[1].shape[0]
 
         print('Querying the index...')
+        # D and I are 2D matrices. The row indexes correspond to the submission index
+        # of self.sub_note_id_to_vec[1]. That means that row 0 in D corresponds to the submission
+        # self.sub_note_id_to_vec[1][0], row 1 to the submission self.sub_note_id_to_vec[1][1], and
+        # so on. The values in the D matrix contain the scores between a submission and a
+        # publication. The scores in matrix D are sorted in descending order from left to right.
+        # In order to know what publication a particular score is for, the I matrix is used.
+        # The I matrix contains the indexes of the publications. Let us call the value in [0, 0] of
+        # matrix I be v. Therefore the value in [0, 0] of matrix D contains the highest score for
+        # submission in self.sub_note_id_to_vec[1][0] and publication self.pub_note_id_to_vec[1][v].
         D, I = index.search(self.sub_note_id_to_vec[1], self.knn)
-        preliminary_scores = (2 - D) / 2
+        # The D matrix scores go from 0 to 2. When values are closer to 0, it means that the
+        # similarity is greater. However, we need to have values closer to 1 to indicate more
+        # similarity. Also, the D matrix values range from 0 to 2.
+        preliminary_scores = self.normalize_scores(2 - D, axis=1)
 
         submission_scores = {}
         for row, publication_indexes in enumerate(I):
