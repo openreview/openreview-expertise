@@ -189,18 +189,18 @@ def get_bids(openreview_client, config):
         json.dump(all_bids, f, indent=4)
 
 def get_assignments(openreview_client, config):
-    # Get edge and/or tag invitations
-    invitations = convert_to_list(config['assignment_inv'])
+    assignments_params = convert_to_list(config['assignments'])
 
     assignment_iterators = []
-    for invitation in invitations:
-        if isinstance(invitation, dict):
-            invitation_id = invitation['invitation']
-            label = invitation['label']
-            assignment_iterators.append(openreview.tools.iterget_edges(
-                openreview_client, invitation=invitation_id, label=label))
+    for params in assignments_params:
+        if isinstance(params, dict):
+            try:
+                assignment_iterators.append(openreview.tools.iterget_edges(openreview_client, **params))
+                assignment_iterators.append(openreview.tools.iterget_notes(openreview_client, **params))
+            except:
+                assignment_iterators.append(openreview.tools.iterget_notes(openreview_client, **params))
         else:
-            invitation_id = invitation
+            invitation_id = params
             assignment_iterators.append(openreview.tools.iterget_edges(
                 openreview_client, invitation=invitation_id))
             assignment_iterators.append(openreview.tools.iterget_notes(
@@ -325,7 +325,7 @@ if __name__ == '__main__':
     if 'bid_inv' in config:
         get_bids(openreview_client, config)
 
-    if 'assignment_inv' in config:
+    if 'assignments' in config:
         get_assignments(openreview_client, config)
 
     metadata['bid_counts'] = OrderedDict(
