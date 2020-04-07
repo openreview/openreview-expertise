@@ -209,23 +209,38 @@ def get_assignments(openreview_client, config):
     all_assignments = defaultdict(list)
     # Use chain to put together bid iterators. Once one is done continue with the next one.
     for assignment in tqdm(chain(*assignment_iterators), desc='writing assignments'):
+        # This is for old conferences like ICLR 2018
+        if getattr(assignment, 'content', None) and assignment.content.get('assignments'):
+            papers = assignment.content.get('assignments')
+            for paper in papers.values():
+                if len(paper.get('assigned', [])) > 0:
+                    for userId in paper.get('assigned'):
+                        all_assignments[userId].append({
+                            'id': None,
+                            'head': paper['forum'],
+                            'tail': userId,
+                            'weight': None
+                        })
+            continue
+
+        # This is for venues like ICLR 2019
+        if getattr(assignment, 'content', None) and assignment.content.get('assignedGroups'):
+            for group in assignment.content.get('assignedGroups'):
+                all_assignments[rgroup['userId']].append({
+                    'id': assignment.id,
+                    'head': assignment.forum,
+                    'tail' = group['userId']
+                    'weight' = group['finalScore']
+                })
+            continue
+
         reduced_assignment = {
             'id': assignment.id,
-            'head': getattr(assignment, 'head', None) or getattr(assignment, 'forum')
+            'head': assignment.forum,
+            'tail' = assignment.tail,
+            'weight' = assignment.weight
         }
-        tail = getattr(assignment, 'tail', None)
-        # If tail is None then the assignment is in a Note
-        if tail is None:
-            if assignment.content.get('assignedGroups', None):
-                for group in assignment.content.get('assignedGroups'):
-                    reduced_assignment['tail'] = group['userId']
-                    reduced_assignment['weight'] = group['finalScore']
-                    all_assignments[reduced_assignment['tail']].append(reduced_assignment.copy())
-        else:
-            reduced_assignment['tail'] = assignment.tail,
-            reduced_assignment['weight'] = assignment.weight
-
-            all_assignments[reduced_assignment['tail']].append(reduced_assignment.copy())
+        all_assignments[reduced_assignment['tail']].append(reduced_assignment)
 
     file_path = Path(assignments_dir).joinpath('assignments.json')
 
