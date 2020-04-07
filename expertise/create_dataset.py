@@ -220,12 +220,12 @@ def get_assignments(openreview_client, config):
                 for group in assignment.content.get('assignedGroups'):
                     reduced_assignment['tail'] = group['userId']
                     reduced_assignment['weight'] = group['finalScore']
-                    all_assignments[reduced_assignment['tail']].append(reduced_assignment)
+                    all_assignments[reduced_assignment['tail']].append(reduced_assignment.copy())
         else:
             reduced_assignment['tail'] = assignment.tail,
             reduced_assignment['weight'] = assignment.weight
 
-            all_assignments[reduced_assignment['tail']].append(reduced_assignment)
+            all_assignments[reduced_assignment['tail']].append(reduced_assignment.copy())
 
     file_path = Path(assignments_dir).joinpath('assignments.json')
 
