@@ -229,16 +229,16 @@ def get_assignments(openreview_client, config):
                 all_assignments[rgroup['userId']].append({
                     'id': assignment.id,
                     'head': assignment.forum,
-                    'tail' = group['userId']
-                    'weight' = group['finalScore']
+                    'tail': group['userId'],
+                    'weight': group['finalScore']
                 })
             continue
 
         reduced_assignment = {
             'id': assignment.id,
             'head': assignment.forum,
-            'tail' = assignment.tail,
-            'weight' = assignment.weight
+            'tail': assignment.tail,
+            'weight': assignment.weight
         }
         all_assignments[reduced_assignment['tail']].append(reduced_assignment)
 
