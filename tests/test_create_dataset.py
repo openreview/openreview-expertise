@@ -1,6 +1,7 @@
 from expertise import create_dataset
 from unittest.mock import patch, MagicMock
 from collections import defaultdict
+from expertise.dataset import ArchivesDataset
 import openreview
 import json
 
@@ -89,3 +90,11 @@ def test_retrieve_expertise(iterget_notes, get_paperhash, tmp_path):
     archive_dir.mkdir()
     create_dataset.retrieve_expertise(openreview_client, config, defaultdict(list), archive_dir, metadata)
 
+    archives_dataset = ArchivesDataset(archives_path=archive_dir)
+
+    with open('tests/data/fakeData.json') as json_file:
+        data = json.load(json_file)
+    profiles = data['profiles']
+    for profile in profiles:
+        if len(profile['publications']) > 0:
+            assert len(archives_dataset[profile['id']]) == len(profile['publications'])
