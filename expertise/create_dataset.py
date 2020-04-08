@@ -89,22 +89,14 @@ def exclude(openreview_client, config):
 
     return excluded_ids_by_user
 
-def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
+def retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_dir, metadata):
     # if group ID is supplied, collect archives for every member
     # (except those whose archives already exist)
-    use_email_ids = config.get('use_email_ids') or False
+    use_email_ids = config.get('use_email_ids', False)
     group_ids = convert_to_list(config['match_group'])
     valid_members = get_profile_ids(openreview_client, group_ids)
 
     print('finding archives for {} valid members'.format(len(valid_members)))
-
-    archive_direct_uploads = openreview.tools.iterget_notes(
-        openreview_client, invitation='OpenReview.net/Archive/-/Direct_Upload')
-
-    direct_uploads_by_signature = defaultdict(list)
-
-    for direct_upload in archive_direct_uploads:
-        direct_uploads_by_signature[direct_upload.signatures[0]].append(direct_upload)
 
     for (member, email) in tqdm(valid_members, total=len(valid_members)):
         file_path = Path(archive_dir).joinpath((email if use_email_ids else member) + '.jsonl')
@@ -113,8 +105,6 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
             continue
 
         member_papers = get_publications(openreview_client, member)
-
-        member_papers.extend(direct_uploads_by_signature[member])
 
         filtered_papers = [
             n for n in member_papers \
@@ -129,7 +119,7 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
             timestamp = n.cdate if n.cdate else n.tcdate
 
             if n.id not in excluded_ids_by_user[member] \
-            and timestamp > minimum_timestamp \
+            and timestamp > config.get('minimum_timestamp', 0) \
             and paperhash not in seen_keys:
                 filtered_papers.append(n)
                 seen_keys.append(paperhash)
@@ -229,14 +219,6 @@ if __name__ == '__main__':
         "bid_counts": {},
     }
 
-    minimum_timestamp = 0
-    if 'oldest_year' in config:
-        epoch = datetime.fromtimestamp(0)
-        date = datetime.strptime(config['oldest_year'], '%Y')
-        minimum_timestamp = (date - epoch).total_seconds() * 1000.0
-
-    print('minimum_timestamp', minimum_timestamp)
-
     if 'exclusion_inv' in config:
         excluded_ids_by_user = exclude(openreview_client, config)
     else:
@@ -246,7 +228,7 @@ if __name__ == '__main__':
         archive_dir = dataset_dir.joinpath('archives')
         if not archive_dir.is_dir():
             archive_dir.mkdir()
-        retrieve_expertise(openreview_client, config, excluded_ids_by_user)
+        retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_dir, metadata)
 
     # if invitation ID is supplied, collect records for each submission
     if 'paper_invitation' in config:

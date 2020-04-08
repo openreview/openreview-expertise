@@ -75,6 +75,7 @@ This parameters could be included in a separate file, like `dataset-config.json`
 - `exclusion_inv`: String or array of strings with the exclusion invitations. Reviewers (and Area Chairs) can choose to exclude some of their papers before the affinity scores are calculated so that they get papers that are more aligned to their current expertise/interest. Papers included here will not be taken into consideration when calculating the affinity scores.
 - `bid_inv`: String or array of strings with the bid invitations. Bids are used by the reviewers in OpenReview to select papers that they would or would not like to review. These bids are then used to compute a final affinity score to be more fair with the reviewers.
 - `use_email_ids`: Boolean value. If true, then the email of the user is used instead of his/her OpenReview Profile ID.
+- `minimum_timestamp`: Number indicating the date in Unix format. This date indicates the minimum date of a publication for it to be considered in the expertise.
 - `dataset.directory`: This is the directory where the data will be dumped. Once `create_dataset` finishes running, all the folders with the files inside will be in there.
 
 ### Affinity Scores Configuration Options
