@@ -11,7 +11,7 @@ from expertise.models import centroid_scibert_cls as centroid_scibert
 from expertise import utils
 from expertise.utils.vocab import Vocab
 from expertise.utils.batcher import Batcher
-from expertise.config import Config
+from expertise.config import ModelConfig
 
 current_path = os.path.abspath(os.path.dirname(__file__))
 import ipdb

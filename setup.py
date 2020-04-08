@@ -44,7 +44,8 @@ setup(
         'python-Levenshtein',
         'allennlp',
         'sacremoses',
-        'rank_bm25'
+        'rank_bm25',
+        'pytest'
     ],
     cmdclass={
         'develop': PostDevelopCommand,
