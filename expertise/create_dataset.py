@@ -57,12 +57,16 @@ def get_profile_ids(openreview_client, group_ids):
         profile_search_results = openreview_client.search_profiles(emails=None, ids=profile_members, term=None)
         tilde_members = []
         for profile in profile_search_results:
-            preferredEmail = profile.content.get('preferredEmail') or profile.content.get('emails')[0]
-            tilde_members.append((profile.id, preferredEmail))
+            preferredEmail = profile.content.get('preferredEmail')
+            # If user does not have preferred email, use first email in the emailsConfirmed list
+            preferredEmail = preferredEmail or profile.content.get('emailsConfirmed') and len(profile.content.get('emailsConfirmed')) and profile.content.get('emailsConfirmed')[0]
+            # If the user does not have emails confirmed, use the first email in the emails list
+            preferredEmail = preferredEmail or profile.content.get('emails') and len(profile.content.get('emails')) and profile.content.get('emails')[0]
+            # If the user Profile does not have an email, use its Profile ID
+            tilde_members.append((profile.id, preferredEmail or profile.id))
         members.extend(tilde_members)
 
         email_members = [member for member in group.members if '@' in member]
-        email_set = set(email_members)
         profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None)
         email_profiles = []
         for email, profile in profile_search_results.items():
