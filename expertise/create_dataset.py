@@ -33,7 +33,7 @@ def get_publications(openreview_client, author_id):
     publications = openreview.tools.iterget_notes(openreview_client, content=content)
     return [publication for publication in publications]
 
-def get_profile_ids(client, group_ids):
+def get_profile_ids(openreview_client, group_ids):
     """
     Returns a list of all the tilde id members from a list of groups.
 
