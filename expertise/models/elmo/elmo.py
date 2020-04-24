@@ -121,9 +121,11 @@ class Model(object):
         If axis is 0, we normalize over the submissions
         If axis is 1, we normalize over the publications (recommended)
         '''
-        minValues = np.nanmin(score_matrix, axis=axis, keepdims=True)
-        maxValues = np.nanmax(score_matrix, axis=axis, keepdims=True)
-        return (score_matrix - minValues) / (maxValues - minValues)
+        min_values = np.nanmin(score_matrix, axis=axis, keepdims=True)
+        max_values = np.nanmax(score_matrix, axis=axis, keepdims=True)
+        normalized = (score_matrix - min_values) / (max_values - min_values)
+        normalized[np.isnan(normalized)] = 0.5
+        return normalized
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
         csv_scores = []
@@ -168,19 +170,23 @@ class Model(object):
                     submission_scores[note_id][reviewer_id].append(preliminary_scores[row][col])
 
         csv_scores = []
+        all_scores = []
         if self.average_score:
             for note_id, reviewer_scores in submission_scores.items():
                 for reviewer_id, scores in reviewer_scores.items():
-                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=np.average(scores))
+                    score = np.average(scores)
+                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=score)
                     csv_scores.append(csv_line)
+                    all_scores.append((note_id, reviewer_id, score))
 
         if self.max_score:
             for note_id, reviewer_scores in submission_scores.items():
                 for reviewer_id, scores in reviewer_scores.items():
-                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=np.max(scores))
+                    score = np.max(scores)
+                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=score)
                     csv_scores.append(csv_line)
+                    all_scores.append((note_id, reviewer_id, score))
 
-        all_scores = []
         if scores_path:
             with open(scores_path, 'w') as f:
                 for csv_line in csv_scores:
