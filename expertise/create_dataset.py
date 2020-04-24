@@ -26,12 +26,70 @@ def convert_to_list(config_invitations):
     assert isinstance(invitations, list), 'Input should be a str or a list'
     return invitations
 
-def get_publications(openreview_client, author_id):
+def get_publications(openreview_client, config, author_id):
     content = {
         'authorids': author_id
     }
     publications = openreview.tools.iterget_notes(openreview_client, content=content)
-    return [publication for publication in publications]
+
+    # Get all publications and assign tcdate to cdate in case cdate is None. If tcdate is also None
+    # assign cdate := 0
+    unsorted_publications = []
+    for publication in publications:
+        if getattr(publication, 'cdate') is None:
+            publication.cdate = getattr(publication, 'tcdate', 0)
+        unsorted_publications.append(publication)
+
+    # If the author does not have publications, then return early
+    if len(unsorted_publications) == 0:
+        return unsorted_publications
+
+    dataset_params = config.get('dataset', {})
+    minimum_pub_date = dataset_params.get('minimum_pub_date') or dataset_params.get('or', {}).get('minimum_pub_date', 0)
+    top_recent_pubs = dataset_params.get('top_recent_pubs') or dataset_params.get('or', {}).get('top_recent_pubs', False)
+
+    # If there is no minimum publication date and no recent publications constraints we return
+    # all the publications in any order
+    if not top_recent_pubs and not minimum_pub_date:
+        return unsorted_publications
+
+    # Sort publications in descending order based on the cdate
+    sorted_publications = sorted(unsorted_publications, key=lambda pub: getattr(pub, 'cdate'), reverse=True)
+
+    if not top_recent_pubs:
+        return [publication for publication in sorted_publications if publication.cdate >= minimum_pub_date]
+
+    if isinstance(top_recent_pubs, str) and top_recent_pubs[-1] == '%':
+        paper_percent = int(top_recent_pubs[:-1]) / 100
+    elif isinstance(top_recent_pubs, int):
+        paper_num = top_recent_pubs
+
+    if paper_percent:
+        non_int_value = len(sorted_publications) * paper_percent
+        # Use remainder to always round up decimals, then convert to int.
+        # This is useful if the percentage is 10%, but the user only has 3 publications, for example.
+        # 3 * 0.1 = 0.3. So we want to round up to 1 in this case.
+        paper_num = int(non_int_value) + (non_int_value % 1 > 0)
+
+    top = sorted_publications[:paper_num]
+    if not minimum_pub_date:
+        return top
+
+    minimum = [publication for publication in sorted_publications if publication.cdate >= minimum_pub_date]
+
+    # We need to figure out if the constraints have an OR or AND relation
+    if dataset_params.get('or', False):
+        # minimum and top will have the same pubs because they are sorted, however, one of them
+        # is larger than the other. In OR relation we want the largest one as it would be the
+        # union between the two sets
+        if len(minimum) > len(top):
+            return minimum
+        return top
+
+    # AND relation
+    if len(minimum) > len(top):
+        return top
+    return minimum
 
 def get_profile_ids(openreview_client, group_ids):
     """
