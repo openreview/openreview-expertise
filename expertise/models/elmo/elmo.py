@@ -106,7 +106,7 @@ class Model(object):
 
         return uid_index, all_papers_tensor
 
-    def embed_submssions(self, submissions_path=None):
+    def embed_submissions(self, submissions_path=None):
         print('Embedding submissions...')
         if self.use_abstract:
             self.sub_note_id_to_vec = self._embed(self.sub_note_id_to_abstract)
@@ -116,7 +116,7 @@ class Model(object):
         with open(submissions_path, 'wb') as f:
             pickle.dump(self.sub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
 
-    def embed_other_submssions(self, other_submissions_path=None):
+    def embed_other_submissions(self, other_submissions_path=None):
         print('Embedding other submissions...')
         if self.use_abstract:
             self.other_sub_note_id_to_vec = self._embed(self.other_sub_note_id_to_abstract)
@@ -193,9 +193,13 @@ class Model(object):
         with open(submissions_path, 'rb') as f:
             self.sub_note_id_to_vec = pickle.load(f)
 
-        print('Loading other cached submissions...')
-        with open(other_submissions_path, 'rb') as f:
-            self.other_sub_note_id_to_vec = pickle.load(f)
+        if other_submissions_path:
+            print('Loading other cached submissions...')
+            with open(other_submissions_path, 'rb') as f:
+                self.other_sub_note_id_to_vec = pickle.load(f)
+        else:
+            with open(submissions_path, 'rb') as f:
+                self.other_sub_note_id_to_vec = pickle.load(f)
 
         print('Computing all scores...')
         index = faiss.IndexFlatL2(self.other_sub_note_id_to_vec[1].shape[1])
@@ -209,15 +213,17 @@ class Model(object):
         scores = (2 - D) / 2
 
         csv_scores = []
+        all_scores = []
         for row, other_submission_indexes in enumerate(I):
             note_id = self.sub_note_id_to_vec[0][row]
             for col, other_submission_index in enumerate(other_submission_indexes):
                 other_note_id = self.other_sub_note_id_to_vec[0][other_submission_index]
                 if not self.skip_same_id or note_id != other_note_id:
-                    csv_line = '{note_id},{other_note_id},{score}'.format(note_id=note_id, other_note_id=other_note_id, score=scores[row][col])
+                    score = scores[row][col]
+                    csv_line = '{note_id},{other_note_id},{score}'.format(note_id=note_id, other_note_id=other_note_id, score=score)
                     csv_scores.append(csv_line)
+                    all_scores.append((note_id, other_note_id, score))
 
-        all_scores = []
         if scores_path:
             with open(scores_path, 'w') as f:
                 for csv_line in csv_scores:
