@@ -67,7 +67,7 @@ def get_profile_ids(openreview_client, group_ids):
         members.extend(tilde_members)
 
         email_members = [member for member in group.members if '@' in member]
-        profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None)
+        profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None) if email_members else {}
         email_profiles = []
         for email, profile in profile_search_results.items():
             email_profiles.append((profile.id, email))
