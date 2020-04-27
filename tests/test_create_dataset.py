@@ -1,5 +1,7 @@
 from expertise import create_dataset
 from unittest.mock import patch, MagicMock
+from collections import defaultdict
+from expertise.dataset import ArchivesDataset
 import openreview
 import json
 
@@ -33,7 +35,8 @@ def mock_client():
         profiles_dict_tilde = {}
         for profile in profiles:
             profile = openreview.Profile.from_json(profile)
-            profiles_dict_emails[profile.content['emails'][0]] = profile
+            if profile.content.get('emails') and len(profile.content.get('emails')):
+                profiles_dict_emails[profile.content['emails'][0]] = profile
             profiles_dict_tilde[profile.id] = profile
         if emails:
             return_value = {}
@@ -55,3 +58,49 @@ def test_get_profile_ids():
     openreview_client = mock_client()
     ids = create_dataset.get_profile_ids(openreview_client, ['ABC.cc'])
     assert len(ids) == 100
+    for tilde_id, email_id in ids:
+        # ~Arianna_Daugherty3 does no thave emails, so both fields should have her tilde ID
+        if tilde_id == '~Arianna_Daugherty3':
+            assert '~' in tilde_id
+            assert '~' in email_id
+        else :
+            assert '~' in tilde_id
+            assert '@' in email_id
+
+def iterget_notes(openreview_client, content):
+    author_id = content['authorids']
+    with open('tests/data/fakeData.json') as json_file:
+        data = json.load(json_file)
+    profiles = data['profiles']
+    for profile in profiles:
+        if profile['id'] == author_id:
+            return [openreview.Note.from_json(publication) for publication in profile['publications']]
+
+def get_paperhash(prefix, title):
+    return prefix + title
+
+@patch('openreview.tools.get_paperhash', side_effect=get_paperhash)
+@patch('openreview.tools.iterget_notes', side_effect=iterget_notes)
+def test_retrieve_expertise(iterget_notes, get_paperhash, tmp_path):
+    openreview_client = mock_client()
+    config = {
+        'use_email_ids': False,
+        'match_group': 'ABC.cc'
+    }
+    metadata = {
+        "no_publications_count": 0,
+        "no_publications": [],
+        "archive_counts": defaultdict(lambda: {'arx': 0, 'bid': 0})
+    }
+    archive_dir = tmp_path / 'archives'
+    archive_dir.mkdir()
+    create_dataset.retrieve_expertise(openreview_client, config, defaultdict(list), archive_dir, metadata)
+
+    archives_dataset = ArchivesDataset(archives_path=archive_dir)
+
+    with open('tests/data/fakeData.json') as json_file:
+        data = json.load(json_file)
+    profiles = data['profiles']
+    for profile in profiles:
+        if len(profile['publications']) > 0:
+            assert len(archives_dataset[profile['id']]) == len(profile['publications'])
