@@ -24,14 +24,14 @@ def test_elmo(tmp_path):
     }
 
     elmoModel = elmo.Model(
-        archives_dataset,
-        submissions_dataset,
         use_title=config['model_params'].get('use_title'),
         use_abstract=config['model_params'].get('use_abstract'),
         use_cuda=config['model_params'].get('use_cuda'),
         batch_size=config['model_params'].get('batch_size'),
         knn=config['model_params'].get('knn')
     )
+    elmoModel.set_archives_dataset(archives_dataset)
+    elmoModel.set_submissions_dataset(submissions_dataset)
 
     if not config['model_params'].get('skip_elmo', False):
         publications_path = tmp_path / 'publications'

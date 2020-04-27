@@ -29,15 +29,15 @@ if __name__ == '__main__':
 
     if config['model'] == 'elmo':
         elmoModel = elmo.Model(
-            use_title=config['model_params'].get('use_title'),
-            use_abstract=config['model_params'].get('use_abstract'),
-            use_cuda=config['model_params'].get('use_cuda'),
-            batch_size=config['model_params'].get('batch_size'),
+            use_title=config['model_params'].get('use_title', False),
+            use_abstract=config['model_params'].get('use_abstract', True),
+            use_cuda=config['model_params'].get('use_cuda', False),
+            batch_size=config['model_params'].get('batch_size', 4),
             knn=config['model_params'].get('knn')
         )
         elmoModel.set_archives_dataset(archives_dataset)
         elmoModel.set_submissions_dataset(submissions_dataset)
-        if config['model_params'].get('skip_elmo') is None or not config['model_params'].get('skip_elmo'):
+        if not config['model_params'].get('skip_elmo', False):
             elmoModel.embed_publications(publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.pkl'))
             elmoModel.embed_submssions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'))
         elmoModel.all_scores(
