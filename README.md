@@ -64,8 +64,10 @@ The output will generate a `.csv` file with the name pattern `<config_name>-scor
 
 ## Detect Duplicates
 
+There are two modes for duplicate detection: intra-conference and inter-conference. Intra-conference detection detects duplicate submissions within the same conference and inter-conference detection detects duplicate submissions with other conferences. For intra-conference detection only one `submissions` directory or one `submissions.jsonl` file is needed. For inter-conference a `submissions` directory and a `other_submissions` directory or a `submissions.jsonl` file and a `other_submissions.jsonl` file are needed. More details about these files/directories can be found at the end of this section.
+
 There are two steps to detect duplicates:
-- Create Dataset
+- Create Dataset or Datasets
 - Run Duplicate Detection
 
 The dataset can be generated using the [OpenReview python API](https://github.com/openreview/openreview-py) which should be installed when this repository is installed. You can generate your own dataset from some other source as long as it is compliant with the format shown in the Datasets section.
@@ -85,7 +87,7 @@ For ELMo run the following command
 ```
 python -m expertise.run_duplicate_detection config.json
 ```
-The output will generate a `.csv` file with the name pattern `<config_name>.csv`.
+The output will generate a `.csv` file with the name pattern `<config_name>.csv`. Read the `Configuration File` section to understand how to create one. For duplicate detection, the parameters that apply are in `Affinity Scores Configuration Options`, `ELMo specific parameters (affinity scores)`, and `ELMo specific parameters (duplicate detection)`.
 
 ## Configuration File
 
