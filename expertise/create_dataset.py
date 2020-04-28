@@ -166,7 +166,7 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_
         if Path(file_path).exists() and not args.overwrite:
             continue
 
-        member_papers = get_publications(openreview_client, member)
+        member_papers = get_publications(openreview_client, config, member)
 
         filtered_papers = [
             n for n in member_papers \
