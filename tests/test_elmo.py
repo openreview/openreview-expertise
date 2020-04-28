@@ -35,6 +35,7 @@ def test_elmo_scores(tmp_path, create_elmo):
             'average_score': True,
             'max_score': False,
             'knn': None,
+            'normalize': False,
             'skip_elmo': False
         }
     }

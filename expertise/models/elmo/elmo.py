@@ -10,7 +10,7 @@ from collections import defaultdict
 import faiss
 
 class Model(object):
-    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None):
+    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None, normalize=False):
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
         if use_title and use_abstract:
@@ -52,8 +52,8 @@ class Model(object):
 
         self.average_score = average_score
         self.max_score = max_score
-
         self.knn = knn
+        self.normalize = normalize
 
     def _extract_elmo(self, papers, tokenizer, elmo):
         toks_list = []
@@ -157,7 +157,10 @@ class Model(object):
         # The D matrix scores go from 0 to 2. When values are closer to 0, it means that the
         # similarity is greater. However, we need to have values closer to 1 to indicate more
         # similarity. Also, the D matrix values range from 0 to 2.
-        preliminary_scores = self.normalize_scores(2 - D, axis=1)
+        if normalize:
+            preliminary_scores = self.normalize_scores(2 - D, axis=1)
+        else:
+            preliminary_scores = (2 - D) / 2
 
         submission_scores = {}
         for row, publication_indexes in enumerate(I):
