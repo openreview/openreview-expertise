@@ -59,6 +59,7 @@ def get_publications(openreview_client, config, author_id):
     if not top_recent_pubs:
         return [publication for publication in sorted_publications if publication.cdate >= minimum_pub_date]
 
+    paper_percent = 0
     if isinstance(top_recent_pubs, str) and top_recent_pubs[-1] == '%':
         paper_percent = int(top_recent_pubs[:-1]) / 100
     elif isinstance(top_recent_pubs, int):
