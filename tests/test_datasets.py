@@ -19,4 +19,4 @@ def test_archives_dataset():
 
 def test_submissions_dataset():
     submissions_dataset = SubmissionsDataset(submissions_path=Path('tests/data/submissions'))
-    assert len(submissions_dataset) == 5
+    assert len(submissions_dataset) == 6

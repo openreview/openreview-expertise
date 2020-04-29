@@ -32,13 +32,13 @@ conda install faiss-cpu -c pytorch
 ```
 [Here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md) you can find the above installation command.
 
-## Run
+## Affinity Scores
 
 There are two steps to create affinity scores:
 - Create Dataset
-- Run Model.
+- Run Model
 
-The dataset is generated using the [OpenReview python API](https://github.com/openreview/openreview-py) which should be installed when this repository is installed. You can generate your own dataset from some other source as long as it is compliant with the format shown in the Datasets section.
+The dataset can be generated using the [OpenReview python API](https://github.com/openreview/openreview-py) which should be installed when this repository is installed. You can generate your own dataset from some other source as long as it is compliant with the format shown in the Datasets section.
 Start by creating an "experiment directory" (`experiment_dir`), and a JSON config file (e.g. `config.json`) in it. Go to the Configuration File section for details on how to create the `config.json`.
 
 Create a dataset by running the following command:
@@ -62,6 +62,37 @@ python -m expertise.tfidf_scores config.json
 
 The output will generate a `.csv` file with the name pattern `<config_name>-scores.csv`.
 
+## Detect Duplicates
+
+Duplicate detection can be used to find duplicates both within a venue or between 2 different venues.
+
+- For detecting duplicates within a venue only one submissions directory or one submissions.jsonl file is needed.
+- For detecting duplicates between 2 different venues, either one submissions and one other submissions directories are needed or one submissions.jsonl and one other_submissions.jsonl are needed.
+
+More details about these files/directories can be found at the end of this section.
+
+There are two steps to detect duplicates:
+- Create Dataset or Datasets
+- Run Duplicate Detection
+
+The dataset can be generated using the [OpenReview python API](https://github.com/openreview/openreview-py) which should be installed when this repository is installed. You can generate your own dataset from some other source as long as it is compliant with the format shown in the Datasets section.
+Start by creating an "experiment directory" (`experiment_dir`), and a JSON config file (e.g. `config.json`) in it. Go to the Configuration File section for details on how to create the `config.json`.
+
+Duplicate detection uses ELMo exclusively, since we normalize the scores for BM25. ELMo scores have values from 0 to 1. The closer a score is to 1, the more similar the submissions are.
+
+Create a dataset by running the following command (this is optional if you already have the dataset):
+```
+python -m expertise.create_dataset config.json \
+	--baseurl <usually https://openreview.net> \
+	--password <your_password> \
+	--username <your_username> \
+```
+
+For ELMo run the following command
+```
+python -m expertise.run_duplicate_detection config.json
+```
+The output will generate a `.csv` file with the name pattern `<config_name>.csv`. Read the `Configuration File` section to understand how to create one. For duplicate detection, the parameters that apply are in `Affinity Scores Configuration Options`, `ELMo specific parameters (affinity scores)`, and `ELMo specific parameters (duplicate detection)`.
 
 ## Configuration File
 
@@ -83,8 +114,9 @@ These parameters could be included in a separate file, like `affinity-config.jso
 
 - `name`: This is the name that the `.csv` file containing the affinity scores will have.
 - `model_params.scores_path`: This is the directory where the `.csv` file with the scores will be dumped.
-- `model_params.use_title`: Boolean that indicates whether to use the title for the affinity scores or not. If this is `true` then `model_params.use_abstract` must be `false`.
-- `model_params.use_abstract`: Boolean that indicates whether to use the abstract for the affinity scores or not. If this is `true` then `model_params.use_title` must be `false`.
+- `model_params.use_title`: Boolean that indicates whether to use the title for the affinity scores or not. If this is `true` and `model_params.use_abstract` is also `true`, then, whenever a Submission or Publication does not have an abstract, it will fallback to the title.
+- `model_params.use_abstract`: Boolean that indicates whether to use the abstract for the affinity scores or not. If this is `true` and `model_params.use_title` is also `true`, then, whenever a Submission or Publication does not have an abstract, it will fallback to the title.
+- `dataset.directory`: This is the directory where the data will be read from. If `create_dataset` is used, then the files will have the required format. If, however, the data does not come from OpenReview, then the dataset should be compliant with the format specified in the Datasets section.
 
 #### BM25Okapi specific parameters:
 - `model_params.workers`: This is the number of processes that for BM25Okapi. This depends on your machine, but 4 is usually a safe value.
@@ -112,14 +144,12 @@ Here is an example:
 }
 ```
 
-#### ELMo specific parameters:
+#### ELMo specific parameters (affinity scores):
 - `model_params.use_cuda`: Boolean to indicate whether to use GPU (`true`) or CPU (`false`) when running ELMo. Currently, only 1 GPU is supported, but there does not seem to be necessary to have more.
 - `model_params.batch_size`: Batch size when running ELMo. This defaults to 8, but depending on your machine, this value could be different.
 - `model_params.publications_path`: When running ELMo, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
 - `model_params.submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the Submissions are stored.
-- `model_params.publications_path`: When running ELMo, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
-- `model_params.submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the Submissions are stored.
-- `model_params.knn`: This parameter specifies the k Nearest Neighbors that will be printed to the csv file. For instance, if the value is 10, then only the first 10 authors with the highest affinity score will be printed for each submission. You may see that if the value is 10, more than 10 values are printed, that is because there are ties in the scores.
+- `model_params.knn`: This parameter specifies the k Nearest Neighbors that will be printed to the csv file. For instance, if the value is 10, then only the first 10 authors with the highest affinity score will be printed for each submission. You may see that if the value is 10, more than 10 values are printed, that is because there are ties in the scores. If the parameter is not specified, then each submission will have a score for every reviewer.
 - `model_params.skip_elmo`: Since running ELMo can take a significant amount of time, the vectors are saved in `model_params.submissions_path` and `model_params.publications_path`. If you want to run other operations with these results, like changing the value of `model_params.knn`, you may do so without running ELMo again by setting `model_params.skip_elmo` to true. The pickle files will be loaded with all the vectors.
 
 Here is an example:
@@ -141,9 +171,33 @@ Here is an example:
         "use_cuda": true,
         "batch_size": 8,
         "skip_elmo": false,
-        "knn": 500,
         "publications_path": "./",
         "submissions_path": "./"
+    }
+}
+```
+
+#### ELMo specific parameters (duplicate detection):
+- `model_params.other_submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the other Submissions are stored.
+All the other parameters are the same as in the affinity scores.
+
+Here is an example:
+```
+{
+    "name": "duplicate_detection",
+    "dataset": {
+        "directory": "./"
+    },
+    "model_params": {
+        "scores_path": "./",
+        "use_title": false,
+        "use_abstract": true,
+        "use_cuda": true,
+        "batch_size": 4,
+        "knn": 10,
+        "skip_elmo": false,
+        "submissions_path": "./",
+        "other_submissions_path": "./"
     }
 }
 ```
@@ -195,11 +249,23 @@ dataset-name/
 
 ```
 
+In case BM25 or ELMo is used, then the Submissions (and Other Submissions when doing duplicate detection) can have the following format
+
+```
+dataset-name/
+	submissions.jsonl
+    other_submissions.jsonl     # Only needed for duplicate detection
+```
+The files `submissions.jsonl` and `other_submissions.jsonl` will have a stringified JSON submission per line.
+
+
 The `archives` folder will contain the user ids of people that will review papers. The reviewers should have publications for the affinity scores to be calculated. For example, the `~User_Id1.jsonl` file will contain all the his publications.
 
-The `submissions` folder conatins all the submissions of a particular venue. The name of the file is the id used to identify the submission in OpenReview. Each file will only contain one line with all the submission content.
+The `submissions` folder contains all the submissions of a particular venue. The name of the file is the id used to identify the submission in OpenReview. Each file will only contain one line with all the submission content.
 
-The files in both `archives` and `submissions` should contain stringified JSONs that should have the following schema to work:
+Alternatively, instead of using the `submissions` folder for BM25 and ELMo, the `submissions.jsonl` and `other_submissions.jsonl` will have a strigified JSON submission per line.
+
+The stringified JSONs representing a Submission or Publication should have the following schema to work:
 ```
 {
     id: <unique-id>,
@@ -211,7 +277,7 @@ The files in both `archives` and `submissions` should contain stringified JSONs 
 ```
 Other fields are allowed, but this is what the code will be looking for.
 
-The `bids` folder is usually not necessary to compute affinity scores. Bids are used by the reviewers in OpenReview to select papers that they would or would not like to review. These bids are then used to compute a final affinity score to be more fair with the reviewers.
+The `bids` folder is usually not necessary to compute affinity scores or for duplicate detection. Bids are used by the reviewers in OpenReview to select papers that they would or would not like to review. These bids are then used to compute a final affinity score to be more fair with the reviewers.
 
 Some datasets differ slightly in terms of the format of the data; these should be accounted for in the experiment's configuration.
 
