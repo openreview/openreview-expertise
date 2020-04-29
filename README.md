@@ -67,7 +67,7 @@ The output will generate a `.csv` file with the name pattern `<config_name>-scor
 Duplicate detection can be used to find duplicates both within a venue or between 2 different venues.
 
 - For detecting duplicates within a venue only one submissions directory or one submissions.jsonl file is needed.
-- For detecting duplicated between 2 different venues, either one submissions and one other submissions directories are needed or one submissions.jsonl and one other_submissions.jsonl are needed.
+- For detecting duplicates between 2 different venues, either one submissions and one other submissions directories are needed or one submissions.jsonl and one other_submissions.jsonl are needed.
 
 More details about these files/directories can be found at the end of this section.
 
