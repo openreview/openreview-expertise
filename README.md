@@ -64,7 +64,12 @@ The output will generate a `.csv` file with the name pattern `<config_name>-scor
 
 ## Detect Duplicates
 
-There are two modes for duplicate detection: intra-conference and inter-conference. Intra-conference detection detects duplicate submissions within the same conference and inter-conference detection detects duplicate submissions with other conferences. For intra-conference detection only one `submissions` directory or one `submissions.jsonl` file is needed. For inter-conference a `submissions` directory and a `other_submissions` directory or a `submissions.jsonl` file and a `other_submissions.jsonl` file are needed. More details about these files/directories can be found at the end of this section.
+Duplicate detection can be used to find duplicates both within a venue or between 2 different venues.
+
+- For detecting duplicates within a venue only one submissions directory or one submissions.jsonl file is needed.
+- For detecting duplicated between 2 different venues, either one submissions and one other submissions directories are needed or one submissions.jsonl and one other_submissions.jsonl are needed.
+
+More details about these files/directories can be found at the end of this section.
 
 There are two steps to detect duplicates:
 - Create Dataset or Datasets
