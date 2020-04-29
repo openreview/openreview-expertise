@@ -10,37 +10,15 @@ from collections import defaultdict
 import faiss
 
 class Model(object):
-    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None, normalize=False):
+    def __init__(self, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None, skip_same_id=True, normalize=False):
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
-        if use_title and use_abstract:
-            raise ValueError('use_title and use_abstract cannot both be True')
         self.metadata = {
             'closest_match': {},
             'no_expertise': set()
         }
         self.use_title = use_title
         self.use_abstract = use_abstract
-        self.submissions_dataset = submissions_dataset
-        self.pub_note_id_to_author_ids = defaultdict(list)
-        self.pub_note_id_to_abstract = {}
-        self.pub_note_id_to_title = {}
-        for profile_id, publications in archives_dataset.items():
-            for publication in publications:
-                if self.use_abstract and 'abstract' in publication['content']:
-                    self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
-                    self.pub_note_id_to_abstract[publication['id']] = publication['content']['abstract']
-                elif self.use_title and 'title' in publication['content']:
-                    self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
-                    self.pub_note_id_to_title[publication['id']] = publication['content']['title']
-
-        self.sub_note_id_to_abstract = {}
-        self.sub_note_id_to_title = {}
-        for note_id, submission in submissions_dataset.items():
-            if self.use_abstract and 'abstract' in submission['content']:
-                self.sub_note_id_to_abstract[submission['id']] = submission['content']['abstract']
-            elif self.use_title and 'title' in submission['content']:
-                self.sub_note_id_to_title[submission['id']] = submission['content']['title']
 
         self.batch_size = batch_size
         # create tokenizer and ELMo objects
@@ -53,7 +31,39 @@ class Model(object):
         self.average_score = average_score
         self.max_score = max_score
         self.knn = knn
+        self.skip_same_id = skip_same_id
         self.normalize = normalize
+
+    def set_archives_dataset(self, archives_dataset):
+        self.pub_note_id_to_author_ids = defaultdict(list)
+        self.pub_note_id_to_abstract = {}
+        self.pub_note_id_to_title = {}
+        for profile_id, publications in archives_dataset.items():
+            for publication in publications:
+                if self.use_abstract and 'abstract' in publication['content']:
+                    self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
+                    self.pub_note_id_to_abstract[publication['id']] = publication['content']['abstract']
+                elif self.use_title and 'title' in publication['content']:
+                    self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
+                    self.pub_note_id_to_title[publication['id']] = publication['content']['title']
+
+    def set_submissions_dataset(self, submissions_dataset):
+        self.sub_note_id_to_abstract = {}
+        self.sub_note_id_to_title = {}
+        for note_id, submission in submissions_dataset.items():
+            if self.use_abstract and 'abstract' in submission['content']:
+                self.sub_note_id_to_abstract[submission['id']] = submission['content']['abstract']
+            elif self.use_title and 'title' in submission['content']:
+                self.sub_note_id_to_title[submission['id']] = submission['content']['title']
+
+    def set_other_submissions_dataset(self, other_submissions_dataset):
+        self.other_sub_note_id_to_abstract = {}
+        self.other_sub_note_id_to_title = {}
+        for note_id, submission in other_submissions_dataset.items():
+            if self.use_abstract and 'abstract' in submission['content']:
+                self.other_sub_note_id_to_abstract[submission['id']] = submission['content']['abstract']
+            elif self.use_title and 'title' in submission['content']:
+                self.other_sub_note_id_to_title[submission['id']] = submission['content']['title']
 
     def _extract_elmo(self, papers, tokenizer, elmo):
         toks_list = []
@@ -96,22 +106,32 @@ class Model(object):
 
         return uid_index, all_papers_tensor
 
-    def embed_submssions(self, submissions_path=None):
+    def embed_submissions(self, submissions_path=None):
         print('Embedding submissions...')
-        if self.use_title:
-            self.sub_note_id_to_vec = self._embed(self.sub_note_id_to_title)
-        elif self.use_abstract:
+        if self.use_abstract:
             self.sub_note_id_to_vec = self._embed(self.sub_note_id_to_abstract)
+        elif self.use_title:
+            self.sub_note_id_to_vec = self._embed(self.sub_note_id_to_title)
 
         with open(submissions_path, 'wb') as f:
             pickle.dump(self.sub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
 
+    def embed_other_submissions(self, other_submissions_path=None):
+        print('Embedding other submissions...')
+        if self.use_abstract:
+            self.other_sub_note_id_to_vec = self._embed(self.other_sub_note_id_to_abstract)
+        elif self.use_title:
+            self.other_sub_note_id_to_vec = self._embed(self.other_sub_note_id_to_title)
+
+        with open(other_submissions_path, 'wb') as f:
+            pickle.dump(self.other_sub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
+
     def embed_publications(self, publications_path=None):
         print('Embedding publications...')
-        if self.use_title:
-            self.pub_note_id_to_vec = self._embed(self.pub_note_id_to_title)
-        elif self.use_abstract:
+        if self.use_abstract:
             self.pub_note_id_to_vec = self._embed(self.pub_note_id_to_abstract)
+        elif self.use_title:
+            self.pub_note_id_to_vec = self._embed(self.pub_note_id_to_title)
 
         with open(publications_path, 'wb') as f:
             pickle.dump(self.pub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
@@ -128,7 +148,6 @@ class Model(object):
         return normalized
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
-        csv_scores = []
         print('Loading cached publications...')
         with open(publications_path, 'rb') as f:
             self.pub_note_id_to_vec = pickle.load(f)
@@ -178,7 +197,7 @@ class Model(object):
             for note_id, reviewer_scores in submission_scores.items():
                 for reviewer_id, scores in reviewer_scores.items():
                     score = np.average(scores)
-                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=score)
+                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_id, reviewer=reviewer_id, score=score)
                     csv_scores.append(csv_line)
                     all_scores.append((note_id, reviewer_id, score))
 
@@ -186,9 +205,51 @@ class Model(object):
             for note_id, reviewer_scores in submission_scores.items():
                 for reviewer_id, scores in reviewer_scores.items():
                     score = np.max(scores)
-                    csv_line = '{note_id},{reviewer},{score}'.format(reviewer=reviewer_id, note_id=note_id, score=score)
+                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_id, reviewer=reviewer_id, score=score)
                     csv_scores.append(csv_line)
                     all_scores.append((note_id, reviewer_id, score))
+
+        if scores_path:
+            with open(scores_path, 'w') as f:
+                for csv_line in csv_scores:
+                    f.write(csv_line + '\n')
+        return all_scores
+
+    def find_duplicates(self, submissions_path=None, other_submissions_path=None, scores_path=None):
+        print('Loading cached submissions...')
+        with open(submissions_path, 'rb') as f:
+            self.sub_note_id_to_vec = pickle.load(f)
+
+        if other_submissions_path:
+            print('Loading other cached submissions...')
+            with open(other_submissions_path, 'rb') as f:
+                self.other_sub_note_id_to_vec = pickle.load(f)
+        else:
+            with open(submissions_path, 'rb') as f:
+                self.other_sub_note_id_to_vec = pickle.load(f)
+
+        print('Computing all scores...')
+        index = faiss.IndexFlatL2(self.other_sub_note_id_to_vec[1].shape[1])
+        index.add(self.other_sub_note_id_to_vec[1])
+
+        if self.knn is None:
+            self.knn = self.other_sub_note_id_to_vec[1].shape[0]
+
+        print('Querying the index...')
+        D, I = index.search(self.sub_note_id_to_vec[1], self.knn)
+        scores = (2 - D) / 2
+
+        csv_scores = []
+        all_scores = []
+        for row, other_submission_indexes in enumerate(I):
+            note_id = self.sub_note_id_to_vec[0][row]
+            for col, other_submission_index in enumerate(other_submission_indexes):
+                other_note_id = self.other_sub_note_id_to_vec[0][other_submission_index]
+                if not self.skip_same_id or note_id != other_note_id:
+                    score = scores[row][col]
+                    csv_line = '{note_id},{other_note_id},{score}'.format(note_id=note_id, other_note_id=other_note_id, score=score)
+                    csv_scores.append(csv_line)
+                    all_scores.append((note_id, other_note_id, score))
 
         if scores_path:
             with open(scores_path, 'w') as f:
