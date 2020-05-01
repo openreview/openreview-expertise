@@ -41,7 +41,7 @@ def get_publications(openreview_client, config, author_id):
         unsorted_publications.append(publication)
 
     # If the author does not have publications, then return early
-    if len(unsorted_publications) == 0:
+    if not unsorted_publications:
         return unsorted_publications
 
     dataset_params = config.get('dataset', {})
