@@ -2,13 +2,30 @@ from unittest.mock import patch, MagicMock
 from pathlib import Path
 import openreview
 import json
+import pytest
+import numpy as np
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import elmo
 
-def test_elmo(tmp_path):
-    archives_dataset = ArchivesDataset(archives_path=Path('tests/data/archives'))
-    submissions_dataset = SubmissionsDataset(submissions_path=Path('tests/data/submissions'))
+@pytest.fixture
+def create_elmo():
+    def simple_elmo(config):
+        archives_dataset = ArchivesDataset(archives_path=Path('tests/data/archives'))
+        submissions_dataset = SubmissionsDataset(submissions_path=Path('tests/data/submissions'))
 
+        elmoModel = elmo.Model(
+            use_title=config['model_params'].get('use_title'),
+            use_abstract=config['model_params'].get('use_abstract'),
+            use_cuda=config['model_params'].get('use_cuda'),
+            batch_size=config['model_params'].get('batch_size'),
+            knn=config['model_params'].get('knn')
+        )
+        elmoModel.set_archives_dataset(archives_dataset)
+        elmoModel.set_submissions_dataset(submissions_dataset)
+        return elmoModel
+    return simple_elmo
+
+def test_elmo_scores(tmp_path, create_elmo):
     config = {
         'name': 'test_elmo',
         'model_params': {
@@ -19,19 +36,12 @@ def test_elmo(tmp_path):
             'average_score': True,
             'max_score': False,
             'knn': None,
+            'normalize': False,
             'skip_elmo': False
         }
     }
 
-    elmoModel = elmo.Model(
-        use_title=config['model_params'].get('use_title'),
-        use_abstract=config['model_params'].get('use_abstract'),
-        use_cuda=config['model_params'].get('use_cuda'),
-        batch_size=config['model_params'].get('batch_size'),
-        knn=config['model_params'].get('knn')
-    )
-    elmoModel.set_archives_dataset(archives_dataset)
-    elmoModel.set_submissions_dataset(submissions_dataset)
+    elmoModel = create_elmo(config)
 
     if not config['model_params'].get('skip_elmo', False):
         publications_path = tmp_path / 'publications'
@@ -48,6 +58,41 @@ def test_elmo(tmp_path):
         submissions_path=submissions_path.joinpath('sub2vec.pkl'),
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
+
+def test_normalize_scores(create_elmo):
+    config = {
+        'name': 'test_elmo',
+        'model_params': {
+            'use_title': False,
+            'use_abstract': True,
+            'use_cuda': False,
+            'batch_size': 1,
+            'average_score': True,
+            'max_score': False,
+            'knn': None,
+            'skip_elmo': False
+        }
+    }
+
+    elmoModel = create_elmo(config)
+
+    score_matrix = np.array([
+        [1,2,3],
+        [5,5,5],
+        [1,0,1]
+    ])
+
+    normalized_matrix = elmoModel.normalize_scores(score_matrix)
+
+    print(normalized_matrix)
+
+    result_array = np.array([
+        [0.,  0.5, 1. ],
+        [0.5,  0.5,  0.5 ],
+        [1.,  0.,  1. ]
+    ])
+    assert np.array_equal(result_array, normalized_matrix)
+
 
 def test_duplicate_detection(tmp_path):
     submissions_dataset = SubmissionsDataset(submissions_path=Path('tests/data/submissions'))

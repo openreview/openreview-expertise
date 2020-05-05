@@ -12,12 +12,6 @@ def test_convert_to_list():
     groupList = create_dataset.convert_to_list(['group.cc', 'group.aa'])
     assert groupList == ['group.cc', 'group.aa']
 
-@patch('openreview.tools.iterget_notes')
-def test_get_publications(mock_iterget_notes):
-    mock_iterget_notes.return_value = iter([1,2,3])
-    publications = create_dataset.get_publications(MagicMock(openreview.Client), '~Carlos_Mondragon1')
-    assert publications == [1,2,3]
-
 def mock_client():
     client = MagicMock(openreview.Client)
 
@@ -75,6 +69,77 @@ def iterget_notes(openreview_client, content):
     for profile in profiles:
         if profile['id'] == author_id:
             return [openreview.Note.from_json(publication) for publication in profile['publications']]
+    return []
+
+@patch('openreview.tools.iterget_notes', side_effect=iterget_notes)
+def test_get_publications(mock_iterget_notes):
+    config = {}
+    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Carlos_Mondragon1')
+    assert publications == []
+
+    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    assert len(publications) == 3
+
+    minimum_pub_date = 1554819115
+    config = {
+        'dataset': {
+            'minimum_pub_date': minimum_pub_date
+        }
+    }
+    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    assert len(publications) == 2
+    for publication in publications:
+        assert publication.cdate > minimum_pub_date
+
+    top_recent_pubs = 2
+    config = {
+        'dataset': {
+            'top_recent_pubs': top_recent_pubs
+        }
+    }
+    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    assert len(publications) == 2
+    for publication in publications:
+        assert publication.cdate > minimum_pub_date
+
+    top_recent_pubs = 1
+    config = {
+        'dataset': {
+            'top_recent_pubs': top_recent_pubs,
+            'minimum_pub_date': minimum_pub_date
+        }
+    }
+    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    assert len(publications) == 1
+    assert publications[0].cdate > minimum_pub_date
+
+    top_recent_pubs = 1
+    config = {
+        'dataset': {
+            'or': {
+                'top_recent_pubs': top_recent_pubs,
+                'minimum_pub_date': minimum_pub_date
+            }
+        }
+    }
+    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    assert len(publications) == 2
+    for publication in publications:
+        assert publication.cdate > minimum_pub_date
+
+    top_recent_pubs = '10%'
+    config = {
+        'dataset': {
+            'or': {
+                'top_recent_pubs': top_recent_pubs,
+                'minimum_pub_date': minimum_pub_date
+            }
+        }
+    }
+    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    assert len(publications) == 2
+    for publication in publications:
+        assert publication.cdate > minimum_pub_date
 
 def get_paperhash(prefix, title):
     return prefix + title

@@ -10,7 +10,7 @@ from collections import defaultdict
 import faiss
 
 class Model(object):
-    def __init__(self, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None, skip_same_id=True):
+    def __init__(self, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None, skip_same_id=True, normalize=False):
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
         self.metadata = {
@@ -30,9 +30,9 @@ class Model(object):
 
         self.average_score = average_score
         self.max_score = max_score
-
         self.knn = knn
         self.skip_same_id = skip_same_id
+        self.normalize = normalize
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
@@ -136,8 +136,16 @@ class Model(object):
         with open(publications_path, 'wb') as f:
             pickle.dump(self.pub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
 
-    def score(self, submission):
-        pass
+    def normalize_scores(self, score_matrix, axis=1):
+        '''
+        If axis is 0, we normalize over the submissions
+        If axis is 1, we normalize over the publications (recommended)
+        '''
+        min_values = np.nanmin(score_matrix, axis=axis, keepdims=True)
+        max_values = np.nanmax(score_matrix, axis=axis, keepdims=True)
+        normalized = (score_matrix - min_values) / (max_values - min_values)
+        normalized[np.isnan(normalized)] = 0.5
+        return normalized
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
         print('Loading cached publications...')
@@ -155,8 +163,23 @@ class Model(object):
             self.knn = self.pub_note_id_to_vec[1].shape[0]
 
         print('Querying the index...')
+        # D and I are 2D matrices. The row indexes correspond to the submission index
+        # of self.sub_note_id_to_vec[1]. That means that row 0 in D corresponds to the submission
+        # self.sub_note_id_to_vec[1][0], row 1 to the submission self.sub_note_id_to_vec[1][1], and
+        # so on. The values in the D matrix contain the scores between a submission and a
+        # publication. The scores in matrix D are sorted in descending order from left to right.
+        # In order to know what publication a particular score is for, the I matrix is used.
+        # The I matrix contains the indexes of the publications. Let us call the value in [0, 0] of
+        # matrix I be v. Therefore the value in [0, 0] of matrix D contains the highest score for
+        # submission in self.sub_note_id_to_vec[1][0] and publication self.pub_note_id_to_vec[1][v].
         D, I = index.search(self.sub_note_id_to_vec[1], self.knn)
-        preliminary_scores = (2 - D) / 2
+        # The D matrix scores go from 0 to 2. When values are closer to 0, it means that the
+        # similarity is greater. However, we need to have values closer to 1 to indicate more
+        # similarity. Also, the D matrix values range from 0 to 2.
+        if normalize:
+            preliminary_scores = self.normalize_scores(2 - D, axis=1)
+        else:
+            preliminary_scores = (2 - D) / 2
 
         submission_scores = {}
         for row, publication_indexes in enumerate(I):
@@ -169,19 +192,23 @@ class Model(object):
                     submission_scores[note_id][reviewer_id].append(preliminary_scores[row][col])
 
         csv_scores = []
+        all_scores = []
         if self.average_score:
             for note_id, reviewer_scores in submission_scores.items():
                 for reviewer_id, scores in reviewer_scores.items():
-                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_id, reviewer=reviewer_id, score=np.average(scores))
+                    score = np.average(scores)
+                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_id, reviewer=reviewer_id, score=score)
                     csv_scores.append(csv_line)
+                    all_scores.append((note_id, reviewer_id, score))
 
         if self.max_score:
             for note_id, reviewer_scores in submission_scores.items():
                 for reviewer_id, scores in reviewer_scores.items():
-                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_id, reviewer=reviewer_id, score=np.max(scores))
+                    score = np.max(scores)
+                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_id, reviewer=reviewer_id, score=score)
                     csv_scores.append(csv_line)
+                    all_scores.append((note_id, reviewer_id, score))
 
-        all_scores = []
         if scores_path:
             with open(scores_path, 'w') as f:
                 for csv_line in csv_scores:
