@@ -33,7 +33,7 @@ def get_publications(openreview_client, author_id):
     publications = openreview.tools.iterget_notes(openreview_client, content=content)
     return [publication for publication in publications]
 
-def get_profile_ids(openreview_client, group_ids):
+def get_profile_ids(openreview_client, group_ids=None, reviewer_ids=None):
     """
     Returns a list of all the tilde id members from a list of groups.
 
@@ -49,29 +49,45 @@ def get_profile_ids(openreview_client, group_ids):
     :return: List of tuples containing (tilde_id, email)
     :rtype: list
     """
+    tilde_members = set()
+    email_members = set()
+
+    if group_ids:
+        for group_id in group_ids:
+            group = openreview_client.get_group(group_id)
+            for member in group.members:
+                if '~' in member:
+                    tilde_members.add(member)
+                elif '@' in member:
+                    email_members.add(member)
+
+    if reviewer_ids:
+        for reviewer_id in reviewer_ids:
+            if '~' in reviewer_id:
+                tilde_members.add(reviewer_id)
+            elif '@' in reviewer_id:
+                email_members.add(reviewer_id)
+
     members = []
-    for group_id in group_ids:
-        group = openreview_client.get_group(group_id)
+    tilde_members = list(tilde_members)
+    profile_search_results = openreview_client.search_profiles(emails=None, ids=tilde_members, term=None) if tilde_members else []
+    tilde_members = []
+    for profile in profile_search_results:
+        preferredEmail = profile.content.get('preferredEmail')
+        # If user does not have preferred email, use first email in the emailsConfirmed list
+        preferredEmail = preferredEmail or profile.content.get('emailsConfirmed') and len(profile.content.get('emailsConfirmed')) and profile.content.get('emailsConfirmed')[0]
+        # If the user does not have emails confirmed, use the first email in the emails list
+        preferredEmail = preferredEmail or profile.content.get('emails') and len(profile.content.get('emails')) and profile.content.get('emails')[0]
+        # If the user Profile does not have an email, use its Profile ID
+        tilde_members.append((profile.id, preferredEmail or profile.id))
+    members.extend(tilde_members)
 
-        profile_members = [member for member in group.members if '~' in member]
-        profile_search_results = openreview_client.search_profiles(emails=None, ids=profile_members, term=None)
-        tilde_members = []
-        for profile in profile_search_results:
-            preferredEmail = profile.content.get('preferredEmail')
-            # If user does not have preferred email, use first email in the emailsConfirmed list
-            preferredEmail = preferredEmail or profile.content.get('emailsConfirmed') and len(profile.content.get('emailsConfirmed')) and profile.content.get('emailsConfirmed')[0]
-            # If the user does not have emails confirmed, use the first email in the emails list
-            preferredEmail = preferredEmail or profile.content.get('emails') and len(profile.content.get('emails')) and profile.content.get('emails')[0]
-            # If the user Profile does not have an email, use its Profile ID
-            tilde_members.append((profile.id, preferredEmail or profile.id))
-        members.extend(tilde_members)
-
-        email_members = [member for member in group.members if '@' in member]
-        profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None) if email_members else {}
-        email_profiles = []
-        for email, profile in profile_search_results.items():
-            email_profiles.append((profile.id, email))
-        members.extend(email_profiles)
+    email_members = list(email_members)
+    profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None) if email_members else {}
+    email_profiles = []
+    for email, profile in profile_search_results.items():
+        email_profiles.append((profile.id, email))
+    members.extend(email_profiles)
 
     return members
 
@@ -97,8 +113,9 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_
     # if group ID is supplied, collect archives for every member
     # (except those whose archives already exist)
     use_email_ids = config.get('use_email_ids', False)
-    group_ids = convert_to_list(config['match_group'])
-    valid_members = get_profile_ids(openreview_client, group_ids)
+    group_ids = convert_to_list(config.get('match_group', []))
+    reviewer_ids = convert_to_list(config.get('reviewer_ids', []))
+    valid_members = get_profile_ids(openreview_client, group_ids=group_ids, reviewer_ids=reviewer_ids)
 
     print('finding archives for {} valid members'.format(len(valid_members)))
 
@@ -228,7 +245,7 @@ if __name__ == '__main__':
     else:
         excluded_ids_by_user = defaultdict(list)
 
-    if 'match_group' in config:
+    if 'match_group' in config or 'reviewer_ids' in config:
         archive_dir = dataset_dir.joinpath('archives')
         if not archive_dir.is_dir():
             archive_dir.mkdir()

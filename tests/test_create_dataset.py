@@ -56,16 +56,20 @@ def mock_client():
 
 def test_get_profile_ids():
     openreview_client = mock_client()
-    ids = create_dataset.get_profile_ids(openreview_client, ['ABC.cc'])
+    ids = create_dataset.get_profile_ids(openreview_client, group_ids=['ABC.cc'])
     assert len(ids) == 100
     for tilde_id, email_id in ids:
-        # ~Arianna_Daugherty3 does no thave emails, so both fields should have her tilde ID
+        # ~Arianna_Daugherty3 does not have emails, so both fields should have her tilde ID
         if tilde_id == '~Arianna_Daugherty3':
             assert '~' in tilde_id
             assert '~' in email_id
         else :
             assert '~' in tilde_id
             assert '@' in email_id
+
+    ids = create_dataset.get_profile_ids(openreview_client, reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
+    assert len(ids) == 3
+    assert sorted(ids) == sorted([('~Romeo_Mraz2', 'hkinder2b@army.mil'), ('~Stacee_Powlowski9', 'mdagg5@1und1.de'), ('~Stanley_Bogisich4', 'cchippendale26@smugmug.com')])
 
 def iterget_notes(openreview_client, content):
     author_id = content['authorids']
