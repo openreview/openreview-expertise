@@ -101,13 +101,28 @@ Below you will find examples of possible configurations depending on the Model t
 
 ### Create Dataset Configuration Options
 This parameters could be included in a separate file, like `dataset-config.json`, as was mentioned before.
-- `match_group`: String or array of strings containing the groups of Reviewers or Area Chairs. The Reviewers (and Area Chairs) will get affinity scores with respect to the submitted papers based on their expertise. This expertise is obtained based on the publications available in OpenReview.
+- `match_group`: String or array of strings containing the groups of Reviewers or Area Chairs. The Reviewers (and Area Chairs) will get affinity scores with respect to the submitted papers based on their expertise. This expertise is obtained based on the publications available in OpenReview. It can be provided instead of the `reviewer_ids` or on top of the `reviewer_ids`, the values will be combined.
+- `reviewer_ids`: Array of strings containing the IDs of the reviewers. An ID can either be an email associated to an OpenReview Profile or the OpenReview ID, also known as a Tilde ID, for a Profile. The array can be a combination of both these types of IDs. It can be provided instead of the `match_group` or on top of the `match_group`, the values will be combined.
 - `paper_invitation`: String or array of strings with the submission invitations. This is the invitation for Submissions, all the submissions in OpenReview for a particular venue have an invitation and that is how they are grouped together.
 - `exclusion_inv`: String or array of strings with the exclusion invitations. Reviewers (and Area Chairs) can choose to exclude some of their papers before the affinity scores are calculated so that they get papers that are more aligned to their current expertise/interest. Papers included here will not be taken into consideration when calculating the affinity scores.
 - `bid_inv`: String or array of strings with the bid invitations. Bids are used by the reviewers in OpenReview to select papers that they would or would not like to review. These bids are then used to compute a final affinity score to be more fair with the reviewers.
 - `use_email_ids`: Boolean value. If true, then the email of the user is used instead of his/her OpenReview Profile ID.
 - `minimum_timestamp`: Number indicating the date in Unix format. This date indicates the minimum date of a publication for it to be considered in the expertise.
 - `dataset.directory`: This is the directory where the data will be dumped. Once `create_dataset` finishes running, all the folders with the files inside will be in there.
+
+Here is an example:
+```
+{
+    "match_group": ["ICLR.cc/2020/Conference/Reviewers", "ICLR.cc/2020/Conference/Area_Chairs"],
+    "reviewer_ids": ["~Carlos_Mondra1", "mondra@email.com", "1234@email.com", ...]
+    "paper_invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+    "exclusion_inv": "ICLR.cc/2020/Conference/-/Expertise_Selection",
+    "bid_inv": "ICLR.cc/2020/Conference/-/Add_Bid",
+    "dataset": {
+        "directory": "./"
+    }
+}
+```
 
 ### Affinity Scores Configuration Options
 These parameters could be included in a separate file, like `affinity-config.json`, as was mentioned before.
