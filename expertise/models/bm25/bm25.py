@@ -79,7 +79,7 @@ class Model(object):
                     self.metadata['no_expertise'].add(profile_id)
                 else:
                     reviewer_scores[profile_id] = submission_scores[start_index:end_index].mean().item()
-        if self.max_score:
+        elif self.max_score:
             for profile_id, (start_index, end_index) in self.profie_id_to_indices.items():
                 if (start_index == end_index):
                     reviewer_scores[profile_id] = 0.
@@ -96,7 +96,6 @@ class Model(object):
                 continue
             for profile_id, score in reviewer_scores.items():
                 csv_line = (note_id, profile_id, score)
-                # csv_line = '{note_id},{reviewer},{score}'.format(reviewer=profile_id, note_id=note_id, score=score)
                 csv_scores.append(csv_line)
         return csv_scores
 

@@ -208,7 +208,7 @@ class Model(object):
                     csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_id, reviewer=reviewer_id, score=average_score)
                     csv_scores.append(csv_line)
 
-        if self.max_score:
+        elif self.max_score:
             for note_id, reviewer_scores in submission_scores.items():
                 for reviewer_id, scores in reviewer_scores.items():
                     max_score = np.max(scores)
