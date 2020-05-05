@@ -1,0 +1,47 @@
+version: 2.1
+
+jobs:
+  build:
+    working_directory: ~/openreview-expertise
+    docker:
+      - image: ubuntu:18.04
+    environment:
+      PYTHON_VERSION: 3.7
+    steps:
+      - checkout
+      - run:
+          name: Setup Miniconda
+          command: |
+            apt update
+            apt install -y wget
+            apt install -y make gcc
+            apt install -y build-essential
+            cd $HOME
+            wget "https://repo.anaconda.com/miniconda/Miniconda3-4.7.10-Linux-x86_64.sh" -O miniconda.sh
+            printf '%s' "8a324adcc9eaf1c09e22a992bb6234d91a94146840ee6b11c114ecadafc68121  miniconda.sh" | sha256sum -c
+            bash miniconda.sh -b -p $HOME/miniconda
+      - run:
+          name: Setup environment
+          command: |
+            export PATH="$HOME/miniconda/bin:$PATH"
+            conda update -y conda
+            conda create -n expertise python=$PYTHON_VERSION -c conda-forge
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            python --version
+            cd ~/openreview-expertise
+            pip install -e .
+            conda install -y faiss-cpu -c pytorch
+      - run:
+          name: Run tests
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview-expertise
+            mkdir reports
+            mkdir reports/pytest
+            python -m pytest -s tests --junitxml=reports/pytest/pytest-report.xml
+      - store_test_results:
+          path: reports
+      - store_artifacts:
+          path: reports
