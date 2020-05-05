@@ -26,14 +26,73 @@ def convert_to_list(config_invitations):
     assert isinstance(invitations, list), 'Input should be a str or a list'
     return invitations
 
-def get_publications(openreview_client, author_id):
+def get_publications(openreview_client, config, author_id):
     content = {
         'authorids': author_id
     }
     publications = openreview.tools.iterget_notes(openreview_client, content=content)
-    return [publication for publication in publications]
 
-def get_profile_ids(client, group_ids):
+    # Get all publications and assign tcdate to cdate in case cdate is None. If tcdate is also None
+    # assign cdate := 0
+    unsorted_publications = []
+    for publication in publications:
+        if getattr(publication, 'cdate') is None:
+            publication.cdate = getattr(publication, 'tcdate', 0)
+        unsorted_publications.append(publication)
+
+    # If the author does not have publications, then return early
+    if not unsorted_publications:
+        return unsorted_publications
+
+    dataset_params = config.get('dataset', {})
+    minimum_pub_date = dataset_params.get('minimum_pub_date') or dataset_params.get('or', {}).get('minimum_pub_date', 0)
+    top_recent_pubs = dataset_params.get('top_recent_pubs') or dataset_params.get('or', {}).get('top_recent_pubs', False)
+
+    # If there is no minimum publication date and no recent publications constraints we return
+    # all the publications in any order
+    if not top_recent_pubs and not minimum_pub_date:
+        return unsorted_publications
+
+    # Sort publications in descending order based on the cdate
+    sorted_publications = sorted(unsorted_publications, key=lambda pub: getattr(pub, 'cdate'), reverse=True)
+
+    if not top_recent_pubs:
+        return [publication for publication in sorted_publications if publication.cdate >= minimum_pub_date]
+
+    paper_percent = 0
+    if isinstance(top_recent_pubs, str) and top_recent_pubs[-1] == '%':
+        paper_percent = int(top_recent_pubs[:-1]) / 100
+    elif isinstance(top_recent_pubs, int):
+        paper_num = top_recent_pubs
+
+    if paper_percent:
+        non_int_value = len(sorted_publications) * paper_percent
+        # Use remainder to always round up decimals, then convert to int.
+        # This is useful if the percentage is 10%, but the user only has 3 publications, for example.
+        # 3 * 0.1 = 0.3. So we want to round up to 1 in this case.
+        paper_num = int(non_int_value) + (non_int_value % 1 > 0)
+
+    top = sorted_publications[:paper_num]
+    if not minimum_pub_date:
+        return top
+
+    minimum = [publication for publication in sorted_publications if publication.cdate >= minimum_pub_date]
+
+    # We need to figure out if the constraints have an OR or AND relation
+    if dataset_params.get('or', False):
+        # minimum and top will have the same pubs because they are sorted, however, one of them
+        # is larger than the other. In OR relation we want the largest one as it would be the
+        # union between the two sets
+        if len(minimum) > len(top):
+            return minimum
+        return top
+
+    # AND relation
+    if len(minimum) > len(top):
+        return top
+    return minimum
+
+def get_profile_ids(openreview_client, group_ids):
     """
     Returns a list of all the tilde id members from a list of groups.
 
@@ -46,22 +105,34 @@ def get_profile_ids(client, group_ids):
     :param group_ids: List of group ids
     :type group_ids: list[str]
 
-    :return: List of tilde ids
+    :return: List of tuples containing (tilde_id, email)
     :rtype: list
     """
-    tilde_members = []
+    members = []
     for group_id in group_ids:
         group = openreview_client.get_group(group_id)
+
         profile_members = [member for member in group.members if '~' in member]
+        profile_search_results = openreview_client.search_profiles(emails=None, ids=profile_members, term=None)
+        tilde_members = []
+        for profile in profile_search_results:
+            preferredEmail = profile.content.get('preferredEmail')
+            # If user does not have preferred email, use first email in the emailsConfirmed list
+            preferredEmail = preferredEmail or profile.content.get('emailsConfirmed') and len(profile.content.get('emailsConfirmed')) and profile.content.get('emailsConfirmed')[0]
+            # If the user does not have emails confirmed, use the first email in the emails list
+            preferredEmail = preferredEmail or profile.content.get('emails') and len(profile.content.get('emails')) and profile.content.get('emails')[0]
+            # If the user Profile does not have an email, use its Profile ID
+            tilde_members.append((profile.id, preferredEmail or profile.id))
+        members.extend(tilde_members)
+
         email_members = [member for member in group.members if '@' in member]
-        profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None)
+        profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None) if email_members else {}
+        email_profiles = []
+        for email, profile in profile_search_results.items():
+            email_profiles.append((profile.id, email))
+        members.extend(email_profiles)
 
-        if profile_members:
-            tilde_members.extend(profile_members)
-        if profile_search_results and type(profile_search_results) == dict:
-            tilde_members.extend([p.id for p in profile_search_results.values()])
-
-    return tilde_members
+    return members
 
 def exclude(openreview_client, config):
     exclusion_invitations = convert_to_list(config['exclusion_inv'])
@@ -86,31 +157,22 @@ def exclude(openreview_client, config):
 
     return excluded_ids_by_user
 
-def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
+def retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_dir, metadata):
     # if group ID is supplied, collect archives for every member
     # (except those whose archives already exist)
+    use_email_ids = config.get('use_email_ids', False)
     group_ids = convert_to_list(config['match_group'])
     valid_members = get_profile_ids(openreview_client, group_ids)
 
     print('finding archives for {} valid members'.format(len(valid_members)))
 
-    archive_direct_uploads = openreview.tools.iterget_notes(
-        openreview_client, invitation='OpenReview.net/Archive/-/Direct_Upload')
-
-    direct_uploads_by_signature = defaultdict(list)
-
-    for direct_upload in archive_direct_uploads:
-        direct_uploads_by_signature[direct_upload.signatures[0]].append(direct_upload)
-
-    for member in tqdm(valid_members, total=len(valid_members)):
-        file_path = Path(archive_dir).joinpath(member + '.jsonl')
+    for (member, email) in tqdm(valid_members, total=len(valid_members)):
+        file_path = Path(archive_dir).joinpath((email if use_email_ids else member) + '.jsonl')
 
         if Path(file_path).exists() and not args.overwrite:
             continue
 
-        member_papers = get_publications(openreview_client, member)
-
-        member_papers.extend(direct_uploads_by_signature[member])
+        member_papers = get_publications(openreview_client, config, member)
 
         filtered_papers = [
             n for n in member_papers \
@@ -125,7 +187,7 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
             timestamp = n.cdate if n.cdate else n.tcdate
 
             if n.id not in excluded_ids_by_user[member] \
-            and timestamp > minimum_timestamp \
+            and timestamp > config.get('minimum_timestamp', 0) \
             and paperhash not in seen_keys:
                 filtered_papers.append(n)
                 seen_keys.append(paperhash)
@@ -133,7 +195,7 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user):
         metadata['archive_counts'][member]['arx'] = len(filtered_papers)
         if len(filtered_papers) == 0:
             metadata['no_publications_count'] += 1
-            metadata['no_publications'].append(member)
+            metadata['no_publications'].append(email if use_email_ids else member)
 
         with open(file_path, 'w') as f:
             for paper in filtered_papers:
@@ -210,18 +272,6 @@ if __name__ == '__main__':
     if not dataset_dir.is_dir():
         dataset_dir.mkdir()
 
-    archive_dir = dataset_dir.joinpath('archives')
-    if not archive_dir.is_dir():
-        archive_dir.mkdir()
-
-    submission_dir = dataset_dir.joinpath('submissions')
-    if not submission_dir.is_dir():
-        submission_dir.mkdir()
-
-    bids_dir = dataset_dir.joinpath('bids')
-    if not bids_dir.is_dir():
-        bids_dir.mkdir()
-
     openreview_client = openreview.Client(
         username=args.username,
         password=args.password,
@@ -237,27 +287,29 @@ if __name__ == '__main__':
         "bid_counts": {},
     }
 
-    minimum_timestamp = 0
-    if 'oldest_year' in config:
-        epoch = datetime.fromtimestamp(0)
-        date = datetime.strptime(config['oldest_year'], '%Y')
-        minimum_timestamp = (date - epoch).total_seconds() * 1000.0
-
-    print('minimum_timestamp', minimum_timestamp)
-
     if 'exclusion_inv' in config:
         excluded_ids_by_user = exclude(openreview_client, config)
     else:
         excluded_ids_by_user = defaultdict(list)
 
     if 'match_group' in config:
-        retrieve_expertise(openreview_client, config, excluded_ids_by_user)
+        archive_dir = dataset_dir.joinpath('archives')
+        if not archive_dir.is_dir():
+            archive_dir.mkdir()
+        retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_dir, metadata)
 
     # if invitation ID is supplied, collect records for each submission
     if 'paper_invitation' in config:
+        submission_dir = dataset_dir.joinpath('submissions')
+        if not submission_dir.is_dir():
+            submission_dir.mkdir()
         submissions = get_submissions(openreview_client, config)
+        metadata['submission_count'] = len(submissions)
 
     if 'bid_inv' in config:
+        bids_dir = dataset_dir.joinpath('bids')
+        if not bids_dir.is_dir():
+            bids_dir.mkdir()
         get_bids(openreview_client, config)
 
     metadata['bid_counts'] = OrderedDict(
@@ -267,7 +319,6 @@ if __name__ == '__main__':
         sorted(metadata['archive_counts'].items(), key=lambda t: t[0]))
 
     metadata['reviewer_count'] = len(metadata['archive_counts'])
-    metadata['submission_count'] = len(submissions)
 
     metadata_file = dataset_dir.joinpath('metadata.json')
     with open(metadata_file, 'w') as f:

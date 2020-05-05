@@ -5,7 +5,7 @@ import multiprocessing
 import pickle
 
 class Model(object):
-    def __init__(self, archives_dataset, submissions_dataset, use_title=False, use_abstract=True, sparse_value=None, average_score=False, max_score=True, workers=1):
+    def __init__(self, use_title=False, use_abstract=True, average_score=False, max_score=True, workers=1, sparse_value=None):
         if not average_score and not max_score:
             raise ValueError('average_score and max_score cannot both be False')
         if not use_title and not use_abstract:
@@ -20,11 +20,16 @@ class Model(object):
         self.average_score = average_score
         self.max_score = max_score
         self.sparse_value = sparse_value
-        self.submissions_dataset = submissions_dataset
+
+        if use_title:
+            self.bm25_titles = BM25Okapi(self.title_corpus)
+        if use_abstract:
+            self.bm25_abstracts = BM25Okapi(self.abstract_corpus)
+
+    def set_archives_dataset(self, archives_dataset):
         self.title_corpus = []
         self.abstract_corpus = []
         self.raw_publications = []
-        self.closest_match = []
         self.profie_id_to_indices = {}
         start_index = 0
         counter = 0
@@ -43,10 +48,8 @@ class Model(object):
             self.profie_id_to_indices[profile_id] = (start_index, counter)
             start_index = counter
 
-        if use_title:
-            self.bm25_titles = BM25Okapi(self.title_corpus)
-        if use_abstract:
-            self.bm25_abstracts = BM25Okapi(self.abstract_corpus)
+    def set_submissions_dataset(self, submissions_dataset):
+        self.submissions_dataset = submissions_dataset
 
     def _is_valid_field(self, obj, field):
         return field in obj and len(obj.get(field)) > 0

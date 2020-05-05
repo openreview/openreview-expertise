@@ -2,7 +2,6 @@ import os
 import json
 from collections import defaultdict
 
-from expertise.utils.standard_test import test
 from expertise.dataset import Dataset
 from tqdm import tqdm
 
