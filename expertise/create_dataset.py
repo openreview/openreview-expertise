@@ -89,7 +89,7 @@ def get_profile_ids(openreview_client, group_ids=None, reviewer_ids=None):
         email_profiles.append((profile.id, email))
     members.extend(email_profiles)
 
-    return members
+    return list(set(members))
 
 def exclude(openreview_client, config):
     exclusion_invitations = convert_to_list(config['exclusion_inv'])

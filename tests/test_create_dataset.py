@@ -71,6 +71,9 @@ def test_get_profile_ids():
     assert len(ids) == 3
     assert sorted(ids) == sorted([('~Romeo_Mraz2', 'hkinder2b@army.mil'), ('~Stacee_Powlowski9', 'mdagg5@1und1.de'), ('~Stanley_Bogisich4', 'cchippendale26@smugmug.com')])
 
+    ids = create_dataset.get_profile_ids(openreview_client, group_ids=['ABC.cc'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
+    assert len(ids) == 100
+
 def iterget_notes(openreview_client, content):
     author_id = content['authorids']
     with open('tests/data/fakeData.json') as json_file:
