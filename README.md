@@ -136,6 +136,7 @@ Here is an example with `minimum_pub_date` and `top_recent_pubs` with AND relati
         "top_recent_pubs": 5
     }
 }
+```
 
 Here is an example with `minimum_pub_date` and `top_recent_pubs` with OR relationship:
 ```
@@ -152,6 +153,7 @@ Here is an example with `minimum_pub_date` and `top_recent_pubs` with OR relatio
         }
     }
 }
+```
 
 ### Affinity Scores Configuration Options
 These parameters could be included in a separate file, like `affinity-config.json`, as was mentioned before.
@@ -190,6 +192,7 @@ Here is an example:
 - `model_params.publications_path`: When running ELMo, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
 - `model_params.submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the Submissions are stored.
 - `model_params.knn` (optional): This parameter specifies the k Nearest Neighbors that will be printed to the csv file. For instance, if the value is 10, then only the first 10 authors with the highest affinity score will be printed for each submission. You may see that if the value is 10, more than 10 values are printed, that is because there are ties in the scores. If the parameter is not specified, then each submission will have a score for every reviewer.
+- `model_params.normalize` (optional): This parameter specifies if the ELMo scores should be normalized. Normally, the ELMo scores are between 0.5 and 1. Therefore, normalizing the scores can provide better matching between reviewers and submissions. This of course would not change the order of the results, if reviewer 1 is better than reviewer 2 for a particular submission, this will still be true after normalizing the scores.
 - `model_params.skip_elmo`: Since running ELMo can take a significant amount of time, the vectors are saved in `model_params.submissions_path` and `model_params.publications_path`. If you want to run other operations with these results, like changing the value of `model_params.knn`, you may do so without running ELMo again by setting `model_params.skip_elmo` to true. The pickle files will be loaded with all the vectors.
 
 Here is an example:
@@ -206,6 +209,7 @@ Here is an example:
         "use_abstract": true,
         "use_cuda": true,
         "batch_size": 8,
+        "normalize": true,
         "skip_elmo": false,
         "publications_path": "./",
         "submissions_path": "./"
