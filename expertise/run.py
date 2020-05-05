@@ -33,7 +33,8 @@ if __name__ == '__main__':
             use_abstract=config['model_params'].get('use_abstract', True),
             use_cuda=config['model_params'].get('use_cuda', False),
             batch_size=config['model_params'].get('batch_size', 4),
-            knn=config['model_params'].get('knn')
+            knn=config['model_params'].get('knn'),
+            normalize=config['model_params'].get('normalize', False)
         )
         elmoModel.set_archives_dataset(archives_dataset)
         elmoModel.set_submissions_dataset(submissions_dataset)

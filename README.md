@@ -78,7 +78,7 @@ There are two steps to detect duplicates:
 The dataset can be generated using the [OpenReview python API](https://github.com/openreview/openreview-py) which should be installed when this repository is installed. You can generate your own dataset from some other source as long as it is compliant with the format shown in the Datasets section.
 Start by creating an "experiment directory" (`experiment_dir`), and a JSON config file (e.g. `config.json`) in it. Go to the Configuration File section for details on how to create the `config.json`.
 
-Duplicate detection uses ELMo exclusively, since we normalize the scores for BM25. ELMo scores have values from 0 to 1. The closer a score is to 1, the more similar the submissions are.
+Duplicate detection uses ELMo exclusively, since we always normalize the scores for BM25. ELMo scores have values from 0 to 1. The closer a score is to 1, the more similar the submissions are. The `normalize` option for ELMo is disabled for duplicate detection.
 
 Create a dataset by running the following command (this is optional if you already have the dataset):
 ```
@@ -104,11 +104,57 @@ This parameters could be included in a separate file, like `dataset-config.json`
 - `match_group`: String or array of strings containing the groups of Reviewers or Area Chairs. The Reviewers (and Area Chairs) will get affinity scores with respect to the submitted papers based on their expertise. This expertise is obtained based on the publications available in OpenReview. It can be provided instead of the `reviewer_ids` or on top of the `reviewer_ids`, the values will be combined.
 - `reviewer_ids`: Array of strings containing the IDs of the reviewers. An ID can either be an email associated to an OpenReview Profile or the OpenReview ID, also known as a Tilde ID, for a Profile. The array can be a combination of both these types of IDs. It can be provided instead of the `match_group` or on top of the `match_group`, the values will be combined.
 - `paper_invitation`: String or array of strings with the submission invitations. This is the invitation for Submissions, all the submissions in OpenReview for a particular venue have an invitation and that is how they are grouped together.
-- `exclusion_inv`: String or array of strings with the exclusion invitations. Reviewers (and Area Chairs) can choose to exclude some of their papers before the affinity scores are calculated so that they get papers that are more aligned to their current expertise/interest. Papers included here will not be taken into consideration when calculating the affinity scores.
-- `bid_inv`: String or array of strings with the bid invitations. Bids are used by the reviewers in OpenReview to select papers that they would or would not like to review. These bids are then used to compute a final affinity score to be more fair with the reviewers.
-- `use_email_ids`: Boolean value. If true, then the email of the user is used instead of his/her OpenReview Profile ID.
-- `minimum_timestamp`: Number indicating the date in Unix format. This date indicates the minimum date of a publication for it to be considered in the expertise.
+- `exclusion_inv` (optional): String or array of strings with the exclusion invitations. Reviewers (and Area Chairs) can choose to exclude some of their papers before the affinity scores are calculated so that they get papers that are more aligned to their current expertise/interest. Papers included here will not be taken into consideration when calculating the affinity scores.
+- `bid_inv` (optional): String or array of strings with the bid invitations. Bids are used by the reviewers in OpenReview to select papers that they would or would not like to review. These bids are then used to compute a final affinity score to be more fair with the reviewers.
+- `use_email_ids` (optional): Boolean value. If true, then the email of the user is used instead of his/her OpenReview Profile ID.
 - `dataset.directory`: This is the directory where the data will be dumped. Once `create_dataset` finishes running, all the folders with the files inside will be in there.
+- `dataset.minimum_pub_date` (optional): Number indicating the Unix date in milliseconds (that's what we use in OpenReview) of the publication. Any publication before this date will not be included in the dataset. If this parameter is included with `dataset.top_recent_pubs`, then, the intersection of the publications meeting both criteria will be selected. If instead, the user wants to include the union between both results, then, both parameters should be included inside the `dataset.or` field. Look at the examples for more details.
+- `dataset.top_recent_pubs` (optional): Number or string indicating a percentage. If the user sets a number, like 3, then only the 3 most recent publications are taken into consideration. If the reviewer has less than 3 publications, then all his/her publications are taken into consideration. For percentages, if we select 10%, this will still work for 3 publications. 10% of 3 is 0.3, however, decimal values are always rounded to the next integer, so the result in this case would be 1. If this parameter is included with `dataset.minimum_pub_date`, then, the intersection of the publications meeting both criteria will be selected. If instead, the user wants to include the union between both results, then, both parameters should be included inside the `dataset.or` field. Look at the examples for more details.
+
+Here is an example:
+```
+{
+    "match_group": ["ICLR.cc/2020/Conference/Reviewers", "ICLR.cc/2020/Conference/Area_Chairs"],
+    "paper_invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+    "exclusion_inv": "ICLR.cc/2020/Conference/-/Expertise_Selection",
+    "bid_inv": "ICLR.cc/2020/Conference/-/Add_Bid",
+    "dataset": {
+        "directory": "./"
+    }
+}
+```
+
+Here is an example with `minimum_pub_date` and `top_recent_pubs` with AND relationship:
+```
+{
+    "match_group": ["ICLR.cc/2020/Conference/Reviewers", "ICLR.cc/2020/Conference/Area_Chairs"],
+    "paper_invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+    "exclusion_inv": "ICLR.cc/2020/Conference/-/Expertise_Selection",
+    "bid_inv": "ICLR.cc/2020/Conference/-/Add_Bid",
+    "dataset": {
+        "directory": "./",
+        "minimum_pub_date": 1483228800000,
+        "top_recent_pubs": 5
+    }
+}
+```
+
+Here is an example with `minimum_pub_date` and `top_recent_pubs` with OR relationship:
+```
+{
+    "match_group": ["ICLR.cc/2020/Conference/Reviewers", "ICLR.cc/2020/Conference/Area_Chairs"],
+    "paper_invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+    "exclusion_inv": "ICLR.cc/2020/Conference/-/Expertise_Selection",
+    "bid_inv": "ICLR.cc/2020/Conference/-/Add_Bid",
+    "dataset": {
+        "directory": "./",
+        "or": {
+            "minimum_pub_date": 1483228800000,
+            "top_recent_pubs": "10%"
+        }
+    }
+}
+```
 
 Here is an example:
 ```
@@ -140,10 +186,6 @@ Here is an example:
 ```
 {
     "name": "iclr2020_bm25_abstracts",
-    "match_group": ["ICLR.cc/2020/Conference/Reviewers", "ICLR.cc/2020/Conference/Area_Chairs"],
-    "paper_invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
-    "exclusion_inv": "ICLR.cc/2020/Conference/-/Expertise_Selection",
-    "bid_inv": "ICLR.cc/2020/Conference/-/Add_Bid",
     "dataset": {
         "directory": "./"
     },
@@ -164,17 +206,14 @@ Here is an example:
 - `model_params.batch_size`: Batch size when running ELMo. This defaults to 8, but depending on your machine, this value could be different.
 - `model_params.publications_path`: When running ELMo, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
 - `model_params.submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the Submissions are stored.
-- `model_params.knn`: This parameter specifies the k Nearest Neighbors that will be printed to the csv file. For instance, if the value is 10, then only the first 10 authors with the highest affinity score will be printed for each submission. You may see that if the value is 10, more than 10 values are printed, that is because there are ties in the scores. If the parameter is not specified, then each submission will have a score for every reviewer.
+- `model_params.knn` (optional): This parameter specifies the k Nearest Neighbors that will be printed to the csv file. For instance, if the value is 10, then only the first 10 authors with the highest affinity score will be printed for each submission. You may see that if the value is 10, more than 10 values are printed, that is because there are ties in the scores. If the parameter is not specified, then each submission will have a score for every reviewer.
+- `model_params.normalize` (optional): This parameter specifies if the ELMo scores should be normalized. Normally, the ELMo scores are between 0.5 and 1. Therefore, normalizing the scores can provide better matching between reviewers and submissions. This of course would not change the order of the results, if reviewer 1 is better than reviewer 2 for a particular submission, this will still be true after normalizing the scores.
 - `model_params.skip_elmo`: Since running ELMo can take a significant amount of time, the vectors are saved in `model_params.submissions_path` and `model_params.publications_path`. If you want to run other operations with these results, like changing the value of `model_params.knn`, you may do so without running ELMo again by setting `model_params.skip_elmo` to true. The pickle files will be loaded with all the vectors.
 
 Here is an example:
 ```
 {
     "name": "iclr2020_elmo_abstracts",
-    "match_group": ["ICLR.cc/2020/Conference/Reviewers", "ICLR.cc/2020/Conference/Area_Chairs"],
-    "paper_invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
-    "exclusion_inv": "ICLR.cc/2020/Conference/-/Expertise_Selection",
-    "bid_inv": "ICLR.cc/2020/Conference/-/Add_Bid",
     "dataset": {
         "directory": "./"
     },
@@ -185,6 +224,7 @@ Here is an example:
         "use_abstract": true,
         "use_cuda": true,
         "batch_size": 8,
+        "normalize": true,
         "skip_elmo": false,
         "publications_path": "./",
         "submissions_path": "./"
