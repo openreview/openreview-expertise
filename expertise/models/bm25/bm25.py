@@ -92,7 +92,7 @@ class Model(object):
         csv_scores = []
         for note_id, submission in tqdm(submissions_dataset.items(), total=len(submissions_dataset)):
             reviewer_scores = self.score(submission)
-            if reviewer_scores is None:
+            if not reviewer_scores:
                 continue
             for profile_id, score in reviewer_scores.items():
                 csv_line = (note_id, profile_id, score)
