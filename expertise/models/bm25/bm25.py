@@ -52,7 +52,7 @@ class Model(object):
         self.submissions_dataset = submissions_dataset
 
     def _is_valid_field(self, obj, field):
-        return field in obj and len(obj.get(field)) > 0
+        return field in obj and obj.get(field)
 
     def normalize_tensor(self, tensor):
         maxValue = tensor.max()
