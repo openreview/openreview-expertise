@@ -67,7 +67,7 @@ class Model(object):
                 self.other_sub_note_id_to_title[submission['id']] = submission['content']['title']
 
     def _is_valid_field(self, obj, field):
-        return field in obj and len(obj.get(field)) > 0
+        return field in obj and obj.get(field)
 
     def _extract_elmo(self, papers, tokenizer, elmo):
         toks_list = []
