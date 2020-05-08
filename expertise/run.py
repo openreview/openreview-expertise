@@ -19,9 +19,11 @@ if __name__ == '__main__':
 
     if config['model'] == 'bm25':
         bm25Model = bm25.Model(
-            use_title=config['model_params'].get('use_title'),
-            use_abstract=config['model_params'].get('use_abstract'),
-            workers=config['model_params'].get('workers')
+            use_title=config['model_params'].get('use_title', True),
+            use_abstract=config['model_params'].get('use_abstract', False),
+            workers=config['model_params'].get('workers' 1),
+            average_score=config['model_params'].get('average_score', False),
+            max_score=config['model_params'].get('max_score', True)
         )
         bm25Model.set_archives_dataset(archives_dataset)
         bm25Model.set_submissions_dataset(submissions_dataset)
@@ -29,6 +31,8 @@ if __name__ == '__main__':
 
     if config['model'] == 'elmo':
         elmoModel = elmo.Model(
+            average_score=config['model_params'].get('average_score', False),
+            max_score=config['model_params'].get('max_score', True),
             use_title=config['model_params'].get('use_title', False),
             use_abstract=config['model_params'].get('use_abstract', True),
             use_cuda=config['model_params'].get('use_cuda', False),
