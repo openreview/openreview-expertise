@@ -21,7 +21,7 @@ if __name__ == '__main__':
         bm25Model = bm25.Model(
             use_title=config['model_params'].get('use_title', True),
             use_abstract=config['model_params'].get('use_abstract', False),
-            workers=config['model_params'].get('workers' 1),
+            workers=config['model_params'].get('workers', 1),
             average_score=config['model_params'].get('average_score', False),
             max_score=config['model_params'].get('max_score', True)
         )

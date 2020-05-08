@@ -81,10 +81,11 @@ class SubmissionsDataset(UserDict):
             self.data = submissions
         elif kwargs.get('submissions_file'):
             submissions = {}
-            with open(submission_file) as file_handle:
+            with open(kwargs.get('submissions_file')) as file_handle:
                 for line in file_handle:
                     submission = json.loads(line.rstrip())
                     submissions[submission.get('id')] = submission
+            self.data = submissions
         elif kwargs.get('submissions_dict'):
             self.data = kwargs['submissions_dict']
 
