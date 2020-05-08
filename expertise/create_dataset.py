@@ -128,9 +128,9 @@ def get_profile_ids(openreview_client, group_ids=None, reviewer_ids=None):
                 email_members.add(reviewer_id)
 
     members = []
-    tilde_members = list(tilde_members)
-    profile_search_results = openreview_client.search_profiles(emails=None, ids=tilde_members, term=None) if tilde_members else []
-    tilde_members = []
+    tilde_members_list = list(tilde_members)
+    profile_search_results = openreview_client.search_profiles(emails=None, ids=tilde_members_list, term=None) if tilde_members_list else []
+    tilde_members_list = []
     for profile in profile_search_results:
         preferredEmail = profile.content.get('preferredEmail')
         # If user does not have preferred email, use first email in the emailsConfirmed list
@@ -138,17 +138,25 @@ def get_profile_ids(openreview_client, group_ids=None, reviewer_ids=None):
         # If the user does not have emails confirmed, use the first email in the emails list
         preferredEmail = preferredEmail or profile.content.get('emails') and len(profile.content.get('emails')) and profile.content.get('emails')[0]
         # If the user Profile does not have an email, use its Profile ID
-        tilde_members.append((profile.id, preferredEmail or profile.id))
-    members.extend(tilde_members)
+        tilde_members_list.append((profile.id, preferredEmail or profile.id))
+    members.extend(tilde_members_list)
 
-    email_members = list(email_members)
-    profile_search_results = openreview_client.search_profiles(emails=email_members, ids=None, term=None) if email_members else {}
+    email_members_list = list(email_members)
+    profile_search_results = openreview_client.search_profiles(emails=email_members_list, ids=None, term=None) if email_members_list else {}
     email_profiles = []
     for email, profile in profile_search_results.items():
         email_profiles.append((profile.id, email))
     members.extend(email_profiles)
 
-    return list(set(members))
+    invalid_members = []
+    valid_members = list(set(members))
+    if len(email_members):
+        valid_emails = set([email_id for _, email_id in valid_members])
+        for member in email_members:
+            if member not in valid_emails:
+                invalid_members.append(member)
+
+    return valid_members, invalid_members
 
 def exclude(openreview_client, config):
     exclusion_invitations = convert_to_list(config['exclusion_inv'])
@@ -174,7 +182,9 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_
     use_email_ids = config.get('use_email_ids', False)
     group_ids = convert_to_list(config.get('match_group', []))
     reviewer_ids = convert_to_list(config.get('reviewer_ids', []))
-    valid_members = get_profile_ids(openreview_client, group_ids=group_ids, reviewer_ids=reviewer_ids)
+    valid_members, invalid_members = get_profile_ids(openreview_client, group_ids=group_ids, reviewer_ids=reviewer_ids)
+
+    metadata['no_profile'] = invalid_members
 
     print('finding archives for {} valid members'.format(len(valid_members)))
 

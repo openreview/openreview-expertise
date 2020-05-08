@@ -35,7 +35,8 @@ def mock_client():
         if emails:
             return_value = {}
             for email in emails:
-                return_value[email] = profiles_dict_emails[email]
+                if profiles_dict_emails.get(email, False):
+                    return_value[email] = profiles_dict_emails[email]
 
         if ids:
             return_value = []
@@ -50,7 +51,7 @@ def mock_client():
 
 def test_get_profile_ids():
     openreview_client = mock_client()
-    ids = create_dataset.get_profile_ids(openreview_client, group_ids=['ABC.cc'])
+    ids, _ = create_dataset.get_profile_ids(openreview_client, group_ids=['ABC.cc'])
     assert len(ids) == 100
     for tilde_id, email_id in ids:
         # ~Arianna_Daugherty3 does not have emails, so both fields should have her tilde ID
@@ -61,12 +62,18 @@ def test_get_profile_ids():
             assert '~' in tilde_id
             assert '@' in email_id
 
-    ids = create_dataset.get_profile_ids(openreview_client, reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
+    ids, _ = create_dataset.get_profile_ids(openreview_client, reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
     assert len(ids) == 3
     assert sorted(ids) == sorted([('~Romeo_Mraz2', 'hkinder2b@army.mil'), ('~Stacee_Powlowski9', 'mdagg5@1und1.de'), ('~Stanley_Bogisich4', 'cchippendale26@smugmug.com')])
 
-    ids = create_dataset.get_profile_ids(openreview_client, group_ids=['ABC.cc'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
+    ids, _ = create_dataset.get_profile_ids(openreview_client, group_ids=['ABC.cc'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
     assert len(ids) == 100
+
+    ids, inv_ids = create_dataset.get_profile_ids(openreview_client, reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de', 'mondragon@email.com'])
+    assert len(ids) == 3
+    assert sorted(ids) == sorted([('~Romeo_Mraz2', 'hkinder2b@army.mil'), ('~Stacee_Powlowski9', 'mdagg5@1und1.de'), ('~Stanley_Bogisich4', 'cchippendale26@smugmug.com')])
+    assert len(inv_ids) == 1
+    assert inv_ids[0] == 'mondragon@email.com'
 
 def iterget_notes(openreview_client, content):
     author_id = content['authorids']
