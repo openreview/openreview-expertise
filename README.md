@@ -178,6 +178,8 @@ These parameters could be included in a separate file, like `affinity-config.jso
 - `model_params.use_title`: Boolean that indicates whether to use the title for the affinity scores or not. If this is `true` and `model_params.use_abstract` is also `true`, then, whenever a Submission or Publication does not have an abstract, it will fallback to the title.
 - `model_params.use_abstract`: Boolean that indicates whether to use the abstract for the affinity scores or not. If this is `true` and `model_params.use_title` is also `true`, then, whenever a Submission or Publication does not have an abstract, it will fallback to the title.
 - `dataset.directory`: This is the directory where the data will be read from. If `create_dataset` is used, then the files will have the required format. If, however, the data does not come from OpenReview, then the dataset should be compliant with the format specified in the Datasets section.
+- `dataset.with_title` (optional): Boolean to indicate if only publications in OpenReview with title should be included.
+- `dataset.with_abstract` (optional): Boolean to indicate if only publications in OpenReview with abstract should be included.
 
 #### BM25Okapi specific parameters:
 - `model_params.workers`: This is the number of processes that for BM25Okapi. This depends on your machine, but 4 is usually a safe value.

@@ -194,6 +194,14 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_
         seen_keys = []
         filtered_papers = []
         for n in member_papers:
+            # Check if paper has abstract or title, otherwise continue
+            if config.get('dataset', {}).get('with_abstract', False):
+                if not 'abstract' in n.content or not n.content.get('abstract'):
+                    continue
+            if config.get('dataset', {}).get('with_title', False):
+                if not 'title' in n.content or not n.content.get('title'):
+                    continue
+
             paperhash = openreview.tools.get_paperhash('', n.content['title'])
 
             timestamp = n.cdate if n.cdate else n.tcdate
