@@ -176,10 +176,7 @@ class Model(object):
         # The D matrix scores go from 0 to 2. When values are closer to 0, it means that the
         # similarity is greater. However, we need to have values closer to 1 to indicate more
         # similarity. Also, the D matrix values range from 0 to 2.
-        if normalize:
-            preliminary_scores = self.normalize_scores(2 - D, axis=1)
-        else:
-            preliminary_scores = (2 - D) / 2
+        preliminary_scores = (2 - D) / 2
 
         submission_scores = {}
         for row, publication_indexes in enumerate(I):
@@ -193,21 +190,35 @@ class Model(object):
 
         csv_scores = []
         all_scores = []
+        scores_matrix = []
+        note_ids = []
+        reviewer_matrix = []
         if self.average_score:
-            for note_id, reviewer_scores in submission_scores.items():
-                for reviewer_id, scores in reviewer_scores.items():
-                    score = np.average(scores)
-                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_id, reviewer=reviewer_id, score=score)
-                    csv_scores.append(csv_line)
-                    all_scores.append((note_id, reviewer_id, score))
+            score_func = np.average
 
         if self.max_score:
-            for note_id, reviewer_scores in submission_scores.items():
-                for reviewer_id, scores in reviewer_scores.items():
-                    score = np.max(scores)
-                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_id, reviewer=reviewer_id, score=score)
-                    csv_scores.append(csv_line)
-                    all_scores.append((note_id, reviewer_id, score))
+            score_func = np.max
+
+        for note_id, reviewer_scores in submission_scores.items():
+            note_ids.append(note_id)
+            reviewer_array = []
+            scores_array = np.array([])
+            for reviewer_id, scores in reviewer_scores.items():
+                score = score_func(scores)
+                scores_array = np.append(scores_array, score)
+                reviewer_array.append(reviewer_id)
+            scores_matrix.append(scores_array)
+            reviewer_matrix.append(reviewer_array)
+
+        scores_matrix = np.array(scores_matrix)
+        if self.normalize:
+            scores_matrix = self.normalize_scores(scores_matrix)
+
+        for i, reviewer_ids in enumerate(reviewer_matrix):
+            for j, reviewer_id in enumerate(reviewer_ids):
+                csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_ids[i], reviewer=reviewer_id, score=scores_matrix[i, j])
+                csv_scores.append(csv_line)
+                all_scores.append((note_id, reviewer_id, score))
 
         if scores_path:
             with open(scores_path, 'w') as f:
