@@ -36,6 +36,13 @@ def get_publications(openreview_client, config, author_id):
     # assign cdate := 0
     unsorted_publications = []
     for publication in publications:
+        # Check if paper has abstract or title, otherwise continue
+        if config.get('dataset', {}).get('with_abstract', False):
+            if not 'abstract' in publication.content or not publication.content.get('abstract'):
+                continue
+        if config.get('dataset', {}).get('with_title', False):
+            if not 'title' in publication.content or not publication.content.get('title'):
+                continue
         if getattr(publication, 'cdate') is None:
             publication.cdate = getattr(publication, 'tcdate', 0)
         unsorted_publications.append(publication)
@@ -118,14 +125,14 @@ def get_profile_ids(openreview_client, group_ids=None, reviewer_ids=None):
                 if '~' in member:
                     tilde_members.add(member)
                 elif '@' in member:
-                    email_members.add(member)
+                    email_members.add(member.lower())
 
     if reviewer_ids:
         for reviewer_id in reviewer_ids:
             if '~' in reviewer_id:
                 tilde_members.add(reviewer_id)
             elif '@' in reviewer_id:
-                email_members.add(reviewer_id)
+                email_members.add(reviewer_id.lower())
 
     members = []
     tilde_members_list = list(tilde_members)
@@ -204,13 +211,6 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_
         seen_keys = []
         filtered_papers = []
         for n in member_papers:
-            # Check if paper has abstract or title, otherwise continue
-            if config.get('dataset', {}).get('with_abstract', False):
-                if not 'abstract' in n.content or not n.content.get('abstract'):
-                    continue
-            if config.get('dataset', {}).get('with_title', False):
-                if not 'title' in n.content or not n.content.get('title'):
-                    continue
 
             paperhash = openreview.tools.get_paperhash('', n.content['title'])
 
