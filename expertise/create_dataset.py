@@ -146,9 +146,14 @@ def exclude(openreview_client, config):
             select='id,head,label,weight'
         )
 
+        total_edges = openreview_client.get_edges_count(invitation=invitation)
+
+        pbar = tqdm(total=total_edges, desc=invitation)
         for edges in user_grouped_edges:
             for edge in edges:
                 excluded_ids_by_user[edge.tail].append(edge.head)
+                pbar.update(1)
+        pbar.close()
 
     return excluded_ids_by_user
 
