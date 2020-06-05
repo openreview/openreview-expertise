@@ -238,7 +238,7 @@ class OpenReviewExpertise(object):
         expertise = defaultdict(list)
         futures = []
         self.pbar = tqdm(total=len(valid_members), desc='Retrieving expertise...')
-        with ThreadPoolExecutor(max_workers=self.config.get('max_workers', 1)) as executor:
+        with ThreadPoolExecutor(max_workers=self.config.get('max_workers')) as executor:
             for (member, email) in valid_members:
                 futures.append(executor.submit(self.retrieve_expertise_helper, member, email))
         self.pbar.close()
