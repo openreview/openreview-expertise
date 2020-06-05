@@ -18,6 +18,8 @@ from collections import defaultdict, OrderedDict
 
 from .config import ModelConfig
 
+import concurrent.futures
+
 def convert_to_list(config_invitations):
     if (isinstance(config_invitations, str)):
         invitations = [config_invitations]
@@ -157,20 +159,12 @@ def exclude(openreview_client, config):
 
     return excluded_ids_by_user
 
-def retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_dir, metadata):
-    # if group ID is supplied, collect archives for every member
-    # (except those whose archives already exist)
-    use_email_ids = config.get('use_email_ids', False)
-    group_ids = convert_to_list(config['match_group'])
-    valid_members = get_profile_ids(openreview_client, group_ids)
+def create_publications_file(openreview_client, use_email_ids, config, member, email):
 
-    print('finding archives for {} valid members'.format(len(valid_members)))
-
-    for (member, email) in tqdm(valid_members, total=len(valid_members)):
         file_path = Path(archive_dir).joinpath((email if use_email_ids else member) + '.jsonl')
 
         if Path(file_path).exists() and not args.overwrite:
-            continue
+            return
 
         member_papers = get_publications(openreview_client, config, member)
 
@@ -200,6 +194,27 @@ def retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_
         with open(file_path, 'w') as f:
             for paper in filtered_papers:
                 f.write(json.dumps(paper.to_json()) + '\n')
+
+
+def retrieve_expertise(openreview_client, config, excluded_ids_by_user, archive_dir, metadata):
+    # if group ID is supplied, collect archives for every member
+    # (except those whose archives already exist)
+    use_email_ids = config.get('use_email_ids', False)
+    group_ids = convert_to_list(config['match_group'])
+    valid_members = get_profile_ids(openreview_client, group_ids)
+
+    print('finding archives for {} valid members'.format(len(valid_members)))
+
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_url = {executor.submit(create_publications_file, openreview_client, use_email_ids, config, valid_member[0], valid_member[1]): valid_member for valid_member in valid_members}
+        for future in concurrent.futures.as_completed(future_to_url):
+            url = future_to_url[future]
+            try:
+                data = future.result()
+            except Exception as exc:
+                print('%r generated an exception: %s' % (url, exc))
+
 
 def get_submissions(openreview_client, config):
 
