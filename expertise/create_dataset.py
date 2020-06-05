@@ -19,7 +19,8 @@ class OpenReviewExpertise(object):
     def __init__(self, openreview_client, config):
         self.openreview_client = openreview_client
         self.config = config
-        self.root = Path(config['dataset']['directory'])
+        self.root = Path(config.get('dataset', {}).get('directory', './'))
+        self.excluded_ids_by_user = defaultdict(list)
 
         self.metadata = {
             'submission_count': 0,
@@ -185,9 +186,8 @@ class OpenReviewExpertise(object):
 
     def exclude(self):
         exclusion_invitations = self.convert_to_list(self.config['exclusion_inv'])
-
+        excluded_ids_by_user = defaultdict(list)
         for invitation in exclusion_invitations:
-            excluded_ids_by_user = defaultdict(list)
             user_grouped_edges = openreview.tools.iterget_grouped_edges(
                 self.openreview_client,
                 invitation=invitation,
@@ -290,8 +290,6 @@ class OpenReviewExpertise(object):
 
         if 'exclusion_inv' in self.config:
             self.excluded_ids_by_user = self.exclude()
-        else:
-            self.excluded_ids_by_user = defaultdict(list)
 
         if 'match_group' in self.config or 'reviewer_ids' in self.config:
             self.archive_dir = self.dataset_dir.joinpath('archives')
@@ -315,7 +313,7 @@ class OpenReviewExpertise(object):
                 json.dump(submissions, f, indent=2)
             self.metadata['submission_count'] = len(submissions.keys())
 
-        with open(Path(self.root).joinpath('metadata.json'), 'w') as f:
+        with open(self.root.joinpath('metadata.json'), 'w') as f:
             json.dump(self.metadata, f, indent=2)
 
 if __name__ == '__main__':
