@@ -7,7 +7,7 @@ and that papers have been submitted.
 '''
 from .config import ModelConfig
 
-import json, argparse
+import json, argparse, csv
 from pathlib import Path
 from itertools import chain
 import openreview
@@ -253,11 +253,29 @@ class OpenReviewExpertise(object):
                 for paper in filtered_papers:
                     expertise[member_id].append(paper)
 
+        csv_expertise = self.config.get('csv_expertise')
+        if csv_expertise:
+            print('adding expertise from csv file ')
+            with open(self.root.joinpath(csv_expertise)) as csv_file:
+                csv_reader = csv.reader(csv_file, delimiter=',')
+                for publication in tqdm(csv_reader):
+                    member_id = publication[0]
+                    _id = publication[1]
+                    title = publication[2]
+                    abstract = publication[3]
+                    expertise[member_id].append({
+                        'id': _id,
+                        'content': {
+                            'title': title,
+                            'abstract': abstract
+                        }
+                    })
+
         return expertise
 
 
     def get_submissions(self):
-        invitation_ids = self.convert_to_list(self.config['paper_invitation'])
+        invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
         submissions = []
 
         for invitation_id in invitation_ids:
@@ -267,18 +285,31 @@ class OpenReviewExpertise(object):
         print('finding records of {} submissions'.format(len(submissions)))
         reduced_submissions = {}
         for paper in tqdm(submissions, total=len(submissions)):
-            # file_path = Path(self.submission_dir).joinpath(paper.id + '.jsonl')
             paper_id = paper.id
             reduced_submissions[paper_id] = {
-                'id': paper.id,
+                'id': paper_id,
                 'content': {
                     'title': paper.content.get('title'),
                     'abstract': paper.content.get('abstract')
                 }
             }
-            # if not file_path.exists():
-            #     with open(file_path, 'w') as f:
-            #         f.write(json.dumps(paper.to_json()) + '\n')
+
+        csv_submissions = self.config.get('csv_submissions')
+        if csv_submissions:
+            print('adding records from csv file ')
+            with open(self.root.joinpath(csv_submissions)) as csv_file:
+                csv_reader = csv.reader(csv_file, delimiter=',')
+                for submission in tqdm(csv_reader):
+                    paper_id = submission[0]
+                    title = submission[1]
+                    abstract = submission[2]
+                    reduced_submissions[paper_id] = {
+                        'id': paper_id,
+                        'content': {
+                            'title': title,
+                            'abstract': abstract
+                        }
+                    }
 
         return reduced_submissions
 
@@ -297,17 +328,12 @@ class OpenReviewExpertise(object):
                 self.archive_dir.mkdir()
             expertise = self.retrieve_expertise()
             for reviewer_id, pubs in expertise.items():
-                with open(self.archive_dir.joinpath(reviewer_id), 'w') as f:
+                with open(self.archive_dir.joinpath(reviewer_id + '.jsonl'), 'w') as f:
                     for paper in pubs:
                         f.write(json.dumps(paper) + '\n')
-            # with open(self.root.joinpath('archive.json'), 'w') as f:
-            #     json.dump(expertise, f, indent=2)
 
         # if invitation ID is supplied, collect records for each submission
-        if 'paper_invitation' in self.config:
-            self.submission_dir = self.dataset_dir.joinpath('submissions')
-            if not self.submission_dir.is_dir():
-                self.submission_dir.mkdir()
+        if 'paper_invitation' in self.config or 'csv_submissions' in self.config:
             submissions = self.get_submissions()
             with open(self.root.joinpath('submissions.json'), 'w') as f:
                 json.dump(submissions, f, indent=2)

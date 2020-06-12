@@ -101,9 +101,12 @@ Below you will find examples of possible configurations depending on the Model t
 
 ### Create Dataset Configuration Options
 This parameters could be included in a separate file, like `dataset-config.json`, as was mentioned before.
-- `match_group`: String or array of strings containing the groups of Reviewers or Area Chairs. The Reviewers (and Area Chairs) will get affinity scores with respect to the submitted papers based on their expertise. This expertise is obtained based on the publications available in OpenReview.
-- `paper_invitation`: String or array of strings with the submission invitations. This is the invitation for Submissions, all the submissions in OpenReview for a particular venue have an invitation and that is how they are grouped together.
+- `match_group`: (optional) String or array of strings containing the groups of Reviewers or Area Chairs. The Reviewers (and Area Chairs) will get affinity scores with respect to the submitted papers based on their expertise. This expertise is obtained based on the publications available in OpenReview. It can be provided instead of or on top of the `reviewer_ids` and `csv_expertise`, the values will be combined.
+- `reviewer_ids`: (optional) Array of strings containing the IDs of the reviewers. An ID can either be an email associated to an OpenReview Profile or the OpenReview ID, also known as a Tilde ID, for a Profile. The array can be a combination of both these types of IDs. It can be provided instead of or on top of the `match_group` and `csv_expertise`, the values will be combined.
+- `csv_expertise`: (optinal) String with the relative path from `dataset.directory` to a csv file containing the expertise in the following format: "author id","publication_id","title","abstract". This can be added instead of or on top of `match_group` and `reviewer_ids`, the values will be combined.
+- `paper_invitation`: (optional) String or array of strings with the submission invitations. This is the invitation for Submissions, all the submissions in OpenReview for a particular venue have an invitation and that is how they are grouped together.
 - `exclusion_inv` (optional): String or array of strings with the exclusion invitations. Reviewers (and Area Chairs) can choose to exclude some of their papers before the affinity scores are calculated so that they get papers that are more aligned to their current expertise/interest. Papers included here will not be taken into consideration when calculating the affinity scores.
+- `csv_submissions`: (optional) String with the relative path from `dataset.directory` to a csv file containing the submissions in the following format: "submission_id","title","abstract". This can be added on top of `paper_invitation`, the values will be combined.
 - `bid_inv` (optional): String or array of strings with the bid invitations. Bids are used by the reviewers in OpenReview to select papers that they would or would not like to review. These bids are then used to compute a final affinity score to be more fair with the reviewers.
 - `use_email_ids` (optional): Boolean value. If true, then the email of the user is used instead of his/her OpenReview Profile ID.
 - `max_workers` (optional): Number indicating the amount of workers that will be used to retrieve the expertise from OpenReview. If it is not set, it will use the maximum available workers of your machine by default. The more workers the faster the creation of the dataset
@@ -156,6 +159,36 @@ Here is an example with `minimum_pub_date` and `top_recent_pubs` with OR relatio
 }
 ```
 
+Here is an example with `reviewer_ids`:
+```
+{
+    "match_group": ["ICLR.cc/2020/Conference/Reviewers", "ICLR.cc/2020/Conference/Area_Chairs"],
+    "reviewer_ids": ["~Carlos_Mondra1", "mondra@email.com", "1234@email.com", ...]
+    "paper_invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+    "exclusion_inv": "ICLR.cc/2020/Conference/-/Expertise_Selection",
+    "bid_inv": "ICLR.cc/2020/Conference/-/Add_Bid",
+    "dataset": {
+        "directory": "./"
+    }
+}
+```
+
+Here is an example with `csv_submissions` and `csv_expertise`. In this case, both files should be placed here `./csv_expertise.csv` and here `./csv_submissions`.
+```
+{
+    "match_group": ["ICLR.cc/2020/Conference/Reviewers", "ICLR.cc/2020/Conference/Area_Chairs"],
+    "csv_expertise": "csv_expertise.csv",
+    "reviewer_ids": ["~Carlos_Mondra1", "mondra@email.com", "1234@email.com", ...]
+    "paper_invitation": "ICLR.cc/2020/Conference/-/Blind_Submission",
+    "csv_submissions": "csv_submissions.csv",
+    "exclusion_inv": "ICLR.cc/2020/Conference/-/Expertise_Selection",
+    "bid_inv": "ICLR.cc/2020/Conference/-/Add_Bid",
+    "dataset": {
+        "directory": "./"
+    }
+}
+```
+
 ### Affinity Scores Configuration Options
 These parameters could be included in a separate file, like `affinity-config.json`, as was mentioned before.
 
@@ -165,6 +198,8 @@ These parameters could be included in a separate file, like `affinity-config.jso
 - `model_params.use_abstract`: Boolean that indicates whether to use the abstract for the affinity scores or not. If this is `true` and `model_params.use_title` is also `true`, then, whenever a Submission or Publication does not have an abstract, it will fallback to the title.
 - `model_params.sparse_value` (optional): Numerical value. If passed, instead of returning all the possible reviewer-submission combinations, only the top scores will be returned. The number of top scores will be determined by the `sparse_value`. That does not mean that the number of scores per submission will be equal to the `sparse_value`. Here is an example, if there are only 10 submissions and 5 reviewers, there would be a total of 50 scores. If we set the `sparse_value` to 5, each reviewer will get the top 5 submissions that are most similar to their publications. However, there might be a submission (or more submissions) that is not among the top 5 of any reviewer. In order to ensure that all submissions also have reviewers, the top 5 reviewers are assigned to each submission. As you can imagine, some reviewers will have more than 5 submissions assigned because of this reason.
 - `dataset.directory`: This is the directory where the data will be read from. If `create_dataset` is used, then the files will have the required format. If, however, the data does not come from OpenReview, then the dataset should be compliant with the format specified in the Datasets section.
+- `dataset.with_title` (optional): Boolean to indicate if only publications in OpenReview with title should be included.
+- `dataset.with_abstract` (optional): Boolean to indicate if only publications in OpenReview with abstract should be included.
 
 #### BM25Okapi specific parameters:
 - `model_params.workers`: This is the number of processes that for BM25Okapi. This depends on your machine, but 4 is usually a safe value.

@@ -27,7 +27,8 @@ def mock_client():
         if emails:
             return_value = {}
             for email in emails:
-                return_value[email] = profiles_dict_emails[email]
+                if profiles_dict_emails.get(email, False):
+                    return_value[email] = profiles_dict_emails[email]
 
         if ids:
             return_value = []
@@ -64,13 +65,27 @@ def test_get_profile_ids():
     ids, _ = or_expertise.get_profile_ids(group_ids=['ABC.cc'])
     assert len(ids) == 100
     for tilde_id, email_id in ids:
-        # ~Arianna_Daugherty3 does no thave emails, so both fields should have her tilde ID
+        # ~Arianna_Daugherty3 does not have emails, so both fields should have her tilde ID
         if tilde_id == '~Arianna_Daugherty3':
             assert '~' in tilde_id
             assert '~' in email_id
         else :
             assert '~' in tilde_id
             assert '@' in email_id
+
+    ids, _ = or_expertise.get_profile_ids(reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
+    assert len(ids) == 3
+    assert sorted(ids) == sorted([('~Romeo_Mraz2', 'hkinder2b@army.mil'), ('~Stacee_Powlowski9', 'mdagg5@1und1.de'), ('~Stanley_Bogisich4', 'cchippendale26@smugmug.com')])
+
+    ids, _ = or_expertise.get_profile_ids(group_ids=['ABC.cc'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
+    assert len(ids) == 100
+
+    ids, inv_ids = or_expertise.get_profile_ids(reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de', 'mondragon@email.com'])
+    assert len(ids) == 3
+    assert sorted(ids) == sorted([('~Romeo_Mraz2', 'hkinder2b@army.mil'), ('~Stacee_Powlowski9', 'mdagg5@1und1.de'), ('~Stanley_Bogisich4', 'cchippendale26@smugmug.com')])
+    assert len(inv_ids) == 1
+    assert inv_ids[0] == 'mondragon@email.com'
+
 
 @patch('openreview.tools.iterget_notes', side_effect=iterget_notes)
 def test_get_publications(mock_iterget_notes):
@@ -147,6 +162,35 @@ def test_get_publications(mock_iterget_notes):
     assert len(publications) == 2
     for publication in publications:
         assert publication['cdate'] > minimum_pub_date
+
+# @patch('openreview.tools.iterget_notes', side_effect=iterget_notes)
+def test_get_submissions():
+    openreview_client = mock_client()
+    config = {
+        'dataset': {
+            'directory': 'tests/data/'
+        },
+        'csv_submissions': 'csv_submissions.csv'
+    }
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    submissions = or_expertise.get_submissions()
+    print(submissions)
+    assert json.dumps(submissions) == json.dumps({
+        'GhJKSuij': {
+            "id": "GhJKSuij",
+            "content": {
+                "title": "Manual & mechan traction",
+                "abstract":"Etiam vel augue. Vestibulum rutrum rutrum neque. Aenean auctor gravida sem."
+                }
+            },
+        'KAeiq76y': {
+            "id": "KAeiq76y",
+            "content": {
+                "title": "Aorta resection & anast",
+                "abstract":"Morbi non lectus. Aliquam sit amet diam in magna bibendum imperdiet. Nullam orci pede, venenatis non, sodales sed, tincidunt eu, felis.Fusce posuere felis sed lacus. Morbi sem mauris, laoreet ut, rhoncus aliquet, pulvinar sed, nisl. Nunc rhoncus dui vel sem."
+                }
+            }
+    })
 
 def get_paperhash(prefix, title):
     return prefix + title

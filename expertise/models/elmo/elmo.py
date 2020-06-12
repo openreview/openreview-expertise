@@ -183,10 +183,7 @@ class Model(object):
         # The D matrix scores go from 0 to 2. When values are closer to 0, it means that the
         # similarity is greater. However, we need to have values closer to 1 to indicate more
         # similarity. Also, the D matrix values range from 0 to 2.
-        if normalize:
-            preliminary_scores = self.normalize_scores(2 - D, axis=1)
-        else:
-            preliminary_scores = (2 - D) / 2
+        preliminary_scores = (2 - D) / 2
 
         submission_scores = {}
         for row, publication_indexes in enumerate(I):
@@ -198,23 +195,37 @@ class Model(object):
                 for reviewer_id in profile_ids:
                     submission_scores[note_id][reviewer_id].append(preliminary_scores[row][col])
 
-        self.preliminary_scores = []
         csv_scores = []
+        self.preliminary_scores = []
+        scores_matrix = []
+        note_ids = []
+        reviewer_matrix = []
         if self.average_score:
-            for note_id, reviewer_scores in submission_scores.items():
-                for reviewer_id, scores in reviewer_scores.items():
-                    average_score = np.average(scores)
-                    self.preliminary_scores.append((note_id, reviewer_id, average_score))
-                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_id, reviewer=reviewer_id, score=average_score)
-                    csv_scores.append(csv_line)
+            score_func = np.average
 
-        elif self.max_score:
-            for note_id, reviewer_scores in submission_scores.items():
-                for reviewer_id, scores in reviewer_scores.items():
-                    max_score = np.max(scores)
-                    self.preliminary_scores.append((note_id, reviewer_id, max_score))
-                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_id, reviewer=reviewer_id, score=max_score)
-                    csv_scores.append(csv_line)
+        if self.max_score:
+            score_func = np.max
+
+        for note_id, reviewer_scores in submission_scores.items():
+            note_ids.append(note_id)
+            reviewer_array = []
+            scores_array = np.array([])
+            for reviewer_id, scores in reviewer_scores.items():
+                score = score_func(scores)
+                scores_array = np.append(scores_array, score)
+                reviewer_array.append(reviewer_id)
+            scores_matrix.append(scores_array)
+            reviewer_matrix.append(reviewer_array)
+
+        scores_matrix = np.array(scores_matrix)
+        if self.normalize:
+            scores_matrix = self.normalize_scores(scores_matrix)
+
+        for i, reviewer_ids in enumerate(reviewer_matrix):
+            for j, reviewer_id in enumerate(reviewer_ids):
+                csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_ids[i], reviewer=reviewer_id, score=scores_matrix[i, j])
+                csv_scores.append(csv_line)
+                self.preliminary_scores.append((note_ids[i], reviewer_id, scores_matrix[i, j]))
 
         if scores_path:
             with open(scores_path, 'w') as f:
@@ -285,6 +296,7 @@ class Model(object):
     def sparse_scores(self, scores_path=None):
         print('Sorting...')
         self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
+        print('preliminary', self.preliminary_scores, len(self.preliminary_scores))
         all_scores = set()
         # They are first sorted by note_id
         all_scores = self._sparse_scores_helper(all_scores, 0)
@@ -301,4 +313,5 @@ class Model(object):
                 for note_id, profile_id, score in all_scores:
                     f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
 
+        print('ALL SCORES', all_scores)
         return all_scores

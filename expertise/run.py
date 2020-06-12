@@ -13,15 +13,17 @@ if __name__ == '__main__':
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
     if Path(config['dataset']['directory']).joinpath('submissions').exists():
         submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
-    elif Path(config['dataset']['directory']).joinpath('submissions.jsonl').exists():
-        submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.jsonl'))
+    elif Path(config['dataset']['directory']).joinpath('submissions.json').exists():
+        submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.json'))
 
     if config['model'] == 'bm25':
         from .models import bm25
         bm25Model = bm25.Model(
-            use_title=config['model_params'].get('use_title'),
-            use_abstract=config['model_params'].get('use_abstract'),
-            workers=config['model_params'].get('workers'),
+            use_title=config['model_params'].get('use_title', False),
+            use_abstract=config['model_params'].get('use_abstract', True),
+            workers=config['model_params'].get('workers', 1),
+            average_score=config['model_params'].get('average_score', False),
+            max_score=config['model_params'].get('max_score', True),
             sparse_value=config['model_params'].get('sparse_value')
         )
         bm25Model.set_archives_dataset(archives_dataset)
@@ -41,6 +43,8 @@ if __name__ == '__main__':
     if config['model'] == 'elmo':
         from .models import elmo
         elmoModel = elmo.Model(
+            average_score=config['model_params'].get('average_score', False),
+            max_score=config['model_params'].get('max_score', True),
             use_title=config['model_params'].get('use_title', False),
             use_abstract=config['model_params'].get('use_abstract', True),
             use_cuda=config['model_params'].get('use_cuda', False),
