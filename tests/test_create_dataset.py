@@ -1,16 +1,8 @@
-from expertise import create_dataset
+from expertise.create_dataset import OpenReviewExpertise
 from unittest.mock import patch, MagicMock
 from collections import defaultdict
-from expertise.dataset import ArchivesDataset
 import openreview
 import json
-
-def test_convert_to_list():
-    groupList = create_dataset.convert_to_list('group.cc')
-    assert groupList == ['group.cc']
-
-    groupList = create_dataset.convert_to_list(['group.cc', 'group.aa'])
-    assert groupList == ['group.cc', 'group.aa']
 
 def mock_client():
     client = MagicMock(openreview.Client)
@@ -48,19 +40,6 @@ def mock_client():
 
     return client
 
-def test_get_profile_ids():
-    openreview_client = mock_client()
-    ids = create_dataset.get_profile_ids(openreview_client, ['ABC.cc'])
-    assert len(ids) == 100
-    for tilde_id, email_id in ids:
-        # ~Arianna_Daugherty3 does no thave emails, so both fields should have her tilde ID
-        if tilde_id == '~Arianna_Daugherty3':
-            assert '~' in tilde_id
-            assert '~' in email_id
-        else :
-            assert '~' in tilde_id
-            assert '@' in email_id
-
 def iterget_notes(openreview_client, content):
     author_id = content['authorids']
     with open('tests/data/fakeData.json') as json_file:
@@ -71,13 +50,36 @@ def iterget_notes(openreview_client, content):
             return [openreview.Note.from_json(publication) for publication in profile['publications']]
     return []
 
+def test_convert_to_list():
+    or_expertise = OpenReviewExpertise(MagicMock(openreview.Client), {})
+    groupList = or_expertise.convert_to_list('group.cc')
+    assert groupList == ['group.cc']
+
+    groupList = or_expertise.convert_to_list(['group.cc', 'group.aa'])
+    assert groupList == ['group.cc', 'group.aa']
+
+def test_get_profile_ids():
+    openreview_client = mock_client()
+    or_expertise = OpenReviewExpertise(openreview_client, {})
+    ids, _ = or_expertise.get_profile_ids(group_ids=['ABC.cc'])
+    assert len(ids) == 100
+    for tilde_id, email_id in ids:
+        # ~Arianna_Daugherty3 does no thave emails, so both fields should have her tilde ID
+        if tilde_id == '~Arianna_Daugherty3':
+            assert '~' in tilde_id
+            assert '~' in email_id
+        else :
+            assert '~' in tilde_id
+            assert '@' in email_id
+
 @patch('openreview.tools.iterget_notes', side_effect=iterget_notes)
 def test_get_publications(mock_iterget_notes):
-    config = {}
-    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Carlos_Mondragon1')
+    openreview_client = mock_client()
+    or_expertise = OpenReviewExpertise(openreview_client, {})
+    publications = or_expertise.get_publications('~Carlos_Mondragon1')
     assert publications == []
 
-    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 3
 
     minimum_pub_date = 1554819115
@@ -86,10 +88,11 @@ def test_get_publications(mock_iterget_notes):
             'minimum_pub_date': minimum_pub_date
         }
     }
-    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
-        assert publication.cdate > minimum_pub_date
+        assert publication['cdate'] > minimum_pub_date
 
     top_recent_pubs = 2
     config = {
@@ -97,10 +100,11 @@ def test_get_publications(mock_iterget_notes):
             'top_recent_pubs': top_recent_pubs
         }
     }
-    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
-        assert publication.cdate > minimum_pub_date
+        assert publication['cdate'] > minimum_pub_date
 
     top_recent_pubs = 1
     config = {
@@ -109,9 +113,10 @@ def test_get_publications(mock_iterget_notes):
             'minimum_pub_date': minimum_pub_date
         }
     }
-    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 1
-    assert publications[0].cdate > minimum_pub_date
+    assert publications[0]['cdate'] > minimum_pub_date
 
     top_recent_pubs = 1
     config = {
@@ -122,10 +127,11 @@ def test_get_publications(mock_iterget_notes):
             }
         }
     }
-    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
-        assert publication.cdate > minimum_pub_date
+        assert publication['cdate'] > minimum_pub_date
 
     top_recent_pubs = '10%'
     config = {
@@ -136,36 +142,29 @@ def test_get_publications(mock_iterget_notes):
             }
         }
     }
-    publications = create_dataset.get_publications(MagicMock(openreview.Client), config, '~Perry_Volkman3')
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
-        assert publication.cdate > minimum_pub_date
+        assert publication['cdate'] > minimum_pub_date
 
 def get_paperhash(prefix, title):
     return prefix + title
 
 @patch('openreview.tools.get_paperhash', side_effect=get_paperhash)
 @patch('openreview.tools.iterget_notes', side_effect=iterget_notes)
-def test_retrieve_expertise(iterget_notes, get_paperhash, tmp_path):
+def test_retrieve_expertise(iterget_notes, get_paperhash):
     openreview_client = mock_client()
     config = {
         'use_email_ids': False,
         'match_group': 'ABC.cc'
     }
-    metadata = {
-        "no_publications_count": 0,
-        "no_publications": [],
-        "archive_counts": defaultdict(lambda: {'arx': 0, 'bid': 0})
-    }
-    archive_dir = tmp_path / 'archives'
-    archive_dir.mkdir()
-    create_dataset.retrieve_expertise(openreview_client, config, defaultdict(list), archive_dir, metadata)
-
-    archives_dataset = ArchivesDataset(archives_path=archive_dir)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    expertise = or_expertise.retrieve_expertise()
 
     with open('tests/data/fakeData.json') as json_file:
         data = json.load(json_file)
     profiles = data['profiles']
     for profile in profiles:
         if len(profile['publications']) > 0:
-            assert len(archives_dataset[profile['id']]) == len(profile['publications'])
+            assert len(expertise[profile['id']]) == len(profile['publications'])
