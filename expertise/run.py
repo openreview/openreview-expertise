@@ -13,8 +13,8 @@ if __name__ == '__main__':
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
     if Path(config['dataset']['directory']).joinpath('submissions').exists():
         submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
-    elif Path(config['dataset']['directory']).joinpath('submissions.jsonl').exists():
-        submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.jsonl'))
+    elif Path(config['dataset']['directory']).joinpath('submissions.json').exists():
+        submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.json'))
 
     if config['model'] == 'bm25':
         from .models import bm25
@@ -23,7 +23,7 @@ if __name__ == '__main__':
             use_abstract=config['model_params'].get('use_abstract', True),
             workers=config['model_params'].get('workers', 1),
             average_score=config['model_params'].get('average_score', False),
-            max_score=config['model_params'].get('max_score', True)
+            max_score=config['model_params'].get('max_score', True),
             sparse_value=config['model_params'].get('sparse_value')
         )
         bm25Model.set_archives_dataset(archives_dataset)
