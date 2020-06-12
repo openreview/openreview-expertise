@@ -80,12 +80,8 @@ class SubmissionsDataset(UserDict):
                         submissions[note_id] = json.loads(line.rstrip())
             self.data = submissions
         elif kwargs.get('submissions_file'):
-            submissions = {}
             with open(kwargs.get('submissions_file')) as file_handle:
-                for line in file_handle:
-                    submission = json.loads(line.rstrip())
-                    submissions[submission.get('id')] = submission
-            self.data = submissions
+                self.data = json.load(file_handle)
         elif kwargs.get('submissions_dict'):
             self.data = kwargs['submissions_dict']
 

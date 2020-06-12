@@ -10,7 +10,7 @@ from collections import defaultdict
 import faiss
 
 class Model(object):
-    def __init__(self, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None, skip_same_id=True, normalize=False):
+    def __init__(self, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None, sparse_value=None,  skip_same_id=True, normalize=False):
         if not use_title and not use_abstract:
             raise ValueError('use_title and use_abstract cannot both be False')
         self.metadata = {
@@ -30,6 +30,7 @@ class Model(object):
 
         self.average_score = average_score
         self.max_score = max_score
+        self.sparse_value = sparse_value
         self.knn = knn
         self.skip_same_id = skip_same_id
         self.normalize = normalize
@@ -40,10 +41,10 @@ class Model(object):
         self.pub_note_id_to_title = {}
         for profile_id, publications in archives_dataset.items():
             for publication in publications:
-                if self.use_abstract and 'abstract' in publication['content']:
+                if self.use_abstract and self._is_valid_field(publication['content'], 'abstract'):
                     self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
                     self.pub_note_id_to_abstract[publication['id']] = publication['content']['abstract']
-                elif self.use_title and 'title' in publication['content']:
+                elif self.use_title and self._is_valid_field(publication['content'], 'title'):
                     self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
                     self.pub_note_id_to_title[publication['id']] = publication['content']['title']
 
@@ -51,9 +52,9 @@ class Model(object):
         self.sub_note_id_to_abstract = {}
         self.sub_note_id_to_title = {}
         for note_id, submission in submissions_dataset.items():
-            if self.use_abstract and 'abstract' in submission['content']:
+            if self.use_abstract and self._is_valid_field(submission['content'], 'abstract'):
                 self.sub_note_id_to_abstract[submission['id']] = submission['content']['abstract']
-            elif self.use_title and 'title' in submission['content']:
+            elif self.use_title and self._is_valid_field(submission['content'], 'title'):
                 self.sub_note_id_to_title[submission['id']] = submission['content']['title']
 
     def set_other_submissions_dataset(self, other_submissions_dataset):
@@ -64,6 +65,9 @@ class Model(object):
                 self.other_sub_note_id_to_abstract[submission['id']] = submission['content']['abstract']
             elif self.use_title and 'title' in submission['content']:
                 self.other_sub_note_id_to_title[submission['id']] = submission['content']['title']
+
+    def _is_valid_field(self, obj, field):
+        return field in obj and obj.get(field)
 
     def _extract_elmo(self, papers, tokenizer, elmo):
         toks_list = []
@@ -87,7 +91,10 @@ class Model(object):
         for batch in tqdm(batched_pubs, total=len(batched_pubs), desc='Embedding'):
             _uids = [x[0] for x in batch]
             _pubs = [x[1] for x in batch]
-            _vecs = self._extract_elmo(_pubs, self.tokenizer, self.elmo)
+            try:
+                _vecs = self._extract_elmo(_pubs, self.tokenizer, self.elmo)
+            except:
+                print(_uids)
             uids.extend(_uids)
             vecs.append(_vecs)
 
@@ -189,7 +196,7 @@ class Model(object):
                     submission_scores[note_id][reviewer_id].append(preliminary_scores[row][col])
 
         csv_scores = []
-        all_scores = []
+        self.preliminary_scores = []
         scores_matrix = []
         note_ids = []
         reviewer_matrix = []
@@ -218,13 +225,13 @@ class Model(object):
             for j, reviewer_id in enumerate(reviewer_ids):
                 csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_ids[i], reviewer=reviewer_id, score=scores_matrix[i, j])
                 csv_scores.append(csv_line)
-                all_scores.append((note_id, reviewer_id, score))
+                self.preliminary_scores.append((note_ids[i], reviewer_id, scores_matrix[i, j]))
 
         if scores_path:
             with open(scores_path, 'w') as f:
                 for csv_line in csv_scores:
                     f.write(csv_line + '\n')
-        return all_scores
+        return self.preliminary_scores
 
     def find_duplicates(self, submissions_path=None, other_submissions_path=None, scores_path=None):
         print('Loading cached submissions...')
@@ -266,4 +273,45 @@ class Model(object):
             with open(scores_path, 'w') as f:
                 for csv_line in csv_scores:
                     f.write(csv_line + '\n')
+        return all_scores
+
+    def _sparse_scores_helper(self, all_scores, id_index):
+        counter = 0
+        # Get the first note_id or profile_id
+        current_id = self.preliminary_scores[0][id_index]
+        if id_index == 0:
+            desc = 'Note IDs'
+        else:
+            desc = 'Profiles IDs'
+        for note_id, profile_id, score in tqdm(self.preliminary_scores, total=len(self.preliminary_scores), desc=desc):
+            if counter < self.sparse_value:
+                all_scores.add((note_id, profile_id, score))
+            elif (note_id, profile_id)[id_index] != current_id:
+                counter = 0
+                all_scores.add((note_id, profile_id, score))
+                current_id = (note_id, profile_id)[id_index]
+            counter += 1
+        return all_scores
+
+    def sparse_scores(self, scores_path=None):
+        print('Sorting...')
+        self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
+        print('preliminary', self.preliminary_scores, len(self.preliminary_scores))
+        all_scores = set()
+        # They are first sorted by note_id
+        all_scores = self._sparse_scores_helper(all_scores, 0)
+
+        # Sort by profile_id
+        print('Sorting...')
+        self.preliminary_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        all_scores = self._sparse_scores_helper(all_scores, 1)
+
+        print('Final Sort...')
+        all_scores = sorted(list(all_scores), key=lambda x: (x[0], x[2]), reverse=True)
+        if scores_path:
+            with open(scores_path, 'w') as f:
+                for note_id, profile_id, score in all_scores:
+                    f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
+
+        print('ALL SCORES', all_scores)
         return all_scores

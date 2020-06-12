@@ -3,7 +3,6 @@ from pathlib import Path
 
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
-from .models import bm25, elmo
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -18,18 +17,31 @@ if __name__ == '__main__':
         submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.jsonl'))
 
     if config['model'] == 'bm25':
+        from .models import bm25
         bm25Model = bm25.Model(
-            use_title=config['model_params'].get('use_title', True),
-            use_abstract=config['model_params'].get('use_abstract', False),
+            use_title=config['model_params'].get('use_title', False),
+            use_abstract=config['model_params'].get('use_abstract', True),
             workers=config['model_params'].get('workers', 1),
             average_score=config['model_params'].get('average_score', False),
             max_score=config['model_params'].get('max_score', True)
+            sparse_value=config['model_params'].get('sparse_value')
         )
         bm25Model.set_archives_dataset(archives_dataset)
         bm25Model.set_submissions_dataset(submissions_dataset)
-        bm25Model.all_scores(Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'))
+
+        if not config['model_params'].get('skip_bm25', False):
+            bm25Model.all_scores(
+                preliminary_scores_path=Path(config['model_params']['scores_path']).joinpath('preliminary_scores.pkl'),
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+            )
+        if config['model_params'].get('sparse_value'):
+            bm25Model.sparse_scores(
+                preliminary_scores_path=Path(config['model_params']['scores_path']).joinpath('preliminary_scores.pkl'),
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+            )
 
     if config['model'] == 'elmo':
+        from .models import elmo
         elmoModel = elmo.Model(
             average_score=config['model_params'].get('average_score', False),
             max_score=config['model_params'].get('max_score', True),
@@ -38,7 +50,8 @@ if __name__ == '__main__':
             use_cuda=config['model_params'].get('use_cuda', False),
             batch_size=config['model_params'].get('batch_size', 4),
             knn=config['model_params'].get('knn'),
-            normalize=config['model_params'].get('normalize', False)
+            normalize=config['model_params'].get('normalize', False),
+            sparse_value=config['model_params'].get('sparse_value')
         )
         elmoModel.set_archives_dataset(archives_dataset)
         elmoModel.set_submissions_dataset(submissions_dataset)
@@ -50,3 +63,8 @@ if __name__ == '__main__':
             submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'),
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
         )
+
+        if config['model_params'].get('sparse_value'):
+            elmoModel.sparse_scores(
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+            )
