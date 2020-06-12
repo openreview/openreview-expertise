@@ -163,6 +163,35 @@ def test_get_publications(mock_iterget_notes):
     for publication in publications:
         assert publication['cdate'] > minimum_pub_date
 
+# @patch('openreview.tools.iterget_notes', side_effect=iterget_notes)
+def test_get_submissions():
+    openreview_client = mock_client()
+    config = {
+        'dataset': {
+            'directory': 'tests/data/'
+        },
+        'csv_submissions': 'csv_submissions.csv'
+    }
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    submissions = or_expertise.get_submissions()
+    print(submissions)
+    assert json.dumps(submissions) == json.dumps({
+        'GhJKSuij': {
+            "id": "GhJKSuij",
+            "content": {
+                "title": "Manual & mechan traction",
+                "abstract":"Etiam vel augue. Vestibulum rutrum rutrum neque. Aenean auctor gravida sem."
+                }
+            },
+        'KAeiq76y': {
+            "id": "KAeiq76y",
+            "content": {
+                "title": "Aorta resection & anast",
+                "abstract":"Morbi non lectus. Aliquam sit amet diam in magna bibendum imperdiet. Nullam orci pede, venenatis non, sodales sed, tincidunt eu, felis.Fusce posuere felis sed lacus. Morbi sem mauris, laoreet ut, rhoncus aliquet, pulvinar sed, nisl. Nunc rhoncus dui vel sem."
+                }
+            }
+    })
+
 def get_paperhash(prefix, title):
     return prefix + title
 
