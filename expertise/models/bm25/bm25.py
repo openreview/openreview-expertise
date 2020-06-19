@@ -21,11 +21,6 @@ class Model(object):
         self.max_score = max_score
         self.sparse_value = sparse_value
 
-        if use_title:
-            self.bm25_titles = BM25Okapi(self.title_corpus)
-        if use_abstract:
-            self.bm25_abstracts = BM25Okapi(self.abstract_corpus)
-
     def set_archives_dataset(self, archives_dataset):
         self.title_corpus = []
         self.abstract_corpus = []
@@ -47,6 +42,11 @@ class Model(object):
                     counter += 1
             self.profie_id_to_indices[profile_id] = (start_index, counter)
             start_index = counter
+
+        if self.use_title:
+            self.bm25_titles = BM25Okapi(self.title_corpus)
+        if self.use_abstract:
+            self.bm25_abstracts = BM25Okapi(self.abstract_corpus)
 
     def set_submissions_dataset(self, submissions_dataset):
         self.submissions_dataset = submissions_dataset
