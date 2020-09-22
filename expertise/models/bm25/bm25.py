@@ -21,11 +21,6 @@ class Model(object):
         self.max_score = max_score
         self.sparse_value = sparse_value
 
-        if use_title:
-            self.bm25_titles = BM25Okapi(self.title_corpus)
-        if use_abstract:
-            self.bm25_abstracts = BM25Okapi(self.abstract_corpus)
-
     def set_archives_dataset(self, archives_dataset):
         self.title_corpus = []
         self.abstract_corpus = []
@@ -48,6 +43,11 @@ class Model(object):
             self.profie_id_to_indices[profile_id] = (start_index, counter)
             start_index = counter
 
+        if self.use_title:
+            self.bm25_titles = BM25Okapi(self.title_corpus)
+        if self.use_abstract:
+            self.bm25_abstracts = BM25Okapi(self.abstract_corpus)
+
     def set_submissions_dataset(self, submissions_dataset):
         self.submissions_dataset = submissions_dataset
 
@@ -55,9 +55,12 @@ class Model(object):
         return field in obj and obj.get(field)
 
     def normalize_tensor(self, tensor):
-        maxValue = tensor.max()
-        minValue = tensor.min()
-        return (tensor - minValue) / (maxValue - minValue)
+        max_value = tensor.max()
+        min_value = tensor.min()
+        if max_value == min_value:
+            tensor[tensor!=0] = 1
+            return tensor
+        return (tensor - min_value) / (max_value - min_value)
 
     def score(self, submission):
         submission_scores = None
