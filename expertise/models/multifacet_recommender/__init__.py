@@ -1,0 +1,1 @@
+from .specter import SpecterPredictor

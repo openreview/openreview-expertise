@@ -32,6 +32,8 @@ conda install faiss-cpu -c pytorch
 ```
 [Here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md) you can find the above installation command.
 
+If you plan to use SPECTER, follow the set-up steps 1 and 2 described [here](https://github.com/allenai/specter#how-to-use-the-pretrained-model). Provide the SPECTER repository path in the config as `model_params.specter_dir`.
+
 ## Affinity Scores
 
 There are two steps to create affinity scores:
@@ -49,7 +51,7 @@ python -m expertise.create_dataset config.json \
 	--username <your_username> \
 ```
 
-For ELMo and BM25 run the following command
+For SPECTER, ELMo and BM25 run the following command
 ```
 python -m expertise.run config.json
 ```
@@ -250,6 +252,39 @@ Here is an example:
         "skip_elmo": false,
         "publications_path": "./",
         "submissions_path": "./"
+    }
+}
+```
+
+#### SPECTER specific parameters (affinity scores):
+- `model_params.specter_dir`: Path to the unpacked SPECTER directory. The model checkpoint will be loaded relative to this directory.
+- `model_params.work_dir`: When running SPECTER, this is where the intermediate files are stored.
+- `model_params.use_cuda`: Boolean to indicate whether to use GPU (`true`) or CPU (`false`) when running SPECTER. Currently, only 1 GPU is supported, but there does not seem to be necessary to have more.
+- `model_params.batch_size`: Batch size when running SPECTER. This defaults to 16.
+- `model_params.publications_path`: When running SPECTER, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
+- `model_params.submissions_path`: When running SPECTER, this is where the embedded abstracts/titles of the Submissions are stored.
+- `model_params.average_score` (boolean, defaults to `false`): This parameter specifies that the reviewer is assigned based on the average similarity of the submission to the authored publication embeddings. Exactly one of `model_params.average_score` and `model_params.max_score` must be `true`.
+- `model_params.max_score` (boolean, defaults to `true`): This parameter specifies that the reviewer is assigned based on the max similarity of the submission to the authored publication embeddings. Exactly one of `model_params.average_score` and `model_params.max_score` must be `true`.
+- `model_params.skip_specter`: Since running SPECTER can take a significant amount of time, the vectors are saved in `model_params.submissions_path` and `model_params.publications_path`. The jsonl files will be loaded with all the vectors.
+
+Here is an example:
+```
+{
+    "name": "iclr2020_specter",
+    "dataset": {
+        "directory": "./"
+    },
+    "model": "specter",
+    "model_params": {
+        "specter_dir": "../specter/",
+        "work_dir": "./",
+        "average_score": false,
+        "max_score": true,
+        "use_cuda": true,
+        "batch_size": 16,
+        "publications_path": "./",
+        "submissions_path": "./",
+        "scores_path": "./"
     }
 }
 ```
