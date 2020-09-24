@@ -276,25 +276,36 @@ class MultiFacetRecommender(object):
                     self.archive_paper_ids_list.append(publication['id'])
                 self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
                 self.pub_author_ids_to_note_id[profile_id].append(publication['id'])
-                self.pub_note_id_to_title[publication['id']] = publication['content'].get('title', "")
-                self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract', "")
+                self.pub_note_id_to_title[publication['id']] = publication['content'].get('title')
+                if self.pub_note_id_to_title[publication['id']] is None:
+                    self.pub_note_id_to_title[publication['id']] = ""
+                self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract')
+                if self.pub_note_id_to_abstract[publication['id']] is None:
+                    self.pub_note_id_to_abstract[publication['id']] = ""
 
     def set_submissions_dataset(self, submissions_dataset):
         self.sub_note_id_to_abstract = {}
         self.sub_note_id_to_title = {}
         self.submission_paper_ids_list = []
         for note_id, submission in submissions_dataset.items():
-            if submission['id'] not in self.sub_note_id_to_title:
-                self.submission_paper_ids_list.append(submission['id'])
-            self.sub_note_id_to_title[submission['id']] = submission['content'].get('title', "")
-            self.sub_note_id_to_abstract[submission['id']] = submission['content'].get('abstract', "")
+            assert submission['id'] not in self.sub_note_id_to_title
+            self.submission_paper_ids_list.append(submission['id'])
+            self.sub_note_id_to_title[submission['id']] = submission['content'].get('title')
+            if self.sub_note_id_to_title[submission['id']] is None:
+                self.sub_note_id_to_title[submission['id']] = ""
+            self.sub_note_id_to_abstract[submission['id']] = submission['content'].get('abstract')
+            if self.sub_note_id_to_abstract[submission['id']] is None:
+                self.sub_note_id_to_abstract[submission['id']] = ""
 
     @staticmethod
     def _tokenize_text(corpus):
         nlp = English()
         w_list = []
         for line in corpus:
-            w_list.append([w.text for w in nlp.tokenizer(line)])
+            if line == "":
+                w_list.append([])
+            else:
+                w_list.append([w.text for w in nlp.tokenizer(line)])
         return w_list
 
     @staticmethod
