@@ -40,9 +40,9 @@ setup(
         'tqdm',
         'pytorch_pretrained_bert',
         'ipdb',
-        'spacy',
+        'spacy==2.1.0',
         'python-Levenshtein',
-        'allennlp',
+        'allennlp==0.9.0',
         'sacremoses',
         'rank_bm25',
         'pytest'
