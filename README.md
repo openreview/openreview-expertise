@@ -35,7 +35,7 @@ conda install faiss-cpu -c pytorch
 
 If you plan to use SPECTER, follow the set-up steps 1 and 2 described [here](https://github.com/allenai/specter#how-to-use-the-pretrained-model). Provide the SPECTER repository path in the config as `model_params.specter_dir`.
 
-If you plan to use Multifacet-Recommender, download the checkpoint files from [here](https://drive.google.com/file/d/1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s/view?usp=sharing) and pass the path to `feature_vocab_file` and `model_checkpoint_dir`
+If you plan to use Multifacet-Recommender, download the checkpoint files from [here](https://drive.google.com/file/d/1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s/view?usp=sharing), extract it, and pass the path to `feature_vocab_file` and `model_checkpoint_dir`
 
 ## Affinity Scores
 
@@ -343,7 +343,7 @@ Here is an example:
     "dataset": {
         "directory": "./"
     },
-    "model": "specter",
+    "model": "specter+mfr",
     "model_params": {
         "specter_dir": "../specter/",
         "average_score": false,
