@@ -2,6 +2,7 @@ import os
 
 from .specter import SpecterPredictor
 from .multifacet_recommender import MultiFacetRecommender
+from tqdm import tqdm
 
 
 class EnsembleModel:
@@ -29,6 +30,7 @@ class EnsembleModel:
         )
 
         self.merge_alpha = merge_alpha
+        self.sparse_value = sparse_value
         self.preliminary_scores = None
 
     def set_archives_dataset(self, archives_dataset):

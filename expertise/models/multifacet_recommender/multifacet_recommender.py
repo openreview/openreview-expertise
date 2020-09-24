@@ -15,8 +15,8 @@ from .mfr_src.utils_testing import compute_freq_prob_idx2word, recommend_test
 
 from spacy.lang.en import English
 from shutil import copyfile
-
 from collections import defaultdict
+from tqdm import tqdm
 
 
 def logging(s, save_dir="", log_file_name="", print_=True, log_=True):
@@ -890,6 +890,7 @@ class MultiFacetRecommender(object):
         dist_arr = np.loadtxt(os.path.join(self.work_dir, "reviewer_submission_dist_arr.txt"))
         assert dist_arr.shape[0] == len(self.submission_paper_ids_list)
         assert dist_arr.shape[1] == len(user_idx2word_freq)
+        sim_arr = 1. - dist_arr
         for j in range(num_special_token, len(user_idx2word_freq)):
             user_raw = user_idx2word_freq[j][0]
             user_name = user_raw
@@ -898,9 +899,9 @@ class MultiFacetRecommender(object):
                 user_name = user_raw[:suffix_start]
             for i, paper_id in enumerate(self.submission_paper_ids_list):
                 csv_line = '{note_id},{reviewer},{score}'.format(note_id=paper_id, reviewer=user_name,
-                                                                 score=dist_arr[i, j])
+                                                                 score=sim_arr[i, j])
                 csv_scores.append(csv_line)
-                self.preliminary_scores.append((paper_id, user_name, dist_arr[i, j]))
+                self.preliminary_scores.append((paper_id, user_name, sim_arr[i, j]))
 
         if scores_path:
             with open(scores_path, 'w') as f:
