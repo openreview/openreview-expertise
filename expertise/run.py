@@ -37,7 +37,7 @@ if __name__ == '__main__':
         if config['model_params'].get('sparse_value'):
             bm25Model.sparse_scores(
                 preliminary_scores_path=Path(config['model_params']['scores_path']).joinpath('preliminary_scores.pkl'),
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
     if config['model'] == 'elmo':
@@ -66,7 +66,7 @@ if __name__ == '__main__':
 
         if config['model_params'].get('sparse_value'):
             elmoModel.sparse_scores(
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
     if config['model'] == 'specter':
@@ -93,7 +93,7 @@ if __name__ == '__main__':
 
         if config['model_params'].get('sparse_value'):
             specter_predictor.sparse_scores(
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
     if config['model'] == 'mfr':
@@ -119,7 +119,7 @@ if __name__ == '__main__':
 
         if config['model_params'].get('sparse_value'):
             mfr_predictor.sparse_scores(
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
     if config['model'] == 'specter+mfr':
@@ -156,5 +156,5 @@ if __name__ == '__main__':
 
         if config['model_params'].get('sparse_value'):
             ens_predictor.sparse_scores(
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )

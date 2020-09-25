@@ -162,9 +162,9 @@ class SpecterPredictor:
                                                       "abstract": self.pub_note_id_to_abstract[publication['id']],
                                                       "paper_id": publication["id"],
                                                       "authors": [profile_id]}
-        with open(os.path.join(self.work_dir, "spector_reviewer_paper_data.json"), 'w') as f_out:
+        with open(os.path.join(self.work_dir, "specter_reviewer_paper_data.json"), 'w') as f_out:
             json.dump(output_dict, f_out, indent=1)
-        with open(os.path.join(self.work_dir, "spector_reviewer_paper_ids.txt"), 'w') as f_out:
+        with open(os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt"), 'w') as f_out:
             f_out.write('\n'.join(paper_ids_list)+'\n')
 
     def set_submissions_dataset(self, submissions_dataset):
@@ -180,15 +180,15 @@ class SpecterPredictor:
                                              "abstract": self.sub_note_id_to_abstract[submission['id']],
                                              "paper_id": submission["id"],
                                              "authors": []}
-        with open(os.path.join(self.work_dir, "spector_submission_paper_data.json"), 'w') as f_out:
+        with open(os.path.join(self.work_dir, "specter_submission_paper_data.json"), 'w') as f_out:
             json.dump(output_dict, f_out, indent=1)
-        with open(os.path.join(self.work_dir, "spector_submission_paper_ids.txt"), 'w') as f_out:
+        with open(os.path.join(self.work_dir, "specter_submission_paper_ids.txt"), 'w') as f_out:
             f_out.write('\n'.join(paper_ids_list)+'\n')
 
     def embed_submissions(self, submissions_path=None):
         print('Embedding submissions...')
-        metadata_file = os.path.join(self.work_dir, "spector_submission_paper_data.json")
-        ids_file = os.path.join(self.work_dir, "spector_submission_paper_ids.txt")
+        metadata_file = os.path.join(self.work_dir, "specter_submission_paper_data.json")
+        ids_file = os.path.join(self.work_dir, "specter_submission_paper_ids.txt")
 
         # Overrides default config in the saved specter archive
         overrides = json.dumps({'model': {'predict_mode': 'true', 'include_venue': 'false',
@@ -236,8 +236,8 @@ class SpecterPredictor:
 
     def embed_publications(self, publications_path=None):
         print('Embedding publications...')
-        metadata_file = os.path.join(self.work_dir, "spector_reviewer_paper_data.json")
-        ids_file = os.path.join(self.work_dir, "spector_reviewer_paper_ids.txt")
+        metadata_file = os.path.join(self.work_dir, "specter_reviewer_paper_data.json")
+        ids_file = os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt")
 
         # Overrides default config in the saved specter archive
         overrides = json.dumps({'model': {'predict_mode': 'true', 'include_venue': 'false',
