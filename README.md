@@ -24,7 +24,9 @@ If you plan to actively develop models, it's best to install the package in "edi
 pip install -e <location of this repository>
 ```
 
-Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine. We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
+Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR) or SPECTER+MFR with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
+
+We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
 
 Run this command if you plan to use ELMo (Using CPU is fine):
 ```
@@ -33,9 +35,27 @@ conda install faiss-cpu -c pytorch
 ```
 [Here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md) you can find the above installation command.
 
-If you plan to use SPECTER, follow the set-up steps 1 and 2 described [here](https://github.com/allenai/specter#how-to-use-the-pretrained-model). Provide the SPECTER repository path in the config as `model_params.specter_dir`.
+If you plan to use SPECTER / SPECTER+MFR, with the conda environment `affinity` active:
+```
+git clone https://github.com/allenai/specter.git
+cd specter
 
-If you plan to use Multifacet-Recommender, download the checkpoint files from [here](https://drive.google.com/file/d/1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s/view?usp=sharing), extract it, and pass the path to `feature_vocab_file` and `model_checkpoint_dir`
+wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
+tar -xzvf archive.tar.gz
+
+conda install pytorch cudatoolkit=10.1 -c pytorch 
+pip install -r requirements.txt
+python setup.py install
+conda install filelock
+cd ..
+```
+Pass the path to the cloned GitHub repository as `model_params.specter_dir`. 
+
+If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint files from [here](https://drive.google.com/file/d/1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s/view?usp=sharing), extract it, and pass the paths:
+```
+"feature_vocab_file": <path_to_untarred_dir>/feature_vocab_file,
+"model_checkpoint_dir": <path_to_untarred_dir>/mfr_model_checkpoint/
+```
 
 ## Affinity Scores
 
@@ -54,7 +74,7 @@ python -m expertise.create_dataset config.json \
 	--username <your_username> \
 ```
 
-For SPECTER, ELMo and BM25 run the following command
+For ELMo, SPECTER, Multifacet-Recommender and BM25 run the following command
 ```
 python -m expertise.run config.json
 ```
