@@ -439,9 +439,8 @@ class MultiFacetRecommender(object):
             if freeze_encoder_decoder and epoch > 1:
                 # load cache
                 sample_idx_np = sample_idx.numpy()
-                basis_pred = torch.tensor(basis_pred_train_cache[sample_idx_np, :, :], dtype=torch.float, device=device)
-                basis_pred_tag = torch.tensor(basis_pred_tag_train_cache[sample_idx_np, :, :], dtype=torch.float,
-                                              device=device)
+                basis_pred = basis_pred_train_cache[sample_idx_np, :, :].detach().clone()
+                basis_pred_tag = basis_pred_tag_train_cache[sample_idx_np, :, :].detach().clone()
             else:
                 output_emb_last, output_emb = parallel_encoder(feature, feature_type)
 
@@ -453,8 +452,8 @@ class MultiFacetRecommender(object):
                         basis_pred = basis_pred / (0.000000000001 + basis_pred.norm(dim=2, keepdim=True))
                         basis_pred_tag = basis_pred_tag / (0.000000000001 + basis_pred_tag.norm(dim=2, keepdim=True))
                     sample_idx_np = sample_idx.numpy()
-                    basis_pred_train_cache[sample_idx_np, :, :] = basis_pred.cpu().numpy()
-                    basis_pred_tag_train_cache[sample_idx_np, :, :] = basis_pred_tag.cpu().numpy()
+                    basis_pred_train_cache[sample_idx_np, :, :] = basis_pred.detach().clone()
+                    basis_pred_tag_train_cache[sample_idx_np, :, :] = basis_pred_tag.detach().clone()
 
             compute_target_grad = update_target_emb
 
@@ -532,8 +531,6 @@ class MultiFacetRecommender(object):
             total_loss += loss.item()
 
             loss.backward()
-
-            gc.collect()
 
             torch.nn.utils.clip_grad_norm_(encoder.parameters(), clip)
             torch.nn.utils.clip_grad_norm_(decoder.parameters(), clip)
@@ -754,8 +751,10 @@ class MultiFacetRecommender(object):
         optimizer_auto = torch.optim.SGD([feature_linear_layer], lr=self.lr_target)
 
         num_sample_train = dataloader_train_arr[0].dataset.feature.size(0)
-        basis_pred_train_cache = np.empty((num_sample_train, self.n_basis, target_emb_sz))
-        basis_pred_tag_train_cache = np.empty((num_sample_train, self.n_basis, target_emb_sz))
+        basis_pred_train_cache = torch.empty((num_sample_train, self.n_basis, target_emb_sz), dtype=torch.float,
+                                             device=self.device)
+        basis_pred_tag_train_cache = torch.empty((num_sample_train, self.n_basis, target_emb_sz), dtype=torch.float,
+                                                 device=self.device)
 
         if self.coeff_opt == 'maxlc':
             current_coeff_opt = 'max'
