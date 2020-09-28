@@ -24,7 +24,9 @@ If you plan to actively develop models, it's best to install the package in "edi
 pip install -e <location of this repository>
 ```
 
-Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine. We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
+Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR) or SPECTER+MFR with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
+
+We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
 
 Run this command if you plan to use ELMo (Using CPU is fine):
 ```
@@ -32,6 +34,28 @@ conda install intel-openmp==2019.4
 conda install faiss-cpu -c pytorch
 ```
 [Here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md) you can find the above installation command.
+
+If you plan to use SPECTER / SPECTER+MFR, with the conda environment `affinity` active:
+```
+git clone https://github.com/allenai/specter.git
+cd specter
+
+wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
+tar -xzvf archive.tar.gz
+
+conda install pytorch cudatoolkit=10.1 -c pytorch 
+pip install -r requirements.txt
+python setup.py install
+conda install filelock
+cd ..
+```
+Pass the path to the cloned GitHub repository as `model_params.specter_dir`. 
+
+If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint files from [here](https://drive.google.com/file/d/1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s/view?usp=sharing), extract it, and pass the paths:
+```
+"feature_vocab_file": <path_to_untarred_dir>/feature_vocab_file,
+"model_checkpoint_dir": <path_to_untarred_dir>/mfr_model_checkpoint/
+```
 
 ## Affinity Scores
 
@@ -50,7 +74,7 @@ python -m expertise.create_dataset config.json \
 	--username <your_username> \
 ```
 
-For ELMo and BM25 run the following command
+For ELMo, SPECTER, Multifacet-Recommender and BM25 run the following command
 ```
 python -m expertise.run config.json
 ```
@@ -251,6 +275,110 @@ Here is an example:
         "skip_elmo": false,
         "publications_path": "./",
         "submissions_path": "./"
+    }
+}
+```
+
+#### SPECTER specific parameters (affinity scores):
+- `model_params.specter_dir`: Path to the unpacked SPECTER directory. The model checkpoint will be loaded relative to this directory.
+- `model_params.work_dir`: When running SPECTER, this is where the intermediate files are stored.
+- `model_params.use_cuda`: Boolean to indicate whether to use GPU (`true`) or CPU (`false`) when running SPECTER. Currently, only 1 GPU is supported, but there does not seem to be necessary to have more.
+- `model_params.batch_size`: Batch size when running SPECTER. This defaults to 16.
+- `model_params.publications_path`: When running SPECTER, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
+- `model_params.submissions_path`: When running SPECTER, this is where the embedded abstracts/titles of the Submissions are stored.
+- `model_params.average_score` (boolean, defaults to `false`): This parameter specifies that the reviewer is assigned based on the average similarity of the submission to the authored publication embeddings. Exactly one of `model_params.average_score` and `model_params.max_score` must be `true`.
+- `model_params.max_score` (boolean, defaults to `true`): This parameter specifies that the reviewer is assigned based on the max similarity of the submission to the authored publication embeddings. Exactly one of `model_params.average_score` and `model_params.max_score` must be `true`.
+- `model_params.skip_specter`: Since running SPECTER can take a significant amount of time, the vectors are saved in `model_params.submissions_path` and `model_params.publications_path`. The jsonl files will be loaded with all the vectors.
+
+Here is an example:
+```
+{
+    "name": "iclr2020_specter",
+    "dataset": {
+        "directory": "./"
+    },
+    "model": "specter",
+    "model_params": {
+        "specter_dir": "../specter/",
+        "work_dir": "./",
+        "average_score": false,
+        "max_score": true,
+        "use_cuda": true,
+        "batch_size": 16,
+        "publications_path": "./",
+        "submissions_path": "./",
+        "scores_path": "./"
+    }
+}
+```
+
+#### Multifacet-Recommender specific parameters (affinity scores):
+- `model_params.feature_vocab_file`: Path to the vocablary file for the text encoders
+- `model_params.model_checkpoint_dir`: Path to the directory containing the trained Multifacet-Recommender model checkpoints
+- `model_params.work_dir`: When running Multifacet-Recommender, this is where the intermediate files are stored.
+- `model_params.epochs`: Number of epochs to finetune reviewer embeddings. This defaults to 100.
+- `model_params.batch_size`: Batch size when running Multifacet-Recommender. This defaults to 50.
+- `model_params.use_cuda`: Boolean to indicate whether to use GPU (`true`) or CPU (`false`) when running Multifacet-Recommender. Currently, only 1 GPU is supported, but there does not seem to be necessary to have more.
+
+Here is an example:
+```
+{
+    "name": "iclr2020_mfr",
+    "dataset": {
+        "directory": "./"
+    },
+    "model": "mfr",
+    "model_params": {
+        "feature_vocab_file": "../mfr_data/feature_vocab_file",
+        "model_checkpoint_dir": "../mfr_data/mfr_model_checkpoint/",
+        "work_dir": "./",
+        "epochs": 100,
+        "batch_size": 50,
+        "use_cuda": true,
+        "scores_path": "./"
+    }
+}
+```
+
+#### SPECTER+MFR ensemble specific parameters (affinity scores):
+- `model_params.specter_dir`: Path to the unpacked SPECTER directory. The model checkpoint will be loaded relative to this directory.
+- `model_params.specter_batch_size`: Batch size when running SPECTER. This defaults to 16.
+- `model_params.publications_path`: When running SPECTER, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
+- `model_params.submissions_path`: When running SPECTER, this is where the embedded abstracts/titles of the Submissions are stored.
+- `model_params.average_score` (boolean, defaults to `false`): This parameter specifies that the reviewer is assigned based on the average similarity of the submission to the authored publication embeddings. Exactly one of `model_params.average_score` and `model_params.max_score` must be `true`.
+- `model_params.max_score` (boolean, defaults to `true`): This parameter specifies that the reviewer is assigned based on the max similarity of the submission to the authored publication embeddings. Exactly one of `model_params.average_score` and `model_params.max_score` must be `true`.
+- `model_params.skip_specter`: Since running SPECTER can take a significant amount of time, the vectors are saved in `model_params.submissions_path` and `model_params.publications_path`. The jsonl files will be loaded with all the vectors.
+- `model_params.mfr_feature_vocab_file`: Path to the vocablary file for the Multifacet-Recommender text encoders.
+- `model_params.mfr_checkpoint_dir`: Path to the directory containing the trained Multifacet-Recommender model checkpoints.
+- `model_params.mfr_epochs`: Number of epochs to finetune reviewer embeddings for Multifacet-Recommender. This defaults to 100.
+- `model_params.mfr_batch_size`: Batch size when running Multifacet-Recommender. This defaults to 50.
+- `model_params.merge_alpha`: Weight for the SPECTER score when linearly mixing with Multifacet-Recommender scores. Defaults to 0.8 (recommended)
+- `model_params.work_dir`: Directory where the intermediate files are stored.
+- `model_params.use_cuda`: Boolean to indicate whether to use GPU (`true`) or CPU (`false`) when running SPECTER and Multifacet-Recommender. Currently, only 1 GPU is supported, but there does not seem to be necessary to have more.
+
+Here is an example:
+```
+{
+    "name": "iclr2020_specter",
+    "dataset": {
+        "directory": "./"
+    },
+    "model": "specter+mfr",
+    "model_params": {
+        "specter_dir": "../specter/",
+        "average_score": false,
+        "max_score": true,
+        "specter_batch_size": 16,
+        "publications_path": "./",
+        "submissions_path": "./",
+        "mfr_feature_vocab_file": "../mfr_data/feature_vocab_file",
+        "mfr_checkpoint_dir": "../mfr_data/mfr_model_checkpoint/",
+        "mfr_epochs": 100,
+        "mfr_batch_size": 50,
+        "merge_alpha": 0.8,
+        "work_dir": "./",
+        "use_cuda": true,
+        "scores_path": "./"
     }
 }
 ```
