@@ -13,15 +13,15 @@ if __name__ == '__main__':
     config = ModelConfig(config_file_path=args.config)
     if Path(config['dataset']['directory']).joinpath('submissions').exists():
         submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
-    elif Path(config['dataset']['directory']).joinpath('submissions.jsonl').exists():
-        submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.jsonl'))
+    elif Path(config['dataset']['directory']).joinpath('submissions.json').exists():
+        submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.json'))
     else:
         raise Exception('Submissions dataset is missing')
 
     if Path(config['dataset']['directory']).joinpath('other_submissions').exists():
         other_submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('other_submissions'))
-    elif Path(config['dataset']['directory']).joinpath('other_submissions.jsonl').exists():
-        other_submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('other_submissions.jsonl'))
+    elif Path(config['dataset']['directory']).joinpath('other_submissions.json').exists():
+        other_submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('other_submissions.json'))
     else:
         other_submissions_dataset = False
 
