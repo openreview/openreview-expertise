@@ -36,7 +36,7 @@ class OpenReviewExpertise(object):
         assert isinstance(invitations, list), 'Input should be a str or a list'
         return invitations
 
-    def get_paper_notes(self, author_id):
+    def get_paper_notes(self, author_id, dataset_params):
 
         use_bids_as_expertise = dataset_params.get('bid_as_expertise', False)
 
