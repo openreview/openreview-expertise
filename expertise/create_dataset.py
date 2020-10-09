@@ -52,10 +52,7 @@ class OpenReviewExpertise(object):
                 print('difference', difference)
             return notes
 
-        content = {
-            'authorids': author_id
-        }
-        return publications = openreview.tools.iterget_notes(self.openreview_client, content=content)
+        return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id})
 
 
     def get_publications(self, author_id):
