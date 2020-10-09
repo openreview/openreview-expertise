@@ -42,14 +42,10 @@ class OpenReviewExpertise(object):
 
         if use_bids_as_expertise:
             bid_invitation = dataset_params['bid_invitation']
+            paper_invitation = self.config['paper_invitation']
             bids = openreview.tools.iterget_edges(self.openreview_client, invitation=bid_invitation, tail=author_id)
             note_ids = [e.head for e in bids if e.label in ['Very High', 'High']]
-
-            notes = self.openreview_client.get_notes_by_ids(ids=note_ids)
-            difference = list(set(note_ids) - set([n.id for n in notes]))
-            if difference:
-                print('difference', difference)
-            return notes
+            return [n for n in self.openreview_client.get_notes_by_ids(ids=note_ids) if n.invitation == paper_invitation]
 
         return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id})
 
