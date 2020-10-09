@@ -42,7 +42,7 @@ class OpenReviewExpertise(object):
 
         if use_bids_as_expertise:
             print('get bids')
-            bid_invitation = dataset_params['ICLR.cc/2020/Conference/Reviewers/-/Bid']
+            bid_invitation = dataset_params['bid_invitation']
             bids = openreview.tools.iterget_edges(self.openreview_client, invitation=bid_invitation, tail=author_id)
             note_ids = [e.head for e in bids]
 
