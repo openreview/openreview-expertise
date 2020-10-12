@@ -87,7 +87,8 @@ def estimate_coeff_mat_batch_softmax(target_embeddings, basis_pred, device, loss
     return sim_softmax.permute(0,2,1)
 
 
-def estimate_coeff_mat_batch_max(target_embeddings, basis_pred, device, loss_type='dist', target_norm=False):
+def estimate_coeff_mat_batch_max(target_embeddings, basis_pred, device, loss_type='dist', target_norm=False,
+                                 always_norm_one=False):
     batch_size = target_embeddings.size(0)
     n_basis = basis_pred.size(1)
     if n_basis == 1 and loss_type[:4] != 'dist':
@@ -111,10 +112,17 @@ def estimate_coeff_mat_batch_max(target_embeddings, basis_pred, device, loss_typ
         ##coeff should have dimension ( n_batch, n_basis, n_set)
         ##max_v, max_i = torch.max(coeff, dim = 1, keepdim=True)
         
-        max_v = torch.gather( coeff, dim = 1, index = max_i_cos)
-        max_v[max_v<0] = 0
-        max_v[max_v>1] = 1
-        
+        max_v = torch.gather(coeff, dim=1, index=max_i_cos)
+        if always_norm_one:
+            # max_v[max_v!=0] = 1
+            norm_max = torch.gather(basis_pred_norm.expand(batch_size, n_basis, cos_sim.size(2)), dim=1,
+                                    index=max_i_cos)
+            max_v = 1 / norm_max
+            # max_v[max_v>1] = 1
+        else:
+            max_v[max_v < 0] = 0
+            max_v[max_v > 1] = 1
+
         #max_v = torch.ones(max_v_cos.size(), requires_grad= False, device=device)
         
         #norm_max = torch.gather(basis_pred_norm.expand(batch_size,n_basis, cos_sim.size(2)), dim = 1, index = max_i_cos)
@@ -303,7 +311,7 @@ def target_emb_preparation(target_index, embeddings, n_batch, n_set, target_inde
 
 #def compute_loss_set(output_emb, model_set, w_embeddings, target_set, n_basis, L1_losss_B, device, w_freq, coeff_opt, compute_target_grad):
 #def compute_loss_set(output_emb, basis_pred, coeff_pred, entpair_embs, target_set, L1_losss_B, device, w_freq, w_freq_sampling, repeat_num, target_len, coeff_opt, loss_type, compute_target_grad, coeff_opt_algo, rand_neg_method, target_norm, compute_div_reg = True):
-def compute_loss_set(basis_pred, entpair_embs, target_set, L1_losss_B, device, w_freq, w_freq_sampling, repeat_num, target_len, coeff_opt, loss_type, compute_target_grad, coeff_opt_algo, rand_neg_method, target_norm, compute_div_reg = True, target_linear_layer = None, pre_avg = False):
+def compute_loss_set(basis_pred, entpair_embs, target_set, L1_losss_B, device, w_freq, w_freq_sampling, repeat_num, target_len, coeff_opt, loss_type, compute_target_grad, coeff_opt_algo, rand_neg_method, target_norm, compute_div_reg = True, target_linear_layer = None, pre_avg = False, always_norm_one = False):
     def compute_target_freq_inv_norm(w_freq, target_set):
         target_freq = w_freq[target_set]
         #target_freq = torch.masked_select( target_freq, target_freq.gt(0))
@@ -392,9 +400,9 @@ def compute_loss_set(basis_pred, entpair_embs, target_set, L1_losss_B, device, w
                     coeff_mat = estimate_coeff_mat_batch_opt(target_embeddings.detach(), basis_pred.detach(), L1_losss_B, device, coeff_opt_algo, lr_coeff, iter_coeff)
                     coeff_mat_neg = estimate_coeff_mat_batch_opt(target_emb_neg.detach(), basis_pred.detach(), L1_losss_B, device, coeff_opt_algo, lr_coeff, iter_coeff)
         elif coeff_opt == 'max':
-            coeff_mat = estimate_coeff_mat_batch_max(target_embeddings.detach(), basis_pred.detach(), device, loss_type, not target_norm)
+            coeff_mat = estimate_coeff_mat_batch_max(target_embeddings.detach(), basis_pred.detach(), device, loss_type, not target_norm, always_norm_one)
             #coeff_mat = estimate_coeff_mat_batch_max_iter(target_embeddings, basis_pred.detach(), device)
-            coeff_mat_neg = estimate_coeff_mat_batch_max(target_emb_neg.detach(), basis_pred.detach(), device, loss_type, not target_norm)
+            coeff_mat_neg = estimate_coeff_mat_batch_max(target_emb_neg.detach(), basis_pred.detach(), device, loss_type, not target_norm, always_norm_one)
         elif coeff_opt == 'softmax':
             coeff_mat = estimate_coeff_mat_batch_softmax(target_embeddings.detach(), basis_pred.detach(), device, loss_type, not target_norm)
             coeff_mat_neg = estimate_coeff_mat_batch_softmax(target_emb_neg.detach(), basis_pred.detach(), device, loss_type, not target_norm)

@@ -216,7 +216,7 @@ class MultiFacetRecommender(object):
         if self.lr_target < 0:
             self.lr_target = self.lr
         self.n_basis = 1
-        self.neg_sample_w = 1
+        self.neg_sample_w = 0
         self.nhid = 200
         self.nhidlast2 = -1
         self.nlayers = 2
@@ -401,7 +401,7 @@ class MultiFacetRecommender(object):
                          optimizers, epoch, batch_size, small_batch_size, device, split_i, log_dir, log_file_name,
                          coeff_opt_algo='rmsprop', current_coeff_opt='max', rand_neg_method="shuffle", target_norm=True,
                          freeze_encoder_decoder=True, update_target_emb=True, user_w=5.0, tag_w=1.0, auto_w=0.0,
-                         auto_avg=False, loss_type="dist", neg_sample_w=1, clip=0.25, log_interval=200, L1_losss_B=0.2,
+                         auto_avg=False, loss_type="dist", neg_sample_w=0, clip=0.25, log_interval=200, L1_losss_B=0.2,
                          norm_basis_when_freezing=False, user_uniform=None, user_freq=None,
                          tag_uniform=None, tag_freq=None, basis_pred_train_cache=None, basis_pred_tag_train_cache=None):
         start_time = time.time()
@@ -459,7 +459,16 @@ class MultiFacetRecommender(object):
 
             if user_w > 0:
                 input_basis = basis_pred
-                loss_set_user, loss_set_neg_user, loss_set_div, loss_set_reg, loss_set_div_target_user = nsd_loss.compute_loss_set(input_basis, user_emb, user, L1_losss_B, device, user_uniform, user_freq, repeat_num, user_len, current_coeff_opt, loss_type, compute_target_grad, coeff_opt_algo, rand_neg_method, target_norm)
+
+                always_norm_one = False
+                if freeze_encoder_decoder:
+                    always_norm_one = True
+
+                loss_set_user, loss_set_neg_user, loss_set_div, loss_set_reg, loss_set_div_target_user = \
+                    nsd_loss.compute_loss_set(input_basis, user_emb, user, L1_losss_B, device, user_uniform, user_freq,
+                                              repeat_num, user_len, current_coeff_opt, loss_type, compute_target_grad,
+                                              coeff_opt_algo, rand_neg_method, target_norm,
+                                              always_norm_one=always_norm_one)
                 if torch.isnan(loss_set_user):
                     sys.stdout.write('user nan, ')
                     continue
