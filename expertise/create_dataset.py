@@ -36,12 +36,27 @@ class OpenReviewExpertise(object):
         assert isinstance(invitations, list), 'Input should be a str or a list'
         return invitations
 
-    def get_publications(self, author_id):
-        content = {
-            'authorids': author_id
-        }
+    def get_paper_notes(self, author_id, dataset_params):
 
-        publications = openreview.tools.iterget_notes(self.openreview_client, content=content)
+        use_bids_as_expertise = dataset_params.get('bid_as_expertise', False)
+
+        if use_bids_as_expertise:
+            bid_invitation = dataset_params['bid_invitation']
+            paper_invitation = self.config['paper_invitation']
+            bids = openreview.tools.iterget_edges(self.openreview_client, invitation=bid_invitation, tail=author_id)
+            note_ids = [e.head for e in bids if e.label in ['Very High', 'High']]
+            return [n for n in self.openreview_client.get_notes_by_ids(ids=note_ids) if n.invitation == paper_invitation]
+
+        return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id})
+
+
+    def get_publications(self, author_id):
+
+        dataset_params = self.config.get('dataset', {})
+        minimum_pub_date = dataset_params.get('minimum_pub_date') or dataset_params.get('or', {}).get('minimum_pub_date', 0)
+        top_recent_pubs = dataset_params.get('top_recent_pubs') or dataset_params.get('or', {}).get('top_recent_pubs', False)
+
+        publications = self.get_paper_notes(author_id, dataset_params)
 
         # Get all publications and assign tcdate to cdate in case cdate is None. If tcdate is also None
         # assign cdate := 0
@@ -69,10 +84,6 @@ class OpenReviewExpertise(object):
         # If the author does not have publications, then return early
         if not unsorted_publications:
             return unsorted_publications
-
-        dataset_params = self.config.get('dataset', {})
-        minimum_pub_date = dataset_params.get('minimum_pub_date') or dataset_params.get('or', {}).get('minimum_pub_date', 0)
-        top_recent_pubs = dataset_params.get('top_recent_pubs') or dataset_params.get('or', {}).get('top_recent_pubs', False)
 
         # If there is no minimum publication date and no recent publications constraints we return
         # all the publications in any order
