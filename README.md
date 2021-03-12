@@ -57,6 +57,12 @@ If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint
 "model_checkpoint_dir": <path_to_untarred_dir>/mfr_model_checkpoint/
 ```
 
+More information about SPECTER+MFR, read these papers:
+
+https://www.overleaf.com/read/ygmygwtjbzfg
+
+https://www.overleaf.com/read/swqrxgqqvmyv
+
 ## Affinity Scores
 
 There are two steps to create affinity scores:
