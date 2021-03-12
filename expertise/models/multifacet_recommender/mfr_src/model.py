@@ -235,7 +235,7 @@ class EMB2SEQ(nn.Module):
         def prepare_posi_emb(input, poistion_emb, drop):
             batch_size = input.size(1)
             n_basis = input.size(0)
-            input_pos = torch.arange(n_basis,dtype=torch.long,device = input.get_device()).expand(batch_size,n_basis).permute(1,0)
+            input_pos = torch.arange(n_basis,dtype=torch.long,device = input.device).expand(batch_size,n_basis).permute(1,0)
             poistion_emb_input = poistion_emb(input_pos)
             poistion_emb_input = drop(poistion_emb_input)
             return poistion_emb_input
@@ -251,7 +251,7 @@ class EMB2SEQ(nn.Module):
             emb = self.drop(emb_raw)
         elif self.positional_option == 'cat':
             #batch_size = input.size(1)
-            #input_pos = torch.arange(self.n_basis,dtype=torch.long,device = input.get_device()).expand(batch_size,self.n_basis).permute(1,0)
+            #input_pos = torch.arange(self.n_basis,dtype=torch.long,device = input.device).expand(batch_size,self.n_basis).permute(1,0)
 
             #poistion_emb_input = self.poistion_emb(input_pos)
             #poistion_emb_input = self.drop(poistion_emb_input)
@@ -452,7 +452,7 @@ class SEQ2EMB(nn.Module):
             #self.encoder = nn.Embedding.from_pretrained(external_emb.clone(), freeze = False)
             if len(init_idx) > 0:
                 print("Randomly initializes embedding for ", len(init_idx), " words")
-                device = self.encoder.weight.data.get_device()
+                device = self.encoder.weight.data.device
                 extra_init_emb = torch.randn(len(init_idx), ninp, requires_grad = False, device = device)
                 #extra_init_emb = extra_init_emb / (0.000000000001 + extra_init_emb.norm(dim = 1, keepdim=True))
                 self.encoder.weight.data[init_idx, :] = extra_init_emb

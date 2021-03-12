@@ -136,7 +136,7 @@ def load_ext_emb(emb_file, target_emb_sz, idx2word_freq, num_special_token, devi
     num_w = len(idx2word_freq)
     if len(emb_file) > 0:
         if emb_file[-3:] == '.pt':
-            target_emb = torch.load(emb_file).to(device=device)
+            target_emb = torch.load(emb_file, map_location=device)
             target_emb.requires_grad = False
             target_emb_sz = target_emb.size(1)
         else:
@@ -738,13 +738,17 @@ class MultiFacetRecommender(object):
             sys.exit(1)
 
         if self.continue_train:
-            encoder.load_state_dict(torch.load(os.path.join(self.model_checkpoint_dir, 'encoder.pt')))
-            decoder.load_state_dict(torch.load(os.path.join(self.model_checkpoint_dir, 'decoder.pt')))
+            encoder.load_state_dict(torch.load(os.path.join(self.model_checkpoint_dir, 'encoder.pt'),
+                                               map_location=self.device))
+            decoder.load_state_dict(torch.load(os.path.join(self.model_checkpoint_dir, 'decoder.pt'),
+                                               map_location=self.device))
             if self.loading_target_embedding:
-                user_emb_load = torch.load(os.path.join(self.model_checkpoint_dir, 'user_emb.pt'))
+                user_emb_load = torch.load(os.path.join(self.model_checkpoint_dir, 'user_emb.pt'),
+                                           map_location=self.device)
                 user_emb = user_emb.new_tensor(user_emb_load)
                 if self.tag_w > 0:
-                    tag_emb_load = torch.load(os.path.join(self.model_checkpoint_dir, 'tag_emb.pt'))
+                    tag_emb_load = torch.load(os.path.join(self.model_checkpoint_dir, 'tag_emb.pt'),
+                                              map_location=self.device)
                     tag_emb = tag_emb.new_tensor(tag_emb_load)
 
         parallel_encoder, parallel_decoder = output_parallel_models(self.use_cuda, self.single_gpu, encoder, decoder)
