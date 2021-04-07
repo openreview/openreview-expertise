@@ -281,7 +281,8 @@ class SpecterPredictor:
                                         False)
         manager.run()
 
-    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
+    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None,
+                   ensemble_mode=False, scores_map=None, score_weight=1.0):
         def load_emb_file(emb_file):
             paper_emb_size_default = 768
             id_list = []
@@ -323,8 +324,14 @@ class SpecterPredictor:
         for i in range(paper_num_test):
             p2p_aff[i, :] = torch.sum(paper_emb_test[i, :].unsqueeze(dim=0) * paper_emb_train, dim=1)
 
-        csv_scores = []
-        self.preliminary_scores = []
+        if not ensemble_mode:
+            self.preliminary_scores = []
+        else:
+            assert scores_map is not None
+        if scores_path:
+            fout = open(scores_path, 'w')
+        else:
+            fout = None
         for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
             if len(train_note_id_list) == 0:
                 continue
@@ -339,16 +346,21 @@ class SpecterPredictor:
             elif self.max_score:
                 all_paper_aff = train_paper_aff_j.max(dim=1)[0]
             for j in range(paper_num_test):
-                csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[j], reviewer=reviewer_id,
-                                                                 score=all_paper_aff[j].item())
-                csv_scores.append(csv_line)
-                self.preliminary_scores.append((test_id_list[j], reviewer_id, all_paper_aff[j].item()))
+                if fout is not None:
+                    csv_line = '{note_id},{reviewer},{score}\n'.format(note_id=test_id_list[j], reviewer=reviewer_id,
+                                                                       score=all_paper_aff[j].item())
+                    fout.write(csv_line)
+                if ensemble_mode:
+                    scores_map[(test_id_list[j], reviewer_id)] = scores_map.get((test_id_list[j], reviewer_id), 0.0) + \
+                                                                 score_weight * all_paper_aff[j].item()
+                else:
+                    self.preliminary_scores.append((test_id_list[j], reviewer_id, all_paper_aff[j].item()))
+        if fout is not None:
+            fout.flush()
+            fout.close()
 
-        if scores_path:
-            with open(scores_path, 'w') as f:
-                for csv_line in csv_scores:
-                    f.write(csv_line + '\n')
-
+        if ensemble_mode:
+            return
         return self.preliminary_scores
 
     def _sparse_scores_helper(self, all_scores, id_index):
@@ -375,7 +387,7 @@ class SpecterPredictor:
 
         print('Sorting...')
         self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
-        print('preliminary', self.preliminary_scores, len(self.preliminary_scores))
+        print('Sort 1 complete')
         all_scores = set()
         # They are first sorted by note_id
         all_scores = self._sparse_scores_helper(all_scores, 0)
@@ -383,6 +395,7 @@ class SpecterPredictor:
         # Sort by profile_id
         print('Sorting...')
         self.preliminary_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        print('Sort 2 complete')
         all_scores = self._sparse_scores_helper(all_scores, 1)
 
         print('Final Sort...')
@@ -392,5 +405,4 @@ class SpecterPredictor:
                 for note_id, profile_id, score in all_scores:
                     f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
 
-        print('ALL SCORES', all_scores)
         return all_scores

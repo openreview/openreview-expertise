@@ -823,7 +823,8 @@ class MultiFacetRecommender(object):
         print('NOTE: Archive publication embeddings are not explicitly computed. '
               'Reviewer embeddings are computed and consumed with submission embeddings during score calculation')
 
-    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
+    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None,
+                   ensemble_mode=False, scores_map=None, score_weight=1.0):
         print("Loading data...")
         seed_all_randomness(self.seed, self.use_cuda)
         idx2word_freq, user_idx2word_freq, tag_idx2word_freq, dataloader_train_arr, _,\
@@ -897,12 +898,17 @@ class MultiFacetRecommender(object):
 
         # Convert distances to scores
         num_special_token = 3
-        csv_scores = []
-        self.preliminary_scores = []
+        if not ensemble_mode:
+            self.preliminary_scores = []
+        else:
+            assert scores_map is not None
+        if scores_path:
+            fout = open(scores_path, 'w')
+        else:
+            fout = None
         dist_arr = np.loadtxt(os.path.join(self.work_dir, "reviewer_submission_dist_arr.txt"))
         assert dist_arr.shape[0] == len(self.submission_paper_ids_list)
         assert dist_arr.shape[1] == len(user_idx2word_freq)
-        sim_arr = 1. - dist_arr
         for j in range(num_special_token, len(user_idx2word_freq)):
             user_raw = user_idx2word_freq[j][0]
             user_name = user_raw
@@ -910,16 +916,21 @@ class MultiFacetRecommender(object):
                 suffix_start = user_raw.index('|')
                 user_name = user_raw[:suffix_start]
             for i, paper_id in enumerate(self.submission_paper_ids_list):
-                csv_line = '{note_id},{reviewer},{score}'.format(note_id=paper_id, reviewer=user_name,
-                                                                 score=sim_arr[i, j])
-                csv_scores.append(csv_line)
-                self.preliminary_scores.append((paper_id, user_name, sim_arr[i, j]))
+                if fout is not None:
+                    csv_line = '{note_id},{reviewer},{score}\n'.format(note_id=paper_id, reviewer=user_name,
+                                                                       score=1. - dist_arr[i, j])
+                    fout.write(csv_line)
+                if ensemble_mode:
+                    scores_map[(paper_id, user_name)] = scores_map.get((paper_id, user_name), 0.0) + \
+                                                        score_weight * (1. - dist_arr[i, j])
+                else:
+                    self.preliminary_scores.append((paper_id, user_name, (1. - dist_arr[i, j])))
+        if fout is not None:
+            fout.flush()
+            fout.close()
 
-        if scores_path:
-            with open(scores_path, 'w') as f:
-                for csv_line in csv_scores:
-                    f.write(csv_line + '\n')
-
+        if ensemble_mode:
+            return
         return self.preliminary_scores
 
     def _sparse_scores_helper(self, all_scores, id_index):
@@ -946,7 +957,7 @@ class MultiFacetRecommender(object):
 
         print('Sorting...')
         self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
-        print('preliminary', self.preliminary_scores, len(self.preliminary_scores))
+        print('Sort 1 complete')
         all_scores = set()
         # They are first sorted by note_id
         all_scores = self._sparse_scores_helper(all_scores, 0)
@@ -954,6 +965,7 @@ class MultiFacetRecommender(object):
         # Sort by profile_id
         print('Sorting...')
         self.preliminary_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        print('Sort 2 complete')
         all_scores = self._sparse_scores_helper(all_scores, 1)
 
         print('Final Sort...')
@@ -963,5 +975,4 @@ class MultiFacetRecommender(object):
                 for note_id, profile_id, score in all_scores:
                     f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
 
-        print('ALL SCORES', all_scores)
         return all_scores

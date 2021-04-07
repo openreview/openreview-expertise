@@ -62,32 +62,31 @@ class EnsembleModel:
     def all_scores(self, specter_publications_path=None, mfr_publications_path=None,
                    specter_submissions_path=None, mfr_submissions_path=None,
                    scores_path=None):
+        preliminary_scores_map = {}
         print("SPECTER:")
         specter_scores_path = os.path.join(self.specter_predictor.work_dir, "specter_affinity.csv")
-        self.specter_predictor.all_scores(specter_publications_path, specter_submissions_path, specter_scores_path)
+        self.specter_predictor.all_scores(specter_publications_path, specter_submissions_path, specter_scores_path,
+                                          ensemble_mode=True, scores_map=preliminary_scores_map,
+                                          score_weight=self.merge_alpha)
+        print("SPECTER: Scores computed")
         print("MFR:")
         mfr_scores_path = os.path.join(self.mfr_predictor.work_dir, "mfr_affinity.csv")
-        self.mfr_predictor.all_scores(mfr_publications_path, mfr_submissions_path, mfr_scores_path)
+        self.mfr_predictor.all_scores(mfr_publications_path, mfr_submissions_path, mfr_scores_path,
+                                      ensemble_mode=True, scores_map=preliminary_scores_map,
+                                      score_weight=(1 - self.merge_alpha))
+        print("MFR: Scores computed")
 
-        # Convert preliminary scores of SPECTER to a dictionary
-        csv_scores = []
-        self.preliminary_scores = []
-        specter_preliminary_scores_map = {}
-        for entry in self.specter_predictor.preliminary_scores:
-            specter_preliminary_scores_map[(entry[0], entry[1])] = entry[2]
-
-        for entry in self.mfr_predictor.preliminary_scores:
-            new_score = specter_preliminary_scores_map[(entry[0], entry[1])] * self.merge_alpha + \
-                        entry[2] * (1 - self.merge_alpha)
-            csv_line = '{note_id},{reviewer},{score}'.format(note_id=entry[0], reviewer=entry[1],
-                                                             score=new_score)
-            csv_scores.append(csv_line)
-            self.preliminary_scores.append((entry[0], entry[1], new_score))
-
+        self.preliminary_scores = [(score_key[0], score_key[1], score_val)
+                                   for score_key, score_val in preliminary_scores_map.items()]
+        del preliminary_scores_map
         if scores_path:
+            print("Writing scores")
             with open(scores_path, 'w') as f:
-                for csv_line in csv_scores:
-                    f.write(csv_line + '\n')
+                for entry in self.preliminary_scores:
+                    csv_line = '{note_id},{reviewer},{score}\n'.format(note_id=entry[0], reviewer=entry[1],
+                                                                       score=entry[2])
+                    f.write(csv_line)
+            print("Scores written")
 
         return self.preliminary_scores
 
@@ -115,7 +114,7 @@ class EnsembleModel:
 
         print('Sorting...')
         self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
-        print('preliminary', self.preliminary_scores, len(self.preliminary_scores))
+        print('Sort 1 complete')
         all_scores = set()
         # They are first sorted by note_id
         all_scores = self._sparse_scores_helper(all_scores, 0)
@@ -123,6 +122,7 @@ class EnsembleModel:
         # Sort by profile_id
         print('Sorting...')
         self.preliminary_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        print('Sort 2 complete')
         all_scores = self._sparse_scores_helper(all_scores, 1)
 
         print('Final Sort...')
@@ -131,6 +131,5 @@ class EnsembleModel:
             with open(scores_path, 'w') as f:
                 for note_id, profile_id, score in all_scores:
                     f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
-
-        print('ALL SCORES', all_scores)
+        print('Sparse scores written')
         return all_scores
