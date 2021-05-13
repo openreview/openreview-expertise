@@ -179,7 +179,7 @@ class OpenReviewExpertise(object):
         members.extend(tilde_members_list)
 
         email_members_list = list(email_members)
-        profile_search_results = self.openreview_client.search_profiles(emails=email_members_list, ids=None, term=None) if email_members_list else {}
+        profile_search_results = self.openreview_client.search_profiles(confirmedEmails=email_members_list, ids=None, term=None) if email_members_list else {}
         email_profiles = []
         for email, profile in profile_search_results.items():
             email_profiles.append((profile.id, email))
