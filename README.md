@@ -75,7 +75,7 @@ Start by creating an "experiment directory" (`experiment_dir`), and a JSON confi
 Create a dataset by running the following command:
 ```
 python -m expertise.create_dataset config.json \
-	--baseurl <usually https://openreview.net> \
+	--baseurl <usually https://api.openreview.net> \
 	--password <your_password> \
 	--username <your_username> \
 ```
@@ -114,7 +114,7 @@ Duplicate detection uses ELMo exclusively, since we always normalize the scores 
 Create a dataset by running the following command (this is optional if you already have the dataset):
 ```
 python -m expertise.create_dataset config.json \
-	--baseurl <usually https://openreview.net> \
+	--baseurl <usually https://api.openreview.net> \
 	--password <your_password> \
 	--username <your_username> \
 ```
