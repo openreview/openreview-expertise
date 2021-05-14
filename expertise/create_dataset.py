@@ -166,7 +166,7 @@ class OpenReviewExpertise(object):
 
         members = []
         tilde_members_list = list(tilde_members)
-        profile_search_results = self.openreview_client.search_profiles(emails=None, ids=tilde_members_list, term=None) if tilde_members_list else []
+        profile_search_results = self.openreview_client.search_profiles(confirmedEmails=None, ids=tilde_members_list, term=None) if tilde_members_list else []
         tilde_members_list = []
         for profile in profile_search_results:
             preferredEmail = profile.content.get('preferredEmail')

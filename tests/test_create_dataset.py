@@ -13,7 +13,7 @@ def mock_client():
         group = openreview.Group.from_json(data['groups'][group_id])
         return group
 
-    def search_profiles(emails=None, ids=None, term=None):
+    def search_profiles(confirmedEmails=None, ids=None, term=None):
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         profiles = data['profiles']
@@ -24,9 +24,9 @@ def mock_client():
             if profile.content.get('emails') and len(profile.content.get('emails')):
                 profiles_dict_emails[profile.content['emails'][0]] = profile
             profiles_dict_tilde[profile.id] = profile
-        if emails:
+        if confirmedEmails:
             return_value = {}
-            for email in emails:
+            for email in confirmedEmails:
                 if profiles_dict_emails.get(email, False):
                     return_value[email] = profiles_dict_emails[email]
 
