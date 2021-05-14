@@ -45,7 +45,8 @@ setup(
         'allennlp==0.9.0',
         'sacremoses',
         'rank_bm25',
-        'pytest'
+        'pytest',
+        'overrides==2.8.0'
     ],
     cmdclass={
         'develop': PostDevelopCommand,
