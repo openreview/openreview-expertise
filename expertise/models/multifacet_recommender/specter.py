@@ -375,7 +375,7 @@ class SpecterPredictor:
 
         print('Sorting...')
         self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
-        print('preliminary', self.preliminary_scores, len(self.preliminary_scores))
+        print('Sort 1 complete')
         all_scores = set()
         # They are first sorted by note_id
         all_scores = self._sparse_scores_helper(all_scores, 0)
@@ -383,6 +383,7 @@ class SpecterPredictor:
         # Sort by profile_id
         print('Sorting...')
         self.preliminary_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        print('Sort 2 complete')
         all_scores = self._sparse_scores_helper(all_scores, 1)
 
         print('Final Sort...')
@@ -392,5 +393,5 @@ class SpecterPredictor:
                 for note_id, profile_id, score in all_scores:
                     f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
 
-        print('ALL SCORES', all_scores)
+        print('Sparse score computation complete')
         return all_scores
