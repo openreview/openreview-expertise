@@ -69,6 +69,9 @@ class OpenReviewExpertise(object):
             if self.config.get('dataset', {}).get('with_title', False):
                 if not 'title' in publication.content or not publication.content.get('title'):
                     continue
+            # Exclude blind Notes
+            if getattr(publication, 'original') is not None:
+                continue
             if getattr(publication, 'cdate') is None:
                 publication.cdate = getattr(publication, 'tcdate', 0)
             reduced_publication = {
@@ -220,7 +223,7 @@ class OpenReviewExpertise(object):
         filtered_papers = []
         for n in member_papers:
             paper_title = openreview.tools.get_paperhash('', n['content']['title'])
-            if paper_title and n.get('original') is None and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys:
+            if paper_title and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys:
                 filtered_papers.append(n)
             seen_keys.add(paper_title)
 
