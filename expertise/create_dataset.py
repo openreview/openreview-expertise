@@ -229,7 +229,8 @@ class OpenReviewExpertise(object):
 
             if n['id'] not in self.excluded_ids_by_user[member] and paperhash not in seen_keys:
                 filtered_papers.append(n)
-                seen_keys.add(paperhash)
+
+            seen_keys.add(paperhash)
 
         return member, email, filtered_papers
 
