@@ -227,7 +227,7 @@ class OpenReviewExpertise(object):
 
             paperhash = openreview.tools.get_paperhash('', n['content']['title'])
 
-            if n.get('original') is not None and n['id'] not in self.excluded_ids_by_user[member] and paperhash not in seen_keys:
+            if n.get('original') is None and n['id'] not in self.excluded_ids_by_user[member] and paperhash not in seen_keys:
                 filtered_papers.append(n)
 
             seen_keys.add(paperhash)
