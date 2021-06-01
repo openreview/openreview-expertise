@@ -216,20 +216,12 @@ class OpenReviewExpertise(object):
         self.pbar.update(1)
         member_papers = self.get_publications(member)
 
-        filtered_papers = [
-            n for n in member_papers \
-            if n['id'] not in self.excluded_ids_by_user[member] \
-        ]
-
         seen_keys = set()
         filtered_papers = []
         for n in member_papers:
-
             paper_title = openreview.tools.get_paperhash('', n['content']['title'])
-
             if paper_title and n.get('original') is None and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys:
                 filtered_papers.append(n)
-
             seen_keys.add(paper_title)
 
         return member, email, filtered_papers
