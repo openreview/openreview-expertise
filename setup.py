@@ -30,7 +30,8 @@ setup(
         'sacremoses',
         'rank_bm25',
         'pytest',
-        'overrides==2.8.0'
+        'overrides==2.8.0',
+        'flask'
     ],
     zip_safe=False
 )
