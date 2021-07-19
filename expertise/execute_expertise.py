@@ -1,5 +1,6 @@
 from pathlib import Path
-
+import openreview
+from .create_dataset import OpenReviewExpertise
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
 
@@ -161,3 +162,16 @@ def execute_expertise(config_file=None, model_config=None):
             ens_predictor.sparse_scores(
                 scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
+
+def execute_create_dataset(client, config_file=None, model_config=None):
+    if model_config:
+        config = model_config
+    elif config_file:
+        config = ModelConfig(config_dict=config_file)
+    else:
+        raise Exception('Must provide either a model config or a dictionary of config parameters')
+    
+    print(config)
+
+    expertise = OpenReviewExpertise(client, config)
+    expertise.run()
