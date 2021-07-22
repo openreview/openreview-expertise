@@ -67,6 +67,7 @@ class JobQueue:
         self.max_jobs: int = max_jobs
         self.submitted: List[JobData] = []
         self.lock_submitted = threading.Lock()
+        self.running_semaphore = threading.BoundedSemaphore(value = max_jobs)
     
     def put_job(self, request: JobData) -> None:
         """
@@ -146,7 +147,11 @@ class JobQueue:
     # ------------ PRIVATE FUNCTIONS ------------
     def _daemon(self) -> None:
         """Job queue daemon function that continuously attempts to consume from the queue"""
-        pass
+        while True:
+            self.running_semaphore.acquire()    # Blocks when the max jobs has been met
+            next_job_info: JobData = self.q.get()   # Blocks when queue is empty
+            threading.Thread(target=self._handle_job, args=(next_job_info,))
+            
     
     def _handle_job(self, job_info: JobData) -> None:
         """Creates a process to perform the job, sleeps and kills process on wake up if process is still alive"""
@@ -163,6 +168,10 @@ class JobQueue:
         # If not exited, terminate the process
         if not p.exitcode:
             p.terminate()
+        
+        # Release semaphore and indicate job done
+        self.running_semaphore.release()
+        self.q.task_done()
 
 
     @classmethod
