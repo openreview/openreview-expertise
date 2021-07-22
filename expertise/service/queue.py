@@ -27,12 +27,12 @@ class JobData:
         metadata={"help": "The maximum amount of time to run this job"},
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Generate job id
         config_string = json.dumps(self.config)
         self.job_id = hashlib.md5(config_string.encode('utf-8')).hexdigest()
 
-    def to_json(self):
+    def to_json(self) -> dict:
         """
         Converts JobData instance to a dictionary. The instance variable names are the keys and their values the values of the dictinary.
 
@@ -76,9 +76,10 @@ class JobQueue:
         :param request: A JobData object containing the metadata of the job to be executed
         :type request: JobData
         """
+        self.submitted.append(request)
         self.q.put(request)
     
-    def cancel_job(self, user_id: str, job_id: str = '', job_name: str = '') -> str:
+    def cancel_job(self, user_id: str, job_id: str = '', job_name: str = '') -> None:
         """
         For a job that is still queued, sets the status to stale to ensure that it does not get processed
         Currently, cannot cancel a job that is already in processing
@@ -95,7 +96,11 @@ class JobQueue:
         :param job_name: A string containing the user specified name for the job
         :type job_name: str
         """
-        pass
+        # Get list of job data and ensure a length of 1
+        job_list: List[JobData] = self._get_job_data(user_id=user_id)
+        assert len(job_list) == 1, 'Error: Multiple job matches'
+
+        job_list[0].status = 'stale'
 
     def get_jobs(self, user_id: str) -> List[dict]:
         """
@@ -103,8 +108,24 @@ class JobQueue:
 
         :param user_id: A string containing the user id that has submitted jobs
         :type user_id: str
+
+        :rtype: List[dict]
         """
-        pass
+        ret_list: List[dict] = []
+
+        # Get list of job data
+        job_list: List[JobData] = self._get_job_data(user_id=user_id)
+        for job in job_list:
+            # Construct dicts and append to list
+            ret_list.append(
+                {
+                    'job_name': job.job_name,
+                    'job_id': job.job_id,
+                    'status': job.status
+                }
+            )
+        
+        return ret_list
 
     def get_status(self, user_id: str, job_id: str = '', job_name: str = '') -> str:
         """
@@ -120,8 +141,14 @@ class JobQueue:
 
         :param job_name: A string containing the user specified name for the job
         :type job_name: str
+
+        :rtype: str
         """
-        pass
+        # Get list of job data and ensure a length of 1
+        job_list: List[JobData] = self._get_job_data(user_id=user_id)
+        assert len(job_list) == 1, 'Error: Multiple job matches'
+
+        return job_list[0].status
 
     def get_result(self, user_id: str, delete_on_get: bool = True, job_id: str = '', job_name: str = '') -> dict:
         """
@@ -141,6 +168,8 @@ class JobQueue:
 
         :param job_name: A string containing the user specified name for the job
         :type job_name: str
+
+        :rtype: dict
         """
         pass
     
@@ -152,7 +181,6 @@ class JobQueue:
             next_job_info: JobData = self.q.get()   # Blocks when queue is empty
             threading.Thread(target=self._handle_job, args=(next_job_info,))
             
-    
     def _handle_job(self, job_info: JobData) -> None:
         """Creates a process to perform the job, sleeps and kills process on wake up if process is still alive"""
         # Spawn process to perform the job
@@ -173,7 +201,6 @@ class JobQueue:
         self.running_semaphore.release()
         self.q.task_done()
 
-
     @classmethod
     def _run_job(config: dict) -> None:
         """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
@@ -184,6 +211,7 @@ class JobQueue:
         Fetches a list of JobData objects that have been submitted by user_id with either the given job_id or job_name
         If no job_id is provided, uses job_name
         if no job_name is provided, uses job_id
+        If neither is provided, return all jobs associated with the user_id
 
         :param user_id: A string containing the user id that has submitted jobs
         :type user_id: str
@@ -193,19 +221,24 @@ class JobQueue:
 
         :param job_name: A string containing the user specified name for the job
         :type job_name: str
+
+        :rtype: List[JobData]
         """
         ret_list: List[JobData] = []
 
         # Validate arguments
-        if not job_id and not job_name:
-            raise Exception('No job id or job name provided')
+        aggregate_by_user: bool = not job_id and not job_name
         
         # Lock the submitted history and search
         self.lock_submitted.acquire()
         for data in self.submitted:
             if data.id == user_id:
-                if (job_id and job_id == data.job_id) or (job_name and job_name == data.job_name):
+                if (job_id and job_id == data.job_id) or (job_name and job_name == data.job_name) or (aggregate_by_user):
                     ret_list.append(data)
         self.lock_submitted.release()
+
+        # If no item found, raise exception
+        if not len(ret_list):
+            raise Exception('No matching jobs')
 
         return ret_list
