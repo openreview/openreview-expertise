@@ -1,6 +1,7 @@
 import hashlib, json, threading, queue
 from typing import *
 from dataclasses import dataclass, field
+from multiprocessing import Process
 
 @dataclass
 class JobData:
@@ -149,7 +150,20 @@ class JobQueue:
     
     def _handle_job(self, job_info: JobData) -> None:
         """Creates a process to perform the job, sleeps and kills process on wake up if process is still alive"""
-        pass
+        # Spawn process to perform the job
+        p = Process(target=JobQueue._run_job(job_info.config), args=(job_info.config,))
+        p.start()
+
+        # Check timeout and execute sleep/join
+        if job_info.timeout > 0:
+            p.join(job_info.timeout)
+        else:
+            p.join()
+        
+        # If not exited, terminate the process
+        if not p.exitcode:
+            p.terminate()
+
 
     @classmethod
     def _run_job(config: dict) -> None:
@@ -171,4 +185,18 @@ class JobQueue:
         :param job_name: A string containing the user specified name for the job
         :type job_name: str
         """
-        pass
+        ret_list: List[JobData] = []
+
+        # Validate arguments
+        if not job_id and not job_name:
+            raise Exception('No job id or job name provided')
+        
+        # Lock the submitted history and search
+        self.lock_submitted.acquire()
+        for data in self.submitted:
+            if data.id == user_id:
+                if (job_id and job_id == data.job_id) or (job_name and job_name == data.job_name):
+                    ret_list.append(data)
+        self.lock_submitted.release()
+
+        return ret_list
