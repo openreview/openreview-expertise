@@ -1,5 +1,4 @@
 import hashlib, json, threading, queue
-from multiprocessing import Queue
 from typing import *
 from dataclasses import dataclass, field
 
@@ -55,18 +54,18 @@ class JobQueue:
         q -- The Python queue which from which the daemon thread pulls JobData objects
         submitted -- A list of JobData objects which have been submitted (to be updated to a redundant database like redis)
     """
-    def __init__(self, max_size: int = 0) -> None:
+    def __init__(self, max_jobs: int = 0) -> None:
         """
-        Instantiates a JobQueue object using a max_size parameter which determines the amount of concurrent jobs that can be run which depends the type of computation
-        and system resources. If no max_size is provided, default to infinity.
+        Instantiates a JobQueue object using a max_jobs parameter which determines the amount of concurrent jobs that can be run which depends the type of computation
+        and system resources. If no max_jobs is provided, default to infinity.
 
-        :param max_size: Integer of the amount of concurrent jobs
-        :type max_size: int
+        :param max_jobs: Integer of the amount of concurrent jobs
+        :type max_jobs: int
         """
-        self.q = Queue(maxsize=max_size)
-        self.submitted = list()
+        self.q = queue.Queue()
+        self.max_jobs: int = max_jobs
+        self.submitted: List[JobData] = []
         self.lock_submitted = threading.Lock()
-        pass
     
     def put_job(self, request: JobData) -> None:
         """
@@ -75,7 +74,7 @@ class JobQueue:
         :param request: A JobData object containing the metadata of the job to be executed
         :type request: JobData
         """
-        pass
+        self.q.put(request)
     
     def cancel_job(self, user_id: str, job_id: str = '', job_name: str = '') -> str:
         """
@@ -96,7 +95,7 @@ class JobQueue:
         """
         pass
 
-    def get_jobs(self, user_id: str) -> list:
+    def get_jobs(self, user_id: str) -> List[dict]:
         """
         Returns a list of job names and ids of all jobs associated with the user id, and their statuses
 
@@ -148,8 +147,7 @@ class JobQueue:
         """Job queue daemon function that continuously attempts to consume from the queue"""
         pass
     
-    @classmethod
-    def _handle_job(job_info: JobData) -> None:
+    def _handle_job(self, job_info: JobData) -> None:
         """Creates a process to perform the job, sleeps and kills process on wake up if process is still alive"""
         pass
 
@@ -158,7 +156,7 @@ class JobQueue:
         """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
         pass
 
-    def _get_job_data(self, user_id: str, job_id: str = '', job_name: str = '') -> list:
+    def _get_job_data(self, user_id: str, job_id: str = '', job_name: str = '') -> List[JobData]:
         """
         Fetches a list of JobData objects that have been submitted by user_id with either the given job_id or job_name
         If no job_id is provided, uses job_name
