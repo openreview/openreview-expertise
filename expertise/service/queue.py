@@ -2,10 +2,9 @@ import hashlib, json, threading, queue, os
 from typing import *
 from dataclasses import dataclass, field
 from multiprocessing import Process, TimeoutError, ProcessError
-
 @dataclass
 class JobData:
-    """Keeps track of job information and status. Dataset directory will be overwritten by the server."""
+    """Keeps track of job information and status"""
     id: str = field(
         metadata={"help": "The profile id at the time of submission"},
     )
@@ -32,11 +31,6 @@ class JobData:
         config_string = json.dumps(self.config)
         self.job_id = hashlib.md5(config_string.encode('utf-8')).hexdigest()
 
-        # Overwrite dataset -> directory in config
-        if 'dataset' not in self.config.keys():
-            self.config['dataset'] = {}
-        self.config['dataset']['directory'] = f"./{self.job_id}"
-
     def to_json(self) -> dict:
         """
         Converts JobData instance to a dictionary. The instance variable names are the keys and their values the values of the dictinary.
@@ -53,6 +47,27 @@ class JobData:
             'timeout': self.timeout
         }
 
+@dataclass
+class ExpertiseInfo(JobData):
+    """
+    Keeps track of the create_expertise queue information and status. Dataset directory will be overwritten by the server.
+    """
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        # Overwrite dataset -> directory in config
+        if 'dataset' not in self.config.keys():
+            self.config['dataset'] = {}
+        self.config['dataset']['directory'] = f"./{self.job_id}"
+
+@dataclass
+class DatasetInfo(ExpertiseInfo):
+    """
+    Keeps track of the create_dataset queue information and status. Dataset directory will be overwritten by the server.
+    Same information as expertise info but requires an authenticated token
+    """
+    token = field(
+        metadata={"help": "The authenticated token of the user client"}
+    )
 class JobQueue:
     """
     Keeps track of queue metadata in-memory and is responsible for queuing jobs when given a config
