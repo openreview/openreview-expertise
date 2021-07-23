@@ -2,6 +2,7 @@ import hashlib, json, threading, queue, os
 from typing import *
 from dataclasses import dataclass, field
 from multiprocessing import Process, TimeoutError, ProcessError
+from ..execute_expertise import *
 @dataclass
 class JobData:
     """Keeps track of job information and status"""
@@ -65,9 +66,11 @@ class DatasetInfo(ExpertiseInfo):
     Keeps track of the create_dataset queue information and status. Dataset directory will be overwritten by the server.
     Same information as expertise info but requires an authenticated token
     """
-    token = field(
+    token: str = field(
+        default='',
         metadata={"help": "The authenticated token of the user client"}
     )
+
 class JobQueue:
     """
     Keeps track of queue metadata in-memory and is responsible for queuing jobs when given a config
@@ -284,3 +287,64 @@ class JobQueue:
             raise Exception('No matching jobs')
 
         return ret_list
+
+class ExpertiseQueue(JobQueue):
+    """
+    Keeps track of queue metadata and is responsible for queuing jobs when given a config for running the expertise model
+    """
+    def get_result(self, user_id: str, delete_on_get: bool = True, job_id: str = '', job_name: str = '') -> dict:
+        """
+        Return the result of the job submitted by user_id with either the given job_id or job_name
+        If no job_id is provided, uses job_name
+        if no job_name is provided, uses job_id
+        By default, deletes the data and metadata with the associated job
+
+        :param user_id: A string containing the user id that has submitted jobs
+        :type user_id: str
+
+        :param delete_on_get: A boolean flag that decides whether or not to maintain the data and metadata from the job
+        :type delete_on_get: bool
+
+        :param job_id: A string containing the submitted job id
+        :type job_id: str
+
+        :param job_name: A string containing the user specified name for the job
+        :type job_name: str
+
+        :rtype: dict
+        """
+        # Retrieve the single job data object
+        matching_jobs: List[ExpertiseInfo] = self._get_job_data(user_id, job_id=job_id, job_name=job_name)
+        assert len(matching_jobs) == 1
+
+        # TODO: Read-in the results of the expertise model as a list of triples
+        #       and decide on how to handle the remaining directory based on the arguments
+
+    def run_job(self, config: dict) -> None:
+        """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
+        execute_expertise(config_file=config)
+
+class DatasetQueue(JobQueue):
+    """
+    Keeps track of queue metadata and is responsible for queuing jobs when given a config for getting the data for the expertise model
+    """
+    def __init__(self, max_jobs: int) -> None:
+        super().__init__(max_jobs=max_jobs)
+        # TODO: DatasetQueue objects instantiate an ExpertiseQueue - jobs finished on the dataset queue immediately
+        #       pass a request to the ExpertiseQueue
+    
+    def put_job(self, request: DatasetInfo) -> None:
+        """
+        Adds a DatasetInfo object to the queue to be processed asynchronously
+        Augments the request's config with the authenticated token
+        
+        :param request: A DatasetInfo object containing the metadata of the job to be executed
+        :type request: DatasetInfo
+        """
+        # Update the config with the token
+        request.config.update({'token': request.token})
+        super().put_job(request)
+    
+    def run_job(self, config: dict) -> None:
+        """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
+        execute_expertise(config_file=config)
