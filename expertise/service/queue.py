@@ -1,11 +1,11 @@
-import hashlib, json, threading, queue
+import hashlib, json, threading, queue, os
 from typing import *
 from dataclasses import dataclass, field
 from multiprocessing import Process
 
 @dataclass
 class JobData:
-    """Keeps track of job information and status"""
+    """Keeps track of job information and status. Dataset directory will be overwritten by the server."""
     id: str = field(
         metadata={"help": "The profile id at the time of submission"},
     )
@@ -31,6 +31,11 @@ class JobData:
         # Generate job id
         config_string = json.dumps(self.config)
         self.job_id = hashlib.md5(config_string.encode('utf-8')).hexdigest()
+
+        # Overwrite dataset -> directory in config
+        if 'dataset' not in self.config.keys():
+            self.config['dataset'] = {}
+        self.config['dataset']['directory'] = f"./{self.job_id}"
 
     def to_json(self) -> dict:
         """
@@ -183,23 +188,29 @@ class JobQueue:
             
     def _handle_job(self, job_info: JobData) -> None:
         """Creates a process to perform the job, sleeps and kills process on wake up if process is still alive"""
-        # Spawn process to perform the job
-        p = Process(target=JobQueue._run_job(job_info.config), args=(job_info.config,))
-        p.start()
+        if job_info.status != 'stale':
+            # Create job directory if it doesn't exist
+            job_dir = os.path.join(os.getcwd(), job_info.job_id)
+            if not os.path.exists(job_dir):
+                os.mkdir(job_dir)
 
-        # Check timeout and execute sleep/join
-        if job_info.timeout > 0:
-            p.join(job_info.timeout)
-        else:
-            p.join()
-        
-        # If not exited, terminate the process
-        if not p.exitcode:
-            p.terminate()
-        
-        # Release semaphore and indicate job done
-        self.running_semaphore.release()
-        self.q.task_done()
+            # Spawn process to perform the job
+            p = Process(target=JobQueue._run_job, args=(job_info.config,))
+            p.start()
+
+            # Check timeout and execute sleep/join
+            if job_info.timeout > 0:
+                p.join(job_info.timeout)
+            else:
+                p.join()
+
+            # If not exited, terminate the process
+            if not p.exitcode:
+                p.terminate()
+
+            # Release semaphore and indicate job done
+            self.running_semaphore.release()
+            self.q.task_done()
 
     @classmethod
     def _run_job(config: dict) -> None:
