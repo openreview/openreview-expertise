@@ -1,4 +1,4 @@
-import hashlib, json, threading, queue, os
+import hashlib, json, threading, queue, os, openreview
 from typing import *
 from dataclasses import dataclass, field
 from multiprocessing import Process, TimeoutError, ProcessError
@@ -69,6 +69,10 @@ class DatasetInfo(ExpertiseInfo):
     token: str = field(
         default='',
         metadata={"help": "The authenticated token of the user client"}
+    )
+    baseurl: str = field(
+        default='',
+        metadata={"help": "The base URL of the API to call to log in"}
     )
 
 class JobQueue:
@@ -341,10 +345,17 @@ class DatasetQueue(JobQueue):
         :param request: A DatasetInfo object containing the metadata of the job to be executed
         :type request: DatasetInfo
         """
-        # Update the config with the token
-        request.config.update({'token': request.token})
+        # Update the config with the token and base URL
+        request.config.update({
+            'token': request.token,
+            'baseurl': request.baseurl
+        })
         super().put_job(request)
     
     def run_job(self, config: dict) -> None:
         """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
-        execute_expertise(config_file=config)
+        openreview_client = openreview.Client(
+            token=config['token'],
+            baseurl=config['baseurl']
+        )
+        execute_create_dataset(openreview_client, config_file=config)
