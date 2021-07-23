@@ -56,6 +56,9 @@ class JobData:
 class JobQueue:
     """
     Keeps track of queue metadata in-memory and is responsible for queuing jobs when given a config
+
+    Create a subclass of a JobQueue and implement "get_result" and "run_job" with user-defined logic
+
     Status semantics:
         "Queued" -- The job is currently awaiting processing by a worker
         "Processing" -- The job is currently being worked on a by a worder
@@ -184,7 +187,11 @@ class JobQueue:
 
         :rtype: dict
         """
-        pass
+        raise Exception('Not Implemented Yet')
+
+    def run_job(self, config: dict) -> None:
+        """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
+        raise Exception('Not Implemented Yet')
     
     # ------------ PRIVATE FUNCTIONS ------------
     def _daemon(self) -> None:
@@ -204,7 +211,7 @@ class JobQueue:
 
             # Spawn process to perform the job
             job_info.status = 'Processing'
-            p = Process(target=JobQueue._run_job, args=(job_info.config,))
+            p = Process(target=self.run_job, args=(job_info.config,))
             p.start()
 
             # Check timeout and execute sleep/join
@@ -225,11 +232,6 @@ class JobQueue:
             # If not exited, terminate the process
             if p.exitcode is None:
                 p.terminate()
-
-    @classmethod
-    def _run_job(config: dict) -> None:
-        """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
-        pass
 
     def _get_job_data(self, user_id: str, job_id: str = '', job_name: str = '') -> List[JobData]:
         """
