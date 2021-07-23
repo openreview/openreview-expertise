@@ -1,7 +1,7 @@
 import hashlib, json, threading, queue, os
 from typing import *
 from dataclasses import dataclass, field
-from multiprocessing import Process
+from multiprocessing import Process, TimeoutError, ProcessError
 
 @dataclass
 class JobData:
@@ -56,6 +56,14 @@ class JobData:
 class JobQueue:
     """
     Keeps track of queue metadata in-memory and is responsible for queuing jobs when given a config
+    Status semantics:
+        "Queued" -- The job is currently awaiting processing by a worker
+        "Processing" -- The job is currently being worked on a by a worder
+        "Completed" -- The job has finished and the results are stored on the server
+        "Stale" -- The job has been cancelled before it arrived at processing
+        "Timeout" -- The job has exceeded the specified/default timeout
+        "Error" -- The job has run into an error 
+
     Important attributes:
         q -- The Python queue which from which the daemon thread pulls JobData objects
         submitted -- A list of JobData objects which have been submitted (to be updated to a redundant database like redis)
@@ -184,7 +192,7 @@ class JobQueue:
         while True:
             self.running_semaphore.acquire()    # Blocks when the max jobs has been met
             next_job_info: JobData = self.q.get()   # Blocks when queue is empty
-            threading.Thread(target=self._handle_job, args=(next_job_info,))
+            threading.Thread(target=self._handle_job, args=(next_job_info,)).start()
             
     def _handle_job(self, job_info: JobData) -> None:
         """Creates a process to perform the job, sleeps and kills process on wake up if process is still alive"""
@@ -195,22 +203,28 @@ class JobQueue:
                 os.mkdir(job_dir)
 
             # Spawn process to perform the job
+            job_info.status = 'Processing'
             p = Process(target=JobQueue._run_job, args=(job_info.config,))
             p.start()
 
             # Check timeout and execute sleep/join
-            if job_info.timeout > 0:
-                p.join(job_info.timeout)
-            else:
-                p.join()
+            try:
+                if job_info.timeout > 0:
+                    p.join(job_info.timeout)
+                else:
+                    p.join()
+                # Release semaphore and indicate job done
+                self.running_semaphore.release()
+                self.q.task_done()
+                job_info.status = 'Completed'
+            except TimeoutError:
+                job_info.status = 'Timeout'
+            except ProcessError:
+                job_info.status = 'Error'
 
             # If not exited, terminate the process
-            if not p.exitcode:
+            if p.exitcode is None:
                 p.terminate()
-
-            # Release semaphore and indicate job done
-            self.running_semaphore.release()
-            self.q.task_done()
 
     @classmethod
     def _run_job(config: dict) -> None:
