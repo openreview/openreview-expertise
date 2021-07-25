@@ -20,7 +20,7 @@ class JobData:
         metadata={"help": "The submitted configuration file as a dictionary"},
     )
     status: str = field(
-        default='Queued',
+        default='queued',
         metadata={"help": "The current status of this job"},
     )
     timeout: int = field(
@@ -84,12 +84,12 @@ class JobQueue:
     Create a subclass of a JobQueue and implement "get_result" and "run_job" with user-defined logic
 
     Status semantics:
-        "Queued" -- The job is currently awaiting processing by a worker
-        "Processing" -- The job is currently being worked on a by a worder
-        "Completed" -- The job has finished and the results are stored on the server
-        "Stale" -- The job has been cancelled before it arrived at processing
-        "Timeout" -- The job has exceeded the specified/default timeout
-        "Error" -- The job has run into an error 
+        "queued" -- The job is currently awaiting processing by a worker
+        "processing" -- The job is currently being worked on a by a worder
+        "completed" -- The job has finished and the results are stored on the server
+        "stale" -- The job has been cancelled before it arrived at processing
+        "timeout" -- The job has exceeded the specified/default timeout
+        "error" -- The job has run into an error 
 
     Important attributes:
         q -- The Python queue which from which the daemon thread pulls JobData objects
@@ -234,7 +234,7 @@ class JobQueue:
                 os.mkdir(job_dir)
 
             # Spawn process to perform the job
-            job_info.status = 'Processing'
+            job_info.status = 'processing'
             p = Process(target=self.run_job, args=(job_info.config,))
             p.start()
 
@@ -247,11 +247,11 @@ class JobQueue:
                 # Release semaphore and indicate job done
                 self.running_semaphore.release()
                 self.q.task_done()
-                job_info.status = 'Completed'
+                job_info.status = 'completed'
             except TimeoutError:
-                job_info.status = 'Timeout'
+                job_info.status = 'timeout'
             except ProcessError:
-                job_info.status = 'Error'
+                job_info.status = 'error'
 
             # If not exited, terminate the process
             if p.exitcode is None:
@@ -352,9 +352,7 @@ class DatasetQueue(JobQueue):
     """
     def __init__(self, max_jobs: int) -> None:
         super().__init__(max_jobs=max_jobs)
-        # TODO: DatasetQueue objects instantiate an ExpertiseQueue - jobs finished on the dataset queue immediately
-        #       pass a request to the ExpertiseQueue
-        #       When querying/updating the DatasetQueue, also query the ExpertiseQueue if the dataset job is complete
+        self.expertise_queue = ExpertiseQueue(max_jobs)
     
     def put_job(self, request: DatasetInfo) -> None:
         """
@@ -370,7 +368,117 @@ class DatasetQueue(JobQueue):
             'baseurl': request.baseurl
         })
         super().put_job(request)
-    
+
+    def cancel_job(self, user_id: str, job_id: str = '', job_name: str = '') -> None:
+        """
+        For a job that is still queued, sets the status to stale to ensure that it does not get processed
+        Currently, cannot cancel a job that is already in processing
+        Identify the job to be canceled with a combination of the user_id and the optional arguments
+        If no job_id is provided, uses job_name
+        if no job_name is provided, uses job_id
+
+        :param user_id: A string containing the user id that has submitted jobs
+        :type user_id: str
+
+        :param job_id: A string containing the submitted job id
+        :type job_id: str
+
+        :param job_name: A string containing the user specified name for the job
+        :type job_name: str
+        """
+        # Check job status on dataset queue and decide on action
+        job_list: List[DatasetInfo] = self._get_job_data(user_id=user_id)
+        assert len(job_list) == 1, 'Error: Multiple job matches'
+        current_job = job_list[0]
+
+        if current_job.status == 'completed':
+            self.expertise_queue.cancel_job(user_id, job_id, job_name)
+        else:
+            super().cancel_job(user_id, job_id, job_name)
+
+    def get_jobs(self, user_id: str) -> dict:
+        """
+        Returns a dict of both create_dataset and run_expertise jobs created by the user
+
+        :param user_id: A string containing the user id that has submitted jobs
+        :type user_id: str
+
+        :rtype: dict
+        """
+        ret_dict: dict = {}
+
+        # Query Dataset job statuses
+        dataset_list = super().get_jobs(user_id)
+        
+        # Attempt to gather Expertise jobs
+        try:
+            expertise_list = self.expertise_queue.get_jobs(user_id)
+        except:
+            expertise_list = []
+
+        # Gather queue queries
+        ret_dict.update({'dataset': dataset_list})
+        ret_dict.update({'expertise': expertise_list})
+
+        return ret_dict
+
+    def get_status(self, user_id: str, job_id: str = '', job_name: str = '') -> dict:
+        """
+        Return a dict of statuses of a single job
+        If no job_id is provided, uses job_name
+        if no job_name is provided, uses job_id
+
+        :param user_id: A string containing the user id that has submitted jobs
+        :type user_id: str
+
+        :param job_id: A string containing the submitted job id
+        :type job_id: str
+
+        :param job_name: A string containing the user specified name for the job
+        :type job_name: str
+
+        :rtype: dict
+        """
+        # Get the dataset job status and if completed, query the expertise status
+        dataset_status = super().get_status(user_id, job_id, job_name)
+        expertise_status = ''
+        if dataset_status == 'completed':
+            expertise_status = self.expertise_queue.get_status(user_id, job_id, job_name)
+        return{
+            'dataset': dataset_status,
+            'expertise': expertise_status
+        }
+
+
+    def get_result(self, user_id: str, delete_on_get: bool = True, job_id: str = '', job_name: str = '') -> List[dict]:
+        """
+        Return the result of the job submitted by user_id with either the given job_id or job_name
+        If neither the dataset nor the expertise step is not completed yet, return an empty list, otherwise query the expertise queue
+
+        If no job_id is provided, uses job_name
+        if no job_name is provided, uses job_id
+        By default, deletes the data and metadata with the associated job 
+
+        :param user_id: A string containing the user id that has submitted jobs
+        :type user_id: str
+
+        :param delete_on_get: A boolean flag that decides whether or not to maintain the data and metadata from the job
+        :type delete_on_get: bool
+
+        :param job_id: A string containing the submitted job id
+        :type job_id: str
+
+        :param job_name: A string containing the user specified name for the job
+        :type job_name: str
+
+        :rtype: List[dict]
+        """
+        # Return an empty list if the dataset job is not completed
+        dataset_status = super().get_status(user_id, job_id, job_name)
+        if dataset_status == 'completed':
+            return self.expertise_queue.get_result(user_id, delete_on_get, job_id, job_name)
+        return []
+
     def run_job(self, config: dict) -> None:
         """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
         openreview_client = openreview.Client(
@@ -378,3 +486,9 @@ class DatasetQueue(JobQueue):
             baseurl=config['baseurl']
         )
         execute_create_dataset(openreview_client, config_file=config)
+    
+    def _handle_job(self, job_info: JobData) -> None:
+        """Handle job - if completed, put a copy of the config on the expertise queue"""
+        super()._handle_job(job_info)
+        if job_info.status == 'completed':
+            self.expertise_queue.put_job(job_info)
