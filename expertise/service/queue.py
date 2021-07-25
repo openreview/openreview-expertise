@@ -346,28 +346,40 @@ class ExpertiseQueue(JobQueue):
         """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
         execute_expertise(config_file=config)
 
-class DatasetQueue(JobQueue):
+class TwoStepQueue(JobQueue):
     """
-    Keeps track of queue metadata and is responsible for queuing jobs when given a config for getting the data for the expertise model
+    Manage 2 concurrent queues which consist of an outer (this object) and an inner queue
+    The outer queue defers to the inner queue for get_results and must implement its own run_job
+
+    Converts return types of certain get functions to dictionaries to allow access to information from the inner
+    and outer queues simultaneously
+
+    Jobs put into this queue perform the outer queue's task and if the task successfully completes,
+    put the same job information into the inner queue
     """
-    def __init__(self, max_jobs: int) -> None:
+    def __init__(self, max_jobs: int, inner_queue = None, inner_key: str = 'inner', outer_key: str = 'outer') -> None:
+        """
+        Instantiates a TwoStepQueue object using a max_jobs parameter which determines the amount of concurrent jobs that can be run which depends the type of computation
+        and system resources. If no max_jobs is provided, default to infinity.
+
+        Accepts a class of type JobQueue and keys that define the inner and outer queues
+
+        :param max_jobs: Integer of the amount of concurrent jobs
+        :type max_jobs: int
+
+        :param inner_queue: A subclass of JobQueue that implements get_results and run_job
+        :type inner_queue: class
+
+        :param inner_key: The key to use to access the inner queue's information
+        :type inner_key: str
+
+        :param outer_key: The key to use to access the outer queue's information
+        :type outer_key: str
+        """
         super().__init__(max_jobs=max_jobs)
-        self.expertise_queue = ExpertiseQueue(max_jobs)
-    
-    def put_job(self, request: DatasetInfo) -> None:
-        """
-        Adds a DatasetInfo object to the queue to be processed asynchronously
-        Augments the request's config with the authenticated token
-        
-        :param request: A DatasetInfo object containing the metadata of the job to be executed
-        :type request: DatasetInfo
-        """
-        # Update the config with the token and base URL
-        request.config.update({
-            'token': request.token,
-            'baseurl': request.baseurl
-        })
-        super().put_job(request)
+        self.inner_queue: JobQueue = inner_queue(max_jobs)
+        self.inner_key = inner_key
+        self.outer_key = outer_key
 
     def cancel_job(self, user_id: str, job_id: str = '', job_name: str = '') -> None:
         """
@@ -392,35 +404,33 @@ class DatasetQueue(JobQueue):
         current_job = job_list[0]
 
         if current_job.status == 'completed':
-            self.expertise_queue.cancel_job(user_id, job_id, job_name)
+            self.inner_queue.cancel_job(user_id, job_id, job_name)
         else:
             super().cancel_job(user_id, job_id, job_name)
 
     def get_jobs(self, user_id: str) -> dict:
         """
-        Returns a dict of both create_dataset and run_expertise jobs created by the user
+        Returns a dict of both inner and outer queue jobs created by the user
 
         :param user_id: A string containing the user id that has submitted jobs
         :type user_id: str
 
         :rtype: dict
         """
-        ret_dict: dict = {}
-
-        # Query Dataset job statuses
-        dataset_list = super().get_jobs(user_id)
+        # Query outer queue job statuses
+        outer_list = super().get_jobs(user_id)
         
-        # Attempt to gather Expertise jobs
+        # Attempt to gather inner queue jobs
         try:
-            expertise_list = self.expertise_queue.get_jobs(user_id)
+            inner_list = self.inner_queue.get_jobs(user_id)
         except:
-            expertise_list = []
+            inner_list = []
 
         # Gather queue queries
-        ret_dict.update({'dataset': dataset_list})
-        ret_dict.update({'expertise': expertise_list})
-
-        return ret_dict
+        return {
+            self.outer_key: outer_list,
+            self.inner_key: inner_list
+        }
 
     def get_status(self, user_id: str, job_id: str = '', job_name: str = '') -> dict:
         """
@@ -439,14 +449,14 @@ class DatasetQueue(JobQueue):
 
         :rtype: dict
         """
-        # Get the dataset job status and if completed, query the expertise status
-        dataset_status = super().get_status(user_id, job_id, job_name)
-        expertise_status = ''
-        if dataset_status == 'completed':
-            expertise_status = self.expertise_queue.get_status(user_id, job_id, job_name)
-        return{
-            'dataset': dataset_status,
-            'expertise': expertise_status
+        # Get the outer queue job status and if completed, query the inner queue status
+        outer_status = super().get_status(user_id, job_id, job_name)
+        inner_status = ''
+        if outer_status == 'completed':
+            inner_status = self.inner_queue.get_status(user_id, job_id, job_name)
+        return {
+            self.inner_key: inner_status,
+            self.outer_key: outer_status
         }
 
 
@@ -473,11 +483,35 @@ class DatasetQueue(JobQueue):
 
         :rtype: List[dict]
         """
-        # Return an empty list if the dataset job is not completed
-        dataset_status = super().get_status(user_id, job_id, job_name)
-        if dataset_status == 'completed':
-            return self.expertise_queue.get_result(user_id, delete_on_get, job_id, job_name)
+        # Return an empty list if the outer job is not completed
+        outer_status = super().get_status(user_id, job_id, job_name)
+        if outer_status == 'completed':
+            return self.inner_queue.get_result(user_id, delete_on_get, job_id, job_name)
         return []
+    
+    def _handle_job(self, job_info: JobData) -> None:
+        """Handle job - if completed, put a copy of the config on the expertise queue"""
+        super()._handle_job(job_info)
+        if job_info.status == 'completed':
+            self.expertise_queue.put_job(job_info)
+class DatasetQueue(TwoStepQueue):
+    """
+    Keeps track of queue metadata and is responsible for queuing jobs when given a config for getting the data for the expertise model
+    """
+    def put_job(self, request: DatasetInfo) -> None:
+        """
+        Adds a DatasetInfo object to the queue to be processed asynchronously
+        Augments the request's config with the authenticated token
+        
+        :param request: A DatasetInfo object containing the metadata of the job to be executed
+        :type request: DatasetInfo
+        """
+        # Update the config with the token and base URL
+        request.config.update({
+            'token': request.token,
+            'baseurl': request.baseurl
+        })
+        super().put_job(request)
 
     def run_job(self, config: dict) -> None:
         """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
@@ -486,9 +520,3 @@ class DatasetQueue(JobQueue):
             baseurl=config['baseurl']
         )
         execute_create_dataset(openreview_client, config_file=config)
-    
-    def _handle_job(self, job_info: JobData) -> None:
-        """Handle job - if completed, put a copy of the config on the expertise queue"""
-        super()._handle_job(job_info)
-        if job_info.status == 'completed':
-            self.expertise_queue.put_job(job_info)
