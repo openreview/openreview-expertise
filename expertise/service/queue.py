@@ -1,8 +1,9 @@
-import hashlib, json, threading, queue, os, openreview
+import hashlib, json, threading, queue, os, openreview, shutil
 from typing import *
 from dataclasses import dataclass, field
 from multiprocessing import Process, TimeoutError, ProcessError
 from ..execute_expertise import *
+from csv import reader
 @dataclass
 class JobData:
     """Keeps track of job information and status"""
@@ -56,6 +57,7 @@ class ExpertiseInfo(JobData):
     def __post_init__(self) -> None:
         super().__post_init__()
         # Overwrite dataset -> directory in config
+        # TODO: Overwrite all other possible directory variables with the job id
         if 'dataset' not in self.config.keys():
             self.config['dataset'] = {}
         self.config['dataset']['directory'] = f"./{self.job_id}"
@@ -188,7 +190,7 @@ class JobQueue:
 
         return job_list[0].status
 
-    def get_result(self, user_id: str, delete_on_get: bool = True, job_id: str = '', job_name: str = '') -> dict:
+    def get_result(self, user_id: str, delete_on_get: bool = True, job_id: str = '', job_name: str = '') -> List[dict]:
         """
         Return the result of the job submitted by user_id with either the given job_id or job_name
         If no job_id is provided, uses job_name
@@ -207,7 +209,7 @@ class JobQueue:
         :param job_name: A string containing the user specified name for the job
         :type job_name: str
 
-        :rtype: dict
+        :rtype: List[dict]
         """
         raise Exception('Not Implemented Yet')
 
@@ -296,7 +298,7 @@ class ExpertiseQueue(JobQueue):
     """
     Keeps track of queue metadata and is responsible for queuing jobs when given a config for running the expertise model
     """
-    def get_result(self, user_id: str, delete_on_get: bool = True, job_id: str = '', job_name: str = '') -> dict:
+    def get_result(self, user_id: str, delete_on_get: bool = True, job_id: str = '', job_name: str = '') -> List[dict]:
         """
         Return the result of the job submitted by user_id with either the given job_id or job_name
         If no job_id is provided, uses job_name
@@ -317,13 +319,29 @@ class ExpertiseQueue(JobQueue):
 
         :rtype: dict
         """
+        ret_list: List[dict] = []
         # Retrieve the single job data object
         matching_jobs: List[ExpertiseInfo] = self._get_job_data(user_id, job_id=job_id, job_name=job_name)
         assert len(matching_jobs) == 1
+        current_job = matching_jobs[0]
 
-        # TODO: Read-in the results of the expertise model as a list of triples
-        #       and decide on how to handle the remaining directory based on the arguments
-
+        # Build the return list by reading the csv under the job_name.csv file
+        cwd = os.getcwd()
+        job_path = os.path.join(cwd, current_job.job_id)
+        csv_path = os.path.join(job_path, f'{current_job.job_name}.csv')
+        with open(csv_path, 'r') as csv_file:
+            data_reader = reader(csv_file)
+            for row in data_reader:
+                ret_list.append({
+                    'submission': row[0],
+                    'user': row[1],
+                    'score': float(row[2])
+                })
+        
+        # Check flag and clear directory
+        if delete_on_get:
+            shutil.rmtree(job_path)
+            
     def run_job(self, config: dict) -> None:
         """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
         execute_expertise(config_file=config)
@@ -336,6 +354,7 @@ class DatasetQueue(JobQueue):
         super().__init__(max_jobs=max_jobs)
         # TODO: DatasetQueue objects instantiate an ExpertiseQueue - jobs finished on the dataset queue immediately
         #       pass a request to the ExpertiseQueue
+        #       When querying/updating the DatasetQueue, also query the ExpertiseQueue if the dataset job is complete
     
     def put_job(self, request: DatasetInfo) -> None:
         """
