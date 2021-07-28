@@ -13,11 +13,12 @@ class JobData:
     job_name: str = field(
         metadata={"help": "The name of the job specified in the submitted config file"},
     )
-    job_id: str = field(
-        metadata={"help": "The unique id for this job"},
-    )
     config: dict = field(
         metadata={"help": "The submitted configuration file as a dictionary"},
+    )
+    job_id: str = field(
+        default='',
+        metadata={"help": "The unique id for this job"},
     )
     status: str = field(
         default='queued',
@@ -109,7 +110,7 @@ class JobQueue:
         self.lock_submitted = threading.Lock()
         self.running_semaphore = threading.BoundedSemaphore(value = max_jobs)
 
-        # create logger with 'spam_application'
+        # create logger with 'job_queue'
         self.logger = logging.getLogger('job_queue')
         self.logger.setLevel(logging.DEBUG)
         # create file handler which logs even debug messages
@@ -126,6 +127,9 @@ class JobQueue:
         self.logger.addHandler(self.fh)
         self.logger.addHandler(self.ch)
         self.logger.info('JobQueue successfully created')
+
+        # Kickstart queue daemon thread
+        threading.Thread(target=self._daemon, daemon=True).start()
     
     def put_job(self, request: JobData) -> None:
         """
@@ -162,7 +166,7 @@ class JobQueue:
         assert len(job_list) == 1, 'Error: Multiple job matches'
 
         job_list[0].status = 'stale'
-        self.logger.info(f'Successfully cancelled job from {user_id} with either job ID {job_id} or job name {job_name}')
+        self.logger.info(f'Successfully cancelled job from {user_id} with either job ID [{job_id}] or job name [{job_name}]')
 
     def get_jobs(self, user_id: str) -> List[dict]:
         """
@@ -212,7 +216,7 @@ class JobQueue:
         job_list: List[JobData] = self._get_job_data(user_id=user_id)
         assert len(job_list) == 1, 'Error: Multiple job matches'
 
-        self.logger.info(f'Successfully fetched status from {user_id} with either job ID {job_id} or job name {job_name}')
+        self.logger.info(f'Successfully fetched status from {user_id} with either job ID [{job_id}] or job name [{job_name}]')
         return job_list[0].status
 
     def get_result(self, user_id: str, delete_on_get: bool = True, job_id: str = '', job_name: str = '') -> List[dict]:
@@ -247,6 +251,7 @@ class JobQueue:
         """Job queue daemon function that continuously attempts to consume from the queue"""
         self.logger.info('Starting queue daemon - listening for queue insertions')
         while True:
+            self.logger.info('Listening for queue insertions')
             self.running_semaphore.acquire()    # Blocks when the max jobs has been met
             self.logger.info('Semaphore acquired - starting thread to execute job')
             next_job_info: JobData = self.q.get()   # Blocks when queue is empty
@@ -310,7 +315,7 @@ class JobQueue:
         """
         ret_list: List[JobData] = []
 
-        self.logger.info('Retrieving job ddta...')
+        self.logger.info('Retrieving job data...')
         # Validate arguments
         aggregate_by_user: bool = not job_id and not job_name
         
@@ -328,7 +333,7 @@ class JobQueue:
         if not len(ret_list):
             raise Exception('No matching jobs')
 
-        self.logger.info(f'Job data retrieved from user {user_id} with either job ID {job_id} or job name {job_name}')
+        self.logger.info(f'Job data retrieved from user {user_id} with either job ID [{job_id}] or job name [{job_name}]')
         return ret_list
 
 class ExpertiseQueue(JobQueue):
@@ -382,7 +387,7 @@ class ExpertiseQueue(JobQueue):
         if delete_on_get:
             shutil.rmtree(job_path)
         
-        self.logger.info(f'ExpertiseQueue: Returning results from job user {user_id} with either job ID {job_id} or job name {job_name}')
+        self.logger.info(f'ExpertiseQueue: Returning results from job user {user_id} with either job ID [{job_id}] or job name [{job_name}]')
         return ret_list
             
     def run_job(self, config: dict) -> None:
@@ -554,6 +559,7 @@ class TwoStepQueue(JobQueue):
         if job_info.status == 'completed':
             self.logger.info('TwoStepQueue: outer queue job process complete, enqueuing into inner queue')
             self.expertise_queue.put_job(job_info)
+
 class DatasetQueue(TwoStepQueue):
     """
     Keeps track of queue metadata and is responsible for queuing jobs when given a config for getting the data for the expertise model
