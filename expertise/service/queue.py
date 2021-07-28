@@ -95,10 +95,10 @@ class JobQueue:
         q -- The Python queue which from which the daemon thread pulls JobData objects
         submitted -- A list of JobData objects which have been submitted (to be updated to a redundant database like redis)
     """
-    def __init__(self, max_jobs: int = 0) -> None:
+    def __init__(self, max_jobs: int = 1) -> None:
         """
         Instantiates a JobQueue object using a max_jobs parameter which determines the amount of concurrent jobs that can be run which depends the type of computation
-        and system resources. If no max_jobs is provided, default to infinity.
+        and system resources. If no max_jobs is provided, default to 1.
 
         :param max_jobs: Integer of the amount of concurrent jobs
         :type max_jobs: int
@@ -400,10 +400,10 @@ class TwoStepQueue(JobQueue):
     Jobs put into this queue perform the outer queue's task and if the task successfully completes,
     put the same job information into the inner queue
     """
-    def __init__(self, max_jobs: int, inner_queue = None, inner_key: str = 'inner', outer_key: str = 'outer') -> None:
+    def __init__(self, max_jobs: int = 1, inner_queue = None, inner_key: str = 'inner', outer_key: str = 'outer') -> None:
         """
         Instantiates a TwoStepQueue object using a max_jobs parameter which determines the amount of concurrent jobs that can be run which depends the type of computation
-        and system resources. If no max_jobs is provided, default to infinity.
+        and system resources. If no max_jobs is provided, default to 1.
 
         Accepts a class of type JobQueue and keys that define the inner and outer queues
 
