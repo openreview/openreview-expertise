@@ -171,6 +171,7 @@ class JobQueue:
     def get_jobs(self, user_id: str) -> List[dict]:
         """
         Returns a list of job names and ids of all jobs associated with the user id, and their statuses
+        If no jobs found, return an empty list corresponding to no jobs
 
         :param user_id: A string containing the user id that has submitted jobs
         :type user_id: str
@@ -181,7 +182,10 @@ class JobQueue:
         ret_list: List[dict] = []
 
         # Get list of job data
-        job_list: List[JobData] = self._get_job_data(user_id=user_id)
+        try:
+            job_list: List[JobData] = self._get_job_data(user_id=user_id)
+        except:
+            job_list = []
         for job in job_list:
             # Construct dicts and append to list
             ret_list.append(
@@ -260,6 +264,7 @@ class JobQueue:
             
     def _handle_job(self, job_info: JobData) -> None:
         """Creates a process to perform the job, sleeps and kills process on wake up if process is still alive"""
+        # TODO: If error or timedout, clean up working directory
         self.logger.info('Job handler thread started')
         if job_info.status != 'stale':
             # Create job directory if it doesn't exist
@@ -284,13 +289,23 @@ class JobQueue:
                 # Release semaphore and indicate job done
                 self.running_semaphore.release()
                 self.q.task_done()
-                job_info.status = 'completed'
+                # If no errors detected, check exit codes
+                if p.exitcode is None:
+                    job_info.status = 'timeout'
+                elif p.exitcode != 0:
+                    job_info.status = 'error'
+                else:
+                    job_info.status = 'completed'
             except TimeoutError:
                 job_info.status = 'timeout'
             except ProcessError:
                 job_info.status = 'error'
 
-            self.logger.info('Job process has terminated')
+            # If status isn't completed, delete directory
+            if job_info.status != 'completed':
+                shutil.rmtree(job_dir, ignore_errors=False)
+
+            self.logger.info(f'Job process has terminated with error code {p.exitcode}')
             # If not exited, terminate the process
             if p.exitcode is None:
                 p.terminate()

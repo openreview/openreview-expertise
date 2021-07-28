@@ -17,6 +17,8 @@ class SleepQueue(JobQueue):
     """A queue that runs a job that sleeps for specified seconds from the config"""
     def run_job(self, config: dict) -> None:
         # Expect key in config: filename
+        if config['sleep'] < 0:
+            raise Exception('Negative sleep time not allowed')
         time.sleep(config['sleep'])
         fname = config['filename']
         with open(fname, 'w') as f:
@@ -79,17 +81,120 @@ def test_single_job_remove():
 
 def test_get_status():
     '''Queue a long running job, and query its status at several stages'''
-    pass
+    short_queue = SleepQueue()
+    # Sleep for 3 seconds
+    conf = {'sleep': 3, 'filename': 'get_status_job.txt'}
+    id = 'test_get_status'
+    name = 'get_status'
+    next_job = SleepInfo(id, name, conf)
 
+    # Try to get status of non-existant job
+    try:
+        assert short_queue.get_status(id, job_name=name) == 'queued'
+        raise Exception('Detected job when no job has been enqueued')
+    except:
+        print('Correctly threw exception for non-existant job')
+    short_queue.put_job(next_job)
+
+    # Sleep to ensure job is scheduled and get status
+    time.sleep(0.5)
+    assert short_queue.get_status(id, job_name=name) == 'processing'
+
+    # Sleep to finish job and get its status
+    time.sleep(3)
+    assert short_queue.get_status(id, job_name=name) == 'completed'
+
+    # Clean up queue log and directory
+    short_queue.get_result(id, delete_on_get=True, job_name=name)
+    os.remove('queue.log')
+
+def test_get_jobs():
+    '''Several scenarios for get jobs'''
+    short_queue = SleepQueue()
+    # Sleep for 2 seconds
+    conf = {'sleep': 2, 'filename': 'get_status_job.txt'}
+    id = 'test_get_status'
+    name = 'get_status'
+    next_job = SleepInfo(id, name, conf)
+
+    # Try to get a list of jobs for this user
+    current_jobs = short_queue.get_jobs(id)
+    assert len(current_jobs) == 0
+
+    # There should now be a job in processing
+    short_queue.put_job(next_job)
+    current_jobs = short_queue.get_jobs(id)
+    assert len(current_jobs) == 1
+    current_job_data = current_jobs[0]
+    assert current_job_data['job_name'] == name
+    assert current_job_data['job_id'] == next_job.job_id
+    assert current_job_data['status'] == 'processing'
+
+    # Sleep and expect to find a single completed job
+    time.sleep(5)
+    current_jobs = short_queue.get_jobs(id)
+    assert len(current_jobs) == 1
+    current_job_data = current_jobs[0]
+    assert current_job_data['job_name'] == name
+    assert current_job_data['job_id'] == next_job.job_id
+    assert current_job_data['status'] == 'completed'
+
+    # Clean up queue log and directory
+    short_queue.get_result(id, delete_on_get=True, job_name=name)
+    os.remove('queue.log')
+
+def test_timeout_job():
+    '''Add a job with a timeout and check status for timeout'''
+    short_queue = SleepQueue()
+    # Sleep for 5 seconds and set a timeout for shorter than 5 seconds
+    conf = {'sleep': 5, 'filename': 'set_timeout_job.txt'}
+    id = 'test_set_timeout'
+    name = 'set_timeout'
+    next_job = SleepInfo(id, name, conf, timeout=3)
+    short_queue.put_job(next_job)
+
+    # Get jobs and check for timeout
+    time.sleep(5)
+    current_jobs = short_queue.get_jobs(id)
+    assert len(current_jobs) == 1
+    current_job_data = current_jobs[0]
+    assert current_job_data['job_name'] == name
+    assert current_job_data['job_id'] == next_job.job_id
+    assert current_job_data['status'] == 'timeout'
+
+    # Check for cleanup
+    assert os.path.isdir(f'./{next_job.job_id}') == False
+
+    # Clean up queue log and directory
+    os.remove('queue.log')
+
+def test_error_job():
+    '''Add a job that is bound to return an exception'''
+    short_queue = SleepQueue()
+    # Sleep for negative seconds, which will throw an error for the underlying job code
+    conf = {'sleep': -5, 'filename': 'illegal_config_job.txt'}
+    id = 'test_illegal_config'
+    name = 'illegal_config'
+    next_job = SleepInfo(id, name, conf, timeout=3)
+    short_queue.put_job(next_job)
+
+    # Get jobs and check for error
+    time.sleep(1)
+    current_jobs = short_queue.get_jobs(id)
+    assert len(current_jobs) == 1
+    current_job_data = current_jobs[0]
+    assert current_job_data['job_name'] == name
+    assert current_job_data['job_id'] == next_job.job_id
+    assert current_job_data['status'] == 'error'
+
+    # Clean up queue log and directory
+    os.remove('queue.log')
+
+# Two job unit test
 def test_cancel_job():
     '''Add a single job to sleep for a long time, cancel it, and check its status'''
     pass
 
-def test_get_jobs():
-    '''Several scenarious for get jobs'''
-    pass
-
-# Two job unit test
 def test_two_jobs_remove():
     '''
     Enqueue two jobs for a queue that only runs 1 job at a time
