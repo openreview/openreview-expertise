@@ -1,4 +1,4 @@
-import hashlib, json, threading, queue, os, openreview, shutil
+import hashlib, json, threading, queue, os, openreview, shutil, logging
 from typing import *
 from dataclasses import dataclass, field
 from multiprocessing import Process, TimeoutError, ProcessError
@@ -108,6 +108,24 @@ class JobQueue:
         self.submitted: List[JobData] = []
         self.lock_submitted = threading.Lock()
         self.running_semaphore = threading.BoundedSemaphore(value = max_jobs)
+
+        # create logger with 'spam_application'
+        self.logger = logging.getLogger('job_queue')
+        self.logger.setLevel(logging.DEBUG)
+        # create file handler which logs even debug messages
+        self.fh = logging.FileHandler('queue.log')
+        self.fh.setLevel(logging.DEBUG)
+        # create console handler with a higher log level
+        self.ch = logging.StreamHandler()
+        self.ch.setLevel(logging.ERROR)
+        # create formatter and add it to the handlers
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(process)d - %(thread)d - %(levelname)s - %(message)s')
+        self.fh.setFormatter(formatter)
+        self.ch.setFormatter(formatter)
+        # add the handlers to the logger
+        self.logger.addHandler(self.fh)
+        self.logger.addHandler(self.ch)
+        self.logger.info('JobQueue successfully created')
     
     def put_job(self, request: JobData) -> None:
         """
@@ -116,8 +134,10 @@ class JobQueue:
         :param request: A JobData object containing the metadata of the job to be executed
         :type request: JobData
         """
+        self.logger.info('Putting job on queue...')
         self.submitted.append(request)
         self.q.put(request)
+        self.logger.info(f'Job successfully submitted with information: {request}')
     
     def cancel_job(self, user_id: str, job_id: str = '', job_name: str = '') -> None:
         """
@@ -137,10 +157,12 @@ class JobQueue:
         :type job_name: str
         """
         # Get list of job data and ensure a length of 1
+        self.logger.info('Attempting to cancel job...')
         job_list: List[JobData] = self._get_job_data(user_id=user_id)
         assert len(job_list) == 1, 'Error: Multiple job matches'
 
         job_list[0].status = 'stale'
+        self.logger.info(f'Successfully cancelled job from {user_id} with either job ID {job_id} or job name {job_name}')
 
     def get_jobs(self, user_id: str) -> List[dict]:
         """
@@ -151,6 +173,7 @@ class JobQueue:
 
         :rtype: List[dict]
         """
+        self.logger.info(f'Retrieving all jobs...')
         ret_list: List[dict] = []
 
         # Get list of job data
@@ -164,7 +187,7 @@ class JobQueue:
                     'status': job.status
                 }
             )
-        
+        self.logger.info(f'Returning gathered jobs submitted by {user_id}')
         return ret_list
 
     def get_status(self, user_id: str, job_id: str = '', job_name: str = '') -> str:
@@ -184,10 +207,12 @@ class JobQueue:
 
         :rtype: str
         """
+        self.logger.info(f'Fetching status...')
         # Get list of job data and ensure a length of 1
         job_list: List[JobData] = self._get_job_data(user_id=user_id)
         assert len(job_list) == 1, 'Error: Multiple job matches'
 
+        self.logger.info(f'Successfully fetched status from {user_id} with either job ID {job_id} or job name {job_name}')
         return job_list[0].status
 
     def get_result(self, user_id: str, delete_on_get: bool = True, job_id: str = '', job_name: str = '') -> List[dict]:
@@ -220,23 +245,30 @@ class JobQueue:
     # ------------ PRIVATE FUNCTIONS ------------
     def _daemon(self) -> None:
         """Job queue daemon function that continuously attempts to consume from the queue"""
+        self.logger.info('Starting queue daemon - listening for queue insertions')
         while True:
             self.running_semaphore.acquire()    # Blocks when the max jobs has been met
+            self.logger.info('Semaphore acquired - starting thread to execute job')
             next_job_info: JobData = self.q.get()   # Blocks when queue is empty
             threading.Thread(target=self._handle_job, args=(next_job_info,)).start()
+            self.logger.info('Thread spawned')
             
     def _handle_job(self, job_info: JobData) -> None:
         """Creates a process to perform the job, sleeps and kills process on wake up if process is still alive"""
+        self.logger.info('Job handler thread started')
         if job_info.status != 'stale':
             # Create job directory if it doesn't exist
+            self.logger.info('Making directory...')
             job_dir = os.path.join(os.getcwd(), job_info.job_id)
             if not os.path.exists(job_dir):
                 os.mkdir(job_dir)
 
             # Spawn process to perform the job
+            self.logger.info('Spawning job process from handler thread...')
             job_info.status = 'processing'
             p = Process(target=self.run_job, args=(job_info.config,))
             p.start()
+            self.logger.info('Job process spawned')
 
             # Check timeout and execute sleep/join
             try:
@@ -253,6 +285,7 @@ class JobQueue:
             except ProcessError:
                 job_info.status = 'error'
 
+            self.logger.info('Job process has terminated')
             # If not exited, terminate the process
             if p.exitcode is None:
                 p.terminate()
@@ -277,21 +310,25 @@ class JobQueue:
         """
         ret_list: List[JobData] = []
 
+        self.logger.info('Retrieving job ddta...')
         # Validate arguments
         aggregate_by_user: bool = not job_id and not job_name
         
         # Lock the submitted history and search
         self.lock_submitted.acquire()
+        self.logger.info('Lock acquired on submitted datastore')
         for data in self.submitted:
             if data.id == user_id:
                 if (job_id and job_id == data.job_id) or (job_name and job_name == data.job_name) or (aggregate_by_user):
                     ret_list.append(data)
         self.lock_submitted.release()
+        self.logger.info('Lock released on submitted datastore')
 
         # If no item found, raise exception
         if not len(ret_list):
             raise Exception('No matching jobs')
 
+        self.logger.info(f'Job data retrieved from user {user_id} with either job ID {job_id} or job name {job_name}')
         return ret_list
 
 class ExpertiseQueue(JobQueue):
@@ -321,6 +358,7 @@ class ExpertiseQueue(JobQueue):
         """
         ret_list: List[dict] = []
         # Retrieve the single job data object
+        self.logger.info('ExpertiseQueue: Retrieving results from an expertise job')
         matching_jobs: List[ExpertiseInfo] = self._get_job_data(user_id, job_id=job_id, job_name=job_name)
         assert len(matching_jobs) == 1
         current_job = matching_jobs[0]
@@ -329,6 +367,7 @@ class ExpertiseQueue(JobQueue):
         cwd = os.getcwd()
         job_path = os.path.join(cwd, current_job.job_id)
         csv_path = os.path.join(job_path, f'{current_job.job_name}.csv')
+        self.logger.info('ExpertiseQueue: Reading data from generated by the job')
         with open(csv_path, 'r') as csv_file:
             data_reader = reader(csv_file)
             for row in data_reader:
@@ -339,8 +378,12 @@ class ExpertiseQueue(JobQueue):
                 })
         
         # Check flag and clear directory
+        self.logger.info('ExpertiseQueue: Checking delete on get flag')
         if delete_on_get:
             shutil.rmtree(job_path)
+        
+        self.logger.info(f'ExpertiseQueue: Returning results from job user {user_id} with either job ID {job_id} or job name {job_name}')
+        return ret_list
             
     def run_job(self, config: dict) -> None:
         """The actual work, set of functions to be run in a subprocess from the _handle_job thread"""
@@ -377,6 +420,7 @@ class TwoStepQueue(JobQueue):
         :type outer_key: str
         """
         super().__init__(max_jobs=max_jobs)
+        self.logger.info('Initializing as TwoStepQueue...')
         self.inner_queue: JobQueue = inner_queue(max_jobs)
         self.inner_key = inner_key
         self.outer_key = outer_key
@@ -402,11 +446,14 @@ class TwoStepQueue(JobQueue):
         job_list: List[DatasetInfo] = self._get_job_data(user_id=user_id)
         assert len(job_list) == 1, 'Error: Multiple job matches'
         current_job = job_list[0]
-
+        self.logger.info('TwoStepQueue: checking for outer queue completion')
         if current_job.status == 'completed':
+            self.logger.info('TwoStepQueue: canceling inner queue job')
             self.inner_queue.cancel_job(user_id, job_id, job_name)
         else:
+            self.logger.info('TwoStepQueue: canceling outer queue job')
             super().cancel_job(user_id, job_id, job_name)
+        self.logger.info('TwoStepQueue: job cancelled')
 
     def get_jobs(self, user_id: str) -> dict:
         """
@@ -418,15 +465,18 @@ class TwoStepQueue(JobQueue):
         :rtype: dict
         """
         # Query outer queue job statuses
+        self.logger.info('TwoStepQueue: querying outer queue job list')
         outer_list = super().get_jobs(user_id)
         
         # Attempt to gather inner queue jobs
+        self.logger.info('TwoStepQueue: querying inner queue job list')
         try:
             inner_list = self.inner_queue.get_jobs(user_id)
         except:
             inner_list = []
 
         # Gather queue queries
+        self.logger.info(f'TwoStepQueue: gathering and returning job queries for user {user_id}')
         return {
             self.outer_key: outer_list,
             self.inner_key: inner_list
@@ -450,10 +500,13 @@ class TwoStepQueue(JobQueue):
         :rtype: dict
         """
         # Get the outer queue job status and if completed, query the inner queue status
+        self.logger.info('TwoStepQueue: retrieving outer status')
         outer_status = super().get_status(user_id, job_id, job_name)
         inner_status = ''
         if outer_status == 'completed':
+            self.logger.info('TwoStepQueue: outer status completed - retrieving inner status')
             inner_status = self.inner_queue.get_status(user_id, job_id, job_name)
+        self.logger.info('TwoStepQueue: returning status results')
         return {
             self.inner_key: inner_status,
             self.outer_key: outer_status
@@ -484,15 +537,22 @@ class TwoStepQueue(JobQueue):
         :rtype: List[dict]
         """
         # Return an empty list if the outer job is not completed
+        self.logger.info('TwoStepQueue: fetching results - checking outer status')
         outer_status = super().get_status(user_id, job_id, job_name)
         if outer_status == 'completed':
-            return self.inner_queue.get_result(user_id, delete_on_get, job_id, job_name)
+            self.logger.info('TwoStepQueue: outer status completed - checking inner queue')
+            inner_status = self.inner_queue.get_status(user_id, job_id, job_name)
+            if inner_status == 'completed':
+                return self.inner_queue.get_result(user_id, delete_on_get, job_id, job_name)
+        self.logger.info('TwoStepQueue: No results found')
         return []
     
     def _handle_job(self, job_info: JobData) -> None:
         """Handle job - if completed, put a copy of the config on the expertise queue"""
         super()._handle_job(job_info)
+        self.logger.info('TwoStepQueue: checking job status before enqueuing...')
         if job_info.status == 'completed':
+            self.logger.info('TwoStepQueue: outer queue job process complete, enqueuing into inner queue')
             self.expertise_queue.put_job(job_info)
 class DatasetQueue(TwoStepQueue):
     """
@@ -507,10 +567,12 @@ class DatasetQueue(TwoStepQueue):
         :type request: DatasetInfo
         """
         # Update the config with the token and base URL
+        self.logger.info('DatasetQueue: augmenting the request config with credentials...')
         request.config.update({
             'token': request.token,
             'baseurl': request.baseurl
         })
+        self.logger.info('DatasetQueue: enqueuing the request')
         super().put_job(request)
 
     def run_job(self, config: dict) -> None:
