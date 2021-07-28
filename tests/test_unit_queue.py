@@ -42,6 +42,7 @@ class SleepQueue(JobQueue):
             shutil.rmtree(job_path)
         return ret_val
 
+# Single job unit tests
 def test_single_job_remove():
     '''Single job added, run and deleted after getting results'''
     short_queue = SleepQueue()
@@ -75,3 +76,28 @@ def test_single_job_remove():
 
     # Clean up queue log
     os.remove('queue.log')
+
+def test_get_status():
+    '''Queue a long running job, and query its status at several stages'''
+    pass
+
+def test_cancel_job():
+    '''Add a single job to sleep for a long time, cancel it, and check its status'''
+    pass
+
+def test_get_jobs():
+    '''Several scenarious for get jobs'''
+    pass
+
+# Two job unit test
+def test_two_jobs_remove():
+    '''
+    Enqueue two jobs for a queue that only runs 1 job at a time
+    Query their statuses along the way and check for proper outputting
+    '''
+    pass
+
+# Many job unit test
+def test_many_jobs():
+    '''Enqueue many jobs to check ability to handle long workloads'''
+    pass
