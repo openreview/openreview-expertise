@@ -1,4 +1,4 @@
-import sys, time, os
+import time, os, random
 from pytest import *
 from dataclasses import dataclass
 from expertise.service.queue import *
@@ -191,18 +191,143 @@ def test_error_job():
     os.remove('queue.log')
 
 # Two job unit test
-def test_cancel_job():
-    '''Add a single job to sleep for a long time, cancel it, and check its status'''
-    pass
-
 def test_two_jobs_remove():
     '''
     Enqueue two jobs for a queue that only runs 1 job at a time
     Query their statuses along the way and check for proper outputting
     '''
-    pass
+    short_queue = SleepQueue()
+    # Create two jobs
+    conf_one = {'sleep': 3, 'filename': 'job_one.txt'}
+    id_one = 'test_job_one'
+    name_one = 'job_one'
+    job_one = SleepInfo(id_one, name_one, conf_one)
+    conf_two = {'sleep': 2, 'filename': 'job_two.txt'}
+    id_two = 'test_job_two'
+    name_two = 'job_two'
+    job_two = SleepInfo(id_two, name_two, conf_two)
+
+    # Put jobs on queue and check initial statuses
+    short_queue.put_job(job_one)
+    short_queue.put_job(job_two)
+    time.sleep(0.5)
+    assert short_queue.get_status(id_one, job_name=name_one) == 'processing'
+    assert short_queue.get_status(id_two, job_name=name_two) == 'queued'
+
+    # Sleep for total job time and check created directories
+    time.sleep(6)
+    assert os.path.isdir(f'./{job_one.job_id}') == True
+    assert os.path.isdir(f'./{job_two.job_id}') == True
+    assert short_queue.get_status(id_one, job_name=name_one) == 'completed'
+    assert short_queue.get_status(id_two, job_name=name_two) == 'completed'
+
+    # Clean up queue log and directory
+    short_queue.get_result(id_one, delete_on_get=True, job_name=name_one)
+    short_queue.get_result(id_two, delete_on_get=True, job_name=name_two)
+    os.remove('queue.log')
+
+def test_cancel_job():
+    '''Add a single job to sleep for a long time, cancel it, and check its status'''
+    short_queue = SleepQueue()
+    # Create two jobs
+    conf_one = {'sleep': 3, 'filename': 'job_one.txt'}
+    id_one = 'test_job_one'
+    name_one = 'job_one'
+    job_one = SleepInfo(id_one, name_one, conf_one)
+    conf_two = {'sleep': 2, 'filename': 'job_two.txt'}
+    id_two = 'test_job_two'
+    name_two = 'job_two'
+    job_two = SleepInfo(id_two, name_two, conf_two)
+
+    # Put jobs on queue and check initial statuses
+    short_queue.put_job(job_one)
+    short_queue.put_job(job_two)
+    time.sleep(0.5)
+    assert short_queue.get_status(id_one, job_name=name_one) == 'processing'
+    assert short_queue.get_status(id_two, job_name=name_two) == 'queued'
+
+    # Send the cancel signal and confirm the status is changed to stale
+    short_queue.cancel_job(id_two, job_name=name_two)
+    assert short_queue.get_status(id_two, job_name=name_two) == 'stale'
+
+    # Sleep for total job time and check created directories
+    time.sleep(6)
+    assert os.path.isdir(f'./{job_one.job_id}') == True
+    assert os.path.isdir(f'./{job_two.job_id}') == False
+    assert short_queue.get_status(id_one, job_name=name_one) == 'completed'
+    assert short_queue.get_status(id_two, job_name=name_two) == 'stale'
+
+    # Clean up queue log and directory
+    short_queue.get_result(id_one, delete_on_get=True, job_name=name_one)
+    os.remove('queue.log')
 
 # Many job unit test
-def test_many_jobs():
+def test_many_jobs_singlethread():
     '''Enqueue many jobs to check ability to handle long workloads'''
-    pass
+    NUM_JOBS = 30
+    many_queue = SleepQueue()
+    configs: List[dict] = []
+    ids: List[str] = []
+    names: List[str] = []
+    jobs: List[SleepInfo] = []
+    for job_num in range(NUM_JOBS):
+        configs.append({
+            'sleep': random.random(),
+            'filename': f'job_{job_num}.txt'
+        })
+        ids.append(f'test_job_{job_num}')
+        names.append(f'job_{job_num}')
+        jobs.append(SleepInfo(
+            ids[job_num],
+            names[job_num],
+            configs[job_num]
+        ))
+
+    for job in jobs:
+        many_queue.put_job(job)
+    
+    time.sleep(NUM_JOBS)
+    for job in jobs:
+        job_filepath = job.config['filename']
+        assert many_queue.get_status(job.id, job_name = job.job_name) == 'completed'
+        assert os.path.isdir(f'./{job.job_id}') == True
+        assert os.path.isfile(f'{job_filepath}') == True
+        assert many_queue.get_result(job.id, delete_on_get=True, job_name=job.job_name) == 'job done!'
+
+    # Clean up queue log and directory
+    os.remove('queue.log')
+
+def test_many_jobs_multithread():
+    '''Enqueue many jobs to check ability to handle long workloads with multithreading'''
+    NUM_JOBS = 30
+    many_queue = SleepQueue(max_jobs=5)
+    configs: List[dict] = []
+    ids: List[str] = []
+    names: List[str] = []
+    jobs: List[SleepInfo] = []
+    for job_num in range(NUM_JOBS):
+        configs.append({
+            'sleep': random.random(),
+            'filename': f'job_{job_num}.txt'
+        })
+        ids.append(f'test_job_{job_num}')
+        names.append(f'job_{job_num}')
+        jobs.append(SleepInfo(
+            ids[job_num],
+            names[job_num],
+            configs[job_num]
+        ))
+
+    for job in jobs:
+        many_queue.put_job(job)
+    
+    time.sleep(NUM_JOBS)
+    for job in jobs:
+        job_filepath = job.config['filename']
+        assert many_queue.get_status(job.id, job_name = job.job_name) == 'completed'
+        assert os.path.isdir(f'./{job.job_id}') == True
+        assert os.path.isfile(f'{job_filepath}') == True
+        assert many_queue.get_result(job.id, delete_on_get=True, job_name=job.job_name) == 'job done!'
+
+    # Clean up queue log and directory
+    os.remove('queue.log')
