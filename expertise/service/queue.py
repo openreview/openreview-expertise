@@ -420,7 +420,7 @@ class TwoStepQueue(JobQueue):
     Jobs put into this queue perform the outer queue's task and if the task successfully completes,
     put the same job information into the inner queue
     """
-    def __init__(self, max_jobs: int = 1, inner_queue = None, inner_key: str = 'inner', outer_key: str = 'outer') -> None:
+    def __init__(self, max_jobs: int = 1, inner_queue = None, inner_queue_max_jobs: int = 1, inner_key: str = 'inner', outer_key: str = 'outer') -> None:
         """
         Instantiates a TwoStepQueue object using a max_jobs parameter which determines the amount of concurrent jobs that can be run which depends the type of computation
         and system resources. If no max_jobs is provided, default to 1.
@@ -433,6 +433,9 @@ class TwoStepQueue(JobQueue):
         :param inner_queue: A subclass of JobQueue that implements get_results and run_job
         :type inner_queue: class
 
+        :param inner_queue_max_jobs: Integer amount of concurrent jobs for the inner queue
+        :type inner_queue_max_jobs: int
+
         :param inner_key: The key to use to access the inner queue's information
         :type inner_key: str
 
@@ -441,9 +444,12 @@ class TwoStepQueue(JobQueue):
         """
         super().__init__(max_jobs=max_jobs)
         self.logger.info('Initializing as TwoStepQueue...')
-        self.inner_queue: JobQueue = inner_queue(max_jobs)
         self.inner_key = inner_key
         self.outer_key = outer_key
+        
+        # Kickstart queue daemon thread
+        self.inner_queue: JobQueue = inner_queue(inner_queue_max_jobs)
+        threading.Thread(target=self.inner_queue._daemon(), daemon=True).start()
 
     def cancel_job(self, user_id: str, job_id: str = '', job_name: str = '') -> None:
         """
