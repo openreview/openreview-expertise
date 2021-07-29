@@ -21,7 +21,7 @@ class SleepQueue(JobQueue):
             raise Exception('Negative sleep time not allowed')
         time.sleep(config['sleep'])
         fname = config['filename']
-        with open(fname, 'w') as f:
+        with open(fname, 'a+') as f:
             f.write('job done!')
 
     def get_result(self, user_id: str, delete_on_get: bool = False, job_id: str = '', job_name: str = '') -> List[dict]:
@@ -43,6 +43,17 @@ class SleepQueue(JobQueue):
         if delete_on_get:
             shutil.rmtree(job_path)
         return ret_val
+
+class TwoStepSleepQueue(TwoStepQueue):
+    """A two-step queue that sleeps the job for half the duration as specified in the config"""
+    def run_job(self, config: dict) -> None:
+        # Expect key in config: filename
+        if config['sleep'] < 0:
+            raise Exception('Negative sleep time not allowed')
+        time.sleep(0.5 * config['sleep'])
+        fname = config['filename']
+        with open(fname, 'w') as f:
+            f.write('job done 1!')
 
 # Single job unit tests
 def test_single_job_remove():
@@ -331,3 +342,163 @@ def test_many_jobs_multithread():
 
     # Clean up queue log and directory
     os.remove('queue.log')
+
+# Two Step Queue tests
+def test_simple_twostep():
+    '''Test one job going through both steps of a queue'''
+    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=SleepQueue)
+    # Sleep for 2.25 seconds then get the result
+    conf = {'sleep': 1.5, 'filename': 'simple_two_step_remove_job.txt'}
+    id = 'test_simple_two_step_remove'
+    name = 'simple_two_step_remove'
+    next_job = SleepInfo(id, name, conf)
+    short_queue.put_job(next_job)
+    time.sleep(4)
+
+    # Check directory made and output file made
+    job_filename = next_job.config['filename']
+    assert os.path.isdir(f'./{next_job.job_id}') == True
+    assert os.path.isfile(f'{job_filename}') == True
+    assert short_queue.get_result(id, job_name=name) == 'job done 1!job done!'
+
+    # Check directory cleanup
+    job_filename = next_job.config['filename']
+    result_and_delete: str = short_queue.get_result(id, delete_on_get=True, job_name=name)
+    assert os.path.isdir(f'./{next_job.job_id}') == False
+    assert os.path.isfile(f'{job_filename}') == False
+    assert result_and_delete == 'job done 1!job done!'
+
+    # Now check for exception on retrieving results
+    try:
+        short_queue.get_result(id, delete_on_get=True, job_name=name)
+        raise Exception('Retrieved results when no results should exist')
+    except:
+        print('Correctly raised exception')
+
+    # Clean up queue log
+    os.remove('queue.log')
+
+def test_status_twostep():
+    '''Test one job and query statuses along the way'''
+    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=SleepQueue)
+    # Sleep for 2.25 seconds
+    conf = {'sleep': 1.5, 'filename': 'status_job.txt'}
+    id = 'test_status'
+    name = 'status'
+    next_job = SleepInfo(id, name, conf)
+    short_queue.put_job(next_job)
+
+    # Check running statuses
+    statuses = short_queue.get_status(id, job_name = name)
+    assert statuses['inner'] == 'blocked'
+    assert statuses['outer'] == 'processing'
+
+    # Check statuses after completing
+    time.sleep(4)
+    statuses = short_queue.get_status(id, job_name = name)
+    assert statuses['inner'] == 'completed'
+    assert statuses['outer'] == 'completed'
+    assert short_queue.get_result(id, delete_on_get=True, job_name=name) == 'job done 1!job done!'
+
+    # Clean up queue log
+    os.remove('queue.log')
+
+def test_query_status_inner_twostep():
+    '''Test one job and query statuses when outer job has finished by inner job is processing'''
+    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=SleepQueue)
+    # Sleep for 6 seconds
+    conf = {'sleep': 4, 'filename': 'status_job.txt'}
+    id = 'test_status'
+    name = 'status'
+    next_job = SleepInfo(id, name, conf)
+    short_queue.put_job(next_job)
+
+    # When outer job finishes, query statuses
+    time.sleep(5)
+    statuses = short_queue.get_status(id, job_name = name)
+    assert statuses['inner'] == 'processing'
+    assert statuses['outer'] == 'completed'
+    assert short_queue.get_result(id, delete_on_get=True, job_name=name) == []
+
+    # Clean up queue log
+    os.remove('queue.log')
+
+def test_query_jobs_inner_twostep():
+    '''Test one job and query jobs along the way'''
+    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=SleepQueue)
+    # Sleep for 6 seconds
+    conf = {'sleep': 4, 'filename': 'status_job.txt'}
+    id = 'test_status'
+    name = 'status'
+    next_job = SleepInfo(id, name, conf)
+    short_queue.put_job(next_job)
+
+    # Getting jobs right away should only yield the outer job
+    jobs = short_queue.get_jobs(id)
+    assert len(jobs['inner']) == 0
+    assert len(jobs['outer']) == 1
+    assert jobs['outer'][0]['status'] == 'processing'
+
+    # When outer job finishes, query statuses
+    time.sleep(5)
+    jobs = short_queue.get_jobs(id)
+    assert len(jobs['inner']) == 1
+    assert len(jobs['outer']) == 1
+    assert jobs['outer'][0]['status'] == 'completed'
+    assert jobs['inner'][0]['status'] == 'processing'
+    assert short_queue.get_result(id, delete_on_get=True, job_name=name) == []
+
+    # Clean up after both jobs have completed
+    time.sleep(2)
+    jobs = short_queue.get_jobs(id)
+    assert len(jobs['inner']) == 1
+    assert len(jobs['outer']) == 1
+    assert jobs['outer'][0]['status'] == 'completed'
+    assert jobs['inner'][0]['status'] == 'completed'
+    assert short_queue.get_result(id, delete_on_get=True, job_name=name) == 'job done 1!job done!'
+
+    # Clean up queue log
+    os.remove('queue.log')
+
+def test_cancel_twostep():
+    '''Enqueue three jobs and cancel both at various stages'''
+    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=SleepQueue)
+    # Job 1 enters inner queue as fast as job 2 so job 2's inner job is queued
+    # Job 3 exists to cancel at the outer stage
+    conf_one = {'sleep': 3, 'filename': 'job_one.txt'}
+    id_one = 'test_job_one'
+    name_one = 'job_one'
+    job_one = SleepInfo(id_one, name_one, conf_one)
+    conf_two = {'sleep': 3, 'filename': 'job_two.txt'}
+    id_two = 'test_job_two'
+    name_two = 'job_two'
+    job_two = SleepInfo(id_two, name_two, conf_two)
+    conf_three = {'sleep': 4, 'filename': 'job_three.txt'}
+    id_three = 'test_job_three'
+    name_three = 'job_three'
+    job_three = SleepInfo(id_three, name_three, conf_three)
+
+    short_queue.put_job(job_one)
+    short_queue.put_job(job_two)
+    short_queue.put_job(job_three)
+
+    # Immediately cancel job 3 and wait until the other job's outer jobs are finshed
+    short_queue.cancel_job(id_three, job_name = name_three)
+    time.sleep(3)
+    short_queue.cancel_job(id_two, job_name = name_two)
+    time.sleep(10)
+
+    # Now check all jobs
+    statuses = short_queue.get_status(id_one, job_name = name_one)
+    assert statuses['inner'] == 'completed'
+    assert statuses['outer'] == 'completed'
+    statuses = short_queue.get_status(id_two, job_name = name_two)
+    assert statuses['inner'] == 'stale'
+    assert statuses['outer'] == 'completed'
+    statuses = short_queue.get_status(id_three, job_name = name_three)
+    assert statuses['inner'] == 'blocked'
+    assert statuses['outer'] == 'stale'
+
+    # Clean up queue log and clean up job one
+    os.remove('queue.log')
+    short_queue.get_result(id_one, delete_on_get=True, job_name=name_one)

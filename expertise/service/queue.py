@@ -2,8 +2,10 @@ import hashlib, json, threading, queue, os, openreview, shutil, logging
 from typing import *
 from dataclasses import dataclass, field
 from multiprocessing import Process, TimeoutError, ProcessError
-from ..execute_expertise import *
 from csv import reader
+from copy import deepcopy
+
+from ..execute_expertise import *
 @dataclass
 class JobData:
     """Keeps track of job information and status"""
@@ -165,6 +167,15 @@ class JobQueue:
         job_list: List[JobData] = self._get_job_data(user_id=user_id)
         assert len(job_list) == 1, 'Error: Multiple job matches'
 
+        # Strictly, only queued jobs can be canceled
+        if job_list[0].status == 'processing':
+            raise Exception('Cannot cancel a job that is not in queue')
+
+        # If canceled and job directory exists, clear the directory
+        job_dir = os.path.join(os.getcwd(), job_list[0].job_id)
+        if os.path.isdir(job_dir):
+            shutil.rmtree(job_dir)
+
         job_list[0].status = 'stale'
         self.logger.info(f'Successfully cancelled job from {user_id} with either job ID [{job_id}] or job name [{job_name}]')
 
@@ -268,6 +279,7 @@ class JobQueue:
         self.logger.info('Job handler thread started')
         if job_info.status != 'stale':
             # Create job directory if it doesn't exist
+            job_info.status = 'processing'
             self.logger.info('Making directory...')
             job_dir = os.path.join(os.getcwd(), job_info.job_id)
             if not os.path.exists(job_dir):
@@ -275,7 +287,6 @@ class JobQueue:
 
             # Spawn process to perform the job
             self.logger.info('Spawning job process from handler thread...')
-            job_info.status = 'processing'
             p = Process(target=self.run_job, args=(job_info.config,))
             p.start()
             self.logger.info('Job process spawned')
@@ -419,6 +430,9 @@ class TwoStepQueue(JobQueue):
 
     Jobs put into this queue perform the outer queue's task and if the task successfully completes,
     put the same job information into the inner queue
+
+    Defines a new status code:
+        "blocked" -- the inner queue is waiting for the outer queue to finish before queuing
     """
     def __init__(self, max_jobs: int = 1, inner_queue = None, inner_queue_max_jobs: int = 1, inner_key: str = 'inner', outer_key: str = 'outer') -> None:
         """
@@ -442,6 +456,7 @@ class TwoStepQueue(JobQueue):
         :param outer_key: The key to use to access the outer queue's information
         :type outer_key: str
         """
+        # TODO: Allow inner_queue to be callable or an instanced object to enable multi-step chaining
         super().__init__(max_jobs=max_jobs)
         self.logger.info('Initializing as TwoStepQueue...')
         self.inner_key = inner_key
@@ -449,7 +464,6 @@ class TwoStepQueue(JobQueue):
         
         # Kickstart queue daemon thread
         self.inner_queue: JobQueue = inner_queue(inner_queue_max_jobs)
-        threading.Thread(target=self.inner_queue._daemon(), daemon=True).start()
 
     def cancel_job(self, user_id: str, job_id: str = '', job_name: str = '') -> None:
         """
@@ -532,14 +546,16 @@ class TwoStepQueue(JobQueue):
         if outer_status == 'completed':
             self.logger.info('TwoStepQueue: outer status completed - retrieving inner status')
             inner_status = self.inner_queue.get_status(user_id, job_id, job_name)
+        else:
+            inner_status = 'blocked'
+        
         self.logger.info('TwoStepQueue: returning status results')
         return {
             self.inner_key: inner_status,
             self.outer_key: outer_status
         }
 
-
-    def get_result(self, user_id: str, delete_on_get: bool = True, job_id: str = '', job_name: str = '') -> List[dict]:
+    def get_result(self, user_id: str, delete_on_get: bool = False, job_id: str = '', job_name: str = '') -> List[dict]:
         """
         Return the result of the job submitted by user_id with either the given job_id or job_name
         If neither the dataset nor the expertise step is not completed yet, return an empty list, otherwise query the expertise queue
@@ -578,8 +594,11 @@ class TwoStepQueue(JobQueue):
         super()._handle_job(job_info)
         self.logger.info('TwoStepQueue: checking job status before enqueuing...')
         if job_info.status == 'completed':
+            # Copy and decouple statuses
             self.logger.info('TwoStepQueue: outer queue job process complete, enqueuing into inner queue')
-            self.expertise_queue.put_job(job_info)
+            inner_job_info = deepcopy(job_info)
+            inner_job_info.status = 'queued'
+            self.inner_queue.put_job(inner_job_info)
 
 class DatasetQueue(TwoStepQueue):
     """
