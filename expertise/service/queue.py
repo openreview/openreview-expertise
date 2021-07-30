@@ -33,6 +33,7 @@ class JobData:
 
     def __post_init__(self) -> None:
         # Generate job id
+        # TODO: Move job id definition to queue object
         config_string = json.dumps(self.config)
         hash_string = self.id + self.job_name + config_string
         self.job_id = hashlib.md5(hash_string.encode('utf-8')).hexdigest()
@@ -57,11 +58,15 @@ class JobData:
 class ExpertiseInfo(JobData):
     """
     Keeps track of the create_expertise queue information and status. Dataset directory will be overwritten by the server.
+
+    CSV fields that would expect a file now expect a list of CSV strings
     """
     def __post_init__(self) -> None:
         super().__post_init__()
         # Overwrite dataset -> directory in config
         # TODO: Overwrite all other possible directory variables with the job id
+        # TODO: Parse CSV data
+        dir_keys = []
         if 'dataset' not in self.config.keys():
             self.config['dataset'] = {}
         self.config['dataset']['directory'] = f"./{self.job_id}"
@@ -173,6 +178,7 @@ class JobQueue:
             raise Exception('Cannot cancel a job that is not in queue')
 
         # If canceled and job directory exists, clear the directory
+        # TODO: Remove from submitted datastore
         job_dir = os.path.join(os.getcwd(), job_list[0].job_id)
         if os.path.isdir(job_dir):
             shutil.rmtree(job_dir)
@@ -324,9 +330,7 @@ class JobQueue:
 
     def _get_job_data(self, user_id: str, job_id: str = '', job_name: str = '') -> List[JobData]:
         """
-        Fetches a list of JobData objects that have been submitted by user_id with either the given job_id or job_name
-        If no job_id is provided, uses job_name
-        if no job_name is provided, uses job_id
+        Fetches a list of JobData objects that have been submitted by user_id with the given job_id
         If neither is provided, return all jobs associated with the user_id
 
         :param user_id: A string containing the user id that has submitted jobs
@@ -351,7 +355,7 @@ class JobQueue:
         self.logger.info('Lock acquired on submitted datastore')
         for data in self.submitted:
             if data.id == user_id:
-                if (job_id and job_id == data.job_id) or (job_name and job_name == data.job_name) or (aggregate_by_user):
+                if (job_id and job_id == data.job_id) or (aggregate_by_user):
                     ret_list.append(data)
         self.lock_submitted.release()
         self.logger.info('Lock released on submitted datastore')
