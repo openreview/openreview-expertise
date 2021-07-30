@@ -34,7 +34,8 @@ class JobData:
     def __post_init__(self) -> None:
         # Generate job id
         config_string = json.dumps(self.config)
-        self.job_id = hashlib.md5(config_string.encode('utf-8')).hexdigest()
+        hash_string = self.id + self.job_name + config_string
+        self.job_id = hashlib.md5(hash_string.encode('utf-8')).hexdigest()
 
     def to_json(self) -> dict:
         """
