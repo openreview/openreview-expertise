@@ -1,3 +1,4 @@
+import csv
 import hashlib, json, threading, queue, os, openreview, shutil, logging
 from typing import *
 from dataclasses import dataclass, field
@@ -18,10 +19,6 @@ class JobData:
     config: dict = field(
         metadata={"help": "The submitted configuration file as a dictionary"},
     )
-    job_id: str = field(
-        default='',
-        metadata={"help": "The unique id for this job"},
-    )
     status: str = field(
         default='queued',
         metadata={"help": "The current status of this job"},
@@ -34,9 +31,7 @@ class JobData:
     def __post_init__(self) -> None:
         # Generate job id
         # TODO: Move job id definition to queue object
-        config_string = json.dumps(self.config)
-        hash_string = self.id + self.job_name + config_string
-        self.job_id = hashlib.md5(hash_string.encode('utf-8')).hexdigest()
+        self.job_id: int = -1
 
     def to_json(self) -> dict:
         """
@@ -53,26 +48,9 @@ class JobData:
             'status': self.status,
             'timeout': self.timeout
         }
-
+           
 @dataclass
-class ExpertiseInfo(JobData):
-    """
-    Keeps track of the create_expertise queue information and status. Dataset directory will be overwritten by the server.
-
-    CSV fields that would expect a file now expect a list of CSV strings
-    """
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        # Overwrite dataset -> directory in config
-        # TODO: Overwrite all other possible directory variables with the job id
-        # TODO: Parse CSV data
-        dir_keys = []
-        if 'dataset' not in self.config.keys():
-            self.config['dataset'] = {}
-        self.config['dataset']['directory'] = f"./{self.job_id}"
-
-@dataclass
-class DatasetInfo(ExpertiseInfo):
+class DatasetInfo(JobData):
     """
     Keeps track of the create_dataset queue information and status. Dataset directory will be overwritten by the server.
     Same information as expertise info but requires an authenticated token
@@ -90,7 +68,7 @@ class JobQueue:
     """
     Keeps track of queue metadata in-memory and is responsible for queuing jobs when given a config
 
-    Create a subclass of a JobQueue and implement "get_result" and "run_job" with user-defined logic
+    Create a subclass of a JobQueue and implement "get_result", "run_job", and "_prepare_job" with user-defined logic
 
     Status semantics:
         "queued" -- The job is currently awaiting processing by a worker
@@ -116,6 +94,8 @@ class JobQueue:
         self.max_jobs: int = max_jobs
         self.submitted: List[JobData] = []
         self.lock_submitted = threading.Lock()
+        self.global_job_id = 1
+        self.lock_job_id = threading.Lock()
         self.running_semaphore = threading.BoundedSemaphore(value = max_jobs)
 
         # create logger with 'job_queue'
@@ -147,6 +127,16 @@ class JobQueue:
         :type request: JobData
         """
         self.logger.info('Putting job on queue...')
+
+        # Update job_id field
+        self.lock_job_id.acquire()
+        request.job_id = str(self.global_job_id)
+        self.global_job_id += 1
+        self.lock_job_id.release()
+
+        # Prepare the job with the new job_id if necessary
+        self._prepare_job(request)
+
         self.submitted.append(request)
         self.q.put(request)
         self.logger.info(f'Job successfully submitted with information: {request}')
@@ -288,7 +278,7 @@ class JobQueue:
             # Create job directory if it doesn't exist
             job_info.status = 'processing'
             self.logger.info('Making directory...')
-            job_dir = os.path.join(os.getcwd(), job_info.job_id)
+            job_dir = os.path.join(os.getcwd(), str(job_info.job_id))
             if not os.path.exists(job_dir):
                 os.mkdir(job_dir)
 
@@ -327,6 +317,31 @@ class JobQueue:
             # If not exited, terminate the process
             if p.exitcode is None:
                 p.terminate()
+    
+    def _prepare_job(self, job_info: JobData) -> None:
+        """
+        Given a job object, modify its config to work with the server after its job ID is assigned
+
+        :param job_info: A JobData object whose fields will be modified with respect to the job ID
+        :type job_info: JobData
+        """
+        return
+
+    def _augment_path(job_info: JobData, base_path: str) -> str:
+        """
+        Given a path, choose how to nest the path within the job specific directory
+
+        :param bath_path: The path passed into the config
+        :type base_path: str
+
+        :rtype: str
+        """
+        if base_path.startswith('./'):
+            return str(job_info.job_id) + base_path[1:]
+        elif base_path.startswith('/'):
+            return './' + str(job_info.job_id) + base_path
+        elif not base_path.startswith('/'):
+            return './' + str(job_info.job_id) + '/' + base_path
 
     def _get_job_data(self, user_id: str, job_id: str = '', job_name: str = '') -> List[JobData]:
         """
@@ -355,7 +370,7 @@ class JobQueue:
         self.logger.info('Lock acquired on submitted datastore')
         for data in self.submitted:
             if data.id == user_id:
-                if (job_id and job_id == data.job_id) or (aggregate_by_user):
+                if (job_id and job_id == data.job_id) or (job_name and job_name == data.job_name) or (aggregate_by_user):
                     ret_list.append(data)
         self.lock_submitted.release()
         self.logger.info('Lock released on submitted datastore')
@@ -395,8 +410,8 @@ class ExpertiseQueue(JobQueue):
         ret_list: List[dict] = []
         # Retrieve the single job data object
         self.logger.info('ExpertiseQueue: Retrieving results from an expertise job')
-        matching_jobs: List[ExpertiseInfo] = self._get_job_data(user_id, job_id=job_id, job_name=job_name)
-        assert len(matching_jobs) == 1
+        matching_jobs: List[JobData] = self._get_job_data(user_id, job_id=job_id, job_name=job_name)
+        assert len(matching_jobs) == 1, 'Too many matching jobs, search by job ID'
         current_job = matching_jobs[0]
 
         # Build the return list by reading the csv under the job_name.csv file
@@ -609,6 +624,45 @@ class DatasetQueue(TwoStepQueue):
     """
     Keeps track of queue metadata and is responsible for queuing jobs when given a config for getting the data for the expertise model
     """
+    # TODO: Adjust the following directories to match the server's filesystem
+    #     : specter_dir, mfr_feature_vocab_file, mfr_checkpoint_dir
+    def _prepare_job(self, job_info: JobData) -> None:
+        """
+        Given a job object, modify its config to work with the server after its job ID is assigned
+
+        :param job_info: A JobData object whose fields will be modified with respect to the job ID
+        :type job_info: JobData
+        """
+        # Overwrite dataset -> directory in config
+        filepath_keys = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+        file_keys = ['csv_expertise', 'csv_submissions']
+        # First handle dataset -> directory
+        if 'dataset' not in job_info.config.keys():
+            job_info.config['dataset'] = {}
+            job_info.config['dataset']['directory'] = f"./{job_info.job_id}"
+        else:
+            if 'directory' not in job_info.config['dataset'].keys():
+                job_info.config['dataset']['directory'] = f"./{job_info.job_id}"
+            else:
+                job_info.config['dataset']['directory'] = job_info.augment_path(job_info.config['dataset']['directory'])
+
+        # Next handle other file paths
+        for key in filepath_keys:
+            job_info.config[key] = job_info.augment_path(job_info.config[key])
+        
+        # Now, write data stored in the file keys to disk
+        for key in file_keys:
+            output_file = key + '.csv'
+            write_to_dir = os.path.join(job_info.config['dataset']['directory'], output_file)
+
+            # Add newline characters, write to file and set the field in the config to the directory of the file
+            for idx, data in enumerate(job_info.config[key]):
+                job_info.config[key][idx] = data.strip() + '\n'
+            with open(write_to_dir, 'w') as csv_out:
+                csv_out.writelines(job_info.config[key])
+            
+            job_info.config[key] = write_to_dir
+
     def put_job(self, request: DatasetInfo) -> None:
         """
         Adds a DatasetInfo object to the queue to be processed asynchronously

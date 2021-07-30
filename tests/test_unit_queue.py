@@ -9,12 +9,12 @@ class SleepInfo(JobData):
     Keeps track of the sleep queue information and status
     Overwrites filename for server handling
     """
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        self.config['filename'] = f"./{self.job_id}/{self.config['filename']}"
 
 class SleepQueue(JobQueue):
     """A queue that runs a job that sleeps for specified seconds from the config"""
+    def _prepare_job(self, job_info: JobData) -> None:
+        job_info.config['filename'] = f"./{job_info.job_id}/{job_info.config['filename']}"
+    
     def run_job(self, config: dict) -> None:
         # Expect key in config: filename
         if config['sleep'] < 0:
@@ -44,8 +44,14 @@ class SleepQueue(JobQueue):
             shutil.rmtree(job_path)
         return ret_val
 
+class InnerSleepQueue(SleepQueue):
+    def _prepare_job(self, job_info: JobData) -> None:
+        return
+
 class TwoStepSleepQueue(TwoStepQueue):
     """A two-step queue that sleeps the job for half the duration as specified in the config"""
+    def _prepare_job(self, job_info: JobData) -> None:
+        job_info.config['filename'] = f"./{job_info.job_id}/{job_info.config['filename']}"
     def run_job(self, config: dict) -> None:
         # Expect key in config: filename
         if config['sleep'] < 0:
@@ -346,7 +352,7 @@ def test_many_jobs_multithread():
 # Two Step Queue tests
 def test_simple_twostep():
     '''Test one job going through both steps of a queue'''
-    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=SleepQueue)
+    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Sleep for 2.25 seconds then get the result
     conf = {'sleep': 1.5, 'filename': 'simple_two_step_remove_job.txt'}
     id = 'test_simple_two_step_remove'
@@ -380,7 +386,7 @@ def test_simple_twostep():
 
 def test_status_twostep():
     '''Test one job and query statuses along the way'''
-    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=SleepQueue)
+    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Sleep for 2.25 seconds
     conf = {'sleep': 1.5, 'filename': 'status_job.txt'}
     id = 'test_status'
@@ -405,7 +411,7 @@ def test_status_twostep():
 
 def test_query_status_inner_twostep():
     '''Test one job and query statuses when outer job has finished by inner job is processing'''
-    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=SleepQueue)
+    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Sleep for 6 seconds
     conf = {'sleep': 4, 'filename': 'status_job.txt'}
     id = 'test_status'
@@ -425,7 +431,7 @@ def test_query_status_inner_twostep():
 
 def test_query_jobs_inner_twostep():
     '''Test one job and query jobs along the way'''
-    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=SleepQueue)
+    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Sleep for 6 seconds
     conf = {'sleep': 4, 'filename': 'status_job.txt'}
     id = 'test_status'
@@ -462,7 +468,7 @@ def test_query_jobs_inner_twostep():
 
 def test_cancel_twostep():
     '''Enqueue three jobs and cancel both at various stages'''
-    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=SleepQueue)
+    short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Job 1 enters inner queue as fast as job 2 so job 2's inner job is queued
     # Job 3 exists to cancel at the outer stage
     conf_one = {'sleep': 3, 'filename': 'job_one.txt'}
