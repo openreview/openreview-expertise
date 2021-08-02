@@ -621,7 +621,7 @@ class TwoStepQueue(JobQueue):
             inner_job_info.status = 'queued'
             self.inner_queue.put_job(inner_job_info)
 
-class DatasetQueue(TwoStepQueue):
+class UserPaperQueue(TwoStepQueue):
     """
     Keeps track of queue metadata and is responsible for queuing jobs when given a config for getting the data for the expertise model
     """
