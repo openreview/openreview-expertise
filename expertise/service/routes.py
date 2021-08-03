@@ -126,8 +126,16 @@ def results():
         result['error'] = 'No Authorization token in headers'
         return flask.jsonify(result), 400
     try:
-        job_id = flask.request.json['job_id']
-        delete_on_get = flask.request.json['delete_on_get']
+        job_id = flask.request.args['job_id']
+        delete_on_get = flask.request.args.get('delete_on_get', False)
+
+        # Check type of delete_on_get
+        if isinstance(delete_on_get, str):
+            if delete_on_get.lower() == 'true':
+                delete_on_get = True
+            else:
+                delete_on_get = False
+            
         openreview_client = openreview.Client(
             token=token,
             baseurl=flask.current_app.config['OPENREVIEW_BASEURL']

@@ -225,7 +225,7 @@ class JobQueue:
         """
         self.logger.info(f'Fetching status...')
         # Get list of job data and ensure a length of 1
-        job_list: List[JobData] = self._get_job_data(user_id=user_id)
+        job_list: List[JobData] = self._get_job_data(user_id=user_id, job_id=job_id, job_name=job_name)
         assert len(job_list) == 1, 'Error: Multiple job matches'
 
         self.logger.info(f'Successfully fetched status from {user_id} with either job ID [{job_id}] or job name [{job_name}]')
@@ -430,8 +430,9 @@ class ExpertiseQueue(JobQueue):
                 })
         
         # Check flag and clear directory
-        self.logger.info('ExpertiseQueue: Checking delete on get flag')
-        if delete_on_get:
+        self.logger.info(f'ExpertiseQueue: Checking delete on get flag - {delete_on_get}')
+        if delete_on_get == True:
+            self.logger.info('ExpertiseQueue: Deleting directory')
             shutil.rmtree(job_path)
         
         self.logger.info(f'ExpertiseQueue: Returning results from job user {user_id} with either job ID [{job_id}] or job name [{job_name}]')
@@ -606,7 +607,7 @@ class TwoStepQueue(JobQueue):
             self.logger.info('TwoStepQueue: outer status completed - checking inner queue')
             inner_status = self.inner_queue.get_status(user_id, job_id, job_name)
             if inner_status == 'completed':
-                return self.inner_queue.get_result(user_id, delete_on_get, job_id, job_name)
+                return self.inner_queue.get_result(user_id, delete_on_get=delete_on_get, job_id=job_id, job_name=job_name)
         self.logger.info('TwoStepQueue: No results found')
         return []
     
