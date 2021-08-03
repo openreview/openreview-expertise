@@ -5,7 +5,7 @@ import flask
 from flask_cors import CORS
 import threading
 import openreview
-from .queue import ExpertiseQueue, UserPaperQueue, DatasetInfo
+from .or_queue import ExpertiseQueue, UserPaperQueue, DatasetInfo
 
 
 BLUEPRINT = flask.Blueprint('expertise', __name__)

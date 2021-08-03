@@ -125,6 +125,14 @@ python -m expertise.run_duplicate_detection config.json
 ```
 The output will generate a `.csv` file with the name pattern `<config_name>.csv`. Read the `Configuration File` section to understand how to create one. For duplicate detection, the parameters that apply are in `Affinity Scores Configuration Options`, `ELMo specific parameters (affinity scores)`, and `ELMo specific parameters (duplicate detection)`.
 
+## Running the Server
+The server is implemented in Flask and can be started from the command line:
+```
+python -m matcher.service --host localhost --port 5000
+```
+
+By default, the app will run on `http://localhost:5000`. The endpoint `/expertise/test` should show a simple page indicating that Flask is running.
+
 ## Configuration File
 
 The configuration file or `config.json` is the file that contains all the parameters to calculate affinity scores.

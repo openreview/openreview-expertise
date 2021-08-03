@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from pytest import *
 from dataclasses import dataclass
 from expertise.service.queue import *
+from expertise.service.or_queue import *
 
 # Import mock client from test_create_dataset
 def mock_client():
@@ -265,9 +266,6 @@ def test_create_dataset_and_specter_mfr():
             "scores_path": "tests/data/"
         }
     }
-    config['model_params']['specter_dir'] = '../expertise-utils/specter/'
-    config['model_params']['mfr_feature_vocab_file'] = '../expertise-utils/multifacet_recommender/feature_vocab_file'
-    config['model_params']['mfr_checkpoint_dir'] = '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/'
     # Filesystem setup - Parse csv_submissions into list of csv strings
     csv_list = []
     with open(os.path.join(config['dataset']['directory'], config['csv_submissions']), 'r') as f:
@@ -281,7 +279,7 @@ def test_create_dataset_and_specter_mfr():
     server_queue.put_job(next_job)
 
     # Needs to keep running otherwise daemon threads will shutdown
-    time.sleep(90)
+    time.sleep(150)
 
     # Check results
     statuses = server_queue.get_status(id, job_name = name)
@@ -332,9 +330,6 @@ def test_two_create_dataset_and_specter_mfr():
             "scores_path": "tests/data/"
         }
     }
-    config['model_params']['specter_dir'] = '../expertise-utils/specter/'
-    config['model_params']['mfr_feature_vocab_file'] = '../expertise-utils/multifacet_recommender/feature_vocab_file'
-    config['model_params']['mfr_checkpoint_dir'] = '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/'
     # Filesystem setup - Parse csv_submissions into list of csv strings
     csv_list = []
     with open(os.path.join(config['dataset']['directory'], config['csv_submissions']), 'r') as f:
@@ -361,7 +356,7 @@ def test_two_create_dataset_and_specter_mfr():
     server_queue.cancel_job(ids[2], job_name = names[2])
 
     # Needs to keep running otherwise daemon threads will shutdown
-    time.sleep(120)
+    time.sleep(150)
 
     assert os.path.isdir(f'./{jobs[0].job_id}')
     assert os.path.isdir(f'./{jobs[1].job_id}')
