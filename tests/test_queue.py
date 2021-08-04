@@ -293,13 +293,13 @@ def test_create_dataset_and_elmo():
         gt_item = ground_truth[idx].split(',')
         assert item['submission'] == gt_item[0]
         assert item['user'] == gt_item[1]
-        assert item['score'] == float(gt_item[2])
+        assert round(item['score'], 4) == round(float(gt_item[2]), 4)
     
     # Check for cleanup
     res = server_queue.get_result(id, True, job_id = next_job.job_id)
     os.remove('queue.log')
 
-def test_two_create_dataset_and_specter_mfr():
+def test_two_create_dataset_and_elmo():
     """Submit multiple jobs, check statuses and canceling"""
     config = {
         'name': 'test_run',
@@ -360,8 +360,8 @@ def test_two_create_dataset_and_specter_mfr():
     for idx in range(len((res_0['results']))):
         item_0, item_1 = res_0['results'][idx], res_1['results'][idx]
         assert item_0['submission'] == item_1['submission']
-        assert item_0['user'] == item_0['user']
-        assert item_0['score'] == item_0['score']
+        assert item_0['user'] == item_1['user']
+        assert item_0['score'] == item_1['score']
     
     # Check for cleanup
     assert not os.path.isdir(f'./{jobs[0].job_id}')
