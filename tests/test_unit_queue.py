@@ -20,7 +20,7 @@ class SleepQueue(JobQueue):
         # Expect key in config: filename
         if config['sleep'] < 0:
             raise Exception('Negative sleep time not allowed')
-        time.sleep(config['sleep'])
+        time.sleep(config.get('inner_sleep', config['sleep']))
         fname = config['filename']
         with open(fname, 'a+') as f:
             f.write('job done!')
@@ -100,8 +100,8 @@ def test_single_job_remove():
 def test_get_status():
     '''Queue a long running job, and query its status at several stages'''
     short_queue = SleepQueue()
-    # Sleep for 3 seconds
-    conf = {'sleep': 3, 'filename': 'get_status_job.txt'}
+    # Sleep for 7 seconds
+    conf = {'sleep': 7, 'filename': 'get_status_job.txt'}
     id = 'test_get_status'
     name = 'get_status'
     next_job = SleepInfo(id, name, conf)
@@ -115,11 +115,11 @@ def test_get_status():
     short_queue.put_job(next_job)
 
     # Sleep to ensure job is scheduled and get status
-    time.sleep(0.5)
+    time.sleep(3)
     assert short_queue.get_status(id, job_name=name) == 'processing'
 
     # Sleep to finish job and get its status
-    time.sleep(3)
+    time.sleep(10)
     assert short_queue.get_status(id, job_name=name) == 'completed'
 
     # Clean up queue log and directory
@@ -129,8 +129,8 @@ def test_get_status():
 def test_get_jobs():
     '''Several scenarios for get jobs'''
     short_queue = SleepQueue()
-    # Sleep for 2 seconds
-    conf = {'sleep': 2, 'filename': 'get_status_job.txt'}
+    # Sleep for 7 seconds
+    conf = {'sleep': 7, 'filename': 'get_status_job.txt'}
     id = 'test_get_status'
     name = 'get_status'
     next_job = SleepInfo(id, name, conf)
@@ -141,7 +141,7 @@ def test_get_jobs():
 
     # There should now be a job in processing
     short_queue.put_job(next_job)
-    time.sleep(0.5)
+    time.sleep(2)
     current_jobs = short_queue.get_jobs(id)['results']
     assert len(current_jobs) == 1
     current_job_data = current_jobs[0]
@@ -150,7 +150,7 @@ def test_get_jobs():
     assert current_job_data['status'] == 'processing'
 
     # Sleep and expect to find a single completed job
-    time.sleep(5)
+    time.sleep(10)
     current_jobs = short_queue.get_jobs(id)['results']
     assert len(current_jobs) == 1
     current_job_data = current_jobs[0]
@@ -173,7 +173,7 @@ def test_timeout_job():
     short_queue.put_job(next_job)
 
     # Get jobs and check for timeout
-    time.sleep(5)
+    time.sleep(7)
     current_jobs = short_queue.get_jobs(id)['results']
     assert len(current_jobs) == 1
     current_job_data = current_jobs[0]
@@ -198,7 +198,7 @@ def test_error_job():
     short_queue.put_job(next_job)
 
     # Get jobs and check for error
-    time.sleep(1)
+    time.sleep(2)
     current_jobs = short_queue.get_jobs(id)['results']
     assert len(current_jobs) == 1
     current_job_data = current_jobs[0]
@@ -217,11 +217,11 @@ def test_two_jobs_remove():
     '''
     short_queue = SleepQueue()
     # Create two jobs
-    conf_one = {'sleep': 3, 'filename': 'job_one.txt'}
+    conf_one = {'sleep': 5, 'filename': 'job_one.txt'}
     id_one = 'test_job_one'
     name_one = 'job_one'
     job_one = SleepInfo(id_one, name_one, conf_one)
-    conf_two = {'sleep': 2, 'filename': 'job_two.txt'}
+    conf_two = {'sleep': 5, 'filename': 'job_two.txt'}
     id_two = 'test_job_two'
     name_two = 'job_two'
     job_two = SleepInfo(id_two, name_two, conf_two)
@@ -229,12 +229,12 @@ def test_two_jobs_remove():
     # Put jobs on queue and check initial statuses
     short_queue.put_job(job_one)
     short_queue.put_job(job_two)
-    time.sleep(0.5)
+    time.sleep(2)
     assert short_queue.get_status(id_one, job_name=name_one) == 'processing'
     assert short_queue.get_status(id_two, job_name=name_two) == 'queued'
 
     # Sleep for total job time and check created directories
-    time.sleep(6)
+    time.sleep(12)
     assert os.path.isdir(f'./{job_one.job_id}') == True
     assert os.path.isdir(f'./{job_two.job_id}') == True
     assert short_queue.get_status(id_one, job_name=name_one) == 'completed'
@@ -249,11 +249,11 @@ def test_cancel_job():
     '''Add a single job to sleep for a long time, cancel it, and check its status'''
     short_queue = SleepQueue()
     # Create two jobs
-    conf_one = {'sleep': 3, 'filename': 'job_one.txt'}
+    conf_one = {'sleep': 5, 'filename': 'job_one.txt'}
     id_one = 'test_job_one'
     name_one = 'job_one'
     job_one = SleepInfo(id_one, name_one, conf_one)
-    conf_two = {'sleep': 2, 'filename': 'job_two.txt'}
+    conf_two = {'sleep': 3, 'filename': 'job_two.txt'}
     id_two = 'test_job_two'
     name_two = 'job_two'
     job_two = SleepInfo(id_two, name_two, conf_two)
@@ -261,7 +261,7 @@ def test_cancel_job():
     # Put jobs on queue and check initial statuses
     short_queue.put_job(job_one)
     short_queue.put_job(job_two)
-    time.sleep(0.5)
+    time.sleep(2)
     assert short_queue.get_status(id_one, job_name=name_one) == 'processing'
     assert short_queue.get_status(id_two, job_name=name_two) == 'queued'
 
@@ -270,7 +270,7 @@ def test_cancel_job():
     assert short_queue.get_status(id_two, job_name=name_two) == 'stale'
 
     # Sleep for total job time and check created directories
-    time.sleep(6)
+    time.sleep(10)
     assert os.path.isdir(f'./{job_one.job_id}') == True
     assert os.path.isdir(f'./{job_two.job_id}') == False
     assert short_queue.get_status(id_one, job_name=name_one) == 'completed'
@@ -305,7 +305,7 @@ def test_many_jobs_singlethread():
     for job in jobs:
         many_queue.put_job(job)
     
-    time.sleep(NUM_JOBS)
+    time.sleep(NUM_JOBS + 15)
     for job in jobs:
         job_filepath = job.config['filename']
         assert many_queue.get_status(job.id, job_name = job.job_name) == 'completed'
@@ -340,7 +340,7 @@ def test_many_jobs_multithread():
     for job in jobs:
         many_queue.put_job(job)
     
-    time.sleep(NUM_JOBS)
+    time.sleep(NUM_JOBS + 15)
     for job in jobs:
         job_filepath = job.config['filename']
         assert many_queue.get_status(job.id, job_name = job.job_name) == 'completed'
@@ -389,20 +389,21 @@ def test_simple_twostep():
 def test_status_twostep():
     '''Test one job and query statuses along the way'''
     short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
-    # Sleep for 2.25 seconds
-    conf = {'sleep': 1.5, 'filename': 'status_job.txt'}
+    # Sleep for 4,5 seconds
+    conf = {'sleep': 3, 'filename': 'status_job.txt'}
     id = 'test_status'
     name = 'status'
     next_job = SleepInfo(id, name, conf)
     short_queue.put_job(next_job)
 
     # Check running statuses
+    time.sleep(1)
     statuses = short_queue.get_status(id, job_name = name)
     assert statuses['inner'] == 'blocked'
     assert statuses['outer'] == 'processing'
 
     # Check statuses after completing
-    time.sleep(4)
+    time.sleep(7)
     statuses = short_queue.get_status(id, job_name = name)
     assert statuses['inner'] == 'completed'
     assert statuses['outer'] == 'completed'
@@ -415,14 +416,14 @@ def test_query_status_inner_twostep():
     '''Test one job and query statuses when outer job has finished by inner job is processing'''
     short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Sleep for 6 seconds
-    conf = {'sleep': 4, 'filename': 'status_job.txt'}
+    conf = {'sleep': 10, 'filename': 'status_job.txt'}
     id = 'test_status'
     name = 'status'
     next_job = SleepInfo(id, name, conf)
     short_queue.put_job(next_job)
 
     # When outer job finishes, query statuses
-    time.sleep(5)
+    time.sleep(12)
     statuses = short_queue.get_status(id, job_name = name)
     assert statuses['inner'] == 'processing'
     assert statuses['outer'] == 'completed'
@@ -434,21 +435,22 @@ def test_query_status_inner_twostep():
 def test_query_jobs_inner_twostep():
     '''Test one job and query jobs along the way'''
     short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
-    # Sleep for 6 seconds
-    conf = {'sleep': 4, 'filename': 'status_job.txt'}
+    # Sleep for 9 seconds
+    conf = {'sleep': 6, 'filename': 'status_job.txt'}
     id = 'test_status'
     name = 'status'
     next_job = SleepInfo(id, name, conf)
     short_queue.put_job(next_job)
 
     # Getting jobs right away should only yield the outer job
+    time.sleep(1)
     jobs = short_queue.get_jobs(id)
     assert len(jobs['inner']) == 0
     assert len(jobs['outer']) == 1
     assert jobs['outer'][0]['status'] == 'processing'
 
     # When outer job finishes, query statuses
-    time.sleep(5)
+    time.sleep(6)
     jobs = short_queue.get_jobs(id)
     assert len(jobs['inner']) == 1
     assert len(jobs['outer']) == 1
@@ -457,7 +459,7 @@ def test_query_jobs_inner_twostep():
     assert short_queue.get_result(id, delete_on_get=True, job_name=name) == []
 
     # Clean up after both jobs have completed
-    time.sleep(2)
+    time.sleep(5)
     jobs = short_queue.get_jobs(id)
     assert len(jobs['inner']) == 1
     assert len(jobs['outer']) == 1
@@ -473,11 +475,11 @@ def test_cancel_twostep():
     short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Job 1 enters inner queue as fast as job 2 so job 2's inner job is queued
     # Job 3 exists to cancel at the outer stage
-    conf_one = {'sleep': 3, 'filename': 'job_one.txt'}
+    conf_one = {'sleep': 2, 'inner_sleep': 5, 'filename': 'job_one.txt'}
     id_one = 'test_job_one'
     name_one = 'job_one'
     job_one = SleepInfo(id_one, name_one, conf_one)
-    conf_two = {'sleep': 3, 'filename': 'job_two.txt'}
+    conf_two = {'sleep': 2, 'filename': 'job_two.txt'}
     id_two = 'test_job_two'
     name_two = 'job_two'
     job_two = SleepInfo(id_two, name_two, conf_two)
@@ -492,7 +494,7 @@ def test_cancel_twostep():
 
     # Immediately cancel job 3 and wait until the other job's outer jobs are finshed
     short_queue.cancel_job(id_three, job_name = name_three)
-    time.sleep(3.75)
+    time.sleep(2)
     short_queue.cancel_job(id_two, job_name = name_two)
     time.sleep(10)
 
