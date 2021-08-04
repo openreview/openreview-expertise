@@ -349,7 +349,7 @@ def test_two_create_dataset_and_elmo():
     server_queue.cancel_job(ids[2], job_name = names[2])
 
     # Needs to keep running otherwise daemon threads will shutdown
-    time.sleep(90)
+    time.sleep(150)
 
     assert os.path.isdir(f'./{jobs[0].job_id}')
     assert os.path.isdir(f'./{jobs[1].job_id}')
