@@ -136,12 +136,13 @@ def test_get_jobs():
     next_job = SleepInfo(id, name, conf)
 
     # Try to get a list of jobs for this user
-    current_jobs = short_queue.get_jobs(id)
+    current_jobs = short_queue.get_jobs(id)['results']
     assert len(current_jobs) == 0
 
     # There should now be a job in processing
     short_queue.put_job(next_job)
-    current_jobs = short_queue.get_jobs(id)
+    time.sleep(0.5)
+    current_jobs = short_queue.get_jobs(id)['results']
     assert len(current_jobs) == 1
     current_job_data = current_jobs[0]
     assert current_job_data['job_name'] == name
@@ -150,7 +151,7 @@ def test_get_jobs():
 
     # Sleep and expect to find a single completed job
     time.sleep(5)
-    current_jobs = short_queue.get_jobs(id)
+    current_jobs = short_queue.get_jobs(id)['results']
     assert len(current_jobs) == 1
     current_job_data = current_jobs[0]
     assert current_job_data['job_name'] == name
@@ -173,7 +174,7 @@ def test_timeout_job():
 
     # Get jobs and check for timeout
     time.sleep(5)
-    current_jobs = short_queue.get_jobs(id)
+    current_jobs = short_queue.get_jobs(id)['results']
     assert len(current_jobs) == 1
     current_job_data = current_jobs[0]
     assert current_job_data['job_name'] == name
@@ -198,7 +199,7 @@ def test_error_job():
 
     # Get jobs and check for error
     time.sleep(1)
-    current_jobs = short_queue.get_jobs(id)
+    current_jobs = short_queue.get_jobs(id)['results']
     assert len(current_jobs) == 1
     current_job_data = current_jobs[0]
     assert current_job_data['job_name'] == name
@@ -491,7 +492,7 @@ def test_cancel_twostep():
 
     # Immediately cancel job 3 and wait until the other job's outer jobs are finshed
     short_queue.cancel_job(id_three, job_name = name_three)
-    time.sleep(3)
+    time.sleep(3.75)
     short_queue.cancel_job(id_two, job_name = name_two)
     time.sleep(10)
 

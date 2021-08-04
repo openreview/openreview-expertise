@@ -449,12 +449,12 @@ class TwoStepQueue(JobQueue):
         """
         # Query outer queue job statuses
         self.logger.info('TwoStepQueue: querying outer queue job list')
-        outer_list = super().get_jobs(user_id)
+        outer_list = super().get_jobs(user_id)['results']
         
         # Attempt to gather inner queue jobs
         self.logger.info('TwoStepQueue: querying inner queue job list')
         try:
-            inner_list = self.inner_queue.get_jobs(user_id)
+            inner_list = self.inner_queue.get_jobs(user_id)['results']
         except:
             inner_list = []
 
