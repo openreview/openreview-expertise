@@ -1,7 +1,7 @@
 # Running the Server
 The server is implemented in Flask and can be started from the command line:
 ```
-python -m matcher.service --host localhost --port 5000
+python -m expertise.service --host localhost --port 5000
 ```
 
 By default, the app will run on `http://localhost:5000`. The endpoint `/expertise/test` should show a simple page indicating that Flask is running.
