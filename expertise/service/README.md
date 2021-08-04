@@ -6,10 +6,78 @@ python -m expertise.service --host localhost --port 5000
 
 By default, the app will run on `http://localhost:5000`. The endpoint `/expertise/test` should show a simple page indicating that Flask is running.
 
+## Accessing the Endpoints
+Access to all endpoints requires authentication in the header of the request.
+
+**`POST /expertise`**
+
+**Request Body:**
+
+```
+{
+  config: JSON object containing options for both create_dataset and run_expertise
+}
+```
+
+**Returns:**
+
+`{ user_id: str, job_id: int }`
+
+---
+
+**`GET /jobs`**
+
+**Request Body:**
+
+`{}`
+
+**Returns:**
+
+```
+{
+  'dataset': [
+    {
+      job_name: str,
+      job_id: int,
+      status: str,
+    }, ...
+  ],
+  'expertise': [
+    {
+      job_name: str,
+      job_id: int,
+      status: str,
+    }, ...
+  ]
+}
+```
+
+---
+
+**`GET /results`**
+
+**Request Body:**
+
+`{ job_id: int, delete_on_get: boolean }`
+
+**Returns:**
+
+```
+{
+  results: [
+    {
+      submission: str,
+      user: str,
+      status: float,
+    }, ...
+  ]
+}
+```
+
 # Basic Queue Structures
 ## JobQueue
 
-JobData is a dataclass that's used to store metadata about each jobs and it is defined with the following fields (from `queue.py`)
+JobData is a dataclass that's used to store metadata about each jobs and it is defined with the following fields (from `queue.py`):
 ```
     id: str = field(
         metadata={"help": "The profile id at the time of submission"},
@@ -26,7 +94,7 @@ JobData is a dataclass that's used to store metadata about each jobs and it is d
     )
 ```
 
-JobQueue is an abstract wrapper for the built-in Python `queue.Queue()` class. The built-in queue offers a standard FIFO queue that allows both asynchronous and blocking calls for `put()` and `get()`. JobQueue works under the assumption that each job accepts a configuration file and makes modifications to the filesystem to store final and intermediate results. JobQueue offers a set of services on top the built-in queue including:
+JobQueue is an abstract wrapper for the built-in Python `queue.Queue()` class. The built-in queue offers a standard FIFO queue that allows both asynchronous and blocking calls for `put()` and `get()`. JobQueue works under the assumption that each job accepts a configuration file and makes modifications to the filesystem to store intermediate and final results. JobQueue offers a set of services on top the built-in queue including:
 1.  Keeping track of a history of submitted jobs
 2.  Pre-emptive canceling of jobs that are still in queue
 3.  Timing out of possibly long running jobs

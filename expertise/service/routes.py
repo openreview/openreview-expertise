@@ -11,7 +11,7 @@ from .or_queue import ExpertiseQueue, UserPaperQueue, DatasetInfo
 BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
 
-task_queue = UserPaperQueue(max_jobs = 1, inner_queue=ExpertiseQueue)
+task_queue = UserPaperQueue(max_jobs = 1, inner_queue=ExpertiseQueue, inner_key='expertise', outer_key='dataset')
 
 class ExpertiseStatusException(Exception):
     '''Exception wrapper class for errors related to the status of the Expertise model'''

@@ -156,7 +156,7 @@ class JobQueue:
         job_list[0].status = 'stale'
         self.logger.info(f'Successfully cancelled job from {user_id} with either job ID [{job_id}] or job name [{job_name}]')
 
-    def get_jobs(self, user_id: str) -> List[dict]:
+    def get_jobs(self, user_id: str) -> dict:
         """
         Returns a list of job names and ids of all jobs associated with the user id, and their statuses
         If no jobs found, return an empty list corresponding to no jobs
@@ -164,7 +164,7 @@ class JobQueue:
         :param user_id: A string containing the user id that has submitted jobs
         :type user_id: str
 
-        :rtype: List[dict]
+        :rtype: dict
         """
         self.logger.info(f'Retrieving all jobs...')
         ret_list: List[dict] = []
@@ -184,7 +184,7 @@ class JobQueue:
                 }
             )
         self.logger.info(f'Returning gathered jobs submitted by {user_id}')
-        return ret_list
+        return {'results': ret_list}
 
     def get_status(self, user_id: str, job_id: str = '', job_name: str = '') -> str:
         """
