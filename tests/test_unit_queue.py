@@ -65,6 +65,10 @@ class TwoStepSleepQueue(TwoStepQueue):
 # Single job unit tests
 def test_single_job_remove():
     '''Single job added, run and deleted after getting results'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     short_queue = SleepQueue()
     # Sleep for 3 seconds then get the result
     conf = {'sleep': 3, 'filename': 'single_job_remove_job.txt'}
@@ -99,6 +103,10 @@ def test_single_job_remove():
 
 def test_get_status():
     '''Queue a long running job, and query its status at several stages'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     short_queue = SleepQueue()
     # Sleep for 7 seconds
     conf = {'sleep': 7, 'filename': 'get_status_job.txt'}
@@ -128,6 +136,10 @@ def test_get_status():
 
 def test_get_jobs():
     '''Several scenarios for get jobs'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     short_queue = SleepQueue()
     # Sleep for 7 seconds
     conf = {'sleep': 7, 'filename': 'get_status_job.txt'}
@@ -164,6 +176,10 @@ def test_get_jobs():
 
 def test_timeout_job():
     '''Add a job with a timeout and check status for timeout'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     short_queue = SleepQueue()
     # Sleep for 5 seconds and set a timeout for shorter than 5 seconds
     conf = {'sleep': 5, 'filename': 'set_timeout_job.txt'}
@@ -189,6 +205,10 @@ def test_timeout_job():
 
 def test_error_job():
     '''Add a job that is bound to return an exception'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     short_queue = SleepQueue()
     # Sleep for negative seconds, which will throw an error for the underlying job code
     conf = {'sleep': -5, 'filename': 'illegal_config_job.txt'}
@@ -215,6 +235,12 @@ def test_two_jobs_remove():
     Enqueue two jobs for a queue that only runs 1 job at a time
     Query their statuses along the way and check for proper outputting
     '''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+    if os.path.isdir('./2'):
+        shutil.rmtree('./2')
+
     short_queue = SleepQueue()
     # Create two jobs
     conf_one = {'sleep': 5, 'filename': 'job_one.txt'}
@@ -247,6 +273,12 @@ def test_two_jobs_remove():
 
 def test_cancel_job():
     '''Add a single job to sleep for a long time, cancel it, and check its status'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+    if os.path.isdir('./2'):
+        shutil.rmtree('./2')
+
     short_queue = SleepQueue()
     # Create two jobs
     conf_one = {'sleep': 5, 'filename': 'job_one.txt'}
@@ -283,6 +315,12 @@ def test_cancel_job():
 # Many job unit test
 def test_many_jobs_singlethread():
     '''Enqueue many jobs to check ability to handle long workloads'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+    if os.path.isdir('./2'):
+        shutil.rmtree('./2')
+
     NUM_JOBS = 30
     many_queue = SleepQueue()
     configs: List[dict] = []
@@ -318,6 +356,12 @@ def test_many_jobs_singlethread():
 
 def test_many_jobs_multithread():
     '''Enqueue many jobs to check ability to handle long workloads with multithreading'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+    if os.path.isdir('./2'):
+        shutil.rmtree('./2')
+
     NUM_JOBS = 30
     many_queue = SleepQueue(max_jobs=5)
     configs: List[dict] = []
@@ -354,6 +398,10 @@ def test_many_jobs_multithread():
 # Two Step Queue tests
 def test_simple_twostep():
     '''Test one job going through both steps of a queue'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Sleep for 2.25 seconds then get the result
     conf = {'sleep': 1.5, 'filename': 'simple_two_step_remove_job.txt'}
@@ -388,6 +436,10 @@ def test_simple_twostep():
 
 def test_status_twostep():
     '''Test one job and query statuses along the way'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Sleep for 4,5 seconds
     conf = {'sleep': 3, 'filename': 'status_job.txt'}
@@ -414,6 +466,10 @@ def test_status_twostep():
 
 def test_query_status_inner_twostep():
     '''Test one job and query statuses when outer job has finished by inner job is processing'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Sleep for 6 seconds
     conf = {'sleep': 10, 'filename': 'status_job.txt'}
@@ -434,6 +490,10 @@ def test_query_status_inner_twostep():
 
 def test_query_jobs_inner_twostep():
     '''Test one job and query jobs along the way'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Sleep for 9 seconds
     conf = {'sleep': 6, 'filename': 'status_job.txt'}
@@ -459,7 +519,7 @@ def test_query_jobs_inner_twostep():
     assert short_queue.get_result(id, delete_on_get=True, job_name=name) == []
 
     # Clean up after both jobs have completed
-    time.sleep(5)
+    time.sleep(10)
     jobs = short_queue.get_jobs(id)
     assert len(jobs['inner']) == 1
     assert len(jobs['outer']) == 1
@@ -472,14 +532,20 @@ def test_query_jobs_inner_twostep():
 
 def test_cancel_twostep():
     '''Enqueue three jobs and cancel both at various stages'''
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+    if os.path.isdir('./2'):
+        shutil.rmtree('./2')
+
     short_queue = TwoStepSleepQueue(max_jobs = 1, inner_queue=InnerSleepQueue)
     # Job 1 enters inner queue as fast as job 2 so job 2's inner job is queued
     # Job 3 exists to cancel at the outer stage
-    conf_one = {'sleep': 2, 'inner_sleep': 5, 'filename': 'job_one.txt'}
+    conf_one = {'sleep': 2, 'inner_sleep': 10, 'filename': 'job_one.txt'}
     id_one = 'test_job_one'
     name_one = 'job_one'
     job_one = SleepInfo(id_one, name_one, conf_one)
-    conf_two = {'sleep': 2, 'filename': 'job_two.txt'}
+    conf_two = {'sleep': 1, 'filename': 'job_two.txt'}
     id_two = 'test_job_two'
     name_two = 'job_two'
     job_two = SleepInfo(id_two, name_two, conf_two)
@@ -494,9 +560,9 @@ def test_cancel_twostep():
 
     # Immediately cancel job 3 and wait until the other job's outer jobs are finshed
     short_queue.cancel_job(id_three, job_name = name_three)
-    time.sleep(2)
+    time.sleep(5)
     short_queue.cancel_job(id_two, job_name = name_two)
-    time.sleep(10)
+    time.sleep(20)
 
     # Now check all jobs
     statuses = short_queue.get_status(id_one, job_name = name_one)

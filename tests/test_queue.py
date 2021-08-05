@@ -143,6 +143,10 @@ class TestPaperQueue(TwoStepQueue):
 
 def test_create_dataset_and_sleep():
     """Replicate test_get_submissions from test_create_dataset"""
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     config = {
         'dataset': {
             'directory': 'tests/data/'
@@ -190,6 +194,10 @@ def test_create_dataset_and_sleep():
 
 def test_create_dataset_with_outer_error():
     """Pass in a faulty config (error in outer queue) and expect directory to automatically cleanup"""
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     config = {'dataset': {
             'directory': 'tests/data/'
         },
@@ -215,6 +223,10 @@ def test_create_dataset_with_outer_error():
 
 def test_create_dataset_with_inner_error():
     """Pass in a faulty config (error in inner queue) and expect directory to automatically cleanup"""
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     config = {'dataset': {
             'directory': 'tests/data/'
         },
@@ -241,6 +253,10 @@ def test_create_dataset_with_inner_error():
 
 def test_create_dataset_and_elmo():
     """Submit a job to a create_dataset and specter+mfr queue"""
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+
     config = {
         'name': 'test_run',
         'match_group': ["ABC.cc"],
@@ -301,6 +317,12 @@ def test_create_dataset_and_elmo():
 
 def test_two_create_dataset_and_elmo():
     """Submit multiple jobs, check statuses and canceling"""
+    # Clean test directory
+    if os.path.isdir('./1'):
+        shutil.rmtree('./1')
+    if os.path.isdir('./2'):
+        shutil.rmtree('./2')
+
     config = {
         'name': 'test_run',
         'match_group': ["ABC.cc"],
