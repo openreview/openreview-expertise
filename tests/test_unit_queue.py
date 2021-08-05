@@ -516,7 +516,7 @@ def test_query_jobs_inner_twostep():
     assert len(jobs['outer']) == 1
     assert jobs['outer'][0]['status'] == 'completed'
     assert jobs['inner'][0]['status'] == 'processing'
-    assert short_queue.get_result(id, delete_on_get=True, job_name=name) == []
+    assert short_queue.get_result(id, delete_on_get=False, job_name=name) == []
 
     # Clean up after both jobs have completed
     time.sleep(10)
