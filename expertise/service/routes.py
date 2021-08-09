@@ -4,6 +4,7 @@ Implements the Flask API endpoints.
 import flask
 from flask_cors import CORS
 import threading
+from multiprocessing import Value
 import openreview
 from .or_queue import ExpertiseQueue, UserPaperQueue, DatasetInfo
 
@@ -12,6 +13,7 @@ BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
 
 task_queue = UserPaperQueue(max_jobs = 1, inner_queue=ExpertiseQueue, inner_key='expertise', outer_key='dataset')
+global_id: Value = Value('i', 0)
 
 class ExpertiseStatusException(Exception):
     '''Exception wrapper class for errors related to the status of the Expertise model'''
@@ -39,19 +41,18 @@ def expertise():
             token=token,
             baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
         )
-        profile_id = openreview_client.get_profile().id
-        job_request = DatasetInfo(
-            id = profile_id,
-            job_name = config['name'],
-            config = config,
-            token = token,
-            baseurl = flask.current_app.config['OPENREVIEW_BASEURL']
-        )
-        task_queue.put_job(job_request)
-        result = {
-            'user_id': profile_id,
-            'job_id': job_request.job_id
-        }
+        config['token'] = token
+        config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
+        
+        from .celery_tasks import run_userpaper
+        with global_id.get_lock():
+            run_userpaper.apply_async(
+                (config, flask.current_app.logger),
+                queue='userpaper',
+                task_id=global_id.value
+            )
+            global_id.value += 1
+        
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle))
 

@@ -1,6 +1,7 @@
 import os
 import flask
 import logging, logging.handlers
+from celery import Celery
 
 def configure_logger(app):
     '''
@@ -59,3 +60,15 @@ def create_app(config=None):
     app.register_blueprint(routes.BLUEPRINT)
 
     return app
+
+def create_celery(app, config_source):
+    """
+    Initializes a celery application using Flask App
+    """
+    celery = Celery(
+        app.import_name,
+        include=["expertise.service.celery_tasks"],
+        config_source=config_source
+    )
+
+    return celery

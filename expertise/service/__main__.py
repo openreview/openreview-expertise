@@ -1,7 +1,5 @@
 import argparse
-from expertise.service import create_app
-
-app = create_app()
+from expertise.service.server import app
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

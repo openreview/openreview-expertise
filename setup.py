@@ -31,7 +31,11 @@ setup(
         'rank_bm25',
         'pytest',
         'overrides==2.8.0',
-        'flask'
+        'flask',
+        'flask-cors==3.0.9',
+        'cffi>=1.0.0',
+        'celery',
+        'redis'
     ],
     zip_safe=False
 )
