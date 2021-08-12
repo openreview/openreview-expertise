@@ -1,10 +1,12 @@
 '''
 Implements the Flask API endpoints.
 '''
-import flask, os
+import flask, os, shutil
 from flask_cors import CORS
 from multiprocessing import Value
+from csv import reader
 import openreview
+from openreview.openreview import OpenReviewException
 
 
 BLUEPRINT = flask.Blueprint('expertise', __name__)
@@ -22,7 +24,7 @@ def preprocess_config(config: dict, job_id: int, profile_id: str):
     # Overwrite certain keys in the config
     filepath_keys = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
     file_keys = ['csv_expertise', 'csv_submissions']
-    root_dir = f"./{job_id}-{profile_id}"
+    root_dir = f"./{job_id};{profile_id}"
 
     # Filter some keys
     if 'model_params' not in config.keys():
@@ -58,7 +60,7 @@ def preprocess_config(config: dict, job_id: int, profile_id: str):
     config['model_params']['specter_dir'] = '../expertise-utils/specter/'
     config['model_params']['mfr_feature_vocab_file'] = '../expertise-utils/multifacet_recommender/feature_vocab_file'
     config['model_params']['mfr_checkpoint_dir'] = '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/'
-    return f'{job_id}-{profile_id}'
+    return f'{job_id};{profile_id}'
 
 
 @BLUEPRINT.route('/expertise/test')
@@ -143,7 +145,31 @@ def jobs():
             baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
         )
         profile_id = openreview_client.get_profile().id
-        result = task_queue.get_jobs(profile_id)
+        # Walk the file system to find all jobs associated with the ID
+        subdirs = [name for name in os.listdir(".") if os.path.isdir(name)]
+        result['results'] = []
+        for dir in subdirs:
+            if profile_id in dir:
+                # Get status
+                # Search for scores files (only non-sparse scores)
+                job_id = dir.split(';')[0]
+                file_dir = None
+                for root, dirs, files in os.walk(dir, topdown=False):
+                    for name in files:
+                        if '.csv' in name and 'sparse' not in name:
+                            file_dir = os.path.join(root, name)
+                
+                if file_dir is None:
+                    status = 'Processing'
+                else:
+                    status = 'Completed'
+                result['results'].append(
+                    {
+                        'job_id': job_id,
+                        'status': status
+                    }
+                )
+                
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle))
 
@@ -193,11 +219,34 @@ def results():
             baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
         )
         profile_id = openreview_client.get_profile().id
-        result = task_queue.get_result(
-            profile_id,
-            delete_on_get = delete_on_get,
-            job_id = job_id
-        )
+        job_dir = f"./{job_id};{profile_id}"
+
+        # Search for scores files (only non-sparse scores)
+        file_dir = None
+        for root, dirs, files in os.walk(job_dir, topdown=False):
+            for name in files:
+                if '.csv' in name and 'sparse' not in name:
+                    file_dir = os.path.join(root, name)
+        
+        # Assemble scores
+        if file_dir is None:
+            raise OpenReviewException('Either job is still processing or this job id does not exist')
+        else:
+            ret_list = []
+            with open(file_dir, 'r') as csv_file:
+                data_reader = reader(csv_file)
+                for row in data_reader:
+                    ret_list.append({
+                        'submission': row[0],
+                        'user': row[1],
+                        'score': float(row[2])
+                    })
+            result['results'] = ret_list
+        
+        # Clear directory
+        if delete_on_get:
+            shutil.rmtree(job_dir)
+                
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle))
 
