@@ -267,5 +267,5 @@ def results():
         return flask.jsonify(result), 500
         
     else:
-        flask.current_app.logger.debug('POST returns ' + str(result))
+        flask.current_app.logger.debug('POST returns code 200')
         return flask.jsonify(result), 200
