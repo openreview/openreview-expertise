@@ -4,6 +4,7 @@ from kombu.serialization import registry
 task_default_queue = 'default'
 task_queues = (
     Queue('userpaper', routing_key='expertise.service.celery_tasks.run_userpaper'),
+    Queue('expertise', routing_key='expertise.service.celery_tasks.run_expertise')
 )
 # CELERY_IMPORTS = ('tasks')
 task_ignore_result = False
