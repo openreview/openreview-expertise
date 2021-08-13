@@ -1,4 +1,4 @@
-import logging, json
+import logging, json, os, shutil
 from unittest.mock import MagicMock
 from expertise.execute_expertise import *
 from expertise.service.server import celery_app as celery
@@ -56,7 +56,12 @@ def run_userpaper(self, config: dict, logger: logging.Logger, in_test: bool = Fa
                 queue='expertise',
         )
     except Exception as exc:
-        # TODO: Append job id to an error log in the profile directory
+        working_dir = os.path.join(config['profile_dir'], str(config['job_id']))
+        logger.error(f'Removing dir: {working_dir}')
+        shutil.rmtree(working_dir)
+        logger.error(f"Writing to: {os.path.join(config['profile_dir'], 'err.log')}")
+        with open(os.path.join(config['profile_dir'], 'err.log'), 'a+') as f:
+            f.write(f"{config['job_id']},")
         logger.error('Error: {}'.format(exc))
 
 @celery.task(name='expertise', track_started=True, bind=True, time_limit=3600 * 24)
@@ -64,5 +69,11 @@ def run_expertise(self, config: dict, logger: logging.Logger):
     try:
         execute_expertise(config_file=config)
     except Exception as exc:
+        working_dir = os.path.join(config['profile_dir'], str(config['job_id']))
+        logger.error(f'Removing dir: {working_dir}')
+        shutil.rmtree(working_dir)
+        logger.error(f"Writing to: {os.path.join(config['profile_dir'], 'err.log')}")
+        with open(os.path.join(config['profile_dir'], 'err.log'), 'a+') as f:
+            f.write(f"{config['job_id']},")
         logger.error('Error: {}'.format(exc))
 
