@@ -63,11 +63,54 @@ def preprocess_config(config: dict, job_id: int, profile_id: str):
     return f'{job_id};{profile_id}'
 
 
-@BLUEPRINT.route('/expertise/test')
+@BLUEPRINT.route('/test')
 def test():
-    '''Test endpoint.'''
+    """Test endpoint."""
     flask.current_app.logger.info('In test')
     return 'OpenReview Expertise (test)'
+
+@BLUEPRINT.route('/test/expertise', methods=['POST'])
+def test_expertise():
+    """Test endpoint that doesn't check for credentials"""
+    result = {}
+    try:
+        config = flask.request.json['config']
+        flask.current_app.logger.info('[TEST] Received expertise request')
+        profile_id = flask.request.json['profile_id']
+        from .celery_tasks import run_userpaper
+        with global_id.get_lock():
+            job_id = preprocess_config(config, global_id.value, profile_id)
+            run_userpaper.apply_async(
+                (config, flask.current_app.logger),
+                queue='userpaper',
+                task_id=job_id
+            )
+            result['job_id'] = global_id.value
+            global_id.value += 1
+            flask.current_app.logger.info('[TEST] Returning from request')
+        
+    except openreview.OpenReviewException as error_handle:
+        flask.current_app.logger.error(str(error_handle))
+
+        error_type = str(error_handle)
+        status = 500
+
+        if 'not found' in error_type.lower():
+            status = 404
+        elif 'forbidden' in error_type.lower():
+            status = 403
+
+        result['error'] = error_type
+        return flask.jsonify(result), status
+
+    # pylint:disable=broad-except
+    except Exception as error_handle:
+        result['error'] = 'Internal server error: {}'.format(error_handle)
+        return flask.jsonify(result), 500
+        
+    else:
+        flask.current_app.logger.debug('POST returns ' + str(result))
+        return flask.jsonify(result), 200
 
 @BLUEPRINT.route('/expertise', methods=['POST'])
 def expertise():
@@ -89,19 +132,14 @@ def expertise():
         profile_id = openreview_client.profile.id
         config['token'] = token
         config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
-        flask.current_app.logger.info('Config augmented with login credentials')
         from .celery_tasks import run_userpaper
         with global_id.get_lock():
-            flask.current_app.logger.info('Preprocessing config')
             job_id = preprocess_config(config, global_id.value, profile_id)
-            flask.current_app.logger.info('-Config-')
-            flask.current_app.logger.info('Enqueuing modified config')
             run_userpaper.apply_async(
                 (config, flask.current_app.logger),
                 queue='userpaper',
                 task_id=job_id
             )
-            flask.current_app.logger.info('Incrementing global job id')
             result['job_id'] = global_id.value
             global_id.value += 1
             flask.current_app.logger.info('Returning from request')
