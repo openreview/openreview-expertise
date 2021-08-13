@@ -21,7 +21,7 @@ class ExpertiseStatusException(Exception):
 
 # TODO: Fault tolerance - on server start, wipe all profile directories
 
-def preprocess_config(config: dict, job_id: int, profile_id: str):
+def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: bool = False):
     """Overwrites/add specific keywords in the submitted job config"""
     # Overwrite certain keys in the config
     filepath_keys = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
@@ -46,18 +46,18 @@ def preprocess_config(config: dict, job_id: int, profile_id: str):
         config['model_params'][key] = root_dir
     
     # Now, write data stored in the file keys to disk
-    # TODO: only write to disk if in test mode
-    for key in file_keys:
-        output_file = key + '.csv'
-        write_to_dir = os.path.join(config['dataset']['directory'], output_file)
+    if test_mode:
+        for key in file_keys:
+            output_file = key + '.csv'
+            write_to_dir = os.path.join(config['dataset']['directory'], output_file)
 
-        # Add newline characters, write to file and set the field in the config to the directory of the file
-        for idx, data in enumerate(config[key]):
-            config[key][idx] = data.strip() + '\n'
-        with open(write_to_dir, 'w') as csv_out:
-            csv_out.writelines(config[key])
-        
-        config[key] = output_file
+            # Add newline characters, write to file and set the field in the config to the directory of the file
+            for idx, data in enumerate(config[key]):
+                config[key][idx] = data.strip() + '\n'
+            with open(write_to_dir, 'w') as csv_out:
+                csv_out.writelines(config[key])
+            
+            config[key] = output_file
     
     # For error handling, add job_id and profile_dir to config
     config['job_id'] = job_id
@@ -111,7 +111,7 @@ def expertise():
             profile_id = f'~{test_num}'
         from .celery_tasks import run_userpaper
         with global_id.get_lock():
-            job_id = preprocess_config(config, global_id.value, profile_id)
+            job_id = preprocess_config(config, global_id.value, profile_id, test_mode)
             run_userpaper.apply_async(
                 (config, flask.current_app.logger, test_mode),
                 queue='userpaper',
