@@ -150,6 +150,7 @@ def jobs():
         result['error'] = 'No Authorization token in headers'
         return flask.jsonify(result), 400
     try:
+        data_files = ['csv_expertise.csv', 'csv_submissions.csv']
         openreview_client = openreview.Client(
             token=token,
             baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
@@ -166,7 +167,7 @@ def jobs():
                 file_dir = None
                 for root, dirs, files in os.walk(dir, topdown=False):
                     for name in files:
-                        if '.csv' in name and 'sparse' not in name:
+                        if '.csv' in name and 'sparse' not in name and name not in data_files:
                             file_dir = os.path.join(root, name)
                 
                 if file_dir is None:
@@ -214,6 +215,7 @@ def results():
         result['error'] = 'No Authorization token in headers'
         return flask.jsonify(result), 400
     try:
+        data_files = ['csv_expertise.csv', 'csv_submissions.csv']
         job_id = flask.request.args['job_id']
         delete_on_get = flask.request.args.get('delete_on_get', False)
 
@@ -237,7 +239,7 @@ def results():
         file_dir = None
         for root, dirs, files in os.walk(job_dir, topdown=False):
             for name in files:
-                if '.csv' in name and 'sparse' not in name:
+                if '.csv' in name and 'sparse' not in name and name not in data_files:
                     file_dir = os.path.join(root, name)
         
         # Assemble scores
