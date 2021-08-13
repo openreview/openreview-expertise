@@ -104,6 +104,8 @@ def expertise():
             profile_id = openreview_client.profile.id
             config['token'] = token
             config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
+        else:
+            profile_id = f'~{test_num}'
         from .celery_tasks import run_userpaper
         with global_id.get_lock():
             job_id = preprocess_config(config, global_id.value, profile_id)
@@ -144,6 +146,20 @@ def jobs():
     result = {}
 
     token = flask.request.headers.get('Authorization')
+    test_num = flask.request.headers.get('TEST_NUM')
+    test_mode = False
+    
+    if 'TEST_NUM' in flask.current_app.config.keys():
+        if test_num != flask.current_app.config['TEST_NUM']:
+            flask.current_app.logger.error('[TEST] Error in test num match')
+            result['error'] = 'Error in test num match'
+            return flask.jsonify(result), 400
+        else:
+            test_mode = True
+    elif not token:
+        flask.current_app.logger.error('No Authorization token in headers')
+        result['error'] = 'No Authorization token in headers'
+        return flask.jsonify(result), 400
     
     if not token:
         flask.current_app.logger.error('No Authorization token in headers')
@@ -151,11 +167,14 @@ def jobs():
         return flask.jsonify(result), 400
     try:
         data_files = ['csv_expertise.csv', 'csv_submissions.csv']
-        openreview_client = openreview.Client(
-            token=token,
-            baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
-        )
-        profile_id = openreview_client.get_profile().id
+        if not test_mode:
+            openreview_client = openreview.Client(
+                token=token,
+                baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
+            )
+            profile_id = openreview_client.get_profile().id
+        else:
+            profile_id = f'~{test_num}'
         # Walk the file system to find all jobs associated with the ID
         subdirs = [name for name in os.listdir(".") if os.path.isdir(name)]
         result['results'] = []
@@ -209,6 +228,20 @@ def results():
     result = {}
 
     token = flask.request.headers.get('Authorization')
+    test_num = flask.request.headers.get('TEST_NUM')
+    test_mode = False
+    
+    if 'TEST_NUM' in flask.current_app.config.keys():
+        if test_num != flask.current_app.config['TEST_NUM']:
+            flask.current_app.logger.error('[TEST] Error in test num match')
+            result['error'] = 'Error in test num match'
+            return flask.jsonify(result), 400
+        else:
+            test_mode = True
+    elif not token:
+        flask.current_app.logger.error('No Authorization token in headers')
+        result['error'] = 'No Authorization token in headers'
+        return flask.jsonify(result), 400
     
     if not token:
         flask.current_app.logger.error('No Authorization token in headers')
@@ -225,16 +258,17 @@ def results():
                 delete_on_get = True
             else:
                 delete_on_get = False
-            
-        openreview_client = openreview.Client(
-            token=token,
-            baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
-        )
-        profile_id = openreview_client.get_profile().id
+        if not test_mode:
+            openreview_client = openreview.Client(
+                token=token,
+                baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
+            )
+            profile_id = openreview_client.get_profile().id
+        else:
+            profile_id = f'~{test_num}'
         job_dir = f"./{job_id};{profile_id}"
 
         # Search for scores files (only non-sparse scores)
-        # TODO: checking for results is faulty - also check for csv_submissions + csv_expertise
         # TODO: checking for error by reading profile id directory and error log
         file_dir = None
         for root, dirs, files in os.walk(job_dir, topdown=False):
