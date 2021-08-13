@@ -26,7 +26,7 @@ def preprocess_config(config: dict, job_id: int, profile_id: str):
     # Overwrite certain keys in the config
     filepath_keys = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
     file_keys = ['csv_expertise', 'csv_submissions']
-    root_dir = f"./{job_id};{profile_id}"
+    root_dir = f"./{profile_id}/{job_id}"
 
     # Filter some keys
     if 'model_params' not in config.keys():
@@ -38,8 +38,6 @@ def preprocess_config(config: dict, job_id: int, profile_id: str):
         config['dataset'] = {}
     config['dataset']['directory'] = root_dir
 
-    # TODO: change directory to profile_id/job_id
-    # TODO: add job id and profile directory to config
     if not os.path.isdir(config['dataset']['directory']):
         os.makedirs(config['dataset']['directory'])
 
@@ -48,6 +46,7 @@ def preprocess_config(config: dict, job_id: int, profile_id: str):
         config['model_params'][key] = root_dir
     
     # Now, write data stored in the file keys to disk
+    # TODO: only write to disk if in test mode
     for key in file_keys:
         output_file = key + '.csv'
         write_to_dir = os.path.join(config['dataset']['directory'], output_file)
@@ -60,6 +59,10 @@ def preprocess_config(config: dict, job_id: int, profile_id: str):
         
         config[key] = output_file
     
+    # For error handling, add job_id and profile_dir to config
+    config['job_id'] = job_id
+    config['profile_dir'] = f'./{profile_id}'
+
     # Set SPECTER+MFR paths
     config['model_params']['specter_dir'] = '../expertise-utils/specter/'
     config['model_params']['mfr_feature_vocab_file'] = '../expertise-utils/multifacet_recommender/feature_vocab_file'
@@ -161,10 +164,6 @@ def jobs():
         result['error'] = 'No Authorization token in headers'
         return flask.jsonify(result), 400
     
-    if not token:
-        flask.current_app.logger.error('No Authorization token in headers')
-        result['error'] = 'No Authorization token in headers'
-        return flask.jsonify(result), 400
     try:
         data_files = ['csv_expertise.csv', 'csv_submissions.csv']
         if not test_mode:
@@ -175,31 +174,32 @@ def jobs():
             profile_id = openreview_client.get_profile().id
         else:
             profile_id = f'~{test_num}'
-        # Walk the file system to find all jobs associated with the ID
-        subdirs = [name for name in os.listdir(".") if os.path.isdir(name)]
+        profile_dir = f'./{profile_id}'
+
+        # Perform a walk of all job sub-directories for score files
+        job_subdirs = [name for name in os.listdir(profile_dir) if os.path.isdir(os.path.join(profile_dir, name))]
         result['results'] = []
-        for dir in subdirs:
-            if profile_id in dir:
-                # Get status
-                # Search for scores files (only non-sparse scores)
-                job_id = dir.split(';')[0]
-                file_dir = None
-                for root, dirs, files in os.walk(dir, topdown=False):
-                    for name in files:
-                        if '.csv' in name and 'sparse' not in name and name not in data_files:
-                            file_dir = os.path.join(root, name)
-                
-                if file_dir is None:
-                    status = 'Processing'
-                else:
-                    status = 'Completed'
-                result['results'].append(
-                    {
-                        'job_id': job_id,
-                        'status': status
-                    }
-                )
-                
+        for job_dir in job_subdirs:
+            search_dir = os.path.join(profile_dir, job_dir)
+            # Look for score files
+            file_dir = None
+            for root, dirs, files in os.walk(search_dir, topdown=False):
+                for name in files:
+                    if '.csv' in name and 'sparse' not in name and name not in data_files:
+                        file_dir = os.path.join(root, name)
+
+            # If found a non-sparse, non-data file CSV, job has completed
+            if file_dir is None:
+                status = 'Processing'
+            else:
+                status = 'Completed'
+            result['results'].append(
+                {
+                    'job_id': job_dir,
+                    'status': status
+                }
+            )
+                        
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle))
 
@@ -243,10 +243,6 @@ def results():
         result['error'] = 'No Authorization token in headers'
         return flask.jsonify(result), 400
     
-    if not token:
-        flask.current_app.logger.error('No Authorization token in headers')
-        result['error'] = 'No Authorization token in headers'
-        return flask.jsonify(result), 400
     try:
         data_files = ['csv_expertise.csv', 'csv_submissions.csv']
         job_id = flask.request.args['job_id']
@@ -266,16 +262,18 @@ def results():
             profile_id = openreview_client.get_profile().id
         else:
             profile_id = f'~{test_num}'
-        job_dir = f"./{job_id};{profile_id}"
+        profile_dir = f'./{profile_id}'
 
         # Search for scores files (only non-sparse scores)
         # TODO: checking for error by reading profile id directory and error log
         file_dir = None
-        for root, dirs, files in os.walk(job_dir, topdown=False):
+        search_dir = os.path.join(profile_dir, job_id)
+        # Look for score files
+        for root, dirs, files in os.walk(search_dir, topdown=False):
             for name in files:
                 if '.csv' in name and 'sparse' not in name and name not in data_files:
                     file_dir = os.path.join(root, name)
-        
+
         # Assemble scores
         if file_dir is None:
             raise OpenReviewException('Either job is still processing or this job id does not exist')
@@ -293,7 +291,7 @@ def results():
         
         # Clear directory
         if delete_on_get:
-            shutil.rmtree(job_dir)
+            shutil.rmtree(search_dir)
                 
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle))
