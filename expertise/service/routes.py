@@ -165,6 +165,7 @@ def jobs():
         return flask.jsonify(result), 400
     
     try:
+        result['results'] = []
         data_files = ['csv_expertise.csv', 'csv_submissions.csv']
         if not test_mode:
             openreview_client = openreview.Client(
@@ -176,9 +177,26 @@ def jobs():
             profile_id = f'~{test_num}'
         profile_dir = f'./{profile_id}'
 
+        # Check for profile directory
+        if not os.path.isdir(profile_dir):
+            raise OpenReviewException('No jobs submitted since last server reboot')
+
+        # Check for error log
+        err_jobs = None
+        err_dir = os.path.join(profile_dir, 'err.log')
+        if os.path.isfile(err_dir):
+            with open(err_dir, 'r') as f:
+                err_jobs = f.readline().split(',')[:-1]
+        for job in err_jobs:
+            result['results'].append(
+                {
+                    'job_id': job,
+                    'status': 'Error'
+                }
+            )
+
         # Perform a walk of all job sub-directories for score files
         job_subdirs = [name for name in os.listdir(profile_dir) if os.path.isdir(os.path.join(profile_dir, name))]
-        result['results'] = []
         for job_dir in job_subdirs:
             search_dir = os.path.join(profile_dir, job_dir)
             # Look for score files
@@ -265,7 +283,6 @@ def results():
         profile_dir = f'./{profile_id}'
 
         # Search for scores files (only non-sparse scores)
-        # TODO: checking for error by reading profile id directory and error log
         file_dir = None
         search_dir = os.path.join(profile_dir, job_id)
         # Look for score files
@@ -276,7 +293,7 @@ def results():
 
         # Assemble scores
         if file_dir is None:
-            raise OpenReviewException('Either job is still processing or this job id does not exist')
+            raise OpenReviewException('Either job is still processing, has crashed, or does not exist')
         else:
             ret_list = []
             with open(file_dir, 'r') as csv_file:
