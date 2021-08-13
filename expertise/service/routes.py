@@ -19,6 +19,8 @@ class ExpertiseStatusException(Exception):
     '''Exception wrapper class for errors related to the status of the Expertise model'''
     pass
 
+# TODO: Fault tolerance - on server start, wipe all profile directories
+
 def preprocess_config(config: dict, job_id: int, profile_id: str):
     """Overwrites/add specific keywords in the submitted job config"""
     # Overwrite certain keys in the config
@@ -36,6 +38,8 @@ def preprocess_config(config: dict, job_id: int, profile_id: str):
         config['dataset'] = {}
     config['dataset']['directory'] = root_dir
 
+    # TODO: change directory to profile_id/job_id
+    # TODO: add job id and profile directory to config
     if not os.path.isdir(config['dataset']['directory']):
         os.makedirs(config['dataset']['directory'])
 
@@ -69,74 +73,42 @@ def test():
     flask.current_app.logger.info('In test')
     return 'OpenReview Expertise (test)'
 
-@BLUEPRINT.route('/test/expertise', methods=['POST'])
-def test_expertise():
-    """Test endpoint that doesn't check for credentials"""
-    result = {}
-    try:
-        config = flask.request.json['config']
-        flask.current_app.logger.info('[TEST] Received expertise request')
-        profile_id = flask.request.json['profile_id']
-        from .celery_tasks import run_userpaper
-        with global_id.get_lock():
-            job_id = preprocess_config(config, global_id.value, profile_id)
-            run_userpaper.apply_async(
-                (config, flask.current_app.logger),
-                queue='userpaper',
-                task_id=job_id
-            )
-            result['job_id'] = global_id.value
-            global_id.value += 1
-            flask.current_app.logger.info('[TEST] Returning from request')
-        
-    except openreview.OpenReviewException as error_handle:
-        flask.current_app.logger.error(str(error_handle))
-
-        error_type = str(error_handle)
-        status = 500
-
-        if 'not found' in error_type.lower():
-            status = 404
-        elif 'forbidden' in error_type.lower():
-            status = 403
-
-        result['error'] = error_type
-        return flask.jsonify(result), status
-
-    # pylint:disable=broad-except
-    except Exception as error_handle:
-        result['error'] = 'Internal server error: {}'.format(error_handle)
-        return flask.jsonify(result), 500
-        
-    else:
-        flask.current_app.logger.debug('POST returns ' + str(result))
-        return flask.jsonify(result), 200
-
 @BLUEPRINT.route('/expertise', methods=['POST'])
 def expertise():
     result = {}
 
     token = flask.request.headers.get('Authorization')
+    test_num = flask.request.headers.get('TEST_NUM')
+    test_mode = False
     
-    if not token:
+    if 'TEST_NUM' in flask.current_app.config.keys():
+        if test_num != flask.current_app.config['TEST_NUM']:
+            flask.current_app.logger.error('[TEST] Error in test num match')
+            result['error'] = 'Error in test num match'
+            return flask.jsonify(result), 400
+        else:
+            test_mode = True
+    elif not token:
         flask.current_app.logger.error('No Authorization token in headers')
         result['error'] = 'No Authorization token in headers'
         return flask.jsonify(result), 400
+    
     try:
         config = flask.request.json['config']
         flask.current_app.logger.info('Received expertise request')
-        openreview_client = openreview.Client(
-            token=token,
-            baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
-        )
-        profile_id = openreview_client.profile.id
-        config['token'] = token
-        config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
+        if not test_mode:
+            openreview_client = openreview.Client(
+                token=token,
+                baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
+            )
+            profile_id = openreview_client.profile.id
+            config['token'] = token
+            config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
         from .celery_tasks import run_userpaper
         with global_id.get_lock():
             job_id = preprocess_config(config, global_id.value, profile_id)
             run_userpaper.apply_async(
-                (config, flask.current_app.logger),
+                (config, flask.current_app.logger, test_mode),
                 queue='userpaper',
                 task_id=job_id
             )
@@ -260,6 +232,8 @@ def results():
         job_dir = f"./{job_id};{profile_id}"
 
         # Search for scores files (only non-sparse scores)
+        # TODO: checking for results is faulty - also check for csv_submissions + csv_expertise
+        # TODO: checking for error by reading profile id directory and error log
         file_dir = None
         for root, dirs, files in os.walk(job_dir, topdown=False):
             for name in files:

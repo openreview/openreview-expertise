@@ -4,8 +4,9 @@ from expertise.service.server import celery_app as celery
 
 
 @celery.task(name='userpaper', track_started=True, bind=True, time_limit=3600 * 24)
-def run_userpaper(self, config: dict, logger: logging.Logger):
+def run_userpaper(self, config: dict, logger: logging.Logger, in_test: bool = False):
     try:
+        # TODO: Use mock client if in test
         openreview_client = openreview.Client(
             token=config['token'],
             baseurl=config['baseurl']
@@ -16,6 +17,7 @@ def run_userpaper(self, config: dict, logger: logging.Logger):
                 queue='expertise',
         )
     except Exception as exc:
+        # TODO: Append job id to an error log in the profile directory
         logger.error('Error: {}'.format(exc))
 
 @celery.task(name='expertise', track_started=True, bind=True, time_limit=3600 * 24)

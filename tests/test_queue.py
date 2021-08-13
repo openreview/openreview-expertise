@@ -1,4 +1,5 @@
 from unittest.mock import patch, MagicMock
+import random
 from pathlib import Path
 import openreview
 import json
@@ -29,30 +30,29 @@ def create_elmo():
 @pytest.fixture()
 def openreview_context():
     """
-    A pytest fixture for setting up a clean OpenReview test instance:
-    1.  Opens a subprocess running `scripts/clean_start_app.js` from the OpenReview home directory.
-    2.  When the OpenReview instance responds to pings, creates a super user account for testing.
-    3.  Yields the process, Flask app, and openreview.Client object to the test function.
+    A pytest fixture for setting up a clean expertise-api test instance:
     `scope` argument is set to 'function', so each function will get a clean test instance.
     """
-
+    config = {
+        "LOG_FILE": "pytest.log",
+        "OPENREVIEW_USERNAME": "openreview.net",
+        "OPENREVIEW_PASSWORD": "1234",
+        "OPENREVIEW_BASEURL": "http://localhost:3000",
+        "SUPERUSER_FIRSTNAME": "Super",
+        "SUPERUSER_LASTNAME": "User",
+        "SUPERUSER_TILDE_ID": "~Super_User1",
+        "SUPERUSER_EMAIL": "info@openreview.net",
+        "TEST_NUM": random.randint(1, 100000)
+    }
     app = expertise.service.create_app(
-        config={
-            "LOG_FILE": "pytest.log",
-            "OPENREVIEW_USERNAME": "openreview.net",
-            "OPENREVIEW_PASSWORD": "1234",
-            "OPENREVIEW_BASEURL": "http://localhost:3000",
-            "SUPERUSER_FIRSTNAME": "Super",
-            "SUPERUSER_LASTNAME": "User",
-            "SUPERUSER_TILDE_ID": "~Super_User1",
-            "SUPERUSER_EMAIL": "info@openreview.net",
-        }
+        config=config
     )
 
     with app.app_context():
         yield {
             "app": app,
             "test_client": app.test_client(),
+            "config": config
         }
 
 @pytest.fixture(scope="session")
