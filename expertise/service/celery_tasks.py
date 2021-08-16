@@ -50,6 +50,7 @@ def run_userpaper(self, config: dict, logger: logging.Logger, in_test: bool = Fa
             )
         else:
             openreview_client = mock_client()
+            logger.info('Creating dataset')
         execute_create_dataset(openreview_client, config_file=config)
         run_expertise.apply_async(
                 (config, logger),
@@ -67,6 +68,7 @@ def run_userpaper(self, config: dict, logger: logging.Logger, in_test: bool = Fa
 @celery.task(name='expertise', track_started=True, bind=True, time_limit=3600 * 24)
 def run_expertise(self, config: dict, logger: logging.Logger):
     try:
+        logger.info('Executing expertise')
         execute_expertise(config_file=config)
     except Exception as exc:
         working_dir = os.path.join(config['profile_dir'], str(config['job_id']))

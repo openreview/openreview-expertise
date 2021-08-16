@@ -19,7 +19,8 @@ class ExpertiseStatusException(Exception):
     '''Exception wrapper class for errors related to the status of the Expertise model'''
     pass
 
-# TODO: Fault tolerance - on server start, wipe all profile directories
+# TODO: Fault tolerance - on server start, for each profile dir, wipe error log and re-populate with crashed jobs
+#     : and clear the directories of the crashed jobs
 
 def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: bool = False):
     """Overwrites/add specific keywords in the submitted job config"""
@@ -81,13 +82,13 @@ def expertise():
     result = {}
 
     token = flask.request.headers.get('Authorization')
-    test_num = flask.request.headers.get('TEST_NUM')
+    test_num = int(flask.request.json.get('TEST_NUM'))
     test_mode = False
     
     if 'TEST_NUM' in flask.current_app.config.keys():
         if test_num != flask.current_app.config['TEST_NUM']:
-            flask.current_app.logger.error('[TEST] Error in test num match')
-            result['error'] = 'Error in test num match'
+            flask.current_app.logger.error(f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}")
+            result['error'] = f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}"
             return flask.jsonify(result), 400
         else:
             test_mode = True
@@ -110,6 +111,7 @@ def expertise():
         else:
             profile_id = f'~{test_num}'
         from .celery_tasks import run_userpaper
+        # TODO: write global id to file?
         with global_id.get_lock():
             job_id = preprocess_config(config, global_id.value, profile_id, test_mode)
             run_userpaper.apply_async(
@@ -149,13 +151,13 @@ def jobs():
     result = {}
 
     token = flask.request.headers.get('Authorization')
-    test_num = flask.request.headers.get('TEST_NUM')
+    test_num = int(flask.request.args.get('TEST_NUM'))
     test_mode = False
     
     if 'TEST_NUM' in flask.current_app.config.keys():
         if test_num != flask.current_app.config['TEST_NUM']:
-            flask.current_app.logger.error('[TEST] Error in test num match')
-            result['error'] = 'Error in test num match'
+            flask.current_app.logger.error(f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}")
+            result['error'] = f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}"
             return flask.jsonify(result), 400
         else:
             test_mode = True
@@ -176,13 +178,15 @@ def jobs():
         else:
             profile_id = f'~{test_num}'
         profile_dir = f'./{profile_id}'
+        flask.current_app.logger.info(f'Looking at {profile_dir}')
 
         # Check for profile directory
         if not os.path.isdir(profile_dir):
             raise OpenReviewException('No jobs submitted since last server reboot')
 
         # Check for error log
-        err_jobs = None
+        flask.current_app.logger.info(f'Checking error log')
+        err_jobs = []
         err_dir = os.path.join(profile_dir, 'err.log')
         if os.path.isfile(err_dir):
             with open(err_dir, 'r') as f:
@@ -197,8 +201,10 @@ def jobs():
 
         # Perform a walk of all job sub-directories for score files
         job_subdirs = [name for name in os.listdir(profile_dir) if os.path.isdir(os.path.join(profile_dir, name))]
+        flask.current_app.logger.info(f'Subdirs: {job_subdirs}')
         for job_dir in job_subdirs:
             search_dir = os.path.join(profile_dir, job_dir)
+            flask.current_app.logger.info(f'Looking at {search_dir}')
             # Look for score files
             file_dir = None
             for root, dirs, files in os.walk(search_dir, topdown=False):
@@ -206,6 +212,7 @@ def jobs():
                     if '.csv' in name and 'sparse' not in name and name not in data_files:
                         file_dir = os.path.join(root, name)
 
+            flask.current_app.logger.info(f'Current score status {file_dir}')
             # If found a non-sparse, non-data file CSV, job has completed
             if file_dir is None:
                 status = 'Processing'
@@ -246,13 +253,13 @@ def results():
     result = {}
 
     token = flask.request.headers.get('Authorization')
-    test_num = flask.request.headers.get('TEST_NUM')
+    test_num = int(flask.request.args.get('TEST_NUM'))
     test_mode = False
     
     if 'TEST_NUM' in flask.current_app.config.keys():
         if test_num != flask.current_app.config['TEST_NUM']:
-            flask.current_app.logger.error('[TEST] Error in test num match')
-            result['error'] = 'Error in test num match'
+            flask.current_app.logger.error(f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}")
+            result['error'] = f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}"
             return flask.jsonify(result), 400
         else:
             test_mode = True
