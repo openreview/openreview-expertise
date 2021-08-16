@@ -2,6 +2,7 @@
 Implements the Flask API endpoints.
 '''
 import flask, os, shutil
+from copy import deepcopy
 from flask_cors import CORS
 from multiprocessing import Value
 from csv import reader
@@ -21,6 +22,17 @@ class ExpertiseStatusException(Exception):
 
 # TODO: Fault tolerance - on server start, for each profile dir, wipe error log and re-populate with crashed jobs
 #     : and clear the directories of the crashed jobs
+
+DEFAULT_CONFIG = {
+    "model": "specter+mfr",
+    "model_params": {
+        "use_title": True,
+        "use_abstract": True,
+        "average_score": False,
+        "max_score": True,
+        "skip_specter": False
+    }
+}
 
 def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: bool = False):
     """Overwrites/add specific keywords in the submitted job config"""
@@ -98,7 +110,7 @@ def expertise():
         return flask.jsonify(result), 400
     
     try:
-        config = flask.request.json['config']
+        config = deepcopy(DEFAULT_CONFIG)
         flask.current_app.logger.info('Received expertise request')
         if not test_mode:
             openreview_client = openreview.Client(
@@ -110,10 +122,19 @@ def expertise():
             config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
         else:
             profile_id = f'~{test_num}'
+        # Update default config with request body
+        user_config = {}
+        # Throw error if required field isn't present
+        req_fields = ['name', 'match_group', 'paper_invitation']
+        for field in req_fields:
+            user_config[field] = flask.request.json[field]
+
+        config.update(flask.request.json) # Update optional fields
         from .celery_tasks import run_userpaper
         # TODO: write global id to file?
         with global_id.get_lock():
             job_id = preprocess_config(config, global_id.value, profile_id, test_mode)
+            flask.current_app.logger.info(f'Config: {config}')
             run_userpaper.apply_async(
                 (config, flask.current_app.logger, test_mode),
                 queue='userpaper',
