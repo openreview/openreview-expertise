@@ -126,6 +126,9 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     
     # Query until job is complete
     time.sleep(5)
+    response = test_client.get('/results', query_string={'TEST_NUM': test_num, 'job_id': 0})
+    assert response.status_code == 500
+
     response = test_client.get('/jobs', query_string={'TEST_NUM': test_num}).json['results']
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
@@ -133,3 +136,17 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         response = test_client.get('/jobs', query_string={'TEST_NUM': test_num}).json['results']
     
     assert response[0]['status'] == 'Completed'
+
+    # Check for results
+    assert os.path.isdir(f'~{test_num}/0')
+    assert os.path.isfile(f'~{test_num}/0/test_run.csv')
+    response = test_client.get('/results', query_string={'TEST_NUM': test_num, 'job_id': 0}).json['results']
+    assert len(response) == 6
+    response = test_client.get('/results', query_string={'TEST_NUM': test_num, 'job_id': 0, 'delete_on_get': True}).json['results']
+    assert not os.path.isdir(f'~{test_num}/0')
+    assert not os.path.isfile(f'~{test_num}/0/test_run.csv')
+
+    # Clean up test
+    shutil.rmtree(f'~{test_num}')
+    os.remove('pytest.log')
+    os.remove('default.log')

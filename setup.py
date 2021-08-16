@@ -35,7 +35,8 @@ setup(
         'flask-cors==3.0.9',
         'cffi>=1.0.0',
         'celery',
-        'redis'
+        'redis',
+        'pytest-celery'
     ],
     zip_safe=False
 )

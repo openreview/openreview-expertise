@@ -315,6 +315,7 @@ def results():
         
         # Clear directory
         if delete_on_get:
+            flask.current_app.logger.error(f'Deleting {search_dir}')
             shutil.rmtree(search_dir)
                 
     except openreview.OpenReviewException as error_handle:
