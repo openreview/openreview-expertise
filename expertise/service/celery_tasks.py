@@ -70,6 +70,7 @@ def run_expertise(self, config: dict, logger: logging.Logger):
     try:
         logger.info('Executing expertise')
         execute_expertise(config_file=config)
+        logger.info('Returned from expertise')
     except Exception as exc:
         working_dir = os.path.join(config['profile_dir'], str(config['job_id']))
         logger.error(f'Removing dir: {working_dir}')
