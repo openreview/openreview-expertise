@@ -13,12 +13,7 @@ from openreview.openreview import OpenReviewException
 BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
 
-# task_queue = UserPaperQueue(max_jobs = 1, inner_queue=ExpertiseQueue, inner_key='expertise', outer_key='dataset')
 global_id: Value = Value('i', 0)
-
-class ExpertiseStatusException(Exception):
-    '''Exception wrapper class for errors related to the status of the Expertise model'''
-    pass
 
 # TODO: Fault tolerance - on server start, for each profile dir, wipe error log and re-populate with crashed jobs
 #     : and clear the directories of the crashed jobs
@@ -33,6 +28,10 @@ DEFAULT_CONFIG = {
         "skip_specter": False
     }
 }
+
+SPECTER_DIR = '../expertise-utils/specter/'
+MFR_VOCAB_DIR = '../expertise-utils/multifacet_recommender/feature_vocab_file'
+MFR_CHECKPOINT_DIR = '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/'
 
 def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: bool = False):
     """Overwrites/add specific keywords in the submitted job config"""
@@ -77,9 +76,9 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
     config['profile_dir'] = f'./{profile_id}'
 
     # Set SPECTER+MFR paths
-    config['model_params']['specter_dir'] = '../expertise-utils/specter/'
-    config['model_params']['mfr_feature_vocab_file'] = '../expertise-utils/multifacet_recommender/feature_vocab_file'
-    config['model_params']['mfr_checkpoint_dir'] = '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/'
+    config['model_params']['specter_dir'] = SPECTER_DIR
+    config['model_params']['mfr_feature_vocab_file'] = MFR_VOCAB_DIR
+    config['model_params']['mfr_checkpoint_dir'] = MFR_CHECKPOINT_DIR
     return f'{job_id};{profile_id}'
 
 
@@ -91,10 +90,18 @@ def test():
 
 @BLUEPRINT.route('/expertise', methods=['POST'])
 def expertise():
+    """
+    Requires authentication
+    Required fields:
+        name
+        match_group
+        paper_invitation
+    All other fields are optional and will be populated by the server
+    """
     result = {}
 
     token = flask.request.headers.get('Authorization')
-    test_num = int(flask.request.json.get('TEST_NUM'))
+    test_num = int(flask.request.json.get('TEST_NUM', 0))
     test_mode = False
     
     if 'TEST_NUM' in flask.current_app.config.keys():
@@ -169,10 +176,14 @@ def expertise():
 
 @BLUEPRINT.route('/jobs', methods=['GET'])
 def jobs():
+    """
+    Requires authentication
+    Required fields: none
+    """
     result = {}
 
     token = flask.request.headers.get('Authorization')
-    test_num = int(flask.request.args.get('TEST_NUM'))
+    test_num = int(flask.request.args.get('TEST_NUM', 0))
     test_mode = False
     
     if 'TEST_NUM' in flask.current_app.config.keys():
@@ -271,10 +282,17 @@ def jobs():
 
 @BLUEPRINT.route('/results', methods=['GET'])
 def results():
+    """
+    Requires authentication
+    Required fields:
+        job_id
+    Optional field:
+        delete_on_get
+    """
     result = {}
 
     token = flask.request.headers.get('Authorization')
-    test_num = int(flask.request.args.get('TEST_NUM'))
+    test_num = int(flask.request.args.get('TEST_NUM', 0))
     test_mode = False
     
     if 'TEST_NUM' in flask.current_app.config.keys():
