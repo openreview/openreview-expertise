@@ -133,6 +133,31 @@ python -m expertise.service --host localhost --port 5000
 
 By default, the app will run on `http://localhost:5000`. The endpoint `/expertise/test` should show a simple page indicating that Flask is running.
 
+In order to start the Celery queue worker, use: 
+```
+celery --app expertise.service.server.celery_app worker
+```
+
+### Configuration
+Configuration files are located in `/expertise/service/config`. When started, the server will search for a `.cfg` file in `/expertise/service/config` that matches the environment variable `FLASK_ENV`, and will default to the values in `default.cfg`.
+
+For example, with file `/expertise/service/config/development.cfg`:
+```
+# development.cfg
+LOG_FILE='development.log'
+
+OPENREVIEW_USERNAME='OpenReview.net'
+OPENREVIEW_PASSWORD='1234'
+OPENREVIEW_BASEURL='http://localhost:3000'
+```
+
+Start the server with `development.cfg`:
+```
+FLASK_ENV=development python -m expertise.service
+```
+
+Note that Flask will set `FLASK_ENV` to "production" by default, so if a file `production.cfg` exists, and the `FLASK_ENV` variable is unset, then the app will overwrite default values with those in `production.cfg`.
+
 ## Configuration File
 
 The configuration file or `config.json` is the file that contains all the parameters to calculate affinity scores.
