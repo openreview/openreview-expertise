@@ -124,6 +124,8 @@ def expertise():
                 token=token,
                 baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
             )
+            if openreview_client.profile is None:
+                raise OpenReviewException('Forbidden: Profile does not exist')
             profile_id = openreview_client.profile.id
             config['token'] = token
             config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
