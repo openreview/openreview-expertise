@@ -29,10 +29,6 @@ DEFAULT_CONFIG = {
     }
 }
 
-SPECTER_DIR = '../expertise-utils/specter/'
-MFR_VOCAB_DIR = '../expertise-utils/multifacet_recommender/feature_vocab_file'
-MFR_CHECKPOINT_DIR = '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/'
-
 def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: bool = False):
     """Overwrites/add specific keywords in the submitted job config"""
     # Overwrite certain keys in the config
@@ -76,9 +72,9 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
     config['profile_dir'] = f'./{profile_id}'
 
     # Set SPECTER+MFR paths
-    config['model_params']['specter_dir'] = SPECTER_DIR
-    config['model_params']['mfr_feature_vocab_file'] = MFR_VOCAB_DIR
-    config['model_params']['mfr_checkpoint_dir'] = MFR_CHECKPOINT_DIR
+    config['model_params']['specter_dir'] = flask.current_app.config['SPECTER_DIR']
+    config['model_params']['mfr_feature_vocab_file'] = flask.current_app.config['MFR_VOCAB_DIR']
+    config['model_params']['mfr_checkpoint_dir'] = flask.current_app.config['MFR_CHECKPOINT_DIR']
     return f'{job_id};{profile_id}'
 
 

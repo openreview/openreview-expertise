@@ -46,6 +46,9 @@ def openreview_context():
         "SUPERUSER_LASTNAME": "User",
         "SUPERUSER_TILDE_ID": "~Super_User1",
         "SUPERUSER_EMAIL": "info@openreview.net",
+        "SPECTER_DIR": '../expertise-utils/specter/',
+        "MFR_VOCAB_DIR": '../expertise-utils/multifacet_recommender/feature_vocab_file',
+        "MFR_CHECKPOINT_DIR": '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/',
         "TEST_NUM": random.randint(1, 100000)
     }
     app = expertise.service.create_app(
