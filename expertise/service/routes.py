@@ -1,7 +1,7 @@
 '''
 Implements the Flask API endpoints.
 '''
-import flask, os, shutil
+import flask, os, shutil, random, string
 from copy import deepcopy
 from flask_cors import CORS
 from multiprocessing import Value
@@ -99,6 +99,7 @@ def expertise():
     token = flask.request.headers.get('Authorization')
     test_num = int(flask.request.json.get('TEST_NUM', 0))
     test_mode = False
+    in_test_mode = 'TEST_NUM' in flask.current_app.config.keys()
     
     if 'TEST_NUM' in flask.current_app.config.keys():
         if test_num != flask.current_app.config['TEST_NUM']:
@@ -136,18 +137,20 @@ def expertise():
 
         config.update(flask.request.json) # Update optional fields
         from .celery_tasks import run_userpaper
-        # TODO: write global id to file?
-        with global_id.get_lock():
-            job_id = preprocess_config(config, global_id.value, profile_id, test_mode)
-            flask.current_app.logger.info(f'Config: {config}')
-            run_userpaper.apply_async(
-                (config, flask.current_app.logger, test_mode),
-                queue='userpaper',
-                task_id=job_id
-            )
-            result['job_id'] = global_id.value
+        if in_test_mode:
+            job_id = str(global_id.value)
             global_id.value += 1
-            flask.current_app.logger.info('Returning from request')
+        else:
+            job_id = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits + string.ascii_lowercase) for _ in range(5))
+        preprocess_config(config, job_id, profile_id, test_mode)
+        flask.current_app.logger.info(f'Config: {config}')
+        run_userpaper.apply_async(
+            (config, flask.current_app.logger, test_mode),
+            queue='userpaper',
+            task_id=job_id
+        )
+        result['job_id'] = job_id
+        flask.current_app.logger.info('Returning from request')
         
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle))
