@@ -18,19 +18,20 @@ global_id: Value = Value('i', 0)
 # TODO: Fault tolerance - on server start, for each profile dir, wipe error log and re-populate with crashed jobs
 #     : and clear the directories of the crashed jobs
 
-DEFAULT_CONFIG = {
-    "model": "specter+mfr",
-    "model_params": {
-        "use_title": True,
-        "use_abstract": True,
-        "average_score": False,
-        "max_score": True,
-        "skip_specter": False
-    }
-}
 
 def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: bool = False):
     """Overwrites/add specific keywords in the submitted job config"""
+    new_config = {
+        "model": "specter+mfr",
+        "model_params": {
+            "use_title": True,
+            "use_abstract": True,
+            "average_score": False,
+            "max_score": True,
+            "skip_specter": False
+        }
+    }
+    new_config.update(config)
     # Overwrite certain keys in the config
     filepath_keys = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
     file_keys = ['csv_expertise', 'csv_submissions']
@@ -38,44 +39,44 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
 
     # Filter some keys
     if 'model_params' not in config.keys():
-        config['model_params'] = {}
+        new_config['model_params'] = {}
     file_keys = [key for key in file_keys if key in config.keys()]
 
     # First handle dataset -> directory
     if 'dataset' not in config.keys():
-        config['dataset'] = {}
-    config['dataset']['directory'] = root_dir
+        new_config['dataset'] = {}
+    new_config['dataset']['directory'] = root_dir
 
-    if not os.path.isdir(config['dataset']['directory']):
-        os.makedirs(config['dataset']['directory'])
+    if not os.path.isdir(new_config['dataset']['directory']):
+        os.makedirs(new_config['dataset']['directory'])
 
     # Next handle other file paths
     for key in filepath_keys:
-        config['model_params'][key] = root_dir
+        new_config['model_params'][key] = root_dir
     
     # Now, write data stored in the file keys to disk
     if test_mode:
         for key in file_keys:
             output_file = key + '.csv'
-            write_to_dir = os.path.join(config['dataset']['directory'], output_file)
+            write_to_dir = os.path.join(new_config['dataset']['directory'], output_file)
 
             # Add newline characters, write to file and set the field in the config to the directory of the file
-            for idx, data in enumerate(config[key]):
-                config[key][idx] = data.strip() + '\n'
+            for idx, data in enumerate(new_config[key]):
+                new_config[key][idx] = data.strip() + '\n'
             with open(write_to_dir, 'w') as csv_out:
-                csv_out.writelines(config[key])
+                csv_out.writelines(new_config[key])
             
-            config[key] = output_file
+            new_config[key] = output_file
     
     # For error handling, add job_id and profile_dir to config
-    config['job_id'] = job_id
-    config['profile_dir'] = f"./{flask.current_app.config['WORKING_DIR']}/{profile_id}"
+    new_config['job_id'] = job_id
+    new_config['profile_dir'] = f"./{flask.current_app.config['WORKING_DIR']}/{profile_id}"
 
     # Set SPECTER+MFR paths
-    config['model_params']['specter_dir'] = flask.current_app.config['SPECTER_DIR']
-    config['model_params']['mfr_feature_vocab_file'] = flask.current_app.config['MFR_VOCAB_DIR']
-    config['model_params']['mfr_checkpoint_dir'] = flask.current_app.config['MFR_CHECKPOINT_DIR']
-    return f'{job_id};{profile_id}'
+    new_config['model_params']['specter_dir'] = flask.current_app.config['SPECTER_DIR']
+    new_config['model_params']['mfr_feature_vocab_file'] = flask.current_app.config['MFR_VOCAB_DIR']
+    new_config['model_params']['mfr_checkpoint_dir'] = flask.current_app.config['MFR_CHECKPOINT_DIR']
+    return new_config
 
 
 @BLUEPRINT.route('/test')
@@ -114,7 +115,7 @@ def expertise():
         return flask.jsonify(result), 400
     
     try:
-        config = deepcopy(DEFAULT_CONFIG)
+        user_config = flask.request.json
         flask.current_app.logger.info('Received expertise request')
         if not test_mode:
             openreview_client = openreview.Client(
@@ -124,25 +125,22 @@ def expertise():
             if openreview_client.profile is None:
                 raise OpenReviewException('Forbidden: Profile does not exist')
             profile_id = openreview_client.profile.id
-            config['token'] = token
-            config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
+            user_config['token'] = token
+            user_config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
         else:
             profile_id = f'~{test_num}'
-        # Update default config with request body
-        user_config = {}
         # Throw error if required field isn't present
         req_fields = ['name', 'match_group', 'paper_invitation']
         for field in req_fields:
-            user_config[field] = flask.request.json[field]
+            assert field in flask.request.json, f'Missing required field: {field}'
 
-        config.update(flask.request.json) # Update optional fields
         from .celery_tasks import run_userpaper
         if in_test_mode:
             job_id = str(global_id.value)
             global_id.value += 1
         else:
             job_id = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits + string.ascii_lowercase) for _ in range(5))
-        preprocess_config(config, job_id, profile_id, test_mode)
+        config = preprocess_config(user_config, job_id, profile_id, test_mode)
         flask.current_app.logger.info(f'Config: {config}')
         run_userpaper.apply_async(
             (config, flask.current_app.logger, test_mode),
