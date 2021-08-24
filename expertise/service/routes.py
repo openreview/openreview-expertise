@@ -1,7 +1,7 @@
 '''
 Implements the Flask API endpoints.
 '''
-import flask, os, shutil, random, string
+import flask, os, shutil, random, string, json
 from copy import deepcopy
 from flask_cors import CORS
 from multiprocessing import Value
@@ -330,13 +330,15 @@ def results():
         profile_dir = f"./{flask.current_app.config['WORKING_DIR']}/{profile_id}"
 
         # Search for scores files (only non-sparse scores)
-        file_dir = None
+        file_dir, metadata_dir = None, None
         search_dir = os.path.join(profile_dir, job_id)
         # Look for score files
         for root, dirs, files in os.walk(search_dir, topdown=False):
             for name in files:
                 if '.csv' in name and 'sparse' not in name and name not in data_files:
                     file_dir = os.path.join(root, name)
+                if 'metadata' in name:
+                    metadata_dir = os.path.join(root, name)
 
         # Assemble scores
         if file_dir is None:
@@ -352,7 +354,11 @@ def results():
                         'score': float(row[2])
                     })
             result['results'] = ret_list
-        
+
+            # Gather metadata
+            with open(metadata_dir, 'r') as metadata:
+                result['metadata'] = json.load(metadata)
+
         # Clear directory
         if delete_on_get:
             flask.current_app.logger.error(f'Deleting {search_dir}')

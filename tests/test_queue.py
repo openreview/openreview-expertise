@@ -138,7 +138,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         content_type='application/json'
     )
     assert response.status_code == 200, f'{response.json}'
-    
+
     # Query until job is complete
     time.sleep(5)
     response = test_client.get('/results', query_string={'TEST_NUM': test_num, 'job_id': 0})
@@ -155,7 +155,10 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     # Check for results
     assert os.path.isdir(f"{server_config['WORKING_DIR']}/~{test_num}/0")
     assert os.path.isfile(f"{server_config['WORKING_DIR']}/~{test_num}/0/test_run.csv")
-    response = test_client.get('/results', query_string={'TEST_NUM': test_num, 'job_id': 0}).json['results']
+    response = test_client.get('/results', query_string={'TEST_NUM': test_num, 'job_id': 0})
+    metadata = response.json['metadata']
+    assert metadata['submission_count'] == 2
+    response = response.json['results']
     assert len(response) == 6
     response = test_client.get('/results', query_string={'TEST_NUM': test_num, 'job_id': 0, 'delete_on_get': True}).json['results']
     assert not os.path.isdir(f"{server_config['WORKING_DIR']}/~{test_num}/0")
@@ -213,6 +216,6 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     assert os.path.isfile(f"{server_config['WORKING_DIR']}/~{test_num}/err.log")
 
     # Clean up test
-    shutil.rmtree(f"{server_config['WORKING_DIR']}/~{test_num}")
+    shutil.rmtree(f"{server_config['WORKING_DIR']}/")
     os.remove('pytest.log')
     os.remove('default.log')
