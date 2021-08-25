@@ -144,7 +144,7 @@ def expertise():
             user_config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
         else:
             profile_id = f'~{test_num}'
-            
+
         job_id = enqueue_expertise(user_config, profile_id, in_test_mode)
 
         result['job_id'] = job_id
@@ -205,7 +205,9 @@ def jobs():
                 token=token,
                 baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
             )
-            profile_id = openreview_client.get_profile().id
+            if openreview_client.profile is None:
+                raise OpenReviewException('Forbidden: Profile does not exist')
+            profile_id = openreview_client.profile.id
         else:
             profile_id = f'~{test_num}'
         profile_dir = f"./{flask.current_app.config['WORKING_DIR']}/{profile_id}"
@@ -322,7 +324,9 @@ def results():
                 token=token,
                 baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
             )
-            profile_id = openreview_client.get_profile().id
+            if openreview_client.profile is None:
+                raise OpenReviewException('Forbidden: Profile does not exist')
+            profile_id = openreview_client.profile.id
         else:
             profile_id = f'~{test_num}'
         profile_dir = f"./{flask.current_app.config['WORKING_DIR']}/{profile_id}"
