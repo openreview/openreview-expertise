@@ -35,7 +35,7 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
     # Overwrite certain keys in the config
     filepath_keys = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
     file_keys = ['csv_expertise', 'csv_submissions']
-    root_dir = f"./{flask.current_app.config['WORKING_DIR']}/{profile_id}/{job_id}"
+    root_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id, job_id)
 
     # Filter some keys
     if 'model_params' not in config.keys():
@@ -70,7 +70,7 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
     
     # For error handling, add job_id and profile_dir to config
     new_config['job_id'] = job_id
-    new_config['profile_dir'] = f"./{flask.current_app.config['WORKING_DIR']}/{profile_id}"
+    new_config['profile_dir'] = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
 
     # Set SPECTER+MFR paths
     new_config['model_params']['specter_dir'] = flask.current_app.config['SPECTER_DIR']
@@ -210,7 +210,7 @@ def jobs():
             profile_id = openreview_client.profile.id
         else:
             profile_id = f'~{test_num}'
-        profile_dir = f"./{flask.current_app.config['WORKING_DIR']}/{profile_id}"
+        profile_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
         flask.current_app.logger.info(f'Looking at {profile_dir}')
 
         # Check for profile directory
@@ -329,7 +329,7 @@ def results():
             profile_id = openreview_client.profile.id
         else:
             profile_id = f'~{test_num}'
-        profile_dir = f"./{flask.current_app.config['WORKING_DIR']}/{profile_id}"
+        profile_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
 
         # Search for scores files (only non-sparse scores)
         file_dir, metadata_dir = None, None

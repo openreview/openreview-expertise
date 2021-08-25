@@ -49,7 +49,7 @@ def openreview_context():
         "SPECTER_DIR": '../expertise-utils/specter/',
         "MFR_VOCAB_DIR": '../expertise-utils/multifacet_recommender/feature_vocab_file',
         "MFR_CHECKPOINT_DIR": '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/',
-        "WORKING_DIR": 'TEMP_DIR',
+        "WORKING_DIR": 'tmp',
         "TEST_NUM": random.randint(1, 100000)
     }
     app = expertise.service.create_app(
@@ -66,8 +66,8 @@ def openreview_context():
 @pytest.fixture(scope="session")
 def celery_config():
     return {
-        "broker_url": "redis://localhost:6379/0",
-        "result_backend": "redis://localhost:6379/0",
+        "broker_url": "redis://localhost:6379/10",
+        "result_backend": "redis://localhost:6379/10",
         "task_track_started": True,
         "task_serializer": "pickle",
         "result_serializer": "pickle",
