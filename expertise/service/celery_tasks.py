@@ -41,9 +41,9 @@ def mock_client():
     return client
 
 @celery.task(name='userpaper', track_started=True, bind=True, time_limit=3600 * 24)
-def run_userpaper(self, config: dict, logger: logging.Logger, in_test: bool = False):
+def run_userpaper(self, config: dict, logger: logging.Logger):
     try:
-        if not in_test:
+        if 'token' in config.keys():
             openreview_client = openreview.Client(
                 token=config['token'],
                 baseurl=config['baseurl']

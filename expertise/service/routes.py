@@ -78,6 +78,28 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
     new_config['model_params']['mfr_checkpoint_dir'] = flask.current_app.config['MFR_CHECKPOINT_DIR']
     return new_config
 
+def enqueue_expertise(json_request, profile_id, in_test_mode):
+    # Throw error if required field isn't present
+    req_fields = ['name', 'match_group', 'paper_invitation']
+    for field in req_fields:
+        assert field in flask.request.json, f'Missing required field: {field}'
+
+    if in_test_mode:
+        job_id = str(global_id.value)
+        global_id.value += 1
+    else:
+        job_id = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits + string.ascii_lowercase) for _ in range(5))
+    
+    from .celery_tasks import run_userpaper
+    config = preprocess_config(json_request, job_id, profile_id, in_test_mode)
+    flask.current_app.logger.info(f'Config: {config}')
+    run_userpaper.apply_async(
+        (config, flask.current_app.logger),
+        queue='userpaper',
+        task_id=job_id
+    )
+    
+    return job_id
 
 @BLUEPRINT.route('/test')
 def test():
@@ -99,17 +121,9 @@ def expertise():
 
     token = flask.request.headers.get('Authorization')
     test_num = int(flask.request.json.get('TEST_NUM', 0))
-    test_mode = False
     in_test_mode = 'TEST_NUM' in flask.current_app.config.keys()
     
-    if 'TEST_NUM' in flask.current_app.config.keys():
-        if test_num != flask.current_app.config['TEST_NUM']:
-            flask.current_app.logger.error(f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}")
-            result['error'] = f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}"
-            return flask.jsonify(result), 400
-        else:
-            test_mode = True
-    elif not token:
+    if not token and not in_test_mode:
         flask.current_app.logger.error('No Authorization token in headers')
         result['error'] = 'No Authorization token in headers'
         return flask.jsonify(result), 400
@@ -117,7 +131,8 @@ def expertise():
     try:
         user_config = flask.request.json
         flask.current_app.logger.info('Received expertise request')
-        if not test_mode:
+        
+        if not in_test_mode:
             openreview_client = openreview.Client(
                 token=token,
                 baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
@@ -129,24 +144,9 @@ def expertise():
             user_config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
         else:
             profile_id = f'~{test_num}'
-        # Throw error if required field isn't present
-        req_fields = ['name', 'match_group', 'paper_invitation']
-        for field in req_fields:
-            assert field in flask.request.json, f'Missing required field: {field}'
+            
+        job_id = enqueue_expertise(user_config, profile_id, in_test_mode)
 
-        from .celery_tasks import run_userpaper
-        if in_test_mode:
-            job_id = str(global_id.value)
-            global_id.value += 1
-        else:
-            job_id = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits + string.ascii_lowercase) for _ in range(5))
-        config = preprocess_config(user_config, job_id, profile_id, test_mode)
-        flask.current_app.logger.info(f'Config: {config}')
-        run_userpaper.apply_async(
-            (config, flask.current_app.logger, test_mode),
-            queue='userpaper',
-            task_id=job_id
-        )
         result['job_id'] = job_id
         flask.current_app.logger.info('Returning from request')
         
