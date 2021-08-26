@@ -8,6 +8,7 @@ from multiprocessing import Value
 from csv import reader
 import openreview
 from openreview.openreview import OpenReviewException
+from .utils import mock_client
 
 
 BLUEPRINT = flask.Blueprint('expertise', __name__)
@@ -37,7 +38,7 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
     # Define expected/required API fields
     req_fields = ['name', 'match_group', 'paper_invitation']
     optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
-    optional_fields = ['model', 'model_params', 'exclusion_inv', 'TEST_NUM']
+    optional_fields = ['model', 'model_params', 'exclusion_inv']
     path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
     file_keys = ['csv_expertise', 'csv_submissions']
 
@@ -106,8 +107,7 @@ def expertise():
     result = {}
 
     token = flask.request.headers.get('Authorization')
-    test_num = int(flask.request.json.get('TEST_NUM', 0))
-    in_test_mode = 'TEST_NUM' in flask.current_app.config.keys()
+    in_test_mode = 'IN_TEST' in flask.current_app.config.keys()
     
     if not token and not in_test_mode:
         flask.current_app.logger.error('No Authorization token in headers')
@@ -123,13 +123,15 @@ def expertise():
                 token=token,
                 baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
             )
-            if openreview_client.profile is None:
-                raise OpenReviewException('Forbidden: Profile does not exist')
-            profile_id = openreview_client.profile.id
             user_config['token'] = token
             user_config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
         else:
-            profile_id = f'~{test_num}'
+            openreview_client = mock_client()
+
+        profile = openreview_client.get_profile()
+        if profile is None:
+            raise OpenReviewException('Forbidden: Profile does not exist')
+        profile_id = profile.id
 
         job_id = enqueue_expertise(user_config, profile_id, in_test_mode)
 
@@ -168,17 +170,9 @@ def jobs():
     result = {}
 
     token = flask.request.headers.get('Authorization')
-    test_num = int(flask.request.args.get('TEST_NUM', 0))
-    test_mode = False
+    in_test_mode = 'IN_TEST' in flask.current_app.config.keys()
     
-    if 'TEST_NUM' in flask.current_app.config.keys():
-        if test_num != flask.current_app.config['TEST_NUM']:
-            flask.current_app.logger.error(f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}")
-            result['error'] = f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}"
-            return flask.jsonify(result), 400
-        else:
-            test_mode = True
-    elif not token:
+    if not token and not in_test_mode:
         flask.current_app.logger.error('No Authorization token in headers')
         result['error'] = 'No Authorization token in headers'
         return flask.jsonify(result), 400
@@ -186,16 +180,19 @@ def jobs():
     try:
         result['results'] = []
         data_files = ['csv_expertise.csv', 'csv_submissions.csv']
-        if not test_mode:
+        if not in_test_mode:
             openreview_client = openreview.Client(
                 token=token,
                 baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
             )
-            if openreview_client.profile is None:
-                raise OpenReviewException('Forbidden: Profile does not exist')
-            profile_id = openreview_client.profile.id
         else:
-            profile_id = f'~{test_num}'
+            openreview_client = mock_client()
+
+        profile = openreview_client.get_profile()
+        if profile is None:
+            raise OpenReviewException('Forbidden: Profile does not exist')
+        profile_id = profile.id
+
         profile_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
         flask.current_app.logger.info(f'Looking at {profile_dir}')
 
@@ -279,17 +276,9 @@ def results():
     result = {}
 
     token = flask.request.headers.get('Authorization')
-    test_num = int(flask.request.args.get('TEST_NUM', 0))
-    test_mode = False
+    in_test_mode = 'IN_TEST' in flask.current_app.config.keys()
     
-    if 'TEST_NUM' in flask.current_app.config.keys():
-        if test_num != flask.current_app.config['TEST_NUM']:
-            flask.current_app.logger.error(f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}")
-            result['error'] = f"[TEST] Error in test num match, expected: {flask.current_app.config['TEST_NUM']} got: {test_num}"
-            return flask.jsonify(result), 400
-        else:
-            test_mode = True
-    elif not token:
+    if not token and not in_test_mode:
         flask.current_app.logger.error('No Authorization token in headers')
         result['error'] = 'No Authorization token in headers'
         return flask.jsonify(result), 400
@@ -305,16 +294,20 @@ def results():
                 delete_on_get = True
             else:
                 delete_on_get = False
-        if not test_mode:
+        
+        if not in_test_mode:
             openreview_client = openreview.Client(
                 token=token,
                 baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
             )
-            if openreview_client.profile is None:
-                raise OpenReviewException('Forbidden: Profile does not exist')
-            profile_id = openreview_client.profile.id
         else:
-            profile_id = f'~{test_num}'
+            openreview_client = mock_client()
+
+        profile = openreview_client.get_profile()
+        if profile is None:
+            raise OpenReviewException('Forbidden: Profile does not exist')
+        profile_id = profile.id
+
         profile_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
 
         # Search for scores files (only non-sparse scores)

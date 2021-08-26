@@ -51,7 +51,7 @@ def openreview_context():
         "MFR_VOCAB_DIR": '../expertise-utils/multifacet_recommender/feature_vocab_file',
         "MFR_CHECKPOINT_DIR": '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/',
         "WORKING_DIR": 'tmp',
-        "TEST_NUM": random.randint(1, 100000)
+        "IN_TEST": True
     }
     app = expertise.service.create_app(
         config=config
@@ -91,10 +91,10 @@ def celery_worker_parameters():
 def test_elmo_queue(openreview_context, celery_app, celery_worker):
     test_client = openreview_context['test_client']
     server_config = openreview_context['config']
-    test_num = server_config['TEST_NUM']
+    test_profile = '~Test_User1'
     
-    if os.path.isdir(f'~{test_num}'):
-        shutil.rmtree(f'~{test_num}')
+    if os.path.isdir(f'tmp/{test_profile}'):
+        shutil.rmtree(f'tmp/{test_profile}')
 
     # Gather config
     config = {
@@ -111,7 +111,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     # Filesystem setup - Parse csv_submissions into list of csv strings
     response = test_client.post(
         '/expertise',
-        data = json.dumps({'TEST_NUM': test_num, **config}),
+        data = json.dumps({**config}),
         content_type='application/json'
     )
     assert response.status_code == 500, f'{response.json}' # Missing a required field
@@ -119,29 +119,29 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     config.update({'paper_invitation': 'ABC.cc/-/Submission'})
     response = test_client.post(
         '/expertise',
-        data = json.dumps({'TEST_NUM': test_num, **config}),
+        data = json.dumps({**config}),
         content_type='application/json'
     )
     assert response.status_code == 200, f'{response.json}'
     job_id = response.json['job_id']
     # Query until job is complete
     time.sleep(5)
-    response = test_client.get('/results', query_string={'TEST_NUM': test_num, 'job_id': job_id})
+    response = test_client.get('/results', query_string={'job_id': job_id})
     assert response.status_code == 500
 
-    response = test_client.get('/jobs', query_string={'TEST_NUM': test_num}).json['results']
+    response = test_client.get('/jobs', query_string={}).json['results']
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
         time.sleep(5)
-        response = test_client.get('/jobs', query_string={'TEST_NUM': test_num}).json['results']
+        response = test_client.get('/jobs', query_string={}).json['results']
     
     assert response[0]['status'] == 'Completed'
 
     # Check for results
-    assert os.path.isdir(f"{server_config['WORKING_DIR']}/~{test_num}/{job_id}")
-    assert os.path.isfile(f"{server_config['WORKING_DIR']}/~{test_num}/{job_id}/test_run.csv")
+    assert os.path.isdir(f"{server_config['WORKING_DIR']}/{test_profile}/{job_id}")
+    assert os.path.isfile(f"{server_config['WORKING_DIR']}/{test_profile}/{job_id}/test_run.csv")
 
-    response = test_client.get('/results', query_string={'TEST_NUM': test_num, 'job_id': job_id})
+    response = test_client.get('/results', query_string={'job_id': job_id})
     metadata = response.json['metadata']
     assert metadata['submission_count'] == 2
     response = response.json['results']
@@ -152,9 +152,9 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         assert profile_id.startswith('~')
         assert score >= 0 and score <= 1
         
-    response = test_client.get('/results', query_string={'TEST_NUM': test_num, 'job_id': job_id, 'delete_on_get': True}).json['results']
-    assert not os.path.isdir(f"{server_config['WORKING_DIR']}/~{test_num}/{job_id}")
-    assert not os.path.isfile(f"{server_config['WORKING_DIR']}/~{test_num}/{job_id}/test_run.csv")
+    response = test_client.get('/results', query_string={'job_id': job_id, 'delete_on_get': True}).json['results']
+    assert not os.path.isdir(f"{server_config['WORKING_DIR']}/{test_profile}/{job_id}")
+    assert not os.path.isfile(f"{server_config['WORKING_DIR']}/~{test_profile}/{job_id}/test_run.csv")
 
     # Gather second config with an error in the model field
     config = {
@@ -172,7 +172,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     }
     response = test_client.post(
         '/expertise',
-        data = json.dumps({'TEST_NUM': test_num, **config}),
+        data = json.dumps({**config}),
         content_type='application/json'
     )
     assert response.status_code == 200, f'{response.json}'
@@ -180,17 +180,17 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
 
     # Query until job is complete
     time.sleep(5)
-    response = test_client.get('/results', query_string={'TEST_NUM': test_num, 'job_id': job_id})
+    response = test_client.get('/results', query_string={'job_id': job_id})
     assert response.status_code == 500
 
-    response = test_client.get('/jobs', query_string={'TEST_NUM': test_num}).json['results']
+    response = test_client.get('/jobs', query_string={}).json['results']
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
         time.sleep(5)
-        response = test_client.get('/jobs', query_string={'TEST_NUM': test_num}).json['results']
+        response = test_client.get('/jobs', query_string={}).json['results']
     
     assert response[0]['status'] == 'Error'
-    assert os.path.isfile(f"{server_config['WORKING_DIR']}/~{test_num}/err.log")
+    assert os.path.isfile(f"{server_config['WORKING_DIR']}/{test_profile}/err.log")
 
     # Clean up test
     shutil.rmtree(f"{server_config['WORKING_DIR']}/")
