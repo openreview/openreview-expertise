@@ -42,20 +42,6 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
     path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
     file_keys = ['csv_expertise', 'csv_submissions']
 
-    # Populate with server-side fields
-    root_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id, job_id)
-    new_config['dataset']['directory'] = root_dir
-    for field in path_fields:
-        new_config['model_params'][field] = root_dir
-    new_config['job_id'] = job_id
-    new_config['profile_dir'] = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
-    # Set SPECTER+MFR paths
-    if config.get('model', 'specter+mfr') == 'specter+mfr':
-        new_config['model_params']['specter_dir'] = flask.current_app.config['SPECTER_DIR']
-        new_config['model_params']['mfr_feature_vocab_file'] = flask.current_app.config['MFR_VOCAB_DIR']
-        new_config['model_params']['mfr_checkpoint_dir'] = flask.current_app.config['MFR_CHECKPOINT_DIR']
-
-    flask.current_app.logger.info(f'Config: {new_config}')
     # Validate + populate fields
     for field in req_fields:
         assert field in flask.request.json, f'Missing required field: {field}'
@@ -68,7 +54,19 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
         for field in config['model_params']:
             assert field in optional_model_params, f'Unexpected model param: {field}'
             new_config['model_params'][field] = config['model_params'][field]
-    flask.current_app.logger.info(f'Config: {new_config}')
+
+    # Populate with server-side fields
+    root_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id, job_id)
+    new_config['dataset']['directory'] = root_dir
+    for field in path_fields:
+        new_config['model_params'][field] = root_dir
+    new_config['job_id'] = job_id
+    new_config['profile_dir'] = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
+    # Set SPECTER+MFR paths
+    if config.get('model', 'specter+mfr') == 'specter+mfr':
+        new_config['model_params']['specter_dir'] = flask.current_app.config['SPECTER_DIR']
+        new_config['model_params']['mfr_feature_vocab_file'] = flask.current_app.config['MFR_VOCAB_DIR']
+        new_config['model_params']['mfr_checkpoint_dir'] = flask.current_app.config['MFR_CHECKPOINT_DIR']
 
     if not os.path.isdir(new_config['dataset']['directory']):
         os.makedirs(new_config['dataset']['directory'])
