@@ -22,37 +22,58 @@ global_id: Value = Value('i', 0)
 def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: bool = False):
     """Overwrites/add specific keywords in the submitted job config"""
     new_config = {
+        "dataset": {},
         "model": "specter+mfr",
         "model_params": {
             "use_title": True,
+            "batch_size": 4,
             "use_abstract": True,
             "average_score": False,
             "max_score": True,
-            "skip_specter": False
+            "skip_specter": False,
+            "use_cuda": False
         }
     }
-    new_config.update(config)
-    # Overwrite certain keys in the config
-    filepath_keys = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+    # Define expected/required API fields
+    req_fields = ['name', 'match_group', 'paper_invitation']
+    optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
+    optional_fields = ['model', 'model_params', 'exclusion_inv', 'TEST_NUM']
+    path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
     file_keys = ['csv_expertise', 'csv_submissions']
+
+    # Populate with server-side fields
     root_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id, job_id)
+    new_config['dataset']['directory'] = root_dir
+    for field in path_fields:
+        new_config['model_params'][field] = root_dir
+    new_config['job_id'] = job_id
+    new_config['profile_dir'] = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
+    # Set SPECTER+MFR paths
+    if config.get('model', 'specter+mfr') == 'specter+mfr':
+        new_config['model_params']['specter_dir'] = flask.current_app.config['SPECTER_DIR']
+        new_config['model_params']['mfr_feature_vocab_file'] = flask.current_app.config['MFR_VOCAB_DIR']
+        new_config['model_params']['mfr_checkpoint_dir'] = flask.current_app.config['MFR_CHECKPOINT_DIR']
+
+    flask.current_app.logger.info(f'Config: {new_config}')
+    # Validate + populate fields
+    for field in req_fields:
+        assert field in flask.request.json, f'Missing required field: {field}'
+        new_config[field] = config[field]
+    for field in config.keys():
+        assert field in optional_fields or field in req_fields or field in file_keys, f'Unexpected field: {field}'
+        if field != 'model_params':
+            new_config[field] = config[field]
+    if 'model_params' in config.keys():
+        for field in config['model_params']:
+            assert field in optional_model_params, f'Unexpected model param: {field}'
+            new_config['model_params'][field] = config['model_params'][field]
+    flask.current_app.logger.info(f'Config: {new_config}')
 
     # Filter some keys
-    if 'model_params' not in config.keys():
-        new_config['model_params'] = {}
     file_keys = [key for key in file_keys if key in config.keys()]
-
-    # First handle dataset -> directory
-    if 'dataset' not in config.keys():
-        new_config['dataset'] = {}
-    new_config['dataset']['directory'] = root_dir
 
     if not os.path.isdir(new_config['dataset']['directory']):
         os.makedirs(new_config['dataset']['directory'])
-
-    # Next handle other file paths
-    for key in filepath_keys:
-        new_config['model_params'][key] = root_dir
     
     # Now, write data stored in the file keys to disk
     if test_mode:
@@ -67,23 +88,9 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
                 csv_out.writelines(new_config[key])
             
             new_config[key] = output_file
-    
-    # For error handling, add job_id and profile_dir to config
-    new_config['job_id'] = job_id
-    new_config['profile_dir'] = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
-
-    # Set SPECTER+MFR paths
-    new_config['model_params']['specter_dir'] = flask.current_app.config['SPECTER_DIR']
-    new_config['model_params']['mfr_feature_vocab_file'] = flask.current_app.config['MFR_VOCAB_DIR']
-    new_config['model_params']['mfr_checkpoint_dir'] = flask.current_app.config['MFR_CHECKPOINT_DIR']
-    return new_config
+    return new_config   
 
 def enqueue_expertise(json_request, profile_id, in_test_mode):
-    # Throw error if required field isn't present
-    req_fields = ['name', 'match_group', 'paper_invitation']
-    for field in req_fields:
-        assert field in flask.request.json, f'Missing required field: {field}'
-
     if in_test_mode:
         job_id = str(global_id.value)
         global_id.value += 1
@@ -98,7 +105,7 @@ def enqueue_expertise(json_request, profile_id, in_test_mode):
         queue='userpaper',
         task_id=job_id
     )
-    
+
     return job_id
 
 @BLUEPRINT.route('/test')
