@@ -69,34 +69,13 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
             new_config['model_params'][field] = config['model_params'][field]
     flask.current_app.logger.info(f'Config: {new_config}')
 
-    # Filter some keys
-    file_keys = [key for key in file_keys if key in config.keys()]
-
     if not os.path.isdir(new_config['dataset']['directory']):
         os.makedirs(new_config['dataset']['directory'])
     
-    # Now, write data stored in the file keys to disk
-    if test_mode:
-        for key in file_keys:
-            output_file = key + '.csv'
-            write_to_dir = os.path.join(new_config['dataset']['directory'], output_file)
-
-            # Add newline characters, write to file and set the field in the config to the directory of the file
-            for idx, data in enumerate(new_config[key]):
-                new_config[key][idx] = data.strip() + '\n'
-            with open(write_to_dir, 'w') as csv_out:
-                csv_out.writelines(new_config[key])
-            
-            new_config[key] = output_file
     return new_config   
 
 def enqueue_expertise(json_request, profile_id, in_test_mode):
-    if in_test_mode:
-        job_id = str(global_id.value)
-        global_id.value += 1
-    else:
-        job_id = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits + string.ascii_lowercase) for _ in range(5))
-    
+    job_id = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits + string.ascii_lowercase) for _ in range(5))
     from .celery_tasks import run_userpaper
     config = preprocess_config(json_request, job_id, profile_id, in_test_mode)
     flask.current_app.logger.info(f'Config: {config}')
