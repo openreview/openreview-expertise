@@ -3,6 +3,18 @@ from unittest.mock import MagicMock
 def mock_client():
     client = MagicMock(openreview.Client)
 
+    def get_profile():
+        mock_profile = {
+            "id": "~Test_User1",
+            "content": {
+                "preferredEmail": "Test_User1@mail.com",
+                "emails": [
+                    "Test_User1@mail.com"
+                ]
+            }
+        }
+        return openreview.Profile.from_json(mock_profile)
+
     def get_notes(id = None,
         paperhash = None,
         forum = None,
@@ -71,5 +83,6 @@ def mock_client():
     client.get_notes = MagicMock(side_effect=get_notes)
     client.get_group = MagicMock(side_effect=get_group)
     client.search_profiles = MagicMock(side_effect=search_profiles)
+    client.get_profile = MagicMock(side_effect=get_profile)
 
     return client
