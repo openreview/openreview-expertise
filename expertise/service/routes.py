@@ -179,7 +179,6 @@ def jobs():
     
     try:
         result['results'] = []
-        data_files = ['csv_expertise.csv', 'csv_submissions.csv']
         if not in_test_mode:
             openreview_client = openreview.Client(
                 token=token,
@@ -225,7 +224,7 @@ def jobs():
             file_dir = None
             for root, dirs, files in os.walk(search_dir, topdown=False):
                 for name in files:
-                    if '.csv' in name and 'sparse' not in name and name not in data_files:
+                    if '.csv' in name and 'sparse' not in name:
                         file_dir = os.path.join(root, name)
 
             flask.current_app.logger.info(f'Current score status {file_dir}')
@@ -286,15 +285,13 @@ def results():
     try:
         data_files = ['csv_expertise.csv', 'csv_submissions.csv']
         job_id = flask.request.args['job_id']
-        delete_on_get = flask.request.args.get('delete_on_get', False)
+        delete_on_get = flask.request.args.get('delete_on_get', 'False')
 
-        # Check type of delete_on_get
-        if isinstance(delete_on_get, str):
-            if delete_on_get.lower() == 'true':
-                delete_on_get = True
-            else:
-                delete_on_get = False
-        
+        if delete_on_get.lower() == 'true':
+            delete_on_get = True
+        else:
+            delete_on_get = False
+    
         if not in_test_mode:
             openreview_client = openreview.Client(
                 token=token,
