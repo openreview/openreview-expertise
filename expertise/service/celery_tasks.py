@@ -14,7 +14,7 @@ def run_userpaper(self, config: dict, logger: logging.Logger):
         else:
             openreview_client = mock_client()
             logger.info('Creating dataset')
-        execute_create_dataset(openreview_client, config_file=config)
+        execute_create_dataset(openreview_client, config=config)
         run_expertise.apply_async(
                 (config, logger),
                 queue='expertise',
@@ -32,7 +32,7 @@ def run_userpaper(self, config: dict, logger: logging.Logger):
 def run_expertise(self, config: dict, logger: logging.Logger):
     try:
         logger.info('Executing expertise')
-        execute_expertise(config_file=config)
+        execute_expertise(config=config)
         logger.info('Returned from expertise')
     except Exception as exc:
         working_dir = os.path.join(config['profile_dir'], str(config['job_id']))
