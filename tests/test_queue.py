@@ -161,7 +161,6 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         'name': 'test_run',
         'paper_invitation': 'ABC.cc/-/Submission',
         'match_group': ["ABC.cc"],
-        'csv_submissions': 'csv_submissions.csv',
         "model": "elmo",
         "model_params": {
             "use_title": None,

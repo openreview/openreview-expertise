@@ -14,8 +14,6 @@ from .utils import mock_client
 BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
 
-global_id: Value = Value('i', 0)
-
 # TODO: Fault tolerance - on server start, for each profile dir, wipe error log and re-populate with crashed jobs
 #     : and clear the directories of the crashed jobs
 
@@ -40,14 +38,12 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
     optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
     optional_fields = ['model', 'model_params', 'exclusion_inv']
     path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
-    file_keys = ['csv_expertise', 'csv_submissions']
-
     # Validate + populate fields
     for field in req_fields:
         assert field in flask.request.json, f'Missing required field: {field}'
         new_config[field] = config[field]
     for field in config.keys():
-        assert field in optional_fields or field in req_fields or field in file_keys, f'Unexpected field: {field}'
+        assert field in optional_fields or field in req_fields, f'Unexpected field: {field}'
         if field != 'model_params':
             new_config[field] = config[field]
     if 'model_params' in config.keys():
@@ -75,6 +71,7 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
 
 def enqueue_expertise(json_request, profile_id, in_test_mode):
     job_id = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits + string.ascii_lowercase) for _ in range(5))
+
     from .celery_tasks import run_userpaper
     config = preprocess_config(json_request, job_id, profile_id, in_test_mode)
     flask.current_app.logger.info(f'Config: {config}')
@@ -281,7 +278,6 @@ def results():
         return flask.jsonify(result), 400
     
     try:
-        data_files = ['csv_expertise.csv', 'csv_submissions.csv']
         job_id = flask.request.args['job_id']
         delete_on_get = flask.request.args.get('delete_on_get', 'False')
 
@@ -311,7 +307,7 @@ def results():
         # Look for score files
         for root, dirs, files in os.walk(search_dir, topdown=False):
             for name in files:
-                if '.csv' in name and 'sparse' not in name and name not in data_files:
+                if '.csv' in name and 'sparse' not in name:
                     file_dir = os.path.join(root, name)
                 if 'metadata' in name:
                     metadata_dir = os.path.join(root, name)
