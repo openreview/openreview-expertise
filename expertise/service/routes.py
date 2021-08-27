@@ -174,6 +174,7 @@ def jobs():
     
     try:
         result['results'] = []
+        job_id = flask.request.args.get('id', None)
         if not in_test_mode:
             openreview_client = openreview.Client(
                 token=token,
@@ -211,7 +212,11 @@ def jobs():
 
         # Perform a walk of all job sub-directories for score files
         job_subdirs = [name for name in os.listdir(profile_dir) if os.path.isdir(os.path.join(profile_dir, name))]
+        # If given an ID, only get the status of the single job
+        if job_id is not None:
+            job_subdirs = [name for name in job_subdirs if name == job_id]
         flask.current_app.logger.info(f'Subdirs: {job_subdirs}')
+
         for job_dir in job_subdirs:
             search_dir = os.path.join(profile_dir, job_dir)
             flask.current_app.logger.info(f'Looking at {search_dir}')
@@ -300,6 +305,8 @@ def results():
         profile_id = profile.id
 
         profile_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
+        if not os.path.isdir(profile_dir):
+            raise OpenReviewException('No jobs submitted since last server reboot')
 
         # Search for scores files (only non-sparse scores)
         file_dir, metadata_dir = None, None
