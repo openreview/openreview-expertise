@@ -212,7 +212,8 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         time.sleep(5)
         response = test_client.get('/jobs', query_string={}).json['results']
     
-    assert response[0]['status'] == 'Error'
+    assert 'Error' in response[0]['status']
+    assert len(response[0]['status']) > len('Error')
     assert os.path.isfile(f"{server_config['WORKING_DIR']}/{test_profile}/err.log")
 
     # Clean up test

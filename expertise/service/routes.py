@@ -197,18 +197,19 @@ def jobs():
 
         # Check for error log
         flask.current_app.logger.info(f'Checking error log')
-        err_jobs = []
         err_dir = os.path.join(profile_dir, 'err.log')
+        ## Build list of jobs
         if os.path.isfile(err_dir):
             with open(err_dir, 'r') as f:
-                err_jobs = f.readline().split(',')[:-1]
-        for job in err_jobs:
-            result['results'].append(
-                {
-                    'job_id': job,
-                    'status': 'Error'
-                }
-            )
+                err_jobs = f.readlines()
+            err_jobs = [list(item.strip().split(',')) for item in err_jobs]
+            for id, err in err_jobs:
+                result['results'].append(
+                    {
+                        'job_id': id,
+                        'status': f'Error: {err}'
+                    }
+                )
 
         # Perform a walk of all job sub-directories for score files
         job_subdirs = [name for name in os.listdir(profile_dir) if os.path.isdir(os.path.join(profile_dir, name))]
