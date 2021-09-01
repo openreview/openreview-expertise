@@ -36,7 +36,8 @@ setup(
         'cffi>=1.0.0',
         'celery',
         'redis',
-        'pytest-celery'
+        'pytest-celery',
+        'shortuuid'
     ],
     zip_safe=False
 )

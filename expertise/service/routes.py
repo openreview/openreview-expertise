@@ -1,7 +1,7 @@
 '''
 Implements the Flask API endpoints.
 '''
-import flask, os, shutil, random, string, json
+import flask, os, shutil, random, string, json, shortuuid
 from copy import deepcopy
 from flask_cors import CORS
 from multiprocessing import Value
@@ -70,7 +70,7 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
     return new_config   
 
 def enqueue_expertise(json_request, profile_id, in_test_mode):
-    job_id = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits + string.ascii_lowercase) for _ in range(5))
+    job_id = shortuuid.ShortUUID().random(length=5)
 
     from .celery_tasks import run_userpaper
     config = preprocess_config(json_request, job_id, profile_id, in_test_mode)
