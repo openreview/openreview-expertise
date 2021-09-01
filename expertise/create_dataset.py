@@ -167,6 +167,7 @@ class OpenReviewExpertise(object):
                 elif '@' in reviewer_id:
                     email_members.add(reviewer_id.lower())
 
+        emails_confirmed_set = set()
         members = []
         tilde_members_list = list(tilde_members)
         profile_search_results = self.openreview_client.search_profiles(confirmedEmails=None, ids=tilde_members_list, term=None) if tilde_members_list else []
@@ -179,6 +180,9 @@ class OpenReviewExpertise(object):
             preferredEmail = preferredEmail or profile.content.get('emails') and len(profile.content.get('emails')) and profile.content.get('emails')[0]
             # If the user Profile does not have an email, use its Profile ID
             tilde_members_list.append((profile.id, preferredEmail or profile.id))
+            if profile.content.get('emailsConfirmed'):
+                for email in profile.content.get('emailsConfirmed'):
+                    emails_confirmed_set.add(email)
         members.extend(tilde_members_list)
 
         email_members_list = list(email_members)
@@ -186,14 +190,16 @@ class OpenReviewExpertise(object):
         email_profiles = []
         for email, profile in profile_search_results.items():
             email_profiles.append((profile.id, email))
+            if profile.content.get('emailsConfirmed'):
+                for email in profile.content.get('emailsConfirmed'):
+                    emails_confirmed_set.add(email)
         members.extend(email_profiles)
 
         invalid_members = []
         valid_members = list(set(members))
         if len(email_members):
-            valid_emails = set([email_id for _, email_id in valid_members])
             for member in email_members:
-                if member not in valid_emails:
+                if member not in emails_confirmed_set:
                     invalid_members.append(member)
 
         return valid_members, invalid_members

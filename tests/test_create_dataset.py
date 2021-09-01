@@ -22,6 +22,7 @@ def mock_client():
         for profile in profiles:
             profile = openreview.Profile.from_json(profile)
             if profile.content.get('emails') and len(profile.content.get('emails')):
+                profile.content['emailsConfirmed'] = profile.content.get('emails')
                 profiles_dict_emails[profile.content['emails'][0]] = profile
             profiles_dict_tilde[profile.id] = profile
         if confirmedEmails:
