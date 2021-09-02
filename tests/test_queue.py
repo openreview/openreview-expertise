@@ -108,15 +108,36 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
             "max_score": False
         }
     }
-    # Filesystem setup - Parse csv_submissions into list of csv strings
+    # Test missing required field
     response = test_client.post(
         '/expertise',
         data = json.dumps({**config}),
         content_type='application/json'
     )
-    assert response.status_code == 500, f'{response.json}' # Missing a required field
+    assert response.status_code == 500, f'{response.json}'
 
-    config.update({'paper_invitation': 'ABC.cc/-/Submission'})
+    # Test unexpected field
+    config.update({'paper_invitation': 'ABC.cc/-/Submission'}) # Fill in required field
+    config.update({'unexpected_field': 'ABC.cc/-/Submission'})
+    response = test_client.post(
+        '/expertise',
+        data = json.dumps({**config}),
+        content_type='application/json'
+    )
+    assert response.status_code == 500, f'{response.json}'
+
+    # Test unexpected model param
+    del config['unexpected_field']
+    config.update({'model_params': {'dummy_param': '64'}})
+    response = test_client.post(
+        '/expertise',
+        data = json.dumps({**config}),
+        content_type='application/json'
+    )
+    assert response.status_code == 500, f'{response.json}'
+
+    # Submit correct config
+    del config['model_params']['dummy_param']
     response = test_client.post(
         '/expertise',
         data = json.dumps({**config}),
