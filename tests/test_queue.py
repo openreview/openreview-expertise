@@ -158,6 +158,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         time.sleep(5)
         response = test_client.get('/jobs', query_string={}).json['results']
     assert response[0]['status'] == 'Completed'
+    assert response[0]['name'] == 'test_run'
 
     # Check for results
     assert os.path.isdir(f"{server_config['WORKING_DIR']}/{test_profile}/{job_id}")
@@ -191,6 +192,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         time.sleep(5)
         response = test_client.get('/jobs', query_string={'id': job_id_two}).json['results']
     assert response[0]['status'] == 'Completed'
+    assert response[0]['name'] == 'test_run'
 
     # Clean up directories
     response = test_client.get('/results', query_string={'job_id': job_id, 'delete_on_get': True}).json['results']
@@ -234,6 +236,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         response = test_client.get('/jobs', query_string={}).json['results']
     
     assert 'Error' in response[0]['status']
+    assert response[0]['name'] == 'test_run'
     assert len(response[0]['status'].strip()) > len('Error')
     assert os.path.isfile(f"{server_config['WORKING_DIR']}/{test_profile}/err.log")
 

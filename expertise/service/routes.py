@@ -76,8 +76,11 @@ def preprocess_config(config, job_id, profile_id):
         new_config['model_params']['mfr_feature_vocab_file'] = flask.current_app.config['MFR_VOCAB_DIR']
         new_config['model_params']['mfr_checkpoint_dir'] = flask.current_app.config['MFR_CHECKPOINT_DIR']
 
+    # Create directory and config file
     if not os.path.isdir(new_config['dataset']['directory']):
         os.makedirs(new_config['dataset']['directory'])
+    with open(os.path.join(root_dir, 'config.cfg'), 'w+') as f:
+        json.dump(new_config, f, ensure_ascii=False, indent=4)
     
     return new_config   
 
@@ -122,10 +125,12 @@ def get_score_and_metadata_dir(search_dir):
     """
     # Search for scores files (only non-sparse scores)
     file_dir, metadata_dir = None, None
+    with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
+        config = json.load(f)
     # Look for score files
     for root, dirs, files in os.walk(search_dir, topdown=False):
         for name in files:
-            if '.csv' in name and 'sparse' not in name:
+            if name == f"{config['name']}.csv":
                 file_dir = os.path.join(root, name)
             if 'metadata' in name:
                 metadata_dir = os.path.join(root, name)
@@ -219,7 +224,7 @@ def expertise():
             openreview_client = mock_client()
 
         profile, _ = get_profile_and_id(openreview_client)
-        job_id = enqueue_expertise(user_config, profile.id, in_test_mode)
+        job_id = enqueue_expertise(user_config, profile.id)
 
         result['job_id'] = job_id
         flask.current_app.logger.info('Returning from request')
@@ -295,10 +300,11 @@ def jobs():
             with open(err_dir, 'r') as f:
                 err_jobs = f.readlines()
             err_jobs = [list(item.strip().split(',')) for item in err_jobs]
-            for id, err in err_jobs:
+            for id, name, err in err_jobs:
                 result['results'].append(
                     {
                         'job_id': id,
+                        'name': name,
                         'status': f'Error: {err}'
                     }
                 )
@@ -314,7 +320,9 @@ def jobs():
             search_dir = os.path.join(profile_dir, job_dir)
             flask.current_app.logger.info(f'Looking at {search_dir}')
             file_dir, _ = get_score_and_metadata_dir(search_dir)
-
+            # Load the config file to fetch the job name
+            with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
+                config = json.load(f)
             flask.current_app.logger.info(f'Current score status {file_dir}')
             # If found a non-sparse, non-data file CSV, job has completed
             if file_dir is None:
@@ -324,6 +332,7 @@ def jobs():
             result['results'].append(
                 {
                     'job_id': job_dir,
+                    'name': config['name'],
                     'status': status
                 }
             )

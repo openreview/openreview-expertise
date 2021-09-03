@@ -25,7 +25,7 @@ def run_userpaper(self, config: dict, logger: logging.Logger):
         shutil.rmtree(working_dir)
         logger.error(f"Writing to: {os.path.join(config['profile_dir'], 'err.log')}")
         with open(os.path.join(config['profile_dir'], 'err.log'), 'a+') as f:
-            f.write(f"{config['job_id']},{exc}\n")
+            f.write(f"{config['job_id']},{config['name']},{exc}\n")
         logger.error('Error: {}'.format(exc))
 
 @celery.task(name='expertise', track_started=True, bind=True, time_limit=3600 * 24)
@@ -40,6 +40,6 @@ def run_expertise(self, config: dict, logger: logging.Logger):
         shutil.rmtree(working_dir)
         logger.error(f"Writing to: {os.path.join(config['profile_dir'], 'err.log')}")
         with open(os.path.join(config['profile_dir'], 'err.log'), 'a+') as f:
-            f.write(f"{config['job_id']},{exc}\n")
+            f.write(f"{config['job_id']},{config['name']},{exc}\n")
         logger.error('Error: {}'.format(exc))
 
