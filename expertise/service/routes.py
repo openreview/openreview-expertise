@@ -14,12 +14,24 @@ from .utils import mock_client
 BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
 
-# TODO: Fault tolerance - on server start, for each profile dir, wipe error log and re-populate with crashed jobs
-#     : and clear the directories of the crashed jobs
+def preprocess_config(config, job_id, profile_id):
+    """
+    Overwrites/add specific key-value pairs in the submitted job config
 
+    :param config: Configuration fields for creating the dataset and executing the expertise model
+    :type config: dict
 
-def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: bool = False):
-    """Overwrites/add specific keywords in the submitted job config"""
+    :param job_id: The ID for the job to be submitted
+    :type job_id: str
+
+    :param profile_id: The OpenReview profile ID associated with the job
+    :type profile_id: str
+
+    :returns new_config: A modified version of config with the server-required fields
+
+    :raises Exception: Raises exceptions when a required field is missing, or when a parameter is provided
+                       when it is not expected
+    """
     new_config = {
         "dataset": {},
         "model": "specter+mfr",
@@ -69,11 +81,22 @@ def preprocess_config(config: dict, job_id: int, profile_id: str, test_mode: boo
     
     return new_config   
 
-def enqueue_expertise(json_request, profile_id, in_test_mode):
+def enqueue_expertise(json_request, profile_id):
+    """
+    Puts the incoming request on the 'userpaper' queue - which runs creates the dataset followed by executing the expertise
+
+    :param json_request: This is entire body of the json request, possibly augmented by the server
+    :type json_request: dict
+
+    :param profile_id: The OpenReview profile ID associated with the job
+    :type profile_id: str
+    
+    :returns job_id: A unique string assigned to this job
+    """
     job_id = shortuuid.ShortUUID().random(length=5)
 
     from .celery_tasks import run_userpaper
-    config = preprocess_config(json_request, job_id, profile_id, in_test_mode)
+    config = preprocess_config(json_request, job_id, profile_id)
     flask.current_app.logger.info(f'Config: {config}')
     run_userpaper.apply_async(
         (config, flask.current_app.logger),
@@ -84,9 +107,19 @@ def enqueue_expertise(json_request, profile_id, in_test_mode):
     return job_id
 
 def get_subdirs(root_dir):
+    """Returns the direct children directories of the given root directory"""
     return [name for name in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, name))]
 
 def get_score_and_metadata_dir(search_dir):
+    """
+    Searches the given directory for a possible score file and the metadata file
+    
+    :param search_dir: The root directory to search in
+    :type search_dir: str
+
+    :returns file_dir: The directory of the score file, if it exists, starting from the given directory
+    :returns metadata_dir: The directory of the metadata file, if it exists, starting from the given directory
+    """
     # Search for scores files (only non-sparse scores)
     file_dir, metadata_dir = None, None
     # Look for score files
@@ -99,6 +132,15 @@ def get_score_and_metadata_dir(search_dir):
     return file_dir, metadata_dir
 
 def get_profile_and_id(openreview_client):
+    """
+    Returns the profile directory and OpenReview profile object given a client
+    
+    :param openreview_client: A logged in client with the user credentials
+    :type openreview_client: openreview.Client
+
+    :returns profile: An OpenReview profile object for the user
+    :returns profile_dir: The directory of the profile used to store jobs that the user has submitted
+    """
     profile = openreview_client.get_profile()
     if profile is None:
         raise OpenReviewException('Forbidden: Profile does not exist')
@@ -107,6 +149,10 @@ def get_profile_and_id(openreview_client):
 
 @BLUEPRINT.before_app_first_request
 def start_server():
+    """
+    On server start, check if there is a working directory
+    If so, free the space from all incomplete jobs and mark them in the error log
+    """
     # Get all profile directories
     root_dir = flask.current_app.config['WORKING_DIR']
     if os.path.isdir(root_dir):
@@ -134,12 +180,19 @@ def test():
 @BLUEPRINT.route('/expertise', methods=['POST'])
 def expertise():
     """
-    Requires authentication
-    Required fields:
-        name
-        match_group
-        paper_invitation
-    All other fields are optional and will be populated by the server
+    Submit a job to create a dataset and execute an expertise model based on the submitted configuration
+
+    :param token: Authorization from a logged in user, which defines the set of accessible data
+    :type token: str
+
+    :param name: A name describing the job being submitted
+    :type name: str
+
+    :param match_group: A group whose profiles will be used to compute expertise
+    :type match_group: str
+
+    :param paper_invitation: An invitation containing submissions used to compute expertise
+    :type paper_invitation: str
     """
     result = {}
 
@@ -197,8 +250,14 @@ def expertise():
 @BLUEPRINT.route('/jobs', methods=['GET'])
 def jobs():
     """
-    Requires authentication
-    Required fields: none
+    Query all submitted jobs associated with the logged in user
+    If provided with a job_id field, only retrieve the status of the job with that job_id
+
+    :param token: Authorization from a logged in user, which defines the set of accessible data
+    :type token: str
+
+    :param job_id: The ID of a submitted job
+    :type job_id: str
     """
     result = {}
 
@@ -295,11 +354,17 @@ def jobs():
 @BLUEPRINT.route('/results', methods=['GET'])
 def results():
     """
-    Requires authentication
-    Required fields:
-        job_id
-    Optional field:
-        delete_on_get
+    Get the results of a single submitted job with the associated job_id
+    If provided with a delete_on_get field, delete the job from the server after retrieving results
+
+    :param token: Authorization from a logged in user, which defines the set of accessible data
+    :type token: str
+
+    :param job_id: The ID of a submitted job
+    :type job_id: str
+    
+    :param delete_on_get: Decide whether to keep the data on the server after getting the results
+    :type delete_on_get: bool
     """
     result = {}
 
