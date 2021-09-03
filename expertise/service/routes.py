@@ -108,11 +108,22 @@ def get_profile_and_id(openreview_client):
 @BLUEPRINT.before_app_first_request
 def start_server():
     # Get all profile directories
-    # For each profile directory, look at each job
-    # Find score file
-    # If no score file is present, clean up dir and write to error log
+    root_dir = flask.current_app.config['WORKING_DIR']
+    if os.path.isdir(root_dir):
+        profile_names = get_subdirs(root_dir)
+        # For each profile directory, look at each job
+        for profile_name in profile_names:
+            job_ids = get_subdirs(os.path.join(root_dir, profile_name))
+            error_dir = os.path.join(root_dir, profile_name, 'err.log')
 
-    pass
+            # If no score file is present, clean up dir and write to error log
+            for job_id in job_ids:
+                job_dir = os.path.join(root_dir, profile_name, job_id)
+                score_dir, _ = get_score_and_metadata_dir(job_dir)
+                if score_dir is None:
+                    with open(error_dir, 'a+') as f:
+                        f.write(f"{job_id},Interrupted before completed")
+                    shutil.rmtree(job_dir)
 
 @BLUEPRINT.route('/test')
 def test():
