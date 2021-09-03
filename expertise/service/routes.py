@@ -83,6 +83,37 @@ def enqueue_expertise(json_request, profile_id, in_test_mode):
 
     return job_id
 
+def get_subdirs(root_dir):
+    return [name for name in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, name))]
+
+def get_score_and_metadata_dir(search_dir):
+    # Search for scores files (only non-sparse scores)
+    file_dir, metadata_dir = None, None
+    # Look for score files
+    for root, dirs, files in os.walk(search_dir, topdown=False):
+        for name in files:
+            if '.csv' in name and 'sparse' not in name:
+                file_dir = os.path.join(root, name)
+            if 'metadata' in name:
+                metadata_dir = os.path.join(root, name)
+    return file_dir, metadata_dir
+
+def get_profile_and_id(openreview_client):
+    profile = openreview_client.get_profile()
+    if profile is None:
+        raise OpenReviewException('Forbidden: Profile does not exist')
+    profile_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile.id)
+    return profile, profile_dir
+
+@BLUEPRINT.before_app_first_request
+def start_server():
+    # Get all profile directories
+    # For each profile directory, look at each job
+    # Find score file
+    # If no score file is present, clean up dir and write to error log
+
+    pass
+
 @BLUEPRINT.route('/test')
 def test():
     """Test endpoint."""
@@ -123,12 +154,8 @@ def expertise():
         else:
             openreview_client = mock_client()
 
-        profile = openreview_client.get_profile()
-        if profile is None:
-            raise OpenReviewException('Forbidden: Profile does not exist')
-        profile_id = profile.id
-
-        job_id = enqueue_expertise(user_config, profile_id, in_test_mode)
+        profile, _ = get_profile_and_id(openreview_client)
+        job_id = enqueue_expertise(user_config, profile.id, in_test_mode)
 
         result['job_id'] = job_id
         flask.current_app.logger.info('Returning from request')
@@ -183,12 +210,7 @@ def jobs():
         else:
             openreview_client = mock_client()
 
-        profile = openreview_client.get_profile()
-        if profile is None:
-            raise OpenReviewException('Forbidden: Profile does not exist')
-        profile_id = profile.id
-
-        profile_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
+        _, profile_dir = get_profile_and_id(openreview_client)
         flask.current_app.logger.info(f'Looking at {profile_dir}')
 
         # Check for profile directory
@@ -212,7 +234,7 @@ def jobs():
                 )
 
         # Perform a walk of all job sub-directories for score files
-        job_subdirs = [name for name in os.listdir(profile_dir) if os.path.isdir(os.path.join(profile_dir, name))]
+        job_subdirs = get_subdirs(profile_dir)
         # If given an ID, only get the status of the single job
         if job_id is not None:
             job_subdirs = [name for name in job_subdirs if name == job_id]
@@ -221,12 +243,7 @@ def jobs():
         for job_dir in job_subdirs:
             search_dir = os.path.join(profile_dir, job_dir)
             flask.current_app.logger.info(f'Looking at {search_dir}')
-            # Look for score files
-            file_dir = None
-            for root, dirs, files in os.walk(search_dir, topdown=False):
-                for name in files:
-                    if '.csv' in name and 'sparse' not in name:
-                        file_dir = os.path.join(root, name)
+            file_dir, _ = get_score_and_metadata_dir(search_dir)
 
             flask.current_app.logger.info(f'Current score status {file_dir}')
             # If found a non-sparse, non-data file CSV, job has completed
@@ -300,25 +317,13 @@ def results():
         else:
             openreview_client = mock_client()
 
-        profile = openreview_client.get_profile()
-        if profile is None:
-            raise OpenReviewException('Forbidden: Profile does not exist')
-        profile_id = profile.id
-
-        profile_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
+        _, profile_dir = get_profile_and_id(openreview_client)
         if not os.path.isdir(profile_dir):
             raise OpenReviewException('No jobs submitted since last server reboot')
 
         # Search for scores files (only non-sparse scores)
-        file_dir, metadata_dir = None, None
         search_dir = os.path.join(profile_dir, job_id)
-        # Look for score files
-        for root, dirs, files in os.walk(search_dir, topdown=False):
-            for name in files:
-                if '.csv' in name and 'sparse' not in name:
-                    file_dir = os.path.join(root, name)
-                if 'metadata' in name:
-                    metadata_dir = os.path.join(root, name)
+        file_dir, metadata_dir = get_score_and_metadata_dir(search_dir)
 
         # Assemble scores
         if file_dir is None:
