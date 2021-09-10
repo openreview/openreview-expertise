@@ -48,7 +48,7 @@ def preprocess_config(config, job_id, profile_id):
     # Define expected/required API fields
     req_fields = ['name', 'match_group', 'paper_invitation']
     optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
-    optional_fields = ['model', 'model_params', 'exclusion_inv']
+    optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl']
     path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
     # Validate + populate fields
     for field in req_fields:
