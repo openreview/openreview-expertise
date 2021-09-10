@@ -206,8 +206,8 @@ def expertise():
     
     if not token and not in_test_mode:
         flask.current_app.logger.error('No Authorization token in headers')
-        result['error'] = 'No Authorization token in headers'
-        return flask.jsonify(result), 400
+        result['error'] = 'Forbidden: No Authorization token in headers'
+        return flask.jsonify(result), 403
     
     try:
         user_config = flask.request.json
@@ -271,8 +271,8 @@ def jobs():
     
     if not token and not in_test_mode:
         flask.current_app.logger.error('No Authorization token in headers')
-        result['error'] = 'No Authorization token in headers'
-        return flask.jsonify(result), 400
+        result['error'] = 'Forbidden: No Authorization token in headers'
+        return flask.jsonify(result), 403
     
     try:
         result['results'] = []
@@ -382,8 +382,8 @@ def results():
     
     if not token and not in_test_mode:
         flask.current_app.logger.error('No Authorization token in headers')
-        result['error'] = 'No Authorization token in headers'
-        return flask.jsonify(result), 400
+        result['error'] = 'Forbidden: No Authorization token in headers'
+        return flask.jsonify(result), 403
     
     try:
         job_id = flask.request.args['job_id']
