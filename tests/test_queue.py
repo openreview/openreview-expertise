@@ -93,8 +93,8 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     server_config = openreview_context['config']
     test_profile = '~Test_User1'
     
-    if os.path.isdir(f'tmp/{test_profile}'):
-        shutil.rmtree(f'tmp/{test_profile}')
+    if os.path.isdir(f'tmp'):
+        shutil.rmtree(f'tmp')
 
     # Gather config
     config = {
@@ -161,8 +161,8 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     assert response[0]['name'] == 'test_run'
 
     # Check for results
-    assert os.path.isdir(f"{server_config['WORKING_DIR']}/{test_profile}/{job_id}")
-    assert os.path.isfile(f"{server_config['WORKING_DIR']}/{test_profile}/{job_id}/test_run.csv")
+    assert os.path.isdir(f"{server_config['WORKING_DIR']}/{job_id}")
+    assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/test_run.csv")
     response = test_client.get('/results', query_string={'job_id': job_id})
     metadata = response.json['metadata']
     assert metadata['submission_count'] == 2
@@ -184,8 +184,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     job_id_two = response.json['job_id']
 
     # Query until second job is complete
-    response = test_client.get('/jobs', query_string={}).json['results']
-    assert len(response) == 2
+    time.sleep(5)
     response = test_client.get('/jobs', query_string={'id': job_id_two}).json['results']
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
@@ -193,15 +192,17 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         response = test_client.get('/jobs', query_string={'id': job_id_two}).json['results']
     assert response[0]['status'] == 'Completed'
     assert response[0]['name'] == 'test_run'
+    response = test_client.get('/jobs', query_string={}).json['results']
+    assert len(response) == 2
 
     # Clean up directories
     response = test_client.get('/results', query_string={'job_id': job_id, 'delete_on_get': True}).json['results']
-    assert not os.path.isdir(f"{server_config['WORKING_DIR']}/{test_profile}/{job_id}")
-    assert not os.path.isfile(f"{server_config['WORKING_DIR']}/~{test_profile}/{job_id}/test_run.csv")
+    assert not os.path.isdir(f"{server_config['WORKING_DIR']}/{job_id}")
+    assert not os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/test_run.csv")
 
     response = test_client.get('/results', query_string={'job_id': job_id_two, 'delete_on_get': True}).json['results']
-    assert not os.path.isdir(f"{server_config['WORKING_DIR']}/{test_profile}/{job_id_two}")
-    assert not os.path.isfile(f"{server_config['WORKING_DIR']}/~{test_profile}/{job_id_two}/test_run.csv")
+    assert not os.path.isdir(f"{server_config['WORKING_DIR']}/{job_id_two}")
+    assert not os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id_two}/test_run.csv")
 
     # Gather second config with an error in the model field
     config = {
@@ -238,7 +239,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     assert 'Error' in response[0]['status']
     assert response[0]['name'] == 'test_run'
     assert len(response[0]['status'].strip()) > len('Error')
-    assert os.path.isfile(f"{server_config['WORKING_DIR']}/{test_profile}/err.log")
+    assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
     # Clean up test
     shutil.rmtree(f"{server_config['WORKING_DIR']}/")

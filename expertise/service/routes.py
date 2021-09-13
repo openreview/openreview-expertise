@@ -1,7 +1,7 @@
 '''
 Implements the Flask API endpoints.
 '''
-import flask, os, shutil, random, string, json, shortuuid
+import flask, os, shutil, random, string, json, shortuuid, time
 from copy import deepcopy
 from flask_cors import CORS
 from multiprocessing import Value
@@ -64,12 +64,15 @@ def preprocess_config(config, job_id, profile_id):
             new_config['model_params'][field] = config['model_params'][field]
 
     # Populate with server-side fields
-    root_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id, job_id)
+    root_dir = os.path.join(flask.current_app.config['WORKING_DIR'], job_id)
     new_config['dataset']['directory'] = root_dir
     for field in path_fields:
-        new_config['model_params'][field] = root_dir
+        new_config['model_params'][field] = root_dir    
     new_config['job_id'] = job_id
-    new_config['profile_dir'] = os.path.join(flask.current_app.config['WORKING_DIR'], profile_id)
+    new_config['job_dir'] = root_dir
+    new_config['profile'] = profile_id
+    new_config['cdate'] = int(time.time())
+
     # Set SPECTER+MFR paths
     if config.get('model', 'specter+mfr') == 'specter+mfr':
         new_config['model_params']['specter_dir'] = flask.current_app.config['SPECTER_DIR']
@@ -109,9 +112,27 @@ def enqueue_expertise(json_request, profile_id):
 
     return job_id
 
-def get_subdirs(root_dir):
+def get_subdirs(root_dir, profile_id=None):
     """Returns the direct children directories of the given root directory"""
-    return [name for name in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, name))]
+    subdirs = [name for name in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, name))]
+    if profile_id is None:
+        return subdirs
+    else:
+        # If given a profile ID, assume looking for job dirs that contain a config with the
+        # matching profile id
+        flask.current_app.logger.info(f"all subdirs: {subdirs}")
+        filtered_dirs = []
+        for subdir in subdirs:
+            config_dir = os.path.join(root_dir, subdir, 'config.cfg')
+            with open(config_dir, 'r') as f:
+                config = json.load(f)
+                flask.current_app.logger.info(f"checking {profile_id} vs {config['profile']}")
+                flask.current_app.logger.info(f"checking job {subdir}")
+                if profile_id == config['profile']:
+                    flask.current_app.logger.info(f"adding {subdir}")
+                    filtered_dirs.append(subdir)
+        return filtered_dirs
+
 
 def get_score_and_metadata_dir(search_dir):
     """
@@ -136,21 +157,19 @@ def get_score_and_metadata_dir(search_dir):
                 metadata_dir = os.path.join(root, name)
     return file_dir, metadata_dir
 
-def get_profile_and_id(openreview_client):
+def get_profile(openreview_client):
     """
-    Returns the profile directory and OpenReview profile object given a client
+    Returns the OpenReview profile object given a client
     
     :param openreview_client: A logged in client with the user credentials
     :type openreview_client: openreview.Client
 
     :returns profile: An OpenReview profile object for the user
-    :returns profile_dir: The directory of the profile used to store jobs that the user has submitted
     """
     profile = openreview_client.get_profile()
     if profile is None:
         raise OpenReviewException('Forbidden: Profile does not exist')
-    profile_dir = os.path.join(flask.current_app.config['WORKING_DIR'], profile.id)
-    return profile, profile_dir
+    return profile
 
 @BLUEPRINT.before_app_first_request
 def start_server():
@@ -161,20 +180,16 @@ def start_server():
     # Get all profile directories
     root_dir = flask.current_app.config['WORKING_DIR']
     if os.path.isdir(root_dir):
-        profile_names = get_subdirs(root_dir)
-        # For each profile directory, look at each job
-        for profile_name in profile_names:
-            job_ids = get_subdirs(os.path.join(root_dir, profile_name))
-            error_dir = os.path.join(root_dir, profile_name, 'err.log')
-
-            # If no score file is present, clean up dir and write to error log
-            for job_id in job_ids:
-                job_dir = os.path.join(root_dir, profile_name, job_id)
-                score_dir, _ = get_score_and_metadata_dir(job_dir)
-                if score_dir is None:
-                    with open(error_dir, 'a+') as f:
-                        f.write(f"{job_id},Interrupted before completed")
-                    shutil.rmtree(job_dir)
+        job_ids = get_subdirs(root_dir)
+        # If no score file is present, clean up dir and write to error log
+        for job_id in job_ids:
+            error_dir = os.path.join(root_dir, job_id, 'err.log')
+            job_dir = os.path.join(root_dir, job_id)
+            score_dir, _ = get_score_and_metadata_dir(job_dir)
+            if score_dir is None:
+                with open(error_dir, 'a+') as f:
+                    f.write(f"{job_id},Interrupted before completed")
+                shutil.rmtree(job_dir)
 
 @BLUEPRINT.route('/test')
 def test():
@@ -223,7 +238,7 @@ def expertise():
         else:
             openreview_client = mock_client()
 
-        profile, _ = get_profile_and_id(openreview_client)
+        profile = get_profile(openreview_client)
         job_id = enqueue_expertise(user_config, profile.id)
 
         result['job_id'] = job_id
@@ -285,22 +300,38 @@ def jobs():
         else:
             openreview_client = mock_client()
 
-        _, profile_dir = get_profile_and_id(openreview_client)
-        flask.current_app.logger.info(f'Looking at {profile_dir}')
+        profile = get_profile(openreview_client)
 
-        # Check for profile directory
-        if not os.path.isdir(profile_dir):
-            raise OpenReviewException('No jobs submitted since last server reboot')
+        # TODO: Check for profile directory - move this validation later
 
-        # Check for error log
-        flask.current_app.logger.info(f'Checking error log')
-        err_dir = os.path.join(profile_dir, 'err.log')
-        ## Build list of jobs
-        if os.path.isfile(err_dir):
-            with open(err_dir, 'r') as f:
-                err_jobs = f.readlines()
-            err_jobs = [list(item.strip().split(',')) for item in err_jobs]
-            for id, name, err in err_jobs:
+        # Perform a walk of all job sub-directories for score files
+        # TODO: This walks through all submitted jobs and requires reading a file per job
+        # TODO: is this what we want to do?
+
+        job_subdirs = get_subdirs(flask.current_app.config['WORKING_DIR'], profile.id)
+        # If given an ID, only get the status of the single job
+        flask.current_app.logger.info(f'check filtering | value of job_ID: {job_id}')
+        if job_id is not None:
+            flask.current_app.logger.info(f'performing filtering')
+            job_subdirs = [name for name in job_subdirs if name == job_id]
+        flask.current_app.logger.info(f'Subdirs: {job_subdirs}')
+
+        for job_dir in job_subdirs:
+            search_dir = os.path.join(flask.current_app.config['WORKING_DIR'], job_dir)
+            flask.current_app.logger.info(f'Looking at {search_dir}')
+            file_dir, _ = get_score_and_metadata_dir(search_dir)
+            err_dir = os.path.join(search_dir, 'err.log')
+
+            # Load the config file to fetch the job name
+            with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
+                config = json.load(f)
+
+            # Check if there has been an error - read the error and continue
+            if os.path.isfile(err_dir):
+                with open(err_dir, 'r') as f:
+                    err = f.readline()
+                err = list(err.strip().split(','))
+                id, name, err = err[0], err[1], err[2]
                 result['results'].append(
                     {
                         'job_id': id,
@@ -308,21 +339,8 @@ def jobs():
                         'status': f'Error: {err}'
                     }
                 )
+                continue
 
-        # Perform a walk of all job sub-directories for score files
-        job_subdirs = get_subdirs(profile_dir)
-        # If given an ID, only get the status of the single job
-        if job_id is not None:
-            job_subdirs = [name for name in job_subdirs if name == job_id]
-        flask.current_app.logger.info(f'Subdirs: {job_subdirs}')
-
-        for job_dir in job_subdirs:
-            search_dir = os.path.join(profile_dir, job_dir)
-            flask.current_app.logger.info(f'Looking at {search_dir}')
-            file_dir, _ = get_score_and_metadata_dir(search_dir)
-            # Load the config file to fetch the job name
-            with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
-                config = json.load(f)
             flask.current_app.logger.info(f'Current score status {file_dir}')
             # If found a non-sparse, non-data file CSV, job has completed
             if file_dir is None:
@@ -402,12 +420,14 @@ def results():
         else:
             openreview_client = mock_client()
 
-        _, profile_dir = get_profile_and_id(openreview_client)
-        if not os.path.isdir(profile_dir):
-            raise OpenReviewException('No jobs submitted since last server reboot')
+        profile = get_profile(openreview_client)
 
+        # Validate profile ID
+        search_dir = os.path.join(flask.current_app.config['WORKING_DIR'], job_id)
+        with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
+            config = json.load(f)
+        assert profile.id == config['profile'], "Forbidden: Insufficient permissions to access job"
         # Search for scores files (only non-sparse scores)
-        search_dir = os.path.join(profile_dir, job_id)
         file_dir, metadata_dir = get_score_and_metadata_dir(search_dir)
 
         # Assemble scores
