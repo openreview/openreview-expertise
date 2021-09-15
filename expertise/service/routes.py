@@ -184,6 +184,101 @@ def get_user_id(openreview_client):
     profile = get_profile(openreview_client)
     return profile.id
 
+def get_jobs(user_id, server_config, logger, job_id=None):
+    # Perform a walk of all job sub-directories for score files
+    # TODO: This walks through all submitted jobs and requires reading a file per job
+    # TODO: is this what we want to do?
+
+    result = {}
+    result['results'] = []
+
+    job_subdirs = get_subdirs(server_config['WORKING_DIR'], user_id)
+    # If given an ID, only get the status of the single job
+    logger.info(f'check filtering | value of job_ID: {job_id}')
+    if job_id is not None:
+        logger.info(f'performing filtering')
+        job_subdirs = [name for name in job_subdirs if name == job_id]
+    logger.info(f'Subdirs: {job_subdirs}')
+
+    for job_dir in job_subdirs:
+        search_dir = os.path.join(server_config['WORKING_DIR'], job_dir)
+        logger.info(f'Looking at {search_dir}')
+        file_dir, _ = get_score_and_metadata_dir(search_dir)
+        err_dir = os.path.join(search_dir, 'err.log')
+
+        # Load the config file to fetch the job name
+        with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
+            config = json.load(f)
+
+        # Check if there has been an error - read the error and continue
+        if os.path.isfile(err_dir):
+            with open(err_dir, 'r') as f:
+                err = f.readline()
+            err = list(err.strip().split(','))
+            id, name, err = err[0], err[1], err[2]
+            result['results'].append(
+                {
+                    'job_id': id,
+                    'name': name,
+                    'status': f'Error: {err}'
+                }
+            )
+            continue
+
+        logger.info(f'Current score status {file_dir}')
+        # If found a non-sparse, non-data file CSV, job has completed
+        if file_dir is None:
+            status = 'Processing'
+        else:
+            status = 'Completed'
+        result['results'].append(
+            {
+                'job_id': job_dir,
+                'name': config['name'],
+                'status': status
+            }
+        )
+    
+    return result
+
+def get_results(user_id, server_config, job_id, delete_on_get, logger):
+    result = {}
+    result['results'] = []
+
+    # Validate profile ID
+    search_dir = os.path.join(server_config['WORKING_DIR'], job_id)
+    with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
+        config = json.load(f)
+    assert user_id == config['profile'], "Forbidden: Insufficient permissions to access job"
+    # Search for scores files (only non-sparse scores)
+    file_dir, metadata_dir = get_score_and_metadata_dir(search_dir)
+
+    # Assemble scores
+    if file_dir is None:
+        raise OpenReviewException('Either job is still processing, has crashed, or does not exist')
+    else:
+        ret_list = []
+        with open(file_dir, 'r') as csv_file:
+            data_reader = reader(csv_file)
+            for row in data_reader:
+                ret_list.append({
+                    'submission': row[0],
+                    'user': row[1],
+                    'score': float(row[2])
+                })
+        result['results'] = ret_list
+
+        # Gather metadata
+        with open(metadata_dir, 'r') as metadata:
+            result['metadata'] = json.load(metadata)
+
+    # Clear directory
+    if delete_on_get:
+        logger.error(f'Deleting {search_dir}')
+        shutil.rmtree(search_dir)
+    
+    return result
+
 @BLUEPRINT.before_app_first_request
 def start_server():
     """
@@ -238,9 +333,12 @@ def expertise():
         return flask.jsonify(result), 403
     
     try:
-        user_config = flask.request.json
         flask.current_app.logger.info('Received expertise request')
+
+        # Parse request args
+        user_config = flask.request.json
         
+        # Fetch OR client
         if not in_test_mode:
             openreview_client = openreview.Client(
                 token=token,
@@ -251,6 +349,7 @@ def expertise():
         else:
             openreview_client = mock_client()
 
+        # Perform server work
         user_id = get_user_id(openreview_client)
         job_id = enqueue_expertise(user_config, user_id)
 
@@ -303,8 +402,10 @@ def jobs():
         return flask.jsonify(result), 403
     
     try:
-        result['results'] = []
+        # Parse query parameters
         job_id = flask.request.args.get('id', None)
+
+        # Fetch OR client
         if not in_test_mode:
             openreview_client = openreview.Client(
                 token=token,
@@ -313,58 +414,14 @@ def jobs():
         else:
             openreview_client = mock_client()
 
+        # Perform server work
         user_id = get_user_id(openreview_client)
-
-        # Perform a walk of all job sub-directories for score files
-        # TODO: This walks through all submitted jobs and requires reading a file per job
-        # TODO: is this what we want to do?
-
-        job_subdirs = get_subdirs(flask.current_app.config['WORKING_DIR'], user_id)
-        # If given an ID, only get the status of the single job
-        flask.current_app.logger.info(f'check filtering | value of job_ID: {job_id}')
-        if job_id is not None:
-            flask.current_app.logger.info(f'performing filtering')
-            job_subdirs = [name for name in job_subdirs if name == job_id]
-        flask.current_app.logger.info(f'Subdirs: {job_subdirs}')
-
-        for job_dir in job_subdirs:
-            search_dir = os.path.join(flask.current_app.config['WORKING_DIR'], job_dir)
-            flask.current_app.logger.info(f'Looking at {search_dir}')
-            file_dir, _ = get_score_and_metadata_dir(search_dir)
-            err_dir = os.path.join(search_dir, 'err.log')
-
-            # Load the config file to fetch the job name
-            with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
-                config = json.load(f)
-
-            # Check if there has been an error - read the error and continue
-            if os.path.isfile(err_dir):
-                with open(err_dir, 'r') as f:
-                    err = f.readline()
-                err = list(err.strip().split(','))
-                id, name, err = err[0], err[1], err[2]
-                result['results'].append(
-                    {
-                        'job_id': id,
-                        'name': name,
-                        'status': f'Error: {err}'
-                    }
-                )
-                continue
-
-            flask.current_app.logger.info(f'Current score status {file_dir}')
-            # If found a non-sparse, non-data file CSV, job has completed
-            if file_dir is None:
-                status = 'Processing'
-            else:
-                status = 'Completed'
-            result['results'].append(
-                {
-                    'job_id': job_dir,
-                    'name': config['name'],
-                    'status': status
-                }
-            )
+        result = get_jobs(
+            user_id,
+            flask.current_app.config,
+            flask.current_app.logger,
+            job_id
+        )
                         
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle))
@@ -415,6 +472,7 @@ def results():
         return flask.jsonify(result), 403
     
     try:
+        # Parse query parameters
         job_id = flask.request.args['job_id']
         delete_on_get = flask.request.args.get('delete_on_get', 'False')
 
@@ -422,7 +480,8 @@ def results():
             delete_on_get = True
         else:
             delete_on_get = False
-    
+
+        # Fetch OR client
         if not in_test_mode:
             openreview_client = openreview.Client(
                 token=token,
@@ -431,40 +490,15 @@ def results():
         else:
             openreview_client = mock_client()
 
-        #profile = get_profile(openreview_client)
+        # Perform server work
         user_id = get_user_id(openreview_client)
-
-        # Validate profile ID
-        search_dir = os.path.join(flask.current_app.config['WORKING_DIR'], job_id)
-        with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
-            config = json.load(f)
-        assert user_id == config['profile'], "Forbidden: Insufficient permissions to access job"
-        # Search for scores files (only non-sparse scores)
-        file_dir, metadata_dir = get_score_and_metadata_dir(search_dir)
-
-        # Assemble scores
-        if file_dir is None:
-            raise OpenReviewException('Either job is still processing, has crashed, or does not exist')
-        else:
-            ret_list = []
-            with open(file_dir, 'r') as csv_file:
-                data_reader = reader(csv_file)
-                for row in data_reader:
-                    ret_list.append({
-                        'submission': row[0],
-                        'user': row[1],
-                        'score': float(row[2])
-                    })
-            result['results'] = ret_list
-
-            # Gather metadata
-            with open(metadata_dir, 'r') as metadata:
-                result['metadata'] = json.load(metadata)
-
-        # Clear directory
-        if delete_on_get:
-            flask.current_app.logger.error(f'Deleting {search_dir}')
-            shutil.rmtree(search_dir)
+        result = get_results(
+            user_id,
+            flask.current_app.config,
+            job_id,
+            delete_on_get,
+            flask.current_app.logger
+        )
                 
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle))
