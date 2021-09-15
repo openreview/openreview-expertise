@@ -1,283 +1,26 @@
 '''
 Implements the Flask API endpoints.
 '''
-import flask, os, shutil, random, string, json, shortuuid, time
+import flask, os, shutil
 from copy import deepcopy
 from flask_cors import CORS
 from multiprocessing import Value
 from csv import reader
 import openreview
 from openreview.openreview import OpenReviewException
-from .utils import mock_client
+from .utils import (
+    mock_client,
+    get_user_id,
+    get_subdirs,
+    get_score_and_metadata_dir,
+    post_expertise,
+    get_jobs,
+    get_results
+)
 
 
 BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
-
-def preprocess_config(config, job_id, profile_id):
-    """
-    Overwrites/add specific key-value pairs in the submitted job config
-
-    :param config: Configuration fields for creating the dataset and executing the expertise model
-    :type config: dict
-
-    :param job_id: The ID for the job to be submitted
-    :type job_id: str
-
-    :param profile_id: The OpenReview profile ID associated with the job
-    :type profile_id: str
-
-    :returns new_config: A modified version of config with the server-required fields
-
-    :raises Exception: Raises exceptions when a required field is missing, or when a parameter is provided
-                       when it is not expected
-    """
-    new_config = {
-        "dataset": {},
-        "model": "specter+mfr",
-        "model_params": {
-            "use_title": True,
-            "batch_size": 4,
-            "use_abstract": True,
-            "average_score": False,
-            "max_score": True,
-            "skip_specter": False,
-            "use_cuda": False
-        }
-    }
-    # Define expected/required API fields
-    req_fields = ['name', 'match_group', 'paper_invitation']
-    optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
-    optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl']
-    path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
-    # Validate + populate fields
-    for field in req_fields:
-        assert field in flask.request.json, f'Missing required field: {field}'
-        new_config[field] = config[field]
-    for field in config.keys():
-        assert field in optional_fields or field in req_fields, f'Unexpected field: {field}'
-        if field != 'model_params':
-            new_config[field] = config[field]
-    if 'model_params' in config.keys():
-        for field in config['model_params']:
-            assert field in optional_model_params, f'Unexpected model param: {field}'
-            new_config['model_params'][field] = config['model_params'][field]
-
-    # Populate with server-side fields
-    root_dir = os.path.join(flask.current_app.config['WORKING_DIR'], job_id)
-    new_config['dataset']['directory'] = root_dir
-    for field in path_fields:
-        new_config['model_params'][field] = root_dir    
-    new_config['job_id'] = job_id
-    new_config['job_dir'] = root_dir
-    new_config['profile'] = profile_id
-    new_config['cdate'] = int(time.time())
-
-    # Set SPECTER+MFR paths
-    if config.get('model', 'specter+mfr') == 'specter+mfr':
-        new_config['model_params']['specter_dir'] = flask.current_app.config['SPECTER_DIR']
-        new_config['model_params']['mfr_feature_vocab_file'] = flask.current_app.config['MFR_VOCAB_DIR']
-        new_config['model_params']['mfr_checkpoint_dir'] = flask.current_app.config['MFR_CHECKPOINT_DIR']
-
-    # Create directory and config file
-    if not os.path.isdir(new_config['dataset']['directory']):
-        os.makedirs(new_config['dataset']['directory'])
-    with open(os.path.join(root_dir, 'config.cfg'), 'w+') as f:
-        json.dump(new_config, f, ensure_ascii=False, indent=4)
-    
-    return new_config   
-
-def enqueue_expertise(json_request, profile_id):
-    """
-    Puts the incoming request on the 'userpaper' queue - which runs creates the dataset followed by executing the expertise
-
-    :param json_request: This is entire body of the json request, possibly augmented by the server
-    :type json_request: dict
-
-    :param profile_id: The OpenReview profile ID associated with the job
-    :type profile_id: str
-    
-    :returns job_id: A unique string assigned to this job
-    """
-    job_id = shortuuid.ShortUUID().random(length=5)
-
-    from .celery_tasks import run_userpaper
-    config = preprocess_config(json_request, job_id, profile_id)
-    flask.current_app.logger.info(f'Config: {config}')
-    run_userpaper.apply_async(
-        (config, flask.current_app.logger),
-        queue='userpaper',
-        task_id=job_id
-    )
-
-    return job_id
-
-def get_subdirs(root_dir, profile_id=None):
-    """Returns the direct children directories of the given root directory"""
-    subdirs = [name for name in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, name))]
-    if profile_id is None:
-        return subdirs
-    else:
-        # If given a profile ID, assume looking for job dirs that contain a config with the
-        # matching profile id
-        flask.current_app.logger.info(f"all subdirs: {subdirs}")
-        filtered_dirs = []
-        for subdir in subdirs:
-            config_dir = os.path.join(root_dir, subdir, 'config.cfg')
-            with open(config_dir, 'r') as f:
-                config = json.load(f)
-                flask.current_app.logger.info(f"checking {profile_id} vs {config['profile']}")
-                flask.current_app.logger.info(f"checking job {subdir}")
-                if profile_id == config['profile']:
-                    flask.current_app.logger.info(f"adding {subdir}")
-                    filtered_dirs.append(subdir)
-        return filtered_dirs
-
-
-def get_score_and_metadata_dir(search_dir):
-    """
-    Searches the given directory for a possible score file and the metadata file
-    
-    :param search_dir: The root directory to search in
-    :type search_dir: str
-
-    :returns file_dir: The directory of the score file, if it exists, starting from the given directory
-    :returns metadata_dir: The directory of the metadata file, if it exists, starting from the given directory
-    """
-    # Search for scores files (only non-sparse scores)
-    file_dir, metadata_dir = None, None
-    with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
-        config = json.load(f)
-    # Look for score files
-    for root, dirs, files in os.walk(search_dir, topdown=False):
-        for name in files:
-            if name == f"{config['name']}.csv":
-                file_dir = os.path.join(root, name)
-            if 'metadata' in name:
-                metadata_dir = os.path.join(root, name)
-    return file_dir, metadata_dir
-
-def get_profile(openreview_client):
-    """
-    Returns the OpenReview profile object given a client
-    
-    :param openreview_client: A logged in client with the user credentials
-    :type openreview_client: openreview.Client
-
-    :returns profile: An OpenReview profile object for the user
-    """
-    profile = openreview_client.get_profile()
-    if profile is None:
-        default_client = openreview.Client()
-        profile = default_client.get_profile()
-    return profile
-
-def get_user_id(openreview_client):
-    """
-    Returns the user id from an OpenReview client for authenticating access
-    
-    :param openreview_client: A logged in client with the user credentials
-    :type openreview_client: openreview.Client
-
-    :returns id: The id of the logged in user 
-    """
-    profile = get_profile(openreview_client)
-    return profile.id
-
-def get_jobs(user_id, server_config, logger, job_id=None):
-    # Perform a walk of all job sub-directories for score files
-    # TODO: This walks through all submitted jobs and requires reading a file per job
-    # TODO: is this what we want to do?
-
-    result = {}
-    result['results'] = []
-
-    job_subdirs = get_subdirs(server_config['WORKING_DIR'], user_id)
-    # If given an ID, only get the status of the single job
-    logger.info(f'check filtering | value of job_ID: {job_id}')
-    if job_id is not None:
-        logger.info(f'performing filtering')
-        job_subdirs = [name for name in job_subdirs if name == job_id]
-    logger.info(f'Subdirs: {job_subdirs}')
-
-    for job_dir in job_subdirs:
-        search_dir = os.path.join(server_config['WORKING_DIR'], job_dir)
-        logger.info(f'Looking at {search_dir}')
-        file_dir, _ = get_score_and_metadata_dir(search_dir)
-        err_dir = os.path.join(search_dir, 'err.log')
-
-        # Load the config file to fetch the job name
-        with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
-            config = json.load(f)
-
-        # Check if there has been an error - read the error and continue
-        if os.path.isfile(err_dir):
-            with open(err_dir, 'r') as f:
-                err = f.readline()
-            err = list(err.strip().split(','))
-            id, name, err = err[0], err[1], err[2]
-            result['results'].append(
-                {
-                    'job_id': id,
-                    'name': name,
-                    'status': f'Error: {err}'
-                }
-            )
-            continue
-
-        logger.info(f'Current score status {file_dir}')
-        # If found a non-sparse, non-data file CSV, job has completed
-        if file_dir is None:
-            status = 'Processing'
-        else:
-            status = 'Completed'
-        result['results'].append(
-            {
-                'job_id': job_dir,
-                'name': config['name'],
-                'status': status
-            }
-        )
-    
-    return result
-
-def get_results(user_id, server_config, job_id, delete_on_get, logger):
-    result = {}
-    result['results'] = []
-
-    # Validate profile ID
-    search_dir = os.path.join(server_config['WORKING_DIR'], job_id)
-    with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
-        config = json.load(f)
-    assert user_id == config['profile'], "Forbidden: Insufficient permissions to access job"
-    # Search for scores files (only non-sparse scores)
-    file_dir, metadata_dir = get_score_and_metadata_dir(search_dir)
-
-    # Assemble scores
-    if file_dir is None:
-        raise OpenReviewException('Either job is still processing, has crashed, or does not exist')
-    else:
-        ret_list = []
-        with open(file_dir, 'r') as csv_file:
-            data_reader = reader(csv_file)
-            for row in data_reader:
-                ret_list.append({
-                    'submission': row[0],
-                    'user': row[1],
-                    'score': float(row[2])
-                })
-        result['results'] = ret_list
-
-        # Gather metadata
-        with open(metadata_dir, 'r') as metadata:
-            result['metadata'] = json.load(metadata)
-
-    # Clear directory
-    if delete_on_get:
-        logger.error(f'Deleting {search_dir}')
-        shutil.rmtree(search_dir)
-    
-    return result
 
 @BLUEPRINT.before_app_first_request
 def start_server():
@@ -351,7 +94,12 @@ def expertise():
 
         # Perform server work
         user_id = get_user_id(openreview_client)
-        job_id = enqueue_expertise(user_config, user_id)
+        job_id = post_expertise(
+            user_config,
+            user_id,
+            flask.current_app.config,
+            flask.current_app.logger
+        )
 
         result['job_id'] = job_id
         flask.current_app.logger.info('Returning from request')
@@ -494,9 +242,9 @@ def results():
         user_id = get_user_id(openreview_client)
         result = get_results(
             user_id,
-            flask.current_app.config,
             job_id,
             delete_on_get,
+            flask.current_app.config,
             flask.current_app.logger
         )
                 
