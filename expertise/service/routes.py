@@ -168,8 +168,21 @@ def get_profile(openreview_client):
     """
     profile = openreview_client.get_profile()
     if profile is None:
-        raise OpenReviewException('Forbidden: Profile does not exist')
+        default_client = openreview.Client()
+        profile = default_client.get_profile()
     return profile
+
+def get_user_id(openreview_client):
+    """
+    Returns the user id from an OpenReview client for authenticating access
+    
+    :param openreview_client: A logged in client with the user credentials
+    :type openreview_client: openreview.Client
+
+    :returns id: The id of the logged in user 
+    """
+    profile = get_profile(openreview_client)
+    return profile.id
 
 @BLUEPRINT.before_app_first_request
 def start_server():
@@ -238,8 +251,8 @@ def expertise():
         else:
             openreview_client = mock_client()
 
-        profile = get_profile(openreview_client)
-        job_id = enqueue_expertise(user_config, profile.id)
+        user_id = get_user_id(openreview_client)
+        job_id = enqueue_expertise(user_config, user_id)
 
         result['job_id'] = job_id
         flask.current_app.logger.info('Returning from request')
@@ -300,15 +313,13 @@ def jobs():
         else:
             openreview_client = mock_client()
 
-        profile = get_profile(openreview_client)
-
-        # TODO: Check for profile directory - move this validation later
+        user_id = get_user_id(openreview_client)
 
         # Perform a walk of all job sub-directories for score files
         # TODO: This walks through all submitted jobs and requires reading a file per job
         # TODO: is this what we want to do?
 
-        job_subdirs = get_subdirs(flask.current_app.config['WORKING_DIR'], profile.id)
+        job_subdirs = get_subdirs(flask.current_app.config['WORKING_DIR'], user_id)
         # If given an ID, only get the status of the single job
         flask.current_app.logger.info(f'check filtering | value of job_ID: {job_id}')
         if job_id is not None:
@@ -420,13 +431,14 @@ def results():
         else:
             openreview_client = mock_client()
 
-        profile = get_profile(openreview_client)
+        #profile = get_profile(openreview_client)
+        user_id = get_user_id(openreview_client)
 
         # Validate profile ID
         search_dir = os.path.join(flask.current_app.config['WORKING_DIR'], job_id)
         with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
             config = json.load(f)
-        assert profile.id == config['profile'], "Forbidden: Insufficient permissions to access job"
+        assert user_id == config['profile'], "Forbidden: Insufficient permissions to access job"
         # Search for scores files (only non-sparse scores)
         file_dir, metadata_dir = get_score_and_metadata_dir(search_dir)
 
