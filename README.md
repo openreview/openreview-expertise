@@ -63,6 +63,19 @@ https://www.overleaf.com/read/ygmygwtjbzfg
 
 https://www.overleaf.com/read/swqrxgqqvmyv
 
+If you plan to use SentencePiece Model, you can follow the training procedure mentioned [here](https://github.com/acl-org/reviewer-paper-matching) to train the model and pass the paths to the trained model directory. The model files directory structure expected by the expertise is as follows:
+```
+path_to_trained_model_dir/
+	scratch/
+	    abstracts.sp.20k.model
+	    abstracts.sp.20k.model.model
+	    abstracts.sp.20k.model.vocab
+	    abstracts.sp.20k.vocab
+	    similarity-model.pt
+```
+
+The `path_to_trained_model_dir` should be passed as `model_params.model_dir` in the config discussed in the Configuration section.
+
 ## Affinity Scores
 
 There are two steps to create affinity scores:
@@ -80,7 +93,7 @@ python -m expertise.create_dataset config.json \
 	--username <your_username> \
 ```
 
-For ELMo, SPECTER, Multifacet-Recommender and BM25 run the following command
+For ELMo, SPECTER, Multifacet-Recommender, SentencePiece-ACL and BM25 run the following command
 ```
 python -m expertise.run config.json
 ```
@@ -417,6 +430,38 @@ Here is an example:
         "merge_alpha": 0.8,
         "work_dir": "./",
         "use_cuda": true,
+        "scores_path": "./"
+    }
+}
+```
+
+#### SentencePiece-ACL specific parameters (affinity scores):
+- `model_params.model_dir`: Path to the unpacked model directory. The model checkpoint will be loaded relative to this directory. 
+- `model_params.batch_size`: Batch size when running SentencePiece Model. This defaults to 32.
+- `model_params.publications_path`: When running SentencePiece, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
+- `model_params.submissions_path`: When running SentencePiece, this is where the embedded abstracts/titles of the Submissions are stored.
+- `model_params.max_score` (boolean, defaults to `true`): This parameter specifies that the reviewer is assigned based on the max similarity of the submission to the authored publication embeddings.
+- `model.params.weighted_topk` (int, defaults to 0): This parameter specifies that the reviewer is assigned based on the weighted average of top `k` similarity score of the submission to the authored publication embeddings. This is skipped if `model_params.max_score` is set to `true`.
+- `model_params.skip_model`: Since running SentencePiece can take a significant amount of time, the vectors are saved in `model_params.submissions_path` and `model_params.publications_path`. The jsonl files will be loaded with all the vectors.
+- `model_params.use_cuda`: Boolean to indicate whether to use GPU (`true`) or CPU (`false`) when running SentencePiece Model. It defaults to CPU (`false`)
+
+Here is an example:
+```
+{
+    "name": "iclr2020_sentence_piece",
+    "dataset": {
+        "directory": "./data/"
+    },
+    "model": "sentence_piece_acl",
+    "model_params": {
+        "model_dir": "../acl-sentence-piece/",
+        "max_score": true,
+        "batch_size": 16,
+        "skip_model": false,
+        "max_score": true,
+        "publications_path": "./",
+        "submissions_path": "./",
+        "use_cuda": false,
         "scores_path": "./"
     }
 }

@@ -1,8 +1,9 @@
 from pathlib import Path
-import openreview
-from .create_dataset import OpenReviewExpertise
-from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
+
 from .config import ModelConfig
+from .create_dataset import OpenReviewExpertise
+from .dataset import ArchivesDataset, SubmissionsDataset
+
 
 # Move run.py functionality to a function that accepts a config dict
 def execute_expertise(config):
@@ -14,6 +15,31 @@ def execute_expertise(config):
         submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
     elif Path(config['dataset']['directory']).joinpath('submissions.json').exists():
         submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.json'))
+
+    if config['model'] == 'sentence_piece_acl':
+        from .models import acl_scorer
+        acl_scorer = acl_scorer.Model(
+            batch_size=config['model_params'].get('batch_size', 32),
+            max_score=config['model_params'].get('max_score', True),
+            weighted_topk=config['model_params'].get('weighted_topk', 0),
+            sparse_value=config['model_params'].get('sparse_value', None),
+            normalize=config['model_params'].get('normalize', False),
+            device=config['model_params'].get('use_cuda', False)
+        )
+        acl_scorer.set_archives_dataset(archives_dataset)
+        acl_scorer.set_submissions_dataset(submissions_dataset)
+        acl_scorer.set_pub_note_author_mapping()
+        acl_scorer.load_model(data=None, model_dir=config['model_params']['model_dir'])
+
+        if not config['model_params'].get('skip_model', False):
+            acl_scorer.embed_publications(publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.pkl'))
+            acl_scorer.embed_submissions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'))
+
+        acl_scorer.all_scores(
+            publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.pkl'),
+            submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'),
+            scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+        )
 
     if config['model'] == 'bm25':
         from .models import bm25

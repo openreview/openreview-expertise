@@ -5,15 +5,18 @@ Assumes that the necessary evidence-collecting steps have been done,
 and that papers have been submitted.
 
 '''
-from .config import ModelConfig
-
-import json, argparse, csv
+import argparse
+import csv
+import json
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from itertools import chain
+
 import openreview
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
-from collections import defaultdict
+
+from .config import ModelConfig
+
 
 class OpenReviewExpertise(object):
     def __init__(self, openreview_client, config):
