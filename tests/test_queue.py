@@ -51,6 +51,8 @@ def openreview_context():
         "MFR_VOCAB_DIR": '../expertise-utils/multifacet_recommender/feature_vocab_file',
         "MFR_CHECKPOINT_DIR": '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/',
         "WORKING_DIR": 'tmp',
+        "CHECK_EVERY": 3600,
+        "DELETE_AFTER": 3600,
         "IN_TEST": True
     }
     app = expertise.service.create_app(

@@ -1,7 +1,7 @@
 '''
 Implements the Flask API endpoints.
 '''
-import flask, os, shutil
+import flask, os, shutil, threading, json
 from copy import deepcopy
 from flask_cors import CORS
 from multiprocessing import Value
@@ -15,7 +15,8 @@ from .utils import (
     get_score_and_metadata_dir,
     post_expertise,
     get_jobs,
-    get_results
+    get_results,
+    cleanup_thread
 )
 
 
@@ -28,19 +29,27 @@ def start_server():
     On server start, check if there is a working directory
     If so, free the space from all incomplete jobs and mark them in the error log
     """
+    # Start cleanup thread
+    threading.Thread(target=cleanup_thread, args=(
+        flask.current_app.config,
+        flask.current_app.logger),
+        daemon=True
+    ).start()
+
     # Get all profile directories
     root_dir = flask.current_app.config['WORKING_DIR']
     if os.path.isdir(root_dir):
         job_ids = get_subdirs(root_dir)
-        # If no score file is present, clean up dir and write to error log
+        # If no score file is present, write to error log
         for job_id in job_ids:
+            with open(os.path.join(root_dir, job_id, 'config.cfg'), 'r') as f:
+                config = json.load(f)
             error_dir = os.path.join(root_dir, job_id, 'err.log')
             job_dir = os.path.join(root_dir, job_id)
             score_dir, _ = get_score_and_metadata_dir(job_dir)
             if score_dir is None:
                 with open(error_dir, 'a+') as f:
-                    f.write(f"{job_id},Interrupted before completed")
-                shutil.rmtree(job_dir)
+                    f.write(f"{job_id},{config['name']},Interrupted before completed")
 
 @BLUEPRINT.route('/test')
 def test():

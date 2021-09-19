@@ -251,6 +251,44 @@ def get_user_id(openreview_client):
     """
     profile = get_profile(openreview_client)
     return profile.id
+
+def cleanup_thread(server_config, logger):
+    """
+    This function is meant to be called as a daemon thread on server start
+    (before first request)
+    Browses jobs in the server's working directory and checks the cdate of each config
+    If it is time for the job to be cleaned up, wipe the entire job directory
+
+    Expects server_config to contain keys "WORKING_DIR", "CHECK_EVERY", "DELETE_AFTER"
+
+    :param server_config: The Flask server's configuration and expect certain fields from here
+    :type server_config: dict
+
+    :param logger: The Flask server's logger, or some form of logger
+    :type logger: logging.Logger
+    """
+    while True:
+        logger.info('Running eviction check')
+        job_subdirs = get_subdirs(server_config['WORKING_DIR'])
+        logger.info(f"Looking to evict {job_subdirs}")
+        check_every = int(server_config['CHECK_EVERY'])
+        delete_after = int(server_config['DELETE_AFTER'])
+        current_time = int(time.time())
+        for job_dir in job_subdirs:
+            search_dir = os.path.join(server_config['WORKING_DIR'], job_dir)
+            logger.info(f"Checking {search_dir}")
+            # Load the config file to fetch the job name
+            with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
+                config = json.load(f)
+            cdate = int(config['cdate'])
+            logger.info(f"Current time {current_time}")
+            logger.info(f"Expiration time {cdate + delete_after}")
+            if cdate + delete_after <= current_time:
+                logger.info(f"Evicting {search_dir}")
+                shutil.rmtree(search_dir)
+        time.sleep(check_every)
+        
+
 # -------------------------------
 # -- Endpoint Helper Functions --
 # -------------------------------
@@ -266,7 +304,10 @@ def post_expertise(json_request, profile_id, server_config, logger):
     :type json_request: dict
 
     :param profile_id: The OpenReview profile ID associated with the job
-    :type profile_id: 
+    :type profile_id: str
+
+    :param server_config: The Flask server's configuration and expect certain fields from here
+    :type server_config: dict
     
     :param logger: The Flask server's logger, or some form of logger
     :type logger: logging.Logger

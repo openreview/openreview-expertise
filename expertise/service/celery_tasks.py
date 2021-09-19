@@ -20,7 +20,6 @@ def run_userpaper(self, config: dict, logger: logging.Logger):
                 queue='expertise',
         )
     except Exception as exc:
-        # TODO: Jobs that failed will take up space - how to evict?
         # Write error, clean up working directory and store log
         logger.error(f"Error in job: {config['job_id']}")
         working_dir = config['job_dir']
