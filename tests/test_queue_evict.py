@@ -160,5 +160,7 @@ def test_queue_evict(openreview_context, celery_app, celery_worker):
 
     # Clean up test
     shutil.rmtree(f"{server_config['WORKING_DIR']}/")
-    os.remove('pytest.log')
-    os.remove('default.log')
+    if os.path.isfile('pytest.log'):
+        os.remove('pytest.log')
+    if os.path.isfile('default.log'):
+        os.remove('default.log')

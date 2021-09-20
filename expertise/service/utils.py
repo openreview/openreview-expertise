@@ -1,4 +1,4 @@
-import openreview, json, os, time, shutil, json, shortuuid
+import openreview, json, os, time, shutil, json, shortuuid, threading
 from unittest.mock import MagicMock
 from csv import reader
 
@@ -296,6 +296,42 @@ def cleanup_thread(server_config, logger):
 # ------------------------
 # -- Endpoint Functions --
 # ------------------------
+
+def before_first_request(server_config, logger):
+    """
+    Performs the following steps:
+        1) Starts the eviction thread for stale jobs
+        2) Writes an error log for jobs that were interrupted
+
+    :param server_config: The Flask server's configuration and expect certain fields from here
+    :type server_config: dict
+    
+    :param logger: The Flask server's logger, or some form of logger
+    :type logger: logging.Logger
+    """
+    # Start cleanup thread
+    threading.Thread(target=cleanup_thread, args=(
+        server_config,
+        logger),
+        daemon=True
+    ).start()
+
+    # Get all profile directories
+    root_dir = server_config['WORKING_DIR']
+    if os.path.isdir(root_dir):
+        job_ids = get_subdirs(root_dir)
+        # If no score file is present, write to error log
+        for job_id in job_ids:
+            with open(os.path.join(root_dir, job_id, 'config.cfg'), 'r') as f:
+                config = json.load(f)
+            error_dir = os.path.join(root_dir, job_id, 'err.log')
+            job_dir = os.path.join(root_dir, job_id)
+            score_dir, _ = get_score_and_metadata_dir(job_dir)
+            if score_dir is None:
+                with open(error_dir, 'a+') as f:
+                    f.write(f"{job_id},{config['name']},Interrupted before completed")
+
+
 def post_expertise(json_request, profile_id, server_config, logger):
     """
     Puts the incoming request on the 'userpaper' queue - which runs creates the dataset followed by executing the expertise
