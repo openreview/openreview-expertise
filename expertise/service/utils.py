@@ -98,6 +98,7 @@ def mock_client():
     client.get_profile = MagicMock(side_effect=get_profile)
     client.get_user = MagicMock(side_effect=get_user)
     client.user = MagicMock(side_effect=get_user)
+    client.token = None
 
     return client
 # -----------------
