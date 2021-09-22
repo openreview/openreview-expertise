@@ -7,7 +7,7 @@ from expertise.service.server import celery_app as celery
 def run_userpaper(self, config: dict, logger: logging.Logger):
     try:
         logger.info('Creating dataset')
-        if 'token' in config.keys():
+        if config.get('token'):
             openreview_client = openreview.Client(
                 token=config['token'],
                 baseurl=config['baseurl']
@@ -21,7 +21,7 @@ def run_userpaper(self, config: dict, logger: logging.Logger):
         )
     except Exception as exc:
         # Write error, clean up working directory and store log
-        logger.error(f"Error in job: {config['job_id']}")
+        logger.error(f"Error in job: {config['job_id']}, {str(exc)}")
         working_dir = config['job_dir']
         with open(os.path.join(working_dir, 'err.log'), 'a+') as f:
             f.write(f"{config['job_id']},{config['name']},{exc}\n")
@@ -33,7 +33,7 @@ def run_expertise(self, config: dict, logger: logging.Logger):
         execute_expertise(config=config)
     except Exception as exc:
         # Write error, clean up working directory and store log
-        logger.error(f"Error in job: {config['job_id']}")
+        logger.error(f"Error in job: {config['job_id']}, {str(exc)}")
         working_dir = config['job_dir']
         with open(os.path.join(working_dir, 'err.log'), 'a+') as f:
             f.write(f"{config['job_id']},{config['name']},{exc}\n")

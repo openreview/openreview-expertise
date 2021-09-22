@@ -1,23 +1,16 @@
 '''
 Implements the Flask API endpoints.
 '''
-import flask, os, shutil, threading, json
+from expertise.service.expertise import ExpertiseService
+import openreview
+from openreview.openreview import OpenReviewException
+from .utils import mock_client
+from .utils import get_user_id
+import flask
 from copy import deepcopy
 from flask_cors import CORS
 from multiprocessing import Value
 from csv import reader
-import openreview
-from openreview.openreview import OpenReviewException
-from .utils import (
-    mock_client,
-    get_user_id,
-    get_subdirs,
-    get_score_and_metadata_dir,
-    post_expertise,
-    get_jobs,
-    get_results,
-    before_first_request
-)
 
 
 BLUEPRINT = flask.Blueprint('expertise', __name__)
@@ -34,17 +27,6 @@ def get_client():
     return openreview.Client(
         token=token,
         baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
-    )
-
-@BLUEPRINT.before_app_first_request
-def start_server():
-    """
-    On server start, check if there is a working directory
-    If so, free the space from all incomplete jobs and mark them in the error log
-    """
-    before_first_request(
-        flask.current_app.config,
-        flask.current_app.logger
     )
 
 @BLUEPRINT.route('/test')
@@ -82,16 +64,12 @@ def expertise():
         flask.current_app.logger.info('Received expertise request')
 
         # Parse request args
-        user_config = flask.request.json
-        user_config['token'] = openreview_client.token
-        user_config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
+        user_request = flask.request.json
+        user_request['token'] = openreview_client.token
+        user_request['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
+        user_request['user_id'] = user_id
 
-        job_id = post_expertise(
-            user_config,
-            user_id,
-            flask.current_app.config,
-            flask.current_app.logger
-        )
+        job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).start_expertise(user_request)
 
         result = {'job_id': job_id }
         flask.current_app.logger.info('Returning from request')
@@ -142,12 +120,8 @@ def jobs():
         # Parse query parameters
         job_id = flask.request.args.get('id', None)
 
-        result = get_jobs(
-            user_id,
-            flask.current_app.config,
-            flask.current_app.logger,
-            job_id
-        )
+        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
+
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
@@ -195,20 +169,10 @@ def results():
     try:
         # Parse query parameters
         job_id = flask.request.args.get('id', None)
-        delete_on_get = flask.request.args.get('delete_on_get', 'False')
+        delete_on_get = flask.request.args.get('delete_on_get', 'False').lower() == 'true'
 
-        if delete_on_get.lower() == 'true':
-            delete_on_get = True
-        else:
-            delete_on_get = False
+        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
 
-        result = get_results(
-            user_id,
-            job_id,
-            delete_on_get,
-            flask.current_app.config,
-            flask.current_app.logger
-        )
         flask.current_app.logger.debug('GET returns code 200')
         return flask.jsonify(result), 200
 
