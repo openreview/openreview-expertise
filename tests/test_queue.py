@@ -94,7 +94,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     test_client = openreview_context['test_client']
     server_config = openreview_context['config']
     test_profile = '~Test_User1'
-    
+
     if os.path.isdir(f'tmp'):
         shutil.rmtree(f'tmp')
 
@@ -150,15 +150,15 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
 
     # Attempt getting results of an incomplete job
     time.sleep(5)
-    response = test_client.get('/results', query_string={'job_id': job_id})
+    response = test_client.get('/expertise/results', query_string={'id': job_id})
     assert response.status_code == 500
 
     # Query until job is complete
-    response = test_client.get('/jobs', query_string={}).json['results']
+    response = test_client.get('/expertise/status', query_string={}).json['results']
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
         time.sleep(5)
-        response = test_client.get('/jobs', query_string={}).json['results']
+        response = test_client.get('/jobs/status', query_string={}).json['results']
     assert response[0]['status'] == 'Completed'
     assert response[0]['name'] == 'test_run'
 
@@ -175,7 +175,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         assert len(profile_id) >= 1
         assert profile_id.startswith('~')
         assert score >= 0 and score <= 1
-    
+
     # Submit a second job
     response = test_client.post(
         '/expertise',
@@ -187,7 +187,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
 
     # Query until second job is complete
     time.sleep(5)
-    response = test_client.get('/jobs', query_string={'id': job_id_two}).json['results']
+    response = test_client.get('/expertise/status', query_string={'id': job_id_two}).json['results']
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
         time.sleep(5)
@@ -198,11 +198,11 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     assert len(response) == 2
 
     # Clean up directories
-    response = test_client.get('/results', query_string={'job_id': job_id, 'delete_on_get': True}).json['results']
+    response = test_client.get('/expertise/results', query_string={'job_id': job_id, 'delete_on_get': True}).json['results']
     assert not os.path.isdir(f"{server_config['WORKING_DIR']}/{job_id}")
     assert not os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/test_run.csv")
 
-    response = test_client.get('/results', query_string={'job_id': job_id_two, 'delete_on_get': True}).json['results']
+    response = test_client.get('/expertise/results', query_string={'job_id': job_id_two, 'delete_on_get': True}).json['results']
     assert not os.path.isdir(f"{server_config['WORKING_DIR']}/{job_id_two}")
     assert not os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id_two}/test_run.csv")
 
@@ -229,15 +229,15 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
 
     # Query until job is complete
     time.sleep(5)
-    response = test_client.get('/results', query_string={'job_id': job_id})
+    response = test_client.get('/expertise/results', query_string={'job_id': job_id})
     assert response.status_code == 500
 
-    response = test_client.get('/jobs', query_string={}).json['results']
+    response = test_client.get('/expertise/status', query_string={}).json['results']
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
         time.sleep(5)
         response = test_client.get('/jobs', query_string={}).json['results']
-    
+
     assert 'Error' in response[0]['status']
     assert response[0]['name'] == 'test_run'
     assert len(response[0]['status'].strip()) > len('Error')

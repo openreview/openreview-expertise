@@ -8,13 +8,20 @@ from csv import reader
 def mock_client():
     client = MagicMock(openreview.Client)
 
+    def get_user():
+        return {
+            'user': {
+                'id': 'test_user1@mail.com'
+            }
+        }
+
     def get_profile():
         mock_profile = {
             "id": "~Test_User1",
             "content": {
-                "preferredEmail": "Test_User1@mail.com",
+                "preferredEmail": "test_user1@mail.com",
                 "emails": [
-                    "Test_User1@mail.com"
+                    "test_user1@mail.com"
                 ]
             }
         }
@@ -89,6 +96,8 @@ def mock_client():
     client.get_group = MagicMock(side_effect=get_group)
     client.search_profiles = MagicMock(side_effect=search_profiles)
     client.get_profile = MagicMock(side_effect=get_profile)
+    client.get_user = MagicMock(side_effect=get_user)
+    client.user = MagicMock(side_effect=get_user)
 
     return client
 # -----------------
@@ -154,7 +163,7 @@ def preprocess_config(config, job_id, profile_id, server_config):
     root_dir = os.path.join(server_config['WORKING_DIR'], job_id)
     new_config['dataset']['directory'] = root_dir
     for field in path_fields:
-        new_config['model_params'][field] = root_dir    
+        new_config['model_params'][field] = root_dir
     new_config['job_id'] = job_id
     new_config['job_dir'] = root_dir
     new_config['profile'] = profile_id
@@ -171,13 +180,13 @@ def preprocess_config(config, job_id, profile_id, server_config):
         os.makedirs(new_config['dataset']['directory'])
     with open(os.path.join(root_dir, 'config.cfg'), 'w+') as f:
         json.dump(new_config, f, ensure_ascii=False, indent=4)
-    
-    return new_config   
+
+    return new_config
 
 def get_subdirs(root_dir, profile_id=None):
     """
     Returns the direct children directories of the given root directory
-    
+
     :param root_dir: The relative directory to be searched for sub-directories
     :type root_dir: str
 
@@ -205,7 +214,7 @@ def get_subdirs(root_dir, profile_id=None):
 def get_score_and_metadata_dir(search_dir):
     """
     Searches the given directory for a possible score file and the metadata file
-    
+
     :param search_dir: The root directory to search in
     :type search_dir: str
 
@@ -228,7 +237,7 @@ def get_score_and_metadata_dir(search_dir):
 def get_profile(openreview_client):
     """
     Returns the OpenReview profile object given a client
-    
+
     :param openreview_client: A logged in client with the user credentials
     :type openreview_client: openreview.Client
 
@@ -243,14 +252,14 @@ def get_profile(openreview_client):
 def get_user_id(openreview_client):
     """
     Returns the user id from an OpenReview client for authenticating access
-    
+
     :param openreview_client: A logged in client with the user credentials
     :type openreview_client: openreview.Client
 
-    :returns id: The id of the logged in user 
+    :returns id: The id of the logged in user
     """
-    profile = get_profile(openreview_client)
-    return profile.id
+    user = openreview_client.user
+    return user.get('user', {}).get('id') if user else None
 
 def cleanup_thread(server_config, logger):
     """
@@ -287,7 +296,7 @@ def cleanup_thread(server_config, logger):
                 logger.info(f"Evicting {search_dir}")
                 shutil.rmtree(search_dir)
         time.sleep(check_every)
-        
+
 
 # -------------------------------
 # -- Endpoint Helper Functions --
@@ -305,7 +314,7 @@ def before_first_request(server_config, logger):
 
     :param server_config: The Flask server's configuration and expect certain fields from here
     :type server_config: dict
-    
+
     :param logger: The Flask server's logger, or some form of logger
     :type logger: logging.Logger
     """
@@ -344,7 +353,7 @@ def post_expertise(json_request, profile_id, server_config, logger):
 
     :param server_config: The Flask server's configuration and expect certain fields from here
     :type server_config: dict
-    
+
     :param logger: The Flask server's logger, or some form of logger
     :type logger: logging.Logger
 
@@ -382,7 +391,7 @@ def get_jobs(user_id, server_config, logger, job_id=None):
 
     :param job_id: Optional ID of the specific job to look up
     :type job_id: str
-    
+
     :returns: A dictionary with the key 'results' containing a list of job statuses
     """
     # Perform a walk of all job sub-directories for score files
@@ -438,7 +447,7 @@ def get_jobs(user_id, server_config, logger, job_id=None):
                 'status': status
             }
         )
-    
+
     return result
 
 def get_results(user_id, job_id, delete_on_get, server_config, logger):
@@ -460,7 +469,7 @@ def get_results(user_id, job_id, delete_on_get, server_config, logger):
 
     :param logger: The Flask server's logger, or some form of logger
     :type logger: logging.Logger
-    
+
     :returns: A dictionary that contains the calculated scores and metadata
     """
     result = {}
@@ -497,7 +506,7 @@ def get_results(user_id, job_id, delete_on_get, server_config, logger):
     if delete_on_get:
         logger.error(f'Deleting {search_dir}')
         shutil.rmtree(search_dir)
-    
+
     return result
 # ------------------------
 # -- Endpoint Functions --

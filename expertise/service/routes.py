@@ -23,6 +23,19 @@ from .utils import (
 BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
 
+
+def get_client():
+    token = flask.request.headers.get('Authorization')
+    in_test_mode = 'IN_TEST' in flask.current_app.config.keys()
+
+    if in_test_mode:
+        return mock_client()
+
+    return openreview.Client(
+        token=token,
+        baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
+    )
+
 @BLUEPRINT.before_app_first_request
 def start_server():
     """
@@ -57,35 +70,22 @@ def expertise():
     :param paper_invitation: An invitation containing submissions used to compute expertise
     :type paper_invitation: str
     """
-    result = {}
 
-    token = flask.request.headers.get('Authorization')
-    in_test_mode = 'IN_TEST' in flask.current_app.config.keys()
-    
-    if not token and not in_test_mode:
+    openreview_client = get_client()
+
+    user_id = get_user_id(openreview_client)
+    if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        result['error'] = 'Forbidden: No Authorization token in headers'
-        return flask.jsonify(result), 403
-    
+        return flask.jsonify({ 'error': 'Forbidden: No Authorization token in headers'}), 403
+
     try:
         flask.current_app.logger.info('Received expertise request')
 
         # Parse request args
         user_config = flask.request.json
-        
-        # Fetch OR client
-        if not in_test_mode:
-            openreview_client = openreview.Client(
-                token=token,
-                baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
-            )
-            user_config['token'] = token
-            user_config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
-        else:
-            openreview_client = mock_client()
+        user_config['token'] = openreview_client.token
+        user_config['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
 
-        # Perform server work
-        user_id = get_user_id(openreview_client)
         job_id = post_expertise(
             user_config,
             user_id,
@@ -93,9 +93,12 @@ def expertise():
             flask.current_app.logger
         )
 
-        result['job_id'] = job_id
+        result = {'job_id': job_id }
         flask.current_app.logger.info('Returning from request')
-        
+
+        flask.current_app.logger.debug('POST returns ' + str(result))
+        return flask.jsonify(result), 200
+
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle))
 
@@ -107,19 +110,15 @@ def expertise():
         elif 'forbidden' in error_type.lower():
             status = 403
 
-        result['error'] = error_type
-        return flask.jsonify(result), status
+        return flask.jsonify({'error': error_type}), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        result['error'] = 'Internal server error: {}'.format(error_handle)
-        return flask.jsonify(result), 500
-        
-    else:
-        flask.current_app.logger.debug('POST returns ' + str(result))
-        return flask.jsonify(result), 200
+        flask.current_app.logger.error(str(error_handle))
+        return flask.jsonify({'error': 'Internal server error: {}'.format(error_handle)}), 500
 
-@BLUEPRINT.route('/jobs', methods=['GET'])
+
+@BLUEPRINT.route('/expertise/status', methods=['GET'])
 def jobs():
     """
     Query all submitted jobs associated with the logged in user
@@ -131,38 +130,27 @@ def jobs():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    result = {}
+    openreview_client = get_client()
 
-    token = flask.request.headers.get('Authorization')
-    in_test_mode = 'IN_TEST' in flask.current_app.config.keys()
-    
-    if not token and not in_test_mode:
+    user_id = get_user_id(openreview_client)
+
+    if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        result['error'] = 'Forbidden: No Authorization token in headers'
-        return flask.jsonify(result), 403
-    
+        return flask.jsonify({ 'error': 'Forbidden: No Authorization token in headers'}), 403
+
     try:
         # Parse query parameters
         job_id = flask.request.args.get('id', None)
 
-        # Fetch OR client
-        if not in_test_mode:
-            openreview_client = openreview.Client(
-                token=token,
-                baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
-            )
-        else:
-            openreview_client = mock_client()
-
-        # Perform server work
-        user_id = get_user_id(openreview_client)
         result = get_jobs(
             user_id,
             flask.current_app.config,
             flask.current_app.logger,
             job_id
         )
-                        
+        flask.current_app.logger.debug('GET returns ' + str(result))
+        return flask.jsonify(result), 200
+
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle))
 
@@ -174,19 +162,14 @@ def jobs():
         elif 'forbidden' in error_type.lower():
             status = 403
 
-        result['error'] = error_type
-        return flask.jsonify(result), status
+        return flask.jsonify({'error': error_type}), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        result['error'] = 'Internal server error: {}'.format(error_handle)
-        return flask.jsonify(result), 500
-        
-    else:
-        flask.current_app.logger.debug('POST returns ' + str(result))
-        return flask.jsonify(result), 200
+        flask.current_app.logger.error(str(error_handle))
+        return flask.jsonify({'error': 'Internal server error: {}'.format(error_handle)}), 500
 
-@BLUEPRINT.route('/results', methods=['GET'])
+@BLUEPRINT.route('/expertise/results', methods=['GET'])
 def results():
     """
     Get the results of a single submitted job with the associated job_id
@@ -197,23 +180,21 @@ def results():
 
     :param job_id: The ID of a submitted job
     :type job_id: str
-    
+
     :param delete_on_get: Decide whether to keep the data on the server after getting the results
     :type delete_on_get: bool
     """
-    result = {}
+    openreview_client = get_client()
 
-    token = flask.request.headers.get('Authorization')
-    in_test_mode = 'IN_TEST' in flask.current_app.config.keys()
-    
-    if not token and not in_test_mode:
+    user_id = get_user_id(openreview_client)
+
+    if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        result['error'] = 'Forbidden: No Authorization token in headers'
-        return flask.jsonify(result), 403
-    
+        return flask.jsonify({ 'error': 'Forbidden: No Authorization token in headers'}), 403
+
     try:
         # Parse query parameters
-        job_id = flask.request.args['job_id']
+        job_id = flask.request.args.get('id', None)
         delete_on_get = flask.request.args.get('delete_on_get', 'False')
 
         if delete_on_get.lower() == 'true':
@@ -221,17 +202,6 @@ def results():
         else:
             delete_on_get = False
 
-        # Fetch OR client
-        if not in_test_mode:
-            openreview_client = openreview.Client(
-                token=token,
-                baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
-            )
-        else:
-            openreview_client = mock_client()
-
-        # Perform server work
-        user_id = get_user_id(openreview_client)
         result = get_results(
             user_id,
             job_id,
@@ -239,7 +209,9 @@ def results():
             flask.current_app.config,
             flask.current_app.logger
         )
-                
+        flask.current_app.logger.debug('GET returns code 200')
+        return flask.jsonify(result), 200
+
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle))
 
@@ -251,14 +223,9 @@ def results():
         elif 'forbidden' in error_type.lower():
             status = 403
 
-        result['error'] = error_type
-        return flask.jsonify(result), status
+        return flask.jsonify({'error': error_type}), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        result['error'] = 'Internal server error: {}'.format(error_handle)
-        return flask.jsonify(result), 500
-        
-    else:
-        flask.current_app.logger.debug('POST returns code 200')
-        return flask.jsonify(result), 200
+        flask.current_app.logger.error(str(error_handle))
+        return flask.jsonify({'error', 'Internal server error: {}'.format(error_handle)}), 500
