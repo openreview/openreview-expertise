@@ -95,7 +95,7 @@ def test_queue_evict(openreview_context, celery_app, celery_worker):
     test_profile = '~Test_User1'
     server_config = openreview_context['config']
     test_client = openreview_context['test_client']
-    
+
     if os.path.isdir(f"{server_config['WORKING_DIR']}"):
         shutil.rmtree(f"{server_config['WORKING_DIR']}")
 
@@ -144,9 +144,9 @@ def test_queue_evict(openreview_context, celery_app, celery_worker):
         json.dump(new_config, f, ensure_ascii=False, indent=4)
     with open(os.path.join(server_config['WORKING_DIR'], keep_job_id, 'test_run.csv'), 'w+') as f:
         f.writelines(['1jxcf,~Test_User1,0.9358935'])
-    
+
     # Send a request to kickstart the thread - first directory gets deleted on first request
-    response = test_client.get('/jobs', query_string={}).json['results']
+    response = test_client.get('/expertise/status', query_string={}).json['results']
     assert len(response) == 2
 
     # Check for existence of directories
