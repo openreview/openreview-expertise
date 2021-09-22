@@ -99,8 +99,12 @@ def mock_client():
     client.search_profiles = MagicMock(side_effect=search_profiles)
     client.get_profile = MagicMock(side_effect=get_profile)
     client.get_user = MagicMock(side_effect=get_user)
-    client.user = MagicMock(side_effect=get_user)
-    client.token = MagicMock(side_effect=get_token)
+    client.user = {
+        'user': {
+            'id': 'test_user1@mail.com'
+        }
+    }
+    client.token = None
 
     return client
 # -----------------

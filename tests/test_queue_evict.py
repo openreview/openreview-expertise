@@ -92,7 +92,7 @@ def celery_worker_parameters():
     }
 
 def test_queue_evict(openreview_context, celery_app, celery_worker):
-    test_profile = '~Test_User1'
+    test_profile = 'test_user1@mail.com'
     server_config = openreview_context['config']
     test_client = openreview_context['test_client']
 
