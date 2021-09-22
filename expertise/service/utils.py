@@ -100,8 +100,12 @@ def mock_client():
     client.search_profiles = MagicMock(side_effect=search_profiles)
     client.get_profile = MagicMock(side_effect=get_profile)
     client.get_user = MagicMock(side_effect=get_user)
-    client.user = MagicMock(side_effect=get_user)
-    client.token = MagicMock(side_effect=get_token)
+    client.user = {
+        'user': {
+            'id': 'test_user1@mail.com'
+        }
+    }
+    client.token = None
 
     return client
 # -----------------
@@ -280,25 +284,30 @@ def cleanup_thread(server_config, logger):
     :param logger: The Flask server's logger, or some form of logger
     :type logger: logging.Logger
     """
+    check_every = int(server_config['CHECK_EVERY'])
+    delete_after = int(server_config['DELETE_AFTER'])
+    
     while True:
-        logger.info('Running eviction check')
-        job_subdirs = get_subdirs(server_config['WORKING_DIR'])
-        logger.info(f"Looking to evict {job_subdirs}")
-        check_every = int(server_config['CHECK_EVERY'])
-        delete_after = int(server_config['DELETE_AFTER'])
-        current_time = int(time.time())
-        for job_dir in job_subdirs:
-            search_dir = os.path.join(server_config['WORKING_DIR'], job_dir)
-            logger.info(f"Checking {search_dir}")
-            # Load the config file to fetch the job name
-            with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
-                config = json.load(f)
-            cdate = int(config['cdate'])
-            logger.info(f"Current time {current_time}")
-            logger.info(f"Expiration time {cdate + delete_after}")
-            if cdate + delete_after <= current_time:
-                logger.info(f"Evicting {search_dir}")
-                shutil.rmtree(search_dir)
+        if os.path.isdir(server_config['WORKING_DIR']):
+            logger.info('Running eviction check')
+            job_subdirs = get_subdirs(server_config['WORKING_DIR'])
+            logger.info(f"Looking to evict {job_subdirs}")
+
+            current_time = int(time.time())
+            for job_dir in job_subdirs:
+                search_dir = os.path.join(server_config['WORKING_DIR'], job_dir)
+                logger.info(f"Checking {search_dir}")
+                
+                # Load the config file to fetch the job name
+                with open(os.path.join(search_dir, 'config.cfg'), 'r') as f:
+                    config = json.load(f)
+                cdate = int(config['cdate'])
+                logger.info(f"Current time {current_time}")
+                logger.info(f"Expiration time {cdate + delete_after}")
+                if cdate + delete_after <= current_time:
+                    logger.info(f"Evicting {search_dir}")
+                    shutil.rmtree(search_dir)
+
         time.sleep(check_every)
 
 
