@@ -158,14 +158,14 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
         time.sleep(5)
-        response = test_client.get('/jobs/status', query_string={}).json['results']
+        response = test_client.get('/expertise/status', query_string={}).json['results']
     assert response[0]['status'] == 'Completed'
     assert response[0]['name'] == 'test_run'
 
     # Check for results
     assert os.path.isdir(f"{server_config['WORKING_DIR']}/{job_id}")
     assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/test_run.csv")
-    response = test_client.get('/results', query_string={'job_id': job_id})
+    response = test_client.get('/expertise/results', query_string={'id': job_id})
     metadata = response.json['metadata']
     assert metadata['submission_count'] == 2
     response = response.json['results']
@@ -191,18 +191,18 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
         time.sleep(5)
-        response = test_client.get('/jobs', query_string={'id': job_id_two}).json['results']
+        response = test_client.get('/expertise/status', query_string={'id': job_id_two}).json['results']
     assert response[0]['status'] == 'Completed'
     assert response[0]['name'] == 'test_run'
-    response = test_client.get('/jobs', query_string={}).json['results']
+    response = test_client.get('/expertise/status', query_string={}).json['results']
     assert len(response) == 2
 
     # Clean up directories
-    response = test_client.get('/expertise/results', query_string={'job_id': job_id, 'delete_on_get': True}).json['results']
+    response = test_client.get('/expertise/results', query_string={'id': job_id, 'delete_on_get': True}).json['results']
     assert not os.path.isdir(f"{server_config['WORKING_DIR']}/{job_id}")
     assert not os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/test_run.csv")
 
-    response = test_client.get('/expertise/results', query_string={'job_id': job_id_two, 'delete_on_get': True}).json['results']
+    response = test_client.get('/expertise/results', query_string={'id': job_id_two, 'delete_on_get': True}).json['results']
     assert not os.path.isdir(f"{server_config['WORKING_DIR']}/{job_id_two}")
     assert not os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id_two}/test_run.csv")
 
@@ -229,14 +229,14 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
 
     # Query until job is complete
     time.sleep(5)
-    response = test_client.get('/expertise/results', query_string={'job_id': job_id})
+    response = test_client.get('/expertise/results', query_string={'id': job_id})
     assert response.status_code == 500
 
     response = test_client.get('/expertise/status', query_string={}).json['results']
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
         time.sleep(5)
-        response = test_client.get('/jobs', query_string={}).json['results']
+        response = test_client.get('/expertise/status', query_string={}).json['results']
 
     assert 'Error' in response[0]['status']
     assert response[0]['name'] == 'test_run'
