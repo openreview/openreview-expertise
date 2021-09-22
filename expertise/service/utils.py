@@ -286,7 +286,7 @@ def cleanup_thread(server_config, logger):
     """
     check_every = int(server_config['CHECK_EVERY'])
     delete_after = int(server_config['DELETE_AFTER'])
-    
+
     while True:
         if os.path.isdir(server_config['WORKING_DIR']):
             logger.info('Running eviction check')
@@ -416,7 +416,7 @@ def get_jobs(user_id, server_config, logger, job_id=None):
 
     job_subdirs = get_subdirs(server_config['WORKING_DIR'], user_id)
     # If given an ID, only get the status of the single job
-    logger.info(f'check filtering | value of job_ID: {job_id}')
+    logger.info(f'check filtering for user {user_id} | value of job_ID: {job_id}')
     if job_id is not None:
         logger.info(f'performing filtering')
         job_subdirs = [name for name in job_subdirs if name == job_id]
