@@ -99,6 +99,8 @@ class ExpertiseService(object):
             os.makedirs(config['dataset']['directory'])
         with open(os.path.join(root_dir, 'config.json'), 'w+') as f:
             ## Remove the token before saving this in the file system
+            if 'token' in config.keys():
+                del config['token']
             json.dump(config, f, ensure_ascii=False, indent=4)
 
         return config
