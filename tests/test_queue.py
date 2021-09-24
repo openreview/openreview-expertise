@@ -156,12 +156,27 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     response = test_client.get('/expertise/results', query_string={'id': job_id})
     assert response.status_code == 500
 
+    # Submit a second job
+    response = test_client.post(
+        '/expertise',
+        data = json.dumps({**config}),
+        content_type='application/json'
+    )
+    assert response.status_code == 200, f'{response.json}'
+    job_id_two = response.json['job_id']
+
+    # Check for queued status
+    time.sleep(5)
+    response = test_client.get('/expertise/status', query_string={'id': job_id_two}).json['results']
+    assert len(response) == 1
+    assert response[0]['status'] == 'Queued'
+
     # Query until job is complete
-    response = test_client.get('/expertise/status', query_string={}).json['results']
+    response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
         time.sleep(5)
-        response = test_client.get('/expertise/status', query_string={}).json['results']
+        response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
     assert response[0]['status'] == 'Completed'
     assert response[0]['name'] == 'test_run'
 
@@ -179,17 +194,7 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         assert profile_id.startswith('~')
         assert score >= 0 and score <= 1
 
-    # Submit a second job
-    response = test_client.post(
-        '/expertise',
-        data = json.dumps({**config}),
-        content_type='application/json'
-    )
-    assert response.status_code == 200, f'{response.json}'
-    job_id_two = response.json['job_id']
-
     # Query until second job is complete
-    time.sleep(5)
     response = test_client.get('/expertise/status', query_string={'id': job_id_two}).json['results']
     assert len(response) == 1
     while response[0]['status'] == 'Processing':
@@ -241,9 +246,9 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         time.sleep(5)
         response = test_client.get('/expertise/status', query_string={}).json['results']
 
-    assert 'Error' in response[0]['status']
     assert response[0]['name'] == 'test_run'
-    assert len(response[0]['status'].strip()) > len('Error')
+    assert response[0]['status'].strip() == 'Error'
+    assert 'error' in response[0].keys()
     assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
     # Clean up test

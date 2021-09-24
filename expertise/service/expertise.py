@@ -6,6 +6,13 @@ import json
 from csv import reader
 import openreview
 from openreview import OpenReviewException
+from enum import Enum
+
+class JobStatus(str, Enum):
+    QUEUED = 'Queued'
+    PROCESSING = 'Processing'
+    COMPLETED = 'Completed'
+    ERROR = 'Error'
 
 class ExpertiseService(object):
 
@@ -207,7 +214,8 @@ class ExpertiseService(object):
                     {
                         'job_id': id,
                         'name': name,
-                        'status': f'Error: {err}'
+                        'status': JobStatus.ERROR.value,
+                        'error': f'{err}'
                     }
                 )
                 continue
@@ -215,9 +223,16 @@ class ExpertiseService(object):
             self.logger.info(f'Current score status {file_dir}')
             # If found a non-sparse, non-data file CSV, job has completed
             if file_dir is None:
-                status = 'Processing'
+                status = JobStatus.PROCESSING.value
             else:
-                status = 'Completed'
+                status = JobStatus.COMPLETED.value
+
+            # If there are no other directories, then the dataset has not been created
+            # so the job is still queued
+            subdirs = [name for name in os.listdir(search_dir) if os.path.isdir(os.path.join(search_dir, name))]
+            if len(subdirs) <= 0:
+                status = JobStatus.QUEUED.value
+
             result['results'].append(
                 {
                     'job_id': job_dir,
