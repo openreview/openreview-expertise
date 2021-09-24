@@ -116,7 +116,8 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         data = json.dumps({**config}),
         content_type='application/json'
     )
-    assert response.status_code == 500, f'{response.json}'
+    assert response.status_code == 400, f'{response.json}'
+    assert 'bad request' in response.json['error'].lower()
 
     # Test unexpected field
     config.update({'paper_invitation': 'ABC.cc/-/Submission'}) # Fill in required field
@@ -126,7 +127,8 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         data = json.dumps({**config}),
         content_type='application/json'
     )
-    assert response.status_code == 500, f'{response.json}'
+    assert response.status_code == 400, f'{response.json}'
+    assert 'bad request' in response.json['error'].lower()
 
     # Test unexpected model param
     del config['unexpected_field']
@@ -136,7 +138,8 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
         data = json.dumps({**config}),
         content_type='application/json'
     )
-    assert response.status_code == 500, f'{response.json}'
+    assert response.status_code == 400, f'{response.json}'
+    assert 'bad request' in response.json['error'].lower()
 
     # Submit correct config
     del config['model_params']['dummy_param']

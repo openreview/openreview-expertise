@@ -87,6 +87,8 @@ def expertise():
             status = 404
         elif 'forbidden' in error_type.lower():
             status = 403
+        elif 'bad request' in error_type.lower():
+            status = 400
 
         return flask.jsonify({'error': error_type}), status
 

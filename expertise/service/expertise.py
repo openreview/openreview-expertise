@@ -5,6 +5,7 @@ import os
 import json
 from csv import reader
 import openreview
+from openreview import OpenReviewException
 
 class ExpertiseService(object):
 
@@ -53,17 +54,23 @@ class ExpertiseService(object):
         optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
         optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl']
         path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+
         # Validate + populate fields
         for field in req_fields:
-            assert field in request, f'Missing required field: {field}'
+            if field not in request:
+                raise OpenReviewException(f"Bad request: missing required field {field}")
             config[field] = request[field]
+
         for field in request.keys():
-            assert field in optional_fields or field in req_fields, f'Unexpected field: {field}'
+            if field not in optional_fields and field not in req_fields:
+                raise OpenReviewException(f"Bad request: unexpected field {field}")
             if field != 'model_params':
                 config[field] = request[field]
+
         if 'model_params' in request.keys():
             for field in request['model_params']:
-                assert field in optional_model_params, f'Unexpected model param: {field}'
+                if field not in optional_model_params:
+                    raise OpenReviewException(f"Bad request: unexpected model param: {field}")
                 config['model_params'][field] = request['model_params'][field]
 
         # Populate with server-side fields
