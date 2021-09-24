@@ -8,6 +8,8 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 
+SUPERUSER_IDS = ['openreview.net']
+
 class JobStatus(str, Enum):
     QUEUED = 'Queued'
     PROCESSING = 'Processing'
@@ -122,7 +124,7 @@ class ExpertiseService(object):
                 config_dir = os.path.join(self.working_dir, subdir, 'config.json')
                 with open(config_dir, 'r') as f:
                     config = json.load(f)
-                    if user_id == config['user_id']:
+                    if user_id == config['user_id'] or user_id.lower() in SUPERUSER_IDS:
                         filtered_dirs.append(subdir)
             return filtered_dirs
 
@@ -268,7 +270,8 @@ class ExpertiseService(object):
         search_dir = os.path.join(self.working_dir, job_id)
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
             config = json.load(f)
-        assert user_id == config['user_id'], "Forbidden: Insufficient permissions to access job"
+        if user_id != config['user_id'] and user_id.lower() not in SUPERUSER_IDS:
+            raise OpenReviewException("Forbidden: Insufficient permissions to access job")
         # Search for scores files (only non-sparse scores)
         file_dir, metadata_dir = self._get_score_and_metadata_dir(search_dir)
 
