@@ -288,8 +288,10 @@ def test_elmo_queue(openreview_context, celery_app, celery_worker):
     server_config = openreview_context['config']
     test_profile = '~Test_User1'
 
-    if os.path.isdir(f'tmp'):
-        shutil.rmtree(f'tmp')
+
+    working_dir = openreview_context['config']['WORKING_DIR']
+    if os.path.isdir(working_dir):
+        shutil.rmtree(working_dir)
 
     # Gather config
     config = {
