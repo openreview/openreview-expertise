@@ -43,25 +43,6 @@ class TestExpertiseService():
 
     job_id = None
 
-    @pytest.fixture
-    def create_elmo():
-        def simple_elmo(config):
-            archives_dataset = ArchivesDataset(archives_path=Path('tests/data/archives'))
-            submissions_dataset = SubmissionsDataset(submissions_path=Path('tests/data/submissions'))
-
-            elmoModel = elmo.Model(
-                use_title=config['model_params'].get('use_title'),
-                use_abstract=config['model_params'].get('use_abstract'),
-                use_cuda=config['model_params'].get('use_cuda'),
-                batch_size=config['model_params'].get('batch_size'),
-                knn=config['model_params'].get('knn'),
-                sparse_value=config['model_params'].get('sparse_value')
-            )
-            elmoModel.set_archives_dataset(archives_dataset)
-            elmoModel.set_submissions_dataset(submissions_dataset)
-            return elmoModel
-        return simple_elmo
-
     @pytest.fixture()
     def openreview_context():
         """
