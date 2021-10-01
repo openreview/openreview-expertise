@@ -16,8 +16,7 @@ from expertise.models import elmo
 
 class TestExpertiseService():
 
-    def __init__(self):
-        self.job_id = None
+    job_id = None
 
     @pytest.fixture
     def create_elmo():
