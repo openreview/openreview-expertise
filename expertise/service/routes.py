@@ -170,7 +170,9 @@ def results():
 
     try:
         # Parse query parameters
-        job_id = flask.request.args.get('id', None)
+        job_id = flask.request.args.get('job_id', None)
+        if job_id is None:
+            raise openreview.OpenReviewException('Bad request: job_id is required')
         delete_on_get = flask.request.args.get('delete_on_get', 'False').lower() == 'true'
 
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
@@ -188,6 +190,8 @@ def results():
             status = 404
         elif 'forbidden' in error_type.lower():
             status = 403
+        elif 'bad request' in error_type.lower():
+            status = 400
 
         return flask.jsonify({'error': error_type}), status
 

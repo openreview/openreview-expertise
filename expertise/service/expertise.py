@@ -11,10 +11,23 @@ from enum import Enum
 SUPERUSER_IDS = ['openreview.net']
 
 class JobStatus(str, Enum):
+    INITIALIZED = 'Initialized'
     QUEUED = 'Queued'
-    PROCESSING = 'Processing'
+    FETCHING_DATA  = 'Fetching Data'
+    EXPERTISE_QUEUED = 'Queued for Expertise'
+    RUN_EXPERTISE = 'Running Expertise'
     COMPLETED = 'Completed'
     ERROR = 'Error'
+
+class JobDescription(dict, Enum):
+    VALS = {
+        JobStatus.INITIALIZED: 'Server received config and allocated space',
+        JobStatus.QUEUED: 'Job is waiting to start fetching OpenReview data',
+        JobStatus.FETCHING_DATA: 'Job is currently fetching data from OpenReview',
+        JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
+        JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
+        JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
+    }
 
 class ExpertiseService(object):
 
@@ -84,11 +97,14 @@ class ExpertiseService(object):
 
         # Populate with server-side fields
         root_dir = os.path.join(self.working_dir, request['job_id'])
+        descriptions = JobDescription.VALS.value
         config['dataset']['directory'] = root_dir
         for field in path_fields:
             config['model_params'][field] = root_dir
         config['job_dir'] = root_dir
         config['cdate'] = int(time.time())
+        config['status'] = JobStatus.INITIALIZED.value
+        config['description'] = descriptions[JobStatus.INITIALIZED]
 
         # Set SPECTER+MFR paths
         if config.get('model', 'specter+mfr') == 'specter+mfr':
@@ -156,7 +172,7 @@ class ExpertiseService(object):
         return file_dir, metadata_dir
 
     def start_expertise(self, request):
-
+        descriptions = JobDescription.VALS.value
         job_id = shortuuid.ShortUUID().random(length=5)
         request['job_id'] = job_id
 
@@ -165,7 +181,8 @@ class ExpertiseService(object):
             config = self._prepare_config(request)
 
             self.logger.info(f'Config: {config}')
-
+            config['status'] = JobStatus.QUEUED
+            config['description'] = descriptions[JobStatus.QUEUED]
             run_userpaper.apply_async(
                 (config, self.logger),
                 queue='userpaper',
@@ -195,6 +212,7 @@ class ExpertiseService(object):
 
         result = {}
         result['results'] = []
+        descriptions = JobDescription.VALS.value
 
         job_subdirs = self._get_subdirs(user_id)
         # If given an ID, only get the status of the single job
@@ -207,50 +225,21 @@ class ExpertiseService(object):
         for job_dir in job_subdirs:
             search_dir = os.path.join(self.working_dir, job_dir)
             self.logger.info(f'Looking at {search_dir}')
-            file_dir, _ = self._get_score_and_metadata_dir(search_dir)
-            err_dir = os.path.join(search_dir, 'err.log')
 
-            # Load the config file to fetch the job name
+            # Load the config file to fetch the job name and status
             with open(os.path.join(search_dir, 'config.json'), 'r') as f:
                 config = json.load(f)
-
-            # Check if there has been an error - read the error and continue
-            if os.path.isfile(err_dir):
-                with open(err_dir, 'r') as f:
-                    err = f.readline()
-                err = list(err.strip().split(','))
-                id, name, err = err[0], err[1], err[2]
-                result['results'].append(
-                    {
-                        'job_id': id,
-                        'name': name,
-                        'status': JobStatus.ERROR.value,
-                        'error': f'{err}'
-                    }
-                )
-                continue
-
-            self.logger.info(f'Current score status {file_dir}')
-            # If found a non-sparse, non-data file CSV, job has completed
-            if file_dir is None:
-                status = JobStatus.PROCESSING.value
-            else:
-                status = JobStatus.COMPLETED.value
-
-            # If there are no other directories, then the dataset has not been created
-            # so the job is still queued
-            subdirs = [name for name in os.listdir(search_dir) if os.path.isdir(os.path.join(search_dir, name))]
-            if len(subdirs) <= 0:
-                status = JobStatus.QUEUED.value
+            status = config['status']
+            description = config['description']
 
             result['results'].append(
                 {
                     'job_id': job_dir,
                     'name': config['name'],
-                    'status': status
+                    'status': status,
+                    'description': description
                 }
             )
-
         return result
 
     def get_expertise_results(self, user_id, job_id, delete_on_get=False):
@@ -271,21 +260,31 @@ class ExpertiseService(object):
         """
         result = {}
         result['results'] = []
+        descriptions = JobDescription.VALS.value
+
+        search_dir = os.path.join(self.working_dir, job_id)
+        # Check for directory existence
+        if not os.path.isdir(search_dir):
+            raise openreview.OpenReviewException('Job not found')
 
         # Validate profile ID
-        search_dir = os.path.join(self.working_dir, job_id)
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
             config = json.load(f)
         if user_id != config['user_id'] and user_id.lower() not in SUPERUSER_IDS:
             raise OpenReviewException("Forbidden: Insufficient permissions to access job")
-        # Search for scores files (only non-sparse scores)
-        file_dir, metadata_dir = self._get_score_and_metadata_dir(search_dir)
+
+        # Fetch status
+        status = config['status']
+        description = config['description']
 
         # Assemble scores
-        if file_dir is None:
+        if status != JobStatus.COMPLETED:
             ## TODO: change it to Job not found
-            raise openreview.OpenReviewException('Either job is still processing, has crashed, or does not exist')
+            raise openreview.OpenReviewException(f"Scores not found - status: {status} | description: {description}")
         else:
+            # Search for scores files (only non-sparse scores)
+            file_dir, metadata_dir = self._get_score_and_metadata_dir(search_dir)
+
             ret_list = []
             with open(file_dir, 'r') as csv_file:
                 data_reader = reader(csv_file)
