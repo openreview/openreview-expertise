@@ -14,6 +14,31 @@ from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import elmo
 
 
+@pytest.fixture(scope="session")
+def celery_config():
+    return {
+        "broker_url": "redis://localhost:6379/10",
+        "result_backend": "redis://localhost:6379/10",
+        "task_track_started": True,
+        "task_serializer": "pickle",
+        "result_serializer": "pickle",
+        "accept_content": ["pickle", "application/x-python-serialize"],
+        "task_create_missing_queues": True,
+    }
+
+@pytest.fixture(scope="session")
+def celery_includes():
+    return ["expertise.service.celery_tasks"]
+
+@pytest.fixture(scope="session")
+def celery_worker_parameters():
+    return {
+        "queues": ("userpaper", "expertise"),
+        "perform_ping_check": False,
+        "concurrency": 4,
+    }
+
+
 class TestExpertiseService():
 
     job_id = None
@@ -70,30 +95,6 @@ class TestExpertiseService():
                 "test_client": app.test_client(),
                 "config": config
             }
-
-    @pytest.fixture(scope="session")
-    def celery_config():
-        return {
-            "broker_url": "redis://localhost:6379/10",
-            "result_backend": "redis://localhost:6379/10",
-            "task_track_started": True,
-            "task_serializer": "pickle",
-            "result_serializer": "pickle",
-            "accept_content": ["pickle", "application/x-python-serialize"],
-            "task_create_missing_queues": True,
-        }
-
-    @pytest.fixture(scope="session")
-    def celery_includes():
-        return ["expertise.service.celery_tasks"]
-
-    @pytest.fixture(scope="session")
-    def celery_worker_parameters():
-        return {
-            "queues": ("userpaper", "expertise"),
-            "perform_ping_check": False,
-            "concurrency": 4,
-        }
 
     def test_request_expertise_with_no_config(self, openreview_context, celery_app, celery_worker):
         test_client = openreview_context['test_client']
