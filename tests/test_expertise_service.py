@@ -44,7 +44,7 @@ class TestExpertiseService():
     job_id = None
 
     @pytest.fixture()
-    def openreview_context():
+    def openreview_context(self):
         """
         A pytest fixture for setting up a clean expertise-api test instance:
         `scope` argument is set to 'function', so each function will get a clean test instance.
