@@ -181,26 +181,35 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['job_id']
 
-        # Attempt getting results of an incomplete job
-        time.sleep(5)
-        response = test_client.get('/expertise/results', query_string={'id': job_id})
-        assert response.status_code == 500
-
-        # Check for queued status
-        time.sleep(5)
-
         response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
         assert len(response) == 1
-        assert response[0]['status'] == 'Queued'
+        assert response[0]['name'] == 'test_run'
+        assert response[0]['status'] == 'Initialized'
+        assert response[0]['description'] == 'Server received config and allocated space'
+
+        # # Attempt getting results of an incomplete job
+        # time.sleep(5)
+        # response = test_client.get('/expertise/results', query_string={'id': job_id})
+        # assert response.status_code == 500
+
+        # Check for queued status
+        #time.sleep(5)
+
+        # response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
+        # assert len(response) == 1
+        # assert response[0]['name'] == 'test_run'
+        # assert response[0]['status'] == 'Queued'
+        # assert response[0]['description'] == 'Server received config and allocated space'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
         assert len(response) == 1
-        while response[0]['status'] == 'Processing':
+        while response[0]['status'] != 'Completed':
             time.sleep(5)
             response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
         assert response[0]['status'] == 'Completed'
         assert response[0]['name'] == 'test_run'
+        assert response[0]['description'] == 'Job is complete and the computed scores are ready'
 
         self.job_id = job_id
 

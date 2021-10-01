@@ -51,7 +51,7 @@ def mock_client():
         if offset != 0:
             return []
 
-        with open('tests/data/fakeData.json') as json_file:
+        with open('tests/data/expertiseServiceData.json') as json_file:
             data = json.load(json_file)
         if invitation:
             notes=data['notes'][invitation]
@@ -67,13 +67,13 @@ def mock_client():
         return []
 
     def get_group(group_id):
-        with open('tests/data/fakeData.json') as json_file:
+        with open('tests/data/expertiseServiceData.json') as json_file:
             data = json.load(json_file)
         group = openreview.Group.from_json(data['groups'][group_id])
         return group
 
     def search_profiles(confirmedEmails=None, ids=None, term=None):
-        with open('tests/data/fakeData.json') as json_file:
+        with open('tests/data/expertiseServiceData.json') as json_file:
             data = json.load(json_file)
         profiles = data['profiles']
         profiles_dict_emails = {}
