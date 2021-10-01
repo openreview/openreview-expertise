@@ -177,21 +177,18 @@ class ExpertiseService(object):
         request['job_id'] = job_id
 
         from .celery_tasks import run_userpaper
-        try:
-            config = self._prepare_config(request)
+        config = self._prepare_config(request)
 
-            self.logger.info(f'Config: {config}')
-            config['status'] = JobStatus.QUEUED
-            config['description'] = descriptions[JobStatus.QUEUED]
-            run_userpaper.apply_async(
-                (config, self.logger),
-                queue='userpaper',
-                task_id=job_id
-            )
+        self.logger.info(f'Config: {config}')
+        config['status'] = JobStatus.QUEUED
+        config['description'] = descriptions[JobStatus.QUEUED]
+        run_userpaper.apply_async(
+            (config, self.logger),
+            queue='userpaper',
+            task_id=job_id
+        )
 
-            return job_id
-        except OpenReviewException as err:
-            raise OpenReviewException(err)
+        return job_id
 
     def get_expertise_status(self, user_id, job_id=None):
         """
