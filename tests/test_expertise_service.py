@@ -237,64 +237,64 @@ class TestExpertiseService():
             assert profile_id.startswith('~')
             assert score >= 0 and score <= 1
 
-def test_get_results_for_all_jobs(self, openreview_context, celery_app, celery_worker):
-    # Assert that there are two completed jobs belonging to this user
-    test_client = openreview_context['test_client']
-    response = test_client.get('/expertise/status', query_string={}).json['results']
-    assert len(response) == 2
-    for job_dict in response:
-        assert job_dict['status'] == 'Completed'
-
-def test_get_results_and_delete_data(self, openreview_context, celery_app, celery_worker):
-    # Clean up directories by setting the "delete_on_get" flag
-    test_client = openreview_context['test_client']
-    response = test_client.get('/expertise/results', query_string={'id': self.job_id, 'delete_on_get': True}).json['results']
-
-    ## Assert the next expertise results should return empty result
-
-def test_request_expertise_with_model_errors(self, openreview_context, celery_app, celery_worker):
-    # Submit a config with an error in the model field and return the job_id
-    test_client = openreview_context['test_client']
-    response = test_client.post(
-        '/expertise',
-        data = json.dumps({
-                'name': 'test_run',
-                'paper_invitation': 'ABC.cc/-/Submission',
-                'match_group': ["ABC.cc"],
-                "model": "elmo",
-                "model_params": {
-                    "use_title": None,
-                    "use_abstract": None,
-                    "average_score": None,
-                    "max_score": None
-                }
-            }
-        ),
-        content_type='application/json'
-    )
-    assert response.status_code == 200, f'{response.json}'
-    job_id = response.json['job_id']
-
-    self.job_id = job_id
-
-def test_get_results_and_get_error(self, openreview_context, celery_app, celery_worker):
-    test_client = openreview_context['test_client']
-    # Query until job is err
-    time.sleep(5)
-    response = test_client.get('/expertise/results', query_string={'id': self.job_id})
-    assert response.status_code == 500
-
-    response = test_client.get('/expertise/status', query_string={}).json['results']
-    assert len(response) == 1
-    while response[0]['status'] == 'Processing':
-        time.sleep(5)
+    def test_get_results_for_all_jobs(self, openreview_context, celery_app, celery_worker):
+        # Assert that there are two completed jobs belonging to this user
+        test_client = openreview_context['test_client']
         response = test_client.get('/expertise/status', query_string={}).json['results']
+        assert len(response) == 2
+        for job_dict in response:
+            assert job_dict['status'] == 'Completed'
 
-    assert response[0]['name'] == 'test_run'
-    assert response[0]['status'].strip() == 'Error'
-    assert 'error' in response[0].keys()
-    ## TODO: assert the error string
-    ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
+    def test_get_results_and_delete_data(self, openreview_context, celery_app, celery_worker):
+        # Clean up directories by setting the "delete_on_get" flag
+        test_client = openreview_context['test_client']
+        response = test_client.get('/expertise/results', query_string={'id': self.job_id, 'delete_on_get': True}).json['results']
+
+        ## Assert the next expertise results should return empty result
+
+    def test_request_expertise_with_model_errors(self, openreview_context, celery_app, celery_worker):
+        # Submit a config with an error in the model field and return the job_id
+        test_client = openreview_context['test_client']
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    'name': 'test_run',
+                    'paper_invitation': 'ABC.cc/-/Submission',
+                    'match_group': ["ABC.cc"],
+                    "model": "elmo",
+                    "model_params": {
+                        "use_title": None,
+                        "use_abstract": None,
+                        "average_score": None,
+                        "max_score": None
+                    }
+                }
+            ),
+            content_type='application/json'
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['job_id']
+
+        self.job_id = job_id
+
+    def test_get_results_and_get_error(self, openreview_context, celery_app, celery_worker):
+        test_client = openreview_context['test_client']
+        # Query until job is err
+        time.sleep(5)
+        response = test_client.get('/expertise/results', query_string={'id': self.job_id})
+        assert response.status_code == 500
+
+        response = test_client.get('/expertise/status', query_string={}).json['results']
+        assert len(response) == 1
+        while response[0]['status'] == 'Processing':
+            time.sleep(5)
+            response = test_client.get('/expertise/status', query_string={}).json['results']
+
+        assert response[0]['name'] == 'test_run'
+        assert response[0]['status'].strip() == 'Error'
+        assert 'error' in response[0].keys()
+        ## TODO: assert the error string
+        ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
 
 # def test_elmo_queue(openreview_context, celery_app, celery_worker):
