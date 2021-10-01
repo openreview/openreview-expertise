@@ -184,7 +184,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
         assert len(response) == 1
         assert response[0]['name'] == 'test_run'
-        assert response[0]['status'] == 'Initialized'
+        assert response[0]['status'] != 'Error'
         assert response[0]['description'] == 'Server received config and allocated space'
 
         # # Attempt getting results of an incomplete job
@@ -207,6 +207,8 @@ class TestExpertiseService():
         while response[0]['status'] != 'Completed':
             time.sleep(5)
             response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
+            if response[0]['status'] == 'Error':
+                assert False, response[0]['description']
         assert response[0]['status'] == 'Completed'
         assert response[0]['name'] == 'test_run'
         assert response[0]['description'] == 'Job is complete and the computed scores are ready'
