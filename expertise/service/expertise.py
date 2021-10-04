@@ -187,6 +187,8 @@ class ExpertiseService(object):
             queue='userpaper',
             task_id=job_id
         )
+        with open(os.path.join(config['job_dir'], 'config.json'), 'w+') as f:
+            json.dump(config, f, ensure_ascii=False, indent=4)
 
         return job_id
 

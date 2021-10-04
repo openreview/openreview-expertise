@@ -86,6 +86,7 @@ class TestExpertiseService():
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'bad request' in response.json['error'].lower()
+        assert response.json['error'] == 'Bad request: missing required field name'
 
     def test_request_expertise_with_missing_required_fields(self, openreview_context, celery_app, celery_worker):
         # Submitting a partially filled out config without a required field
@@ -108,6 +109,7 @@ class TestExpertiseService():
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'bad request' in response.json['error'].lower()
+        assert response.json['error'] == 'Bad request: missing required field paper_invitation'
 
     def test_request_expertise_with_invalid_field(self, openreview_context, celery_app, celery_worker):
         # Submit a working config with an extra field that is not allowed
@@ -132,6 +134,7 @@ class TestExpertiseService():
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'bad request' in response.json['error'].lower()
+        assert response.json['error'] == 'Bad request: unexpected field unexpected_field'
 
     def test_request_expertise_with_invalid_model_param(self, openreview_context, celery_app, celery_worker):
         # Submit a working config with an extra model param field
@@ -156,6 +159,7 @@ class TestExpertiseService():
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'bad request' in response.json['error'].lower()
+        assert response.json['error'] == 'Bad request: unexpected model param: dummy_param'
 
     def test_request_expertise_with_valid_parameters(self, openreview_context, celery_app, celery_worker):
         # Submit a working job and return the job ID
