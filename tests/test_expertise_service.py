@@ -18,7 +18,7 @@ class TestExpertiseService():
 
     job_id = None
 
-    @pytest.fixture()
+    @pytest.fixture(scope='session')
     def celery_config(self):
         return {
             "broker_url": "redis://localhost:6379/10",
@@ -30,11 +30,11 @@ class TestExpertiseService():
             "task_create_missing_queues": True,
         }
 
-    @pytest.fixture()
+    @pytest.fixture(scope='session')
     def celery_includes(self):
         return ["expertise.service.celery_tasks"]
 
-    @pytest.fixture()
+    @pytest.fixture(scope='session')
     def celery_worker_parameters(self):
         return {
             "queues": ("userpaper", "expertise"),
@@ -42,7 +42,7 @@ class TestExpertiseService():
             "concurrency": 4,
         }
 
-    @pytest.fixture()
+    @pytest.fixture(scope='session')
     def openreview_context(self):
         """
         A pytest fixture for setting up a clean expertise-api test instance:
@@ -76,7 +76,7 @@ class TestExpertiseService():
                 "config": config
             }
 
-    def test_request_expertise_with_no_config(self, openreview_context, celery_app, celery_worker):
+    def test_request_expertise_with_no_config(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Submitting an empty config with no required fields
         response = test_client.post(
@@ -88,7 +88,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['error'].lower()
         assert response.json['error'] == 'Bad request: missing required field name'
 
-    def test_request_expertise_with_missing_required_fields(self, openreview_context, celery_app, celery_worker):
+    def test_request_expertise_with_missing_required_fields(self, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -111,7 +111,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['error'].lower()
         assert response.json['error'] == 'Bad request: missing required field paper_invitation'
 
-    def test_request_expertise_with_invalid_field(self, openreview_context, celery_app, celery_worker):
+    def test_request_expertise_with_invalid_field(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra field that is not allowed
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -136,7 +136,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['error'].lower()
         assert response.json['error'] == 'Bad request: unexpected field unexpected_field'
 
-    def test_request_expertise_with_invalid_model_param(self, openreview_context, celery_app, celery_worker):
+    def test_request_expertise_with_invalid_model_param(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra model param field
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -161,7 +161,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['error'].lower()
         assert response.json['error'] == 'Bad request: unexpected model param: dummy_param'
 
-    def test_request_expertise_with_valid_parameters(self, openreview_context, celery_app, celery_worker):
+    def test_request_expertise_with_valid_parameters(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -218,7 +218,7 @@ class TestExpertiseService():
 
         self.job_id = job_id
 
-    def test_get_results_by_job_id(self, openreview_context, celery_app, celery_worker):
+    def test_get_results_by_job_id(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', query_string={'id': self.job_id})
@@ -232,7 +232,7 @@ class TestExpertiseService():
             assert profile_id.startswith('~')
             assert score >= 0 and score <= 1
 
-    def test_get_results_for_all_jobs(self, openreview_context, celery_app, celery_worker):
+    def test_get_results_for_all_jobs(self, openreview_context, celery_session_app, celery_session_worker):
         # Assert that there are two completed jobs belonging to this user
         test_client = openreview_context['test_client']
         response = test_client.get('/expertise/status', query_string={}).json['results']
@@ -240,14 +240,14 @@ class TestExpertiseService():
         for job_dict in response:
             assert job_dict['status'] == 'Completed'
 
-    def test_get_results_and_delete_data(self, openreview_context, celery_app, celery_worker):
+    def test_get_results_and_delete_data(self, openreview_context, celery_session_app, celery_session_worker):
         # Clean up directories by setting the "delete_on_get" flag
         test_client = openreview_context['test_client']
         response = test_client.get('/expertise/results', query_string={'id': self.job_id, 'delete_on_get': True}).json['results']
 
         ## Assert the next expertise results should return empty result
 
-    def test_request_expertise_with_model_errors(self, openreview_context, celery_app, celery_worker):
+    def test_request_expertise_with_model_errors(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a config with an error in the model field and return the job_id
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -272,7 +272,7 @@ class TestExpertiseService():
 
         self.job_id = job_id
 
-    def test_get_results_and_get_error(self, openreview_context, celery_app, celery_worker):
+    def test_get_results_and_get_error(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Query until job is err
         time.sleep(5)
@@ -292,7 +292,7 @@ class TestExpertiseService():
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
 
-# def test_elmo_queue(openreview_context, celery_app, celery_worker):
+# def test_elmo_queue(openreview_context, celery_session_app, celery_session_worker):
 #     test_client = openreview_context['test_client']
 #     server_config = openreview_context['config']
 #     test_profile = '~Test_User1'
