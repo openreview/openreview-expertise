@@ -312,7 +312,9 @@ class TestExpertiseService():
         assert response[0]['description'] == 'use_title and use_abstract cannot both be False'
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
-
+        shutil.rmtree(f"./tests/jobs")
+        os.remove('pytest.log')
+        os.remove('default.log')
 # def test_elmo_queue(openreview_context, celery_session_app, celery_session_worker):
 #     test_client = openreview_context['test_client']
 #     server_config = openreview_context['config']
