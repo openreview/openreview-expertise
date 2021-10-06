@@ -164,6 +164,25 @@ class TestExpertiseService():
     def test_request_expertise_with_valid_parameters(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         test_client = openreview_context['test_client']
+        # Make two requests
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    'name': 'test_run',
+                    'match_group': ["ABC.cc"],
+                    'paper_invitation': 'ABC.cc/-/Submission',
+                    "model": "elmo",
+                    "model_params": {
+                        "use_title": False,
+                        "use_abstract": True,
+                        "average_score": True,
+                        "max_score": False
+                    }
+                }
+            ),
+            content_type='application/json'
+        )
+
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -184,7 +203,7 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['job_id']
 
-        response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
+        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
         assert len(response) == 1
         assert response[0]['name'] == 'test_run'
         assert response[0]['status'] != 'Error'
@@ -192,36 +211,36 @@ class TestExpertiseService():
 
         # # Attempt getting results of an incomplete job
         # time.sleep(5)
-        # response = test_client.get('/expertise/results', query_string={'id': job_id})
+        # response = test_client.get('/expertise/results', query_string={'id': f'{job_id}'})
         # assert response.status_code == 500
 
         # Check for queued status
         #time.sleep(5)
 
-        # response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
+        # response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
         # assert len(response) == 1
         # assert response[0]['name'] == 'test_run'
         # assert response[0]['status'] == 'Queued'
         # assert response[0]['description'] == 'Server received config and allocated space'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
+        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
         assert len(response) == 1
         while response[0]['status'] != 'Completed':
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'id': job_id}).json['results']
+            response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
             if response[0]['status'] == 'Error':
                 assert False, response[0]['description']
         assert response[0]['status'] == 'Completed'
         assert response[0]['name'] == 'test_run'
         assert response[0]['description'] == 'Job is complete and the computed scores are ready'
-
-        self.job_id = job_id
+        assert job_id is not None
+        openreview_context['job_id'] = job_id
 
     def test_get_results_by_job_id(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for results from the given job_id assuming the job has completed
-        response = test_client.get('/expertise/results', query_string={'id': self.job_id})
+        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 2
         response = response.json['results']
@@ -242,8 +261,10 @@ class TestExpertiseService():
 
     def test_get_results_and_delete_data(self, openreview_context, celery_session_app, celery_session_worker):
         # Clean up directories by setting the "delete_on_get" flag
+        assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
-        response = test_client.get('/expertise/results', query_string={'id': self.job_id, 'delete_on_get': True}).json['results']
+        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}", 'delete_on_get': True}).json['results']
+        assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
         ## Assert the next expertise results should return empty result
 
@@ -270,25 +291,25 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['job_id']
 
-        self.job_id = job_id
+        openreview_context['job_id'] = job_id
 
     def test_get_results_and_get_error(self, openreview_context, celery_session_app, celery_session_worker):
+        assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
         # Query until job is err
         time.sleep(5)
-        response = test_client.get('/expertise/results', query_string={'id': self.job_id})
-        assert response.status_code == 500
+        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}"})
+        assert response.status_code == 404
 
-        response = test_client.get('/expertise/status', query_string={}).json['results']
+        response = test_client.get('/expertise/status', query_string={'id': f"{openreview_context['job_id']}"}).json['results']
         assert len(response) == 1
         while response[0]['status'] == 'Processing':
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={}).json['results']
+            response = test_client.get('/expertise/status', query_string={'id': f"{openreview_context['job_id']}"}).json['results']
 
         assert response[0]['name'] == 'test_run'
         assert response[0]['status'].strip() == 'Error'
-        assert 'error' in response[0].keys()
-        ## TODO: assert the error string
+        assert response[0]['description'] == 'use_title and use_abstract cannot both be False'
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
 
