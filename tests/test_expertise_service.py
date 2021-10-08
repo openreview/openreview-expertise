@@ -39,7 +39,7 @@ class TestExpertiseService():
         return {
             "queues": ("userpaper", "expertise"),
             "perform_ping_check": False,
-            "concurrency": 4,
+            "concurrency": 1,
         }
 
     @pytest.fixture(scope='session')
@@ -164,25 +164,7 @@ class TestExpertiseService():
     def test_request_expertise_with_valid_parameters(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         test_client = openreview_context['test_client']
-        # Make two requests
-        response = test_client.post(
-            '/expertise',
-            data = json.dumps({
-                    'name': 'test_run',
-                    'match_group': ["ABC.cc"],
-                    'paper_invitation': 'ABC.cc/-/Submission',
-                    "model": "elmo",
-                    "model_params": {
-                        "use_title": False,
-                        "use_abstract": True,
-                        "average_score": True,
-                        "max_score": False
-                    }
-                }
-            ),
-            content_type='application/json'
-        )
-
+        # Make a request
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -255,7 +237,7 @@ class TestExpertiseService():
         # Assert that there are two completed jobs belonging to this user
         test_client = openreview_context['test_client']
         response = test_client.get('/expertise/status', query_string={}).json['results']
-        assert len(response) == 2
+        assert len(response) == 1
         for job_dict in response:
             assert job_dict['status'] == 'Completed'
 
