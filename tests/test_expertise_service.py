@@ -294,9 +294,94 @@ class TestExpertiseService():
         assert response[0]['description'] == 'use_title and use_abstract cannot both be False'
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
-        shutil.rmtree(f"./tests/jobs")
+        # Clean up error job
+        shutil.rmtree(f"./tests/jobs/{openreview_context['job_id']}")
+    
+    def test_high_load(self, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID
+        test_client = openreview_context['test_client']
+        num_requests = 5
+        id_list = []
+        # Make n requests
+        for _ in range(num_requests):
+            response = test_client.post(
+                '/expertise',
+                data = json.dumps({
+                        'name': 'test_run',
+                        'match_group': ["ABC.cc"],
+                        'paper_invitation': 'ABC.cc/-/Submission',
+                        "model": "elmo",
+                        "model_params": {
+                            "use_title": False,
+                            "use_abstract": True,
+                            "average_score": True,
+                            "max_score": False
+                        }
+                    }
+                ),
+                content_type='application/json'
+            )
+            assert response.status_code == 200, f'{response.json}'
+            job_id = response.json['job_id']
+            id_list.append(job_id)
+            response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
+            assert len(response) == 1
+            assert response[0]['name'] == 'test_run'
+            assert response[0]['status'] != 'Error'
+
+        # Check that the last request is queued
+        last_job_id = id_list[num_requests - 1]
+        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
+        assert response[0]['status'] == 'Queued'
+        assert response[0]['name'] == 'test_run'
+        assert response[0]['description'] == 'Job is waiting to start fetching OpenReview data'
+        assert id_list is not None
+        openreview_context['job_id'] = id_list
+    
+    def test_fetch_high_load_results(self, openreview_context, celery_session_app, celery_session_worker):
+        assert openreview_context['job_id'] is not None
+        id_list = openreview_context['job_id']
+        num_requests = len(id_list)
+        test_client = openreview_context['test_client']
+        last_job_id = id_list[num_requests - 1]
+
+        # Assert that the last request completes
+        response = test_client.get('/expertise/status', query_string={'id': f'{last_job_id}'}).json['results']
+        assert len(response) == 1
+        while response[0]['status'] != 'Completed':
+            time.sleep(5)
+            response = test_client.get('/expertise/status', query_string={'id': f'{last_job_id}'}).json['results']
+            if response[0]['status'] == 'Error':
+                assert False, response[0]['description']
+        assert response[0]['status'] == 'Completed'
+        assert response[0]['name'] == 'test_run'
+        assert response[0]['description'] == 'Job is complete and the computed scores are ready'
+
+        # Now fetch and empty out all previous jobs
+        for id in id_list:
+            # Assert that they are complete
+            response = test_client.get('/expertise/status', query_string={'id': f'{id}'}).json['results']
+            assert response[0]['status'] == 'Completed'
+            assert response[0]['name'] == 'test_run'
+            assert response[0]['description'] == 'Job is complete and the computed scores are ready'
+
+            response = test_client.get('/expertise/results', query_string={'id': f"{id}", 'delete_on_get': True})
+            metadata = response.json['metadata']
+            assert metadata['submission_count'] == 2
+            response = response.json['results']
+            for item in response:
+                submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+                assert len(submission_id) >= 1
+                assert len(profile_id) >= 1
+                assert profile_id.startswith('~')
+                assert score >= 0 and score <= 1
+            assert not os.path.isdir(f"./tests/jobs/{id}")
+
+        # Clean up directory
+        shutil.rmtree(f"./tests/jobs/")
         os.remove('pytest.log')
         os.remove('default.log')
+
 # def test_elmo_queue(openreview_context, celery_session_app, celery_session_worker):
 #     test_client = openreview_context['test_client']
 #     server_config = openreview_context['config']
