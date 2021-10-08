@@ -31,7 +31,6 @@ def update_status(job_dir, new_status, desc=None):
 def run_userpaper(self, config: dict, logger: logging.Logger):
     try:
         update_status(config['job_dir'], JobStatus.FETCHING_DATA)
-        logger.info('Creating dataset')
         if config.get('token'):
             openreview_client = openreview.Client(
                 token=config['token'],
@@ -53,7 +52,6 @@ def run_userpaper(self, config: dict, logger: logging.Logger):
 @celery.task(name='expertise', track_started=True, bind=True, time_limit=3600 * 24)
 def run_expertise(self, config: dict, logger: logging.Logger):
     try:
-        logger.info('Executing expertise')
         update_status(config['job_dir'], JobStatus.RUN_EXPERTISE)
         execute_expertise(config=config)
         update_status(config['job_dir'], JobStatus.COMPLETED)

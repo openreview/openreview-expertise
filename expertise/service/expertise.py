@@ -215,21 +215,15 @@ class ExpertiseService(object):
 
         job_subdirs = self._get_subdirs(user_id)
         # If given an ID, only get the status of the single job
-        self.logger.info(f'check filtering | value of job_ID: {job_id}')
         if job_id is not None:
-            self.logger.info(f'performing filtering')
             job_subdirs = [name for name in job_subdirs if name == job_id]
-        self.logger.info(f'Subdirs: {job_subdirs}')
 
         for job_dir in job_subdirs:
             search_dir = os.path.join(self.working_dir, job_dir)
-            self.logger.info(f'Looking at {search_dir}')
 
             # Load the config file to fetch the job name and status
-            self.logger.info(f"Trying to load {os.path.join(search_dir, 'config.json')}")
             with open(os.path.join(search_dir, 'config.json'), 'r') as f:
                 config = json.load(f)
-            self.logger.info('Config loaded')
             status = config['status']
             description = config['description']
 
