@@ -138,6 +138,8 @@ In order to start the Celery queue worker, use:
 celery --app expertise.service.server.celery_app worker
 ```
 
+See `/expertise/service/README.md` for documentation on the API design and endpoints.
+
 ### Configuration
 Configuration files are located in `/expertise/service/config`. When started, the server will search for a `.cfg` file in `/expertise/service/config` that matches the environment variable `FLASK_ENV`, and will default to the values in `default.cfg`.
 
