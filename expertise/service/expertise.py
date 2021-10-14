@@ -119,6 +119,7 @@ class ExpertiseService(object):
         if failed_request:
             raise OpenReviewException(error_string.strip())
 
+        self.logger.info(f"Config validation passed - setting server-side fields")
         # Populate with server-side fields
         root_dir = os.path.join(self.working_dir, request['job_id'])
         descriptions = JobDescription.VALS.value
@@ -311,15 +312,12 @@ class ExpertiseService(object):
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
-        # Perform a walk of all job sub-directories for score files
-        # TODO: This walks through all submitted jobs and requires reading a file per job
-        # TODO: is this what we want to do?
-
         result = {}
         result['results'] = []
         descriptions = JobDescription.VALS.value
 
         job_subdirs = self._get_subdirs(user_id)
+        self.logger.info(f"Searching {job_subdirs} for user {user_id}")
         # If given an ID, only get the status of the single job
         if job_id is not None:
             job_subdirs = [name for name in job_subdirs if name == job_id]
@@ -385,7 +383,7 @@ class ExpertiseService(object):
         else:
             # Search for scores files (only non-sparse scores)
             file_dir, metadata_dir = self._get_score_and_metadata_dir(search_dir)
-
+            self.logger.info(f"Retrieving scores from {search_dir}")
             ret_list = []
             with open(file_dir, 'r') as csv_file:
                 data_reader = reader(csv_file)
