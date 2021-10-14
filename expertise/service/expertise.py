@@ -319,7 +319,7 @@ class ExpertiseService(object):
 
         # Clear directory
         if delete_on_get:
-            self.logger.error(f'Deleting {search_dir}')
+            self.logger.info(f'Deleting {search_dir}')
             shutil.rmtree(search_dir)
 
         return result
