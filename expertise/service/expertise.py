@@ -184,13 +184,13 @@ class ExpertiseService(object):
         file_dir, metadata_dir = None, None
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
             config = json.load(f)
-        # Look for score files
-        for root, dirs, files in os.walk(search_dir, topdown=False):
-            for name in files:
-                if name == f"{config['name']}.csv":
-                    file_dir = os.path.join(root, name)
-                if 'metadata' in name:
-                    metadata_dir = os.path.join(root, name)
+
+        # Look for files
+        if os.path.isfile(os.path.join(search_dir, f"{config['name']}.csv")):
+            file_dir = os.path.join(search_dir, f"{config['name']}.csv")
+        if os.path.isfile(os.path.join(search_dir, 'metadata.json')):
+            metadata_dir = os.path.join(search_dir, 'metadata.json')
+            
         return file_dir, metadata_dir
 
     def start_expertise(self, request):
