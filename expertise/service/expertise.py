@@ -156,7 +156,7 @@ class ExpertiseService(object):
         :returns: A list of subdirectories not prefixed by the given root directory
         """
         subdirs = [name for name in os.listdir(self.working_dir) if os.path.isdir(os.path.join(self.working_dir, name))]
-        if user_id is None:
+        if user_id is None or user_id.lower() in SUPERUSER_IDS:
             return subdirs
         else:
             # If given a profile ID, assume looking for job dirs that contain a config with the
@@ -166,7 +166,7 @@ class ExpertiseService(object):
                 config_dir = os.path.join(self.working_dir, subdir, 'config.json')
                 with open(config_dir, 'r') as f:
                     config = json.load(f)
-                    if user_id == config['user_id'] or user_id.lower() in SUPERUSER_IDS:
+                    if user_id == config['user_id']:
                         filtered_dirs.append(subdir)
             return filtered_dirs
 
