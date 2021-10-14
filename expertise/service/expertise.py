@@ -77,23 +77,45 @@ class ExpertiseService(object):
         optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl']
         path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
-        # Validate + populate fields
+        # Populate fields
+        failed_request = False
+        error_fields = {
+            'required': [],
+            'unexpected': [],
+            'model_params': []
+        }
         for field in req_fields:
             if field not in request:
-                raise OpenReviewException(f"Bad request: missing required field {field}")
+                error_fields['required'].append(field)
+                failed_request = True
+                continue
             config[field] = request[field]
-
         for field in request.keys():
             if field not in optional_fields and field not in req_fields:
-                raise OpenReviewException(f"Bad request: unexpected field {field}")
+                error_fields['unexpected'].append(field)
+                failed_request = True
+                continue
             if field != 'model_params':
                 config[field] = request[field]
-
         if 'model_params' in request.keys():
             for field in request['model_params']:
                 if field not in optional_model_params:
-                    raise OpenReviewException(f"Bad request: unexpected model param: {field}")
+                    error_fields['model_params'].append(field)
+                    failed_request = True
+                    continue
                 config['model_params'][field] = request['model_params'][field]
+
+        # Validate fields
+        error_string = 'Bad request: '
+        if len(error_fields['required']) > 0:
+            error_string += 'missing required field: ' + ' '.join(error_fields['required']) + '\n'
+        if len(error_fields['unexpected']) > 0:
+            error_string += 'unexpected field: ' + ' '.join(error_fields['unexpected']) + '\n'
+        if len(error_fields['model_params']) > 0:
+            error_string += 'unexpected model param: ' + ' '.join(error_fields['model_params']) + '\n'
+
+        if failed_request:
+            raise OpenReviewException(error_string.strip())
 
         # Populate with server-side fields
         root_dir = os.path.join(self.working_dir, request['job_id'])

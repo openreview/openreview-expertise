@@ -86,7 +86,7 @@ class TestExpertiseService():
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'bad request' in response.json['error'].lower()
-        assert response.json['error'] == 'Bad request: missing required field name'
+        assert response.json['error'] == 'Bad request: missing required field: name match_group paper_invitation'
 
     def test_request_expertise_with_missing_required_fields(self, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field
@@ -109,7 +109,7 @@ class TestExpertiseService():
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'bad request' in response.json['error'].lower()
-        assert response.json['error'] == 'Bad request: missing required field paper_invitation'
+        assert response.json['error'] == 'Bad request: missing required field: paper_invitation'
 
     def test_request_expertise_with_invalid_field(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra field that is not allowed
@@ -134,7 +134,31 @@ class TestExpertiseService():
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'bad request' in response.json['error'].lower()
-        assert response.json['error'] == 'Bad request: unexpected field unexpected_field'
+        assert response.json['error'] == 'Bad request: unexpected field: unexpected_field'
+
+    def test_request_expertise_with_invalid_and_missing_required_field(self, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working config with an extra field that is not allowed
+        test_client = openreview_context['test_client']
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    'match_group': ["ABC.cc"],
+                    'paper_invitation': 'ABC.cc/-/Submission',
+                    'unexpected_field': 'ABC.cc/-/Submission',
+                    "model": "elmo",
+                    "model_params": {
+                        "use_title": False,
+                        "use_abstract": True,
+                        "average_score": True,
+                        "max_score": False
+                    }
+                }
+            ),
+            content_type='application/json'
+        )
+        assert response.status_code == 400, f'{response.json}'
+        assert 'bad request' in response.json['error'].lower()
+        assert response.json['error'] == 'Bad request: missing required field: name\nunexpected field: unexpected_field'
 
     def test_request_expertise_with_invalid_model_param(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra model param field
