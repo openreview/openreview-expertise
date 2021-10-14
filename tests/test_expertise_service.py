@@ -187,6 +187,7 @@ class TestExpertiseService():
 
     def test_request_expertise_with_valid_parameters(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
+        MAX_TIMEOUT = 120 # Timeout after 2 minutes
         test_client = openreview_context['test_client']
         # Make a request
         response = test_client.post(
@@ -232,11 +233,16 @@ class TestExpertiseService():
         # Query until job is complete
         response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
         assert len(response) == 1
-        while response[0]['status'] != 'Completed':
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response[0]['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
             if response[0]['status'] == 'Error':
                 assert False, response[0]['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response[0]['status'] == 'Completed'
         assert response[0]['name'] == 'test_run'
         assert response[0]['description'] == 'Job is complete and the computed scores are ready'
@@ -300,6 +306,7 @@ class TestExpertiseService():
         openreview_context['job_id'] = job_id
 
     def test_get_results_and_get_error(self, openreview_context, celery_session_app, celery_session_worker):
+        MAX_TIMEOUT = 120 # Timeout after 2 minutes
         assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
         # Query until job is err
@@ -309,10 +316,14 @@ class TestExpertiseService():
 
         response = test_client.get('/expertise/status', query_string={'id': f"{openreview_context['job_id']}"}).json['results']
         assert len(response) == 1
-        while response[0]['status'] == 'Processing':
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response[0]['status'] == 'Processing' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', query_string={'id': f"{openreview_context['job_id']}"}).json['results']
+            try_time = time.time() - start_time
 
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response[0]['name'] == 'test_run'
         assert response[0]['status'].strip() == 'Error'
         assert response[0]['description'] == 'use_title and use_abstract cannot both be False'
@@ -363,6 +374,7 @@ class TestExpertiseService():
         openreview_context['job_id'] = id_list
     
     def test_fetch_high_load_results(self, openreview_context, celery_session_app, celery_session_worker):
+        MAX_TIMEOUT = 300 # Timeout after 5 minutes
         assert openreview_context['job_id'] is not None
         id_list = openreview_context['job_id']
         num_requests = len(id_list)
@@ -372,11 +384,16 @@ class TestExpertiseService():
         # Assert that the last request completes
         response = test_client.get('/expertise/status', query_string={'id': f'{last_job_id}'}).json['results']
         assert len(response) == 1
-        while response[0]['status'] != 'Completed':
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response[0]['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', query_string={'id': f'{last_job_id}'}).json['results']
             if response[0]['status'] == 'Error':
                 assert False, response[0]['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response[0]['status'] == 'Completed'
         assert response[0]['name'] == 'test_run'
         assert response[0]['description'] == 'Job is complete and the computed scores are ready'
