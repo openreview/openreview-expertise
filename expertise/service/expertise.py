@@ -108,16 +108,7 @@ class ExpertiseService(object):
                 config['model_params'][field] = request['model_params'][field]
 
         # Validate fields
-        error_string = 'Bad request: '
-        if len(error_fields['required']) > 0:
-            error_string += 'missing required field: ' + ' '.join(error_fields['required']) + '\n'
-        if len(error_fields['unexpected']) > 0:
-            error_string += 'unexpected field: ' + ' '.join(error_fields['unexpected']) + '\n'
-        if len(error_fields['model_params']) > 0:
-            error_string += 'unexpected model param: ' + ' '.join(error_fields['model_params']) + '\n'
-
-        if failed_request:
-            raise OpenReviewException(error_string.strip())
+        self._validate_fields(error_fields, failed_request)
 
         self.logger.info(f"Config validation passed - setting server-side fields")
         # Populate with server-side fields
@@ -151,6 +142,28 @@ class ExpertiseService(object):
                 json.dump(config, f, ensure_ascii=False, indent=4)
 
         return config
+
+    def _validate_fields(self, error_fields, has_failed):
+        """
+        If the server has detected any errors in the proposed config, assemble the error and raise the exception
+        Otherwise, this function returns immediately
+
+        :param error_fields: Contains the fields that caused an error in validation classified by error/field type
+        :type error_fields: dict
+
+        :param has_failed: Indicates whether or not the fields have passed validation
+        :type has_failed: bool 
+        """
+        if has_failed:
+            error_string = 'Bad request: '
+            if len(error_fields['required']) > 0:
+                error_string += 'missing required field: ' + ' '.join(error_fields['required']) + '\n'
+            if len(error_fields['unexpected']) > 0:
+                error_string += 'unexpected field: ' + ' '.join(error_fields['unexpected']) + '\n'
+            if len(error_fields['model_params']) > 0:
+                error_string += 'unexpected model param: ' + ' '.join(error_fields['model_params']) + '\n'
+            raise OpenReviewException(error_string.strip())
+        return
 
     def _get_subdirs(self, user_id):
         """
