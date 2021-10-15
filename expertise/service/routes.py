@@ -101,8 +101,7 @@ def expertise():
 @BLUEPRINT.route('/expertise/status', methods=['GET'])
 def jobs():
     """
-    Query all submitted jobs associated with the logged in user
-    If provided with a job_id field, only retrieve the status of the job with that job_id
+    Only retrieves the status of the job with that job_id
 
     :param token: Authorization from a logged in user, which defines the set of accessible data
     :type token: str
@@ -123,6 +122,49 @@ def jobs():
         job_id = flask.request.args.get('id', None)
 
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
+        flask.current_app.logger.debug('GET returns ' + str(result))
+        return flask.jsonify(result), 200
+
+    except openreview.OpenReviewException as error_handle:
+        flask.current_app.logger.error(str(error_handle))
+
+        error_type = str(error_handle)
+        status = 500
+
+        if 'not found' in error_type.lower():
+            status = 404
+        elif 'forbidden' in error_type.lower():
+            status = 403
+
+        return flask.jsonify({'error': error_type}), status
+
+    # pylint:disable=broad-except
+    except Exception as error_handle:
+        flask.current_app.logger.error(str(error_handle))
+        return flask.jsonify({'error': 'Internal server error: {}'.format(error_handle)}), 500
+
+@BLUEPRINT.route('/expertise/status/all', methods=['GET'])
+def all_jobs():
+    """
+    Query all submitted jobs associated with the logged in user
+
+    :param token: Authorization from a logged in user, which defines the set of accessible data
+    :type token: str
+
+    :param job_id: The ID of a submitted job
+    :type job_id: str
+    """
+    openreview_client = get_client()
+
+    user_id = get_user_id(openreview_client)
+
+    if not user_id:
+        flask.current_app.logger.error('No Authorization token in headers')
+        return flask.jsonify({ 'error': 'Forbidden: No Authorization token in headers'}), 403
+
+    try:
+        # Parse query parameters
+        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, None)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 

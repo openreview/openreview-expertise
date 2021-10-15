@@ -339,8 +339,10 @@ class ExpertiseService(object):
             search_dir = os.path.join(self.working_dir, job_dir)
 
             # Load the config file to fetch the job name and status
+            self.logger.info(f"Attempting to load {search_dir}/config.json")
             with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-                config = json.load(f)
+                s = f"{''.join(f.readlines())}"
+                config = json.loads(s)
             status = config['status']
             description = config['description']
 

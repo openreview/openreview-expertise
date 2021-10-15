@@ -209,7 +209,6 @@ class TestExpertiseService():
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['job_id']
-
         response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
         assert len(response) == 1
         assert response[0]['name'] == 'test_run'
@@ -266,7 +265,7 @@ class TestExpertiseService():
     def test_get_results_for_all_jobs(self, openreview_context, celery_session_app, celery_session_worker):
         # Assert that there are two completed jobs belonging to this user
         test_client = openreview_context['test_client']
-        response = test_client.get('/expertise/status', query_string={}).json['results']
+        response = test_client.get('/expertise/status/all', query_string={}).json['results']
         assert len(response) == 1
         for job_dict in response:
             assert job_dict['status'] == 'Completed'
@@ -364,12 +363,6 @@ class TestExpertiseService():
             assert response[0]['name'] == 'test_run'
             assert response[0]['status'] != 'Error'
 
-        # Check that the last request is queued
-        last_job_id = id_list[num_requests - 1]
-        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
-        assert response[0]['status'] == 'Queued'
-        assert response[0]['name'] == 'test_run'
-        assert response[0]['description'] == 'Job is waiting to start fetching OpenReview data'
         assert id_list is not None
         openreview_context['job_id'] = id_list
     
