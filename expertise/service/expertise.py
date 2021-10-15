@@ -152,14 +152,14 @@ class ExpertiseService(object):
 
         return config
 
-    def _get_subdirs(self, user_id=None):
+    def _get_subdirs(self, user_id):
         """
         Returns the direct children directories of the given root directory
 
         :returns: A list of subdirectories not prefixed by the given root directory
         """
         subdirs = [name for name in os.listdir(self.working_dir) if os.path.isdir(os.path.join(self.working_dir, name))]
-        if user_id is None or user_id.lower() in SUPERUSER_IDS:
+        if user_id.lower() in SUPERUSER_IDS:
             return subdirs
         else:
             # If given a profile ID, assume looking for job dirs that contain a config with the
