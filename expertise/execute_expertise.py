@@ -24,7 +24,7 @@ def execute_expertise(config):
             weighted_topk=config['model_params'].get('weighted_topk', 0),
             sparse_value=config['model_params'].get('sparse_value', None),
             normalize=config['model_params'].get('normalize', False),
-            device=config['model_params'].get('use_cuda', False)
+            use_cuda=config['model_params'].get('use_cuda', False)
         )
         acl_scorer.set_archives_dataset(archives_dataset)
         acl_scorer.set_submissions_dataset(submissions_dataset)
