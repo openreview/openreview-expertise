@@ -1,7 +1,7 @@
 from functools import update_wrapper
 import logging, json, os, shutil
 from .utils import mock_client
-from expertise.execute_expertise import *
+from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from expertise.service.expertise import JobStatus, JobDescription
 from expertise.service.server import celery_app as celery
 
