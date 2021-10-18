@@ -61,6 +61,56 @@ class ExpertiseService(object):
         :raises Exception: Raises exceptions when a required field is missing, or when a parameter is provided
                         when it is not expected
         """
+        # Validate fields
+        config = self._validate_fields(request)
+        self.logger.info(f"Config validation passed - setting server-side fields")
+
+        # Populate with server-side fields
+        path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+        root_dir = os.path.join(self.working_dir, request['job_id'])
+        descriptions = JobDescription.VALS.value
+        config['dataset']['directory'] = root_dir
+        for field in path_fields:
+            config['model_params'][field] = root_dir
+        config['job_dir'] = root_dir
+        config['cdate'] = int(time.time())
+        config['status'] = JobStatus.INITIALIZED.value
+        config['description'] = descriptions[JobStatus.INITIALIZED]
+
+        # Set SPECTER+MFR paths
+        if config.get('model', 'specter+mfr') == 'specter+mfr':
+            config['model_params']['specter_dir'] = self.specter_dir
+            config['model_params']['mfr_feature_vocab_file'] = self.mfr_feature_vocab_file
+            config['model_params']['mfr_checkpoint_dir'] = self.mfr_checkpoint_dir
+
+        # Create directory and config file
+        if not os.path.isdir(config['dataset']['directory']):
+            os.makedirs(config['dataset']['directory'])
+        with open(os.path.join(root_dir, 'config.json'), 'w+') as f:
+            ## Remove the token before saving this in the file system
+            token = config.get('token', None)
+            if token is not None:
+                del config['token']
+                json.dump(config, f, ensure_ascii=False, indent=4)
+                config['token'] = token
+            else:
+                json.dump(config, f, ensure_ascii=False, indent=4)
+
+        return config
+
+    def _validate_fields(self, request):
+        """
+        If the server has detected any errors in the proposed config, assemble the error and raise the exception
+        Otherwise, this function returns the properly augmented config
+
+        :param request: Contains the initial request from the user
+        :type request: dict
+
+        :returns config: A server-compatible version of the user request
+
+        :raises Exception: If the request is missing a required field, contains an unexpected field or an
+                           unexpected model param
+        """
         config = get_default_config()
         # Define expected/required API fields
         req_fields = ['name', 'match_group', 'paper_invitation', 'user_id', 'job_id']
@@ -96,54 +146,7 @@ class ExpertiseService(object):
                     continue
                 config['model_params'][field] = request['model_params'][field]
 
-        # Validate fields
-        self._validate_fields(error_fields, failed_request)
-
-        self.logger.info(f"Config validation passed - setting server-side fields")
-        # Populate with server-side fields
-        root_dir = os.path.join(self.working_dir, request['job_id'])
-        descriptions = JobDescription.VALS.value
-        config['dataset']['directory'] = root_dir
-        for field in path_fields:
-            config['model_params'][field] = root_dir
-        config['job_dir'] = root_dir
-        config['cdate'] = int(time.time())
-        config['status'] = JobStatus.INITIALIZED.value
-        config['description'] = descriptions[JobStatus.INITIALIZED]
-
-        # Set SPECTER+MFR paths
-        if config.get('model', 'specter+mfr') == 'specter+mfr':
-            config['model_params']['specter_dir'] = self.specter_dir
-            config['model_params']['mfr_feature_vocab_file'] = self.mfr_feature_vocab_file
-            config['model_params']['mfr_checkpoint_dir'] = self.mfr_checkpoint_dir
-
-        # Create directory and config file
-        if not os.path.isdir(config['dataset']['directory']):
-            os.makedirs(config['dataset']['directory'])
-        with open(os.path.join(root_dir, 'config.json'), 'w+') as f:
-            ## Remove the token before saving this in the file system
-            token = config.get('token', None)
-            if token is not None:
-                del config['token']
-                json.dump(config, f, ensure_ascii=False, indent=4)
-                config['token'] = token
-            else:
-                json.dump(config, f, ensure_ascii=False, indent=4)
-
-        return config
-
-    def _validate_fields(self, error_fields, has_failed):
-        """
-        If the server has detected any errors in the proposed config, assemble the error and raise the exception
-        Otherwise, this function returns immediately
-
-        :param error_fields: Contains the fields that caused an error in validation classified by error/field type
-        :type error_fields: dict
-
-        :param has_failed: Indicates whether or not the fields have passed validation
-        :type has_failed: bool 
-        """
-        if has_failed:
+        if failed_request:
             error_string = 'Bad request: '
             if len(error_fields['required']) > 0:
                 error_string += 'missing required field: ' + ' '.join(error_fields['required']) + '\n'
@@ -152,7 +155,8 @@ class ExpertiseService(object):
             if len(error_fields['model_params']) > 0:
                 error_string += 'unexpected model param: ' + ' '.join(error_fields['model_params']) + '\n'
             raise OpenReviewException(error_string.strip())
-        return
+        else:
+            return config
 
     def _get_subdirs(self, user_id):
         """
