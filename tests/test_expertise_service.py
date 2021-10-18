@@ -187,7 +187,7 @@ class TestExpertiseService():
 
     def test_request_expertise_with_valid_parameters(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
-        MAX_TIMEOUT = 240 # Timeout after 4 minutes
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
         # Make a request
         response = test_client.post(
@@ -305,7 +305,7 @@ class TestExpertiseService():
         openreview_context['job_id'] = job_id
 
     def test_get_results_and_get_error(self, openreview_context, celery_session_app, celery_session_worker):
-        MAX_TIMEOUT = 240 # Timeout after 4 minutes
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
         assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
         # Query until job is err
