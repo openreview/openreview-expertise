@@ -5,6 +5,7 @@ import os
 import json
 from csv import reader
 import openreview
+from expertise.service import get_default_config
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
@@ -60,19 +61,7 @@ class ExpertiseService(object):
         :raises Exception: Raises exceptions when a required field is missing, or when a parameter is provided
                         when it is not expected
         """
-        config = {
-            "dataset": {},
-            "model": "specter+mfr",
-            "model_params": {
-                "use_title": True,
-                "batch_size": 4,
-                "use_abstract": True,
-                "average_score": False,
-                "max_score": True,
-                "skip_specter": False,
-                "use_cuda": False
-            }
-        }
+        config = get_default_config()
         # Define expected/required API fields
         req_fields = ['name', 'match_group', 'paper_invitation', 'user_id', 'job_id']
         optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
