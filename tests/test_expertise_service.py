@@ -367,7 +367,7 @@ class TestExpertiseService():
         openreview_context['job_id'] = id_list
     
     def test_fetch_high_load_results(self, openreview_context, celery_session_app, celery_session_worker):
-        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        MAX_TIMEOUT = 1200 # Timeout after 20 minutes
         assert openreview_context['job_id'] is not None
         id_list = openreview_context['job_id']
         num_requests = len(id_list)
