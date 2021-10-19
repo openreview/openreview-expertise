@@ -32,6 +32,24 @@ class JobDescription(dict, Enum):
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
     }
 
+
+def _get_default_config():
+    config = {
+        "dataset": {},
+        "model": "specter+mfr",
+        "model_params": {
+            "use_title": True,
+            "batch_size": 4,
+            "use_abstract": True,
+            "average_score": False,
+            "max_score": True,
+            "skip_specter": False,
+            "use_cuda": False
+        }
+    }
+    return config
+
+
 class ExpertiseService(object):
 
     def __init__(self, client, config, logger):
@@ -42,6 +60,11 @@ class ExpertiseService(object):
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
         self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
 
+        # Define expected/required API fields
+        self.req_fields = ['name', 'match_group', 'paper_invitation', 'user_id', 'job_id']
+        self.optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
+        self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl']
+        self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
     def _prepare_config(self, request):
         """
@@ -111,12 +134,7 @@ class ExpertiseService(object):
         :raises Exception: If the request is missing a required field, contains an unexpected field or an
                            unexpected model param
         """
-        config = get_default_config()
-        # Define expected/required API fields
-        req_fields = ['name', 'match_group', 'paper_invitation', 'user_id', 'job_id']
-        optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
-        optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl']
-        path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+        config = _get_default_config()
 
         # Populate fields
         failed_request = False
@@ -125,14 +143,14 @@ class ExpertiseService(object):
             'unexpected': [],
             'model_params': []
         }
-        for field in req_fields:
+        for field in self.req_fields:
             if field not in request:
                 error_fields['required'].append(field)
                 failed_request = True
                 continue
             config[field] = request[field]
         for field in request.keys():
-            if field not in optional_fields and field not in req_fields:
+            if field not in self.optional_fields and field not in self.req_fields:
                 error_fields['unexpected'].append(field)
                 failed_request = True
                 continue
@@ -140,7 +158,7 @@ class ExpertiseService(object):
                 config[field] = request[field]
         if 'model_params' in request.keys():
             for field in request['model_params']:
-                if field not in optional_model_params:
+                if field not in self.optional_model_params:
                     error_fields['model_params'].append(field)
                     failed_request = True
                     continue
