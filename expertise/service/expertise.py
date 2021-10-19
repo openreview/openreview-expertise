@@ -5,7 +5,6 @@ import os
 import json
 from csv import reader
 import openreview
-from expertise.service import get_default_config
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
@@ -66,20 +65,13 @@ class ExpertiseService(object):
         self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
-    def _prepare_config(self, request):
+    def _prepare_config(self, request) -> dict:
         """
         Overwrites/add specific key-value pairs in the submitted job config
+        :param request: Contains the initial request from the user
+        :type request: dict
 
-        :param config: Configuration fields for creating the dataset and executing the expertise model
-        :type config: dict
-
-        :param job_id: The ID for the job to be submitted
-        :type job_id: str
-
-        :param profile_id: The OpenReview profile ID associated with the job
-        :type profile_id: str
-
-        :returns new_config: A modified version of config with the server-required fields
+        :returns config: A modified version of config with the server-required fields
 
         :raises Exception: Raises exceptions when a required field is missing, or when a parameter is provided
                         when it is not expected
@@ -89,11 +81,10 @@ class ExpertiseService(object):
         self.logger.info(f"Config validation passed - setting server-side fields")
 
         # Populate with server-side fields
-        path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
         root_dir = os.path.join(self.working_dir, request['job_id'])
         descriptions = JobDescription.VALS.value
         config['dataset']['directory'] = root_dir
-        for field in path_fields:
+        for field in self.path_fields:
             config['model_params'][field] = root_dir
         config['job_dir'] = root_dir
         config['cdate'] = int(time.time())
@@ -121,7 +112,7 @@ class ExpertiseService(object):
 
         return config
 
-    def _validate_fields(self, request):
+    def _validate_fields(self, request) -> dict:
         """
         If the server has detected any errors in the proposed config, assemble the error and raise the exception
         Otherwise, this function returns the properly augmented config
@@ -336,9 +327,7 @@ class ExpertiseService(object):
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
-        result = {}
-        result['results'] = []
-        descriptions = JobDescription.VALS.value
+        result = {'results': []}
 
         job_subdirs = self._get_subdirs(user_id)
         self.logger.info(f"Searching {job_subdirs} for user {user_id}")
@@ -383,9 +372,7 @@ class ExpertiseService(object):
 
         :returns: A dictionary that contains the calculated scores and metadata
         """
-        result = {}
-        result['results'] = []
-        descriptions = JobDescription.VALS.value
+        result = {'results': []}
 
         search_dir = os.path.join(self.working_dir, job_id)
         # Check for directory existence
