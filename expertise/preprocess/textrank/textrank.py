@@ -3,16 +3,18 @@ import numpy as np
 import spacy
 from spacy.lang.en.stop_words import STOP_WORDS
 import ipdb
-nlp = spacy.load('en_core_web_sm')
 
-class TextRank():
+nlp = spacy.load("en_core_web_sm")
+
+
+class TextRank:
     """Extract keywords from text"""
 
     def __init__(self):
-        self.damping = 0.85 # damping coefficient, usually is .85
-        self.min_diff = 1e-5 # convergence threshold
-        self.steps = 10 # iteration steps
-        self.node_weight = None # save keywords and its weight
+        self.damping = 0.85  # damping coefficient, usually is .85
+        self.min_diff = 1e-5  # convergence threshold
+        self.steps = 10  # iteration steps
+        self.node_weight = None  # save keywords and its weight
 
     def set_stopwords(self, stopwords):
         """Set stop words"""
@@ -21,12 +23,8 @@ class TextRank():
             lexeme.is_stop = True
 
     def sentence_segment(
-        self,
-        text,
-        candidate_pos=['NOUN', 'PROPN'],
-        lower=True,
-        lemma=True,
-        min_len=2):
+        self, text, candidate_pos=["NOUN", "PROPN"], lower=True, lemma=True, min_len=2
+    ):
 
         """Store those words only in cadidate_pos"""
         doc = nlp(text)
@@ -36,7 +34,11 @@ class TextRank():
             selected_words = []
             for token in sent:
                 # Store words only with cadidate POS tag
-                if token.pos_ in candidate_pos and token.is_stop is False and len(token) >= min_len:
+                if (
+                    token.pos_ in candidate_pos
+                    and token.is_stop is False
+                    and len(token) >= min_len
+                ):
                     if lemma is True:
                         selected_word = token.lemma_
                     else:
@@ -50,11 +52,8 @@ class TextRank():
         return sentences
 
     def sentence_segment_chunk(
-        self,
-        text,
-        candidate_pos=['NOUN', 'PROPN'],
-        lower=True,
-        lemma=True):
+        self, text, candidate_pos=["NOUN", "PROPN"], lower=True, lemma=True
+    ):
 
         """Store those words only in cadidate_pos"""
         doc = nlp(text)
@@ -93,7 +92,7 @@ class TextRank():
         token_pairs = list()
         for sentence in sentences:
             for i, word in enumerate(sentence):
-                for j in range(i+1, i+window_size):
+                for j in range(i + 1, i + window_size):
                     if j >= len(sentence):
                         break
                     pair = (word, sentence[j])
@@ -108,7 +107,7 @@ class TextRank():
         """Get normalized matrix"""
         # Build matrix
         vocab_size = len(vocab)
-        g = np.zeros((vocab_size, vocab_size), dtype='float')
+        g = np.zeros((vocab_size, vocab_size), dtype="float")
         for word1, word2 in token_pairs:
             i, j = vocab[word1], vocab[word2]
             g[i][j] = 1
@@ -118,36 +117,42 @@ class TextRank():
 
         # Normalize matrix by column
         norm = np.sum(g, axis=0)
-        g_norm = np.divide(g, norm, where=norm!=0) # this is ignore the 0 element in norm
+        g_norm = np.divide(
+            g, norm, where=norm != 0
+        )  # this is ignore the 0 element in norm
 
         return g_norm
 
-
     def get_keywords(self, number=10):
         """Print top number keywords"""
-        node_weight = OrderedDict(sorted(self.node_weight.items(), key=lambda t: t[1], reverse=True))
+        node_weight = OrderedDict(
+            sorted(self.node_weight.items(), key=lambda t: t[1], reverse=True)
+        )
         for i, (key, value) in enumerate(node_weight.items()):
-            print(key + ' - ' + str(value))
+            print(key + " - " + str(value))
             if i > number:
                 break
 
-    def keyphrases(self, number=float('Inf')):
+    def keyphrases(self, number=float("Inf")):
         """Print top number keywords"""
-        node_weight = OrderedDict(sorted(self.node_weight.items(), key=lambda t: t[1], reverse=True))
+        node_weight = OrderedDict(
+            sorted(self.node_weight.items(), key=lambda t: t[1], reverse=True)
+        )
         for i, (key, value) in enumerate(node_weight.items()):
             if i >= number:
                 break
             yield (key, value)
 
-
-    def analyze(self,
-            text,
-            chunks=False,
-            candidate_pos=['NOUN', 'PROPN'],
-            window_size=4,
-            lower=True,
-            lemma=True,
-            stopwords=list()):
+    def analyze(
+        self,
+        text,
+        chunks=False,
+        candidate_pos=["NOUN", "PROPN"],
+        window_size=4,
+        lower=True,
+        lemma=True,
+        stopwords=list(),
+    ):
         """Main function to analyze text"""
 
         # Set stop words
@@ -155,7 +160,9 @@ class TextRank():
 
         # Filter sentences
         if not chunks:
-            sentences = self.sentence_segment(text, candidate_pos, lower, lemma) # list of list of words
+            sentences = self.sentence_segment(
+                text, candidate_pos, lower, lemma
+            )  # list of list of words
         else:
             sentences = self.sentence_segment_chunk(text, candidate_pos, lower, lemma)
 
@@ -177,8 +184,8 @@ class TextRank():
         # Iteration
         previous_pr = 0
         for epoch in range(self.steps):
-            pr = (1-self.damping) + self.damping * np.dot(g, pr)
-            if abs(previous_pr - sum(pr))  < self.min_diff:
+            pr = (1 - self.damping) + self.damping * np.dot(g, pr)
+            if abs(previous_pr - sum(pr)) < self.min_diff:
                 break
             else:
                 previous_pr = sum(pr)

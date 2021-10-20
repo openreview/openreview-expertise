@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import numpy as np
 
 # import fastText as ft
@@ -11,6 +13,7 @@ from expertise.evaluators.mean_avg_precision import eval_map
 from expertise.evaluators.hits_at_k import eval_hits_at_k
 
 import ipdb
+
 
 class Model(torch.nn.Module):
     def __init__(self, config, vocab):
@@ -36,7 +39,7 @@ class Model(torch.nn.Module):
         self._bce_loss = BCEWithLogitsLoss()
 
     def compute_loss(self, batch_source, batch_pos, batch_neg):
-        """ Compute the loss (BPR) for a batch of examples
+        """Compute the loss (BPR) for a batch of examples
         :param batch_source: a batch of source keyphrase indices (list of lists)
         :param batch_pos: True aliases of the Mentions
         :param batch_neg: False aliases of the Mentions
@@ -51,9 +54,10 @@ class Model(torch.nn.Module):
         neg_embed = self.embed(batch_neg)
 
         loss = self._bce_loss(
-            utils.row_wise_dot(source_embed, pos_embed )
-            - utils.row_wise_dot(source_embed, neg_embed ),
-            self.ones[:batch_size])
+            utils.row_wise_dot(source_embed, pos_embed)
+            - utils.row_wise_dot(source_embed, neg_embed),
+            self.ones[:batch_size],
+        )
         return loss
 
     def score_pair(self, source, target, source_len, target_len):
@@ -92,11 +96,7 @@ class Model(torch.nn.Module):
         """
         return self.embed(vector_batch)
 
-    def score_dev_test_batch(self,
-        batch_queries,
-        batch_targets,
-        batch_size
-        ):
+    def score_dev_test_batch(self, batch_queries, batch_targets, batch_size):
 
         if batch_size == self.config.dev_batch_size:
             source_embed = self.embed_dev(batch_queries)
@@ -124,7 +124,7 @@ def generate_predictions(config, model, batcher, bert_lookup):
 
     for idx, batch in enumerate(batcher.batches(batch_size=config.dev_batch_size)):
         if idx % 100 == 0:
-            print('Predicted {} batches'.format(idx))
+            print("Predicted {} batches".format(idx))
 
         batch_queries = []
         batch_query_lengths = []
@@ -137,27 +137,27 @@ def generate_predictions(config, model, batcher, bert_lookup):
 
         for data in batch:
             # append a positive sample
-            batch_queries.append(bert_lookup[data['source_id']])
-            batch_query_lengths.append(data['source_length'])
-            batch_query_ids.append(data['source_id'])
-            batch_targets.append(bert_lookup[data['positive_id']])
-            batch_target_lengths.append(data['positive_length'])
-            batch_target_ids.append(data['positive_id'])
+            batch_queries.append(bert_lookup[data["source_id"]])
+            batch_query_lengths.append(data["source_length"])
+            batch_query_ids.append(data["source_id"])
+            batch_targets.append(bert_lookup[data["positive_id"]])
+            batch_target_lengths.append(data["positive_length"])
+            batch_target_ids.append(data["positive_id"])
             batch_labels.append(1)
 
             # append a negative sample
-            batch_queries.append(bert_lookup[data['source_id']])
-            batch_query_lengths.append(data['source_length'])
-            batch_query_ids.append(data['source_id'])
-            batch_targets.append(bert_lookup[data['negative_id']])
-            batch_target_lengths.append(data['negative_length'])
-            batch_target_ids.append(data['negative_id'])
+            batch_queries.append(bert_lookup[data["source_id"]])
+            batch_query_lengths.append(data["source_length"])
+            batch_query_ids.append(data["source_id"])
+            batch_targets.append(bert_lookup[data["negative_id"]])
+            batch_target_lengths.append(data["negative_length"])
+            batch_target_ids.append(data["negative_id"])
             batch_labels.append(0)
 
         scores = model.score_dev_test_batch(
             torch.stack(batch_queries),
             torch.stack(batch_targets),
-            np.asarray(batch_size)
+            np.asarray(batch_size),
         )
 
         if type(batch_labels) is not list:
@@ -172,20 +172,21 @@ def generate_predictions(config, model, batcher, bert_lookup):
             batch_targets,
             batch_target_ids,
             batch_labels,
-            scores
-            ):
+            scores,
+        ):
 
             # temporarily commenting out "source" and "target" because I think they are not needed.
             prediction = {
                 # 'source': source,
-                'source_id': source_id,
+                "source_id": source_id,
                 # 'target': target,
-                'target_id': target_id,
-                'label': label,
-                'score': float(score)
+                "target_id": target_id,
+                "label": label,
+                "score": float(score),
             }
 
             yield prediction
+
 
 def load_jsonl(filename):
 
@@ -193,13 +194,12 @@ def load_jsonl(filename):
     scores_by_forum = defaultdict(dict)
 
     for data in utils.jsonl_reader(filename):
-        forum = data['source_id']
-        reviewer = data['target_id']
-        label = data['label']
-        score = data['score']
+        forum = data["source_id"]
+        reviewer = data["target_id"]
+        label = data["label"]
+        score = data["score"]
         labels_by_forum[forum][reviewer] = label
         scores_by_forum[forum][reviewer] = score
-
 
     result_labels = []
     result_scores = []
@@ -218,11 +218,14 @@ def load_jsonl(filename):
 
     return result_labels, result_scores
 
+
 def eval_map_file(filename):
     list_of_list_of_labels, list_of_list_of_scores = utils.load_labels(filename)
     return eval_map(list_of_list_of_labels, list_of_list_of_scores)
 
-def eval_hits_at_k_file(filename, k=2, oracle=False):
-    list_of_list_of_labels,list_of_list_of_scores = utils.load_labels(filename)
-    return eval_hits_at_k(list_of_list_of_labels, list_of_list_of_scores, k=k,oracle=oracle)
 
+def eval_hits_at_k_file(filename, k=2, oracle=False):
+    list_of_list_of_labels, list_of_list_of_scores = utils.load_labels(filename)
+    return eval_hits_at_k(
+        list_of_list_of_labels, list_of_list_of_scores, k=k, oracle=oracle
+    )

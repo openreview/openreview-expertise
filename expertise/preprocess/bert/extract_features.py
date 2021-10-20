@@ -35,17 +35,20 @@ from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertModel
 
 
-logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                    datefmt = '%m/%d/%Y %H:%M:%S',
-                    level = logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+    level=logging.INFO,
+)
 logger = logging.getLogger(__name__)
 
-class InputExample(object):
 
+class InputExample(object):
     def __init__(self, unique_id, text_a, text_b):
         self.unique_id = unique_id
         self.text_a = text_a
         self.text_b = text_b
+
 
 class InputFeatures(object):
     """A single set of features of data."""
@@ -56,6 +59,7 @@ class InputFeatures(object):
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.input_type_ids = input_type_ids
+
 
 def convert_examples_to_features(examples, seq_length, tokenizer, verbose=False):
     """Loads a data file into a list of `InputFeature`s."""
@@ -76,7 +80,7 @@ def convert_examples_to_features(examples, seq_length, tokenizer, verbose=False)
         else:
             # Account for [CLS] and [SEP] with "- 2"
             if len(tokens_a) > seq_length - 2:
-                tokens_a = tokens_a[0:(seq_length - 2)]
+                tokens_a = tokens_a[0 : (seq_length - 2)]
 
         # The convention in BERT is:
         # (a) For sequence pairs:
@@ -136,7 +140,8 @@ def convert_examples_to_features(examples, seq_length, tokenizer, verbose=False)
             logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
             logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
             logger.info(
-                "input_type_ids: %s" % " ".join([str(x) for x in input_type_ids]))
+                "input_type_ids: %s" % " ".join([str(x) for x in input_type_ids])
+            )
 
         features.append(
             InputFeatures(
@@ -144,7 +149,9 @@ def convert_examples_to_features(examples, seq_length, tokenizer, verbose=False)
                 tokens=tokens,
                 input_ids=input_ids,
                 input_mask=input_mask,
-                input_type_ids=input_type_ids))
+                input_type_ids=input_type_ids,
+            )
+        )
     return features
 
 
@@ -184,10 +191,10 @@ def read_examples(lines):
             text_a = m.group(1)
             text_b = m.group(2)
 
-        examples.append(
-            InputExample(unique_id=unique_id, text_a=text_a, text_b=text_b))
+        examples.append(InputExample(unique_id=unique_id, text_a=text_a, text_b=text_b))
         unique_id += 1
     return examples
+
 
 def extract_features(
     lines,
@@ -195,32 +202,40 @@ def extract_features(
     tokenizer,
     no_cuda=True,
     local_rank=-1,
-    layers='-1,-2,-3,-4',
+    layers="-1,-2,-3,-4",
     max_seq_length=128,
     batch_size=32,
-    verbose=False):
-    '''
+    verbose=False,
+):
+    """
     Same arguments as main()
-    '''
+    """
 
     if local_rank == -1 or no_cuda:
-        device = torch.device("cuda" if torch.cuda.is_available() and not no_cuda else "cpu")
+        device = torch.device(
+            "cuda" if torch.cuda.is_available() and not no_cuda else "cpu"
+        )
         n_gpu = torch.cuda.device_count()
     else:
         device = torch.device("cuda", local_rank)
         n_gpu = 1
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        torch.distributed.init_process_group(backend='nccl')
+        torch.distributed.init_process_group(backend="nccl")
 
     if verbose:
-        logger.info("device: {} n_gpu: {} distributed training: {}".format(device, n_gpu, bool(local_rank != -1)))
+        logger.info(
+            "device: {} n_gpu: {} distributed training: {}".format(
+                device, n_gpu, bool(local_rank != -1)
+            )
+        )
 
     layer_indexes = [int(x) for x in layers.split(",")]
 
     examples = read_examples(lines)
 
     features = convert_examples_to_features(
-        examples=examples, seq_length=max_seq_length, tokenizer=tokenizer)
+        examples=examples, seq_length=max_seq_length, tokenizer=tokenizer
+    )
 
     unique_id_to_feature = {}
     for feature in features:
@@ -229,8 +244,9 @@ def extract_features(
     model.to(device)
 
     if local_rank != -1:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank],
-                                                          output_device=local_rank)
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, device_ids=[local_rank], output_device=local_rank
+        )
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)
 
@@ -252,7 +268,9 @@ def extract_features(
         input_ids = input_ids.to(device)
         input_mask = input_mask.to(device)
 
-        all_encoder_layers, _ = model(input_ids, token_type_ids=None, attention_mask=input_mask)
+        all_encoder_layers, _ = model(
+            input_ids, token_type_ids=None, attention_mask=input_mask
+        )
         all_encoder_layers = all_encoder_layers
 
         for b, example_index in enumerate(example_indices):
@@ -265,13 +283,13 @@ def extract_features(
             for (i, token) in enumerate(feature.tokens):
                 all_layers = []
                 for (j, layer_index) in enumerate(layer_indexes):
-                    layer_output = all_encoder_layers[int(layer_index)].detach().cpu().numpy()
+                    layer_output = (
+                        all_encoder_layers[int(layer_index)].detach().cpu().numpy()
+                    )
                     layer_output = layer_output[b]
                     layers = collections.OrderedDict()
                     layers["index"] = layer_index
-                    layers["values"] = [
-                        round(x.item(), 6) for x in layer_output[i]
-                    ]
+                    layers["values"] = [round(x.item(), 6) for x in layer_output[i]]
                     all_layers.append(layers)
                 out_features = collections.OrderedDict()
                 out_features["token"] = token

@@ -1,22 +1,24 @@
-import codecs
-import numpy as np
-from collections import Counter
 import csv
 import io
+import pickle
+from collections import Counter
+
 
 # Note, because I used sets when I constructed the reviewer keyphrase file, I end up with
 # count_keyphrases being a count based on number of documents containing the keyphrase.
-def count_keyphrases(reviewer_keyphrase_file, submission_keyphrase_file, outputfile, min_count):
+def count_keyphrases(
+    reviewer_keyphrase_file, submission_keyphrase_file, outputfile, min_count
+):
 
     keyphrase_counter = Counter()
 
-    with open(reviewer_keyphrase_file, 'rb') as f:
+    with open(reviewer_keyphrase_file, "rb") as f:
         reviewer_keyphrases = pickle.load(f)
 
     for kp_list in reviewer_keyphrases.values():
         keyphrase_counter.update(kp_list)
 
-    with open(submission_keyphrase_file, 'rb') as f:
+    with open(submission_keyphrase_file, "rb") as f:
         submission_keyphrases = pickle.load(f)
 
     for kp_list in submission_keyphrases.values():
@@ -24,12 +26,13 @@ def count_keyphrases(reviewer_keyphrase_file, submission_keyphrase_file, outputf
 
     # start at 2 because other indices are reserved (padding and OOV)
     kp_index = 2
-    with open(outputfile, 'w') as f:
-        writer = csv.writer(delimiter='\t')
+    with open(outputfile, "w") as f:
+        writer = csv.writer(delimiter="\t")
         for keyphrase, count in keyphrase_counter.items():
             if count >= min_count:
                 writer.writerow([keyphrase, kp_index])
                 kp_index += 1
+
 
 class Vocab(object):
     def __init__(self, min_count=1):
@@ -51,10 +54,10 @@ class Vocab(object):
     def __len__(self):
         return len(self.index_by_item)
 
-    def dump_csv(self, outfile=None, delimiter='\t', encoding='utf-8'):
-        '''
+    def dump_csv(self, outfile=None, delimiter="\t", encoding="utf-8"):
+        """
         writes the vocab to a csv file
-        '''
+        """
 
         def write_to_buffer(output):
             writer = csv.writer(output, delimiter=delimiter)
@@ -63,7 +66,7 @@ class Vocab(object):
                     writer.writerow([item, self.index_by_item[item]])
 
         if outfile:
-            with open(outfile, 'w') as f:
+            with open(outfile, "w") as f:
                 write_to_buffer(f)
 
         output = io.StringIO()
@@ -74,8 +77,9 @@ class Vocab(object):
         return csv_binary
 
     def load_items(self, vocab_items):
-        assert self.next_index not in self.item_by_index, \
-            'self.next_index not properly incremented (this should not happen)'
+        assert (
+            self.next_index not in self.item_by_index
+        ), "self.next_index not properly incremented (this should not happen)"
 
         for item in vocab_items:
             if item not in self.index_by_item:
@@ -99,8 +103,8 @@ class Vocab(object):
         return kp_indices
 
     # deprecated
-    def to_ints_no_pad(self,string):
-        print('function deprecated')
+    def to_ints_no_pad(self, string):
+        print("function deprecated")
         # arr = []
         # for c in list(string.split(" ")):
         #     arr.append(self.index_by_item.get(c,self.OOV_INDEX))
@@ -108,9 +112,9 @@ class Vocab(object):
         #     return np.asarray(arr[0:self.max_num_keyphrases])
         # return np.asarray(arr)
 
-    def to_string(self,list_ints):
+    def to_string(self, list_ints):
         stri = ""
         for c in list_ints:
             if c != self.PADDING_INDEX:
-                stri += self.item_by_index.get(c,self.OOV).encode("utf-8") + " "
+                stri += self.item_by_index.get(c, self.OOV).encode("utf-8") + " "
         return stri

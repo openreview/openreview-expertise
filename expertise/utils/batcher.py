@@ -13,17 +13,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from collections import defaultdict
+import csv
+import sys
 
 import numpy as np
-import time
-import csv
-import sys, os
-import random
-import ast
+
 from . import utils
 
 csv.field_size_limit(sys.maxsize)
+
 
 class Batcher(object):
     def __init__(self, input_file, triplet=False):
@@ -39,20 +37,22 @@ class Batcher(object):
 
     def shuffle_data(self):
         # perm = np.random.permutation(self.num_examples)
-        print('shuffling {} lines via the following permutation'.format(self.num_examples))
+        print(
+            "shuffling {} lines via the following permutation".format(self.num_examples)
+        )
         # data_array = np.asarray(self.data)
         # shuffled_data_array = data_array[perm]
         # self.data = shuffled_data_array.tolist()
         self.data = np.random.permutation(self.data).tolist()
         return self.data
 
-    def load_data(self, input_file, delimiter='\t'):
+    def load_data(self, input_file, delimiter="\t"):
         self.input_file = input_file
 
         self.data = []
 
         with open(input_file) as f:
-            if any(input_file.endswith(ext) for ext in ['.tsv','.csv']):
+            if any(input_file.endswith(ext) for ext in [".tsv", ".csv"]):
                 reader = csv.reader(f, delimiter=delimiter)
 
                 for line in reader:
@@ -61,27 +61,29 @@ class Batcher(object):
 
                     self.num_examples += 1
 
-            if input_file.endswith('.jsonl'):
+            if input_file.endswith(".jsonl"):
                 for data_dict in utils.jsonl_reader(input_file):
                     self.data.append(data_dict)
 
         self.num_examples = len(self.data)
 
-    def batches(self, batch_size, delimiter='\t'):
+    def batches(self, batch_size, delimiter="\t"):
         batch = []
         self.start_index = 0
         for data in utils.jsonl_reader(self.input_file):
             batch.append(data)
             self.start_index += 1
-            if self.start_index % batch_size == 0 or self.start_index == self.num_examples:
+            if (
+                self.start_index % batch_size == 0
+                or self.start_index == self.num_examples
+            ):
                 yield batch
 
                 batch = []
 
-
     # deprecated
-    def batches_triplet(self, batch_size, delimiter='\t'):
-        print('function deprecated')
+    def batches_triplet(self, batch_size, delimiter="\t"):
+        print("function deprecated")
         """
         with open(self.input_file) as f:
             reader = csv.reader(f, delimiter=delimiter)
@@ -129,9 +131,9 @@ class Batcher(object):
         """
 
     # function deprecated
-    def write_data_triplet(self, delimiter='\t'):
-        print('function deprecated')
-        '''
+    def write_data_triplet(self, delimiter="\t"):
+        print("function deprecated")
+        """
         print('writing data triplet to {}'.format(self.input_file))
         with open(self.input_file, 'w') as f:
 
@@ -145,11 +147,11 @@ class Batcher(object):
                 self.neg_lens.tolist()
             ):
                 writer.writerow(sample)
-        '''
+        """
 
     # function deprecated
     def shuffle_data_triplet(self):
-        print('function deprecated')
+        print("function deprecated")
         '''
         """
         Shuffles maintaining the same order.
@@ -169,10 +171,10 @@ class Batcher(object):
 
     # function deprecated
 
-    def load_data_triplet(self, input_file, delimiter='\t'):
-        print('function deprecated')
+    def load_data_triplet(self, input_file, delimiter="\t"):
+        print("function deprecated")
 
-        '''
+        """
         if not self.input_file:
             self.input_file = input_file
 
@@ -207,14 +209,14 @@ class Batcher(object):
 
             self.num_examples = len(self.sources)
             print("length of data", self.num_examples)
-        '''
+        """
 
     def get_next_batch_pairwise(self):
         """
         returns the next batch
         TODO(rajarshd): move the if-check outside the loop, so that conditioned is not checked every time. the conditions are suppose to be immutable.
         """
-        print('function deprecated')
+        print("function deprecated")
 
         # self.start_index = 0
         # while True:
@@ -248,7 +250,7 @@ class Batcher(object):
         """
         Shuffles maintaining the same order.
         """
-        print('function deprecated')
+        print("function deprecated")
         # perm = np.random.permutation(self.num_examples)  # perm of index in range(0, num_questions)
         # assert len(perm) == self.num_examples
 
@@ -256,7 +258,7 @@ class Batcher(object):
         #     data = data[perm]
 
     def load_data_pairwise(self):
-        print('function deprecated')
+        print("function deprecated")
         # with codecs.open(self.input_file, "r", "UTF-8", errors="replace") as inp:
         #     sources = []
         #     sources_lengths = []
@@ -298,4 +300,3 @@ class Batcher(object):
         #     print(self.targets.shape)
         #     print(self.labels.shape)
         #     print("length of data", len(sources))
-

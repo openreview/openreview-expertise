@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from sacremoses import MosesTokenizer
 
-entok = MosesTokenizer(lang='en')
+entok = MosesTokenizer(lang="en")
 unk_string = "UUUNKKK"
 
 
@@ -13,7 +13,7 @@ def max_pool(x, lengths, gpu):
     if gpu:
         out = out.cuda()
     for i in range(len(lengths)):
-        out[i] = torch.max(x[i][0:lengths[i]], 0)[0]
+        out[i] = torch.max(x[i][0 : lengths[i]], 0)[0]
     return out
 
 
@@ -22,7 +22,7 @@ def mean_pool(x, lengths, gpu):
     if gpu:
         out = out.cuda()
     for i in range(len(lengths)):
-        out[i] = torch.mean(x[i][0:lengths[i]], 0)
+        out[i] = torch.mean(x[i][0 : lengths[i]], 0)
     return out
 
 
@@ -45,15 +45,17 @@ def torchify_batch(batch, gpu=False):
 
     batch_len = len(batch)
 
-    np_sents = np.zeros((batch_len, max_len), dtype='int32')
-    np_lens = np.zeros((batch_len,), dtype='int32')
+    np_sents = np.zeros((batch_len, max_len), dtype="int32")
+    np_lens = np.zeros((batch_len,), dtype="int32")
 
     for i, ex in enumerate(batch):
-        np_sents[i, :len(ex.embeddings)] = ex.embeddings
+        np_sents[i, : len(ex.embeddings)] = ex.embeddings
         np_lens[i] = len(ex.embeddings)
 
-    idxs, lengths = torch.from_numpy(np_sents).long(), \
-                    torch.from_numpy(np_lens).float().long()
+    idxs, lengths = (
+        torch.from_numpy(np_sents).long(),
+        torch.from_numpy(np_lens).float().long(),
+    )
 
     if gpu:
         idxs = idxs.cuda()
@@ -64,7 +66,7 @@ def torchify_batch(batch, gpu=False):
 
 def print_progress(i, mod_size):
     if i != 0 and i % mod_size == 0:
-        sys.stderr.write('.')
+        sys.stderr.write(".")
         if int(i / mod_size) % 50 == 0:
             print(i, file=sys.stderr)
         sys.stderr.flush()

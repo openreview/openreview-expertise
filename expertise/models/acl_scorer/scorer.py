@@ -13,12 +13,19 @@ from .utils import entok, unk_string, torchify_batch
 
 
 class Model(object):
-    def __init__(self, batch_size=128, max_score=True, weighted_topk: int = None,
-                 sparse_value=None, normalize=False, use_cuda=False):
+    def __init__(
+        self,
+        batch_size=128,
+        max_score=True,
+        weighted_topk: int = None,
+        sparse_value=None,
+        normalize=False,
+        use_cuda=False,
+    ):
         # create tokenizer and ELMo objects
         self.tokenizer = MosesTokenizer()
         self.model = None
-        self.device = 'cuda' if use_cuda else 'cpu'
+        self.device = "cuda" if use_cuda else "cpu"
 
         self.batch_size = batch_size
         self.max_score = max_score
@@ -45,9 +52,11 @@ class Model(object):
             profile_id, publications = archive
             self.author_id_mapping[profile_id].append(i)
             for publication in publications:
-                if self._is_valid_field(publication['content'], 'abstract'):
-                    self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
-                    self.pub_note_id_to_abstract[publication['id']] = publication['content']['abstract']
+                if self._is_valid_field(publication["content"], "abstract"):
+                    self.pub_note_id_to_author_ids[publication["id"]].append(profile_id)
+                    self.pub_note_id_to_abstract[publication["id"]] = publication[
+                        "content"
+                    ]["abstract"]
 
     def set_pub_note_author_mapping(self):
         self.n_authors = len(self.author_id_mapping)
@@ -63,22 +72,27 @@ class Model(object):
 
     def set_submissions_dataset(self, submissions_dataset):
         for note_id, submission in submissions_dataset.items():
-            if self._is_valid_field(submission['content'], 'abstract'):
-                self.sub_note_id_to_abstract[submission['id']] = submission['content']['abstract']
+            if self._is_valid_field(submission["content"], "abstract"):
+                self.sub_note_id_to_abstract[submission["id"]] = submission["content"][
+                    "abstract"
+                ]
 
     def _is_valid_field(self, obj, field):
         return field in obj and obj.get(field)
 
     def load_model(self, data, model_dir):
-        model = torch.load(Path(model_dir).joinpath('scratch/similarity-model.pt'), map_location=torch.device(self.device))
+        model = torch.load(
+            Path(model_dir).joinpath("scratch/similarity-model.pt"),
+            map_location=torch.device(self.device),
+        )
 
-        state_dict = model['state_dict']
-        model_args = model['args']
-        vocab = model['vocab']
-        vocab_fr = model['vocab_fr']
-        optimizer = model['optimizer']
+        state_dict = model["state_dict"]
+        model_args = model["args"]
+        vocab = model["vocab"]
+        vocab_fr = model["vocab_fr"]
+        optimizer = model["optimizer"]
 
-        if self.device == 'cpu':
+        if self.device == "cpu":
             model_args.gpu = False
 
         if model_args.model == "avg":
@@ -98,24 +112,24 @@ class Model(object):
         assert pub_emb is not None
         assert sub_emb is not None
 
-        print(f'Performing similarity calculation')
+        print("Performing similarity calculation")
         similarity_matrix = np.matmul(sub_emb, np.transpose(pub_emb))
         if similarity_scores_path is not None:
             np.save(similarity_scores_path, similarity_matrix)
         return similarity_matrix
 
     def embed_submissions(self, submissions_path=None):
-        print('Embedding submissions...')
+        print("Embedding submissions...")
         self.sub_note_id_to_vec = self._embed(self.sub_note_id_to_abstract)
 
-        with open(submissions_path, 'wb') as f:
+        with open(submissions_path, "wb") as f:
             pickle.dump(self.sub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
 
     def embed_publications(self, publications_path=None):
-        print('Embedding publications...')
+        print("Embedding publications...")
         self.pub_note_id_to_vec = self._embed(self.pub_note_id_to_abstract)
 
-        with open(publications_path, 'wb') as f:
+        with open(publications_path, "wb") as f:
             pickle.dump(self.pub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
 
     def normalize_scores(self, score_matrix, axis=1):
@@ -129,19 +143,29 @@ class Model(object):
         normalized[np.isnan(normalized)] = 0.5
         return normalized
 
-    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None, similarity_scores_path=None):
-        print('Loading cached publications...')
-        with open(publications_path, 'rb') as f:
+    def all_scores(
+        self,
+        publications_path=None,
+        submissions_path=None,
+        scores_path=None,
+        similarity_scores_path=None,
+    ):
+        print("Loading cached publications...")
+        with open(publications_path, "rb") as f:
             self.pub_note_id_to_vec = pickle.load(f)
-        print('Loading cached submissions...')
-        with open(submissions_path, 'rb') as f:
+        print("Loading cached submissions...")
+        with open(submissions_path, "rb") as f:
             self.sub_note_id_to_vec = pickle.load(f)
 
-        print('Computing all scores...')
-        paper_similarity_score_matrix = self.calc_similarity_matrix(similarity_scores_path)
+        print("Computing all scores...")
+        paper_similarity_score_matrix = self.calc_similarity_matrix(
+            similarity_scores_path
+        )
         note_author_mapping = self.pub_note_author_mapping
-        reviewer_scores = np.zeros((paper_similarity_score_matrix.shape[0], note_author_mapping.shape[1]))
-        print('Calculating aggregate reviewer scores')
+        reviewer_scores = np.zeros(
+            (paper_similarity_score_matrix.shape[0], note_author_mapping.shape[1])
+        )
+        print("Calculating aggregate reviewer scores")
 
         for i in range(paper_similarity_score_matrix.shape[0]):
             scores = paper_similarity_score_matrix[i]
@@ -160,7 +184,7 @@ class Model(object):
                 reviewer_scores[i] = (top_k * weighting).sum(axis=0)
             else:
                 raise ValueError(
-                    'Either max_score should be set to True or weighted_topk should be set to a positive integer.'
+                    "Either max_score should be set to True or weighted_topk should be set to a positive integer."
                 )
 
         if self.normalize:
@@ -172,15 +196,20 @@ class Model(object):
 
         for i, sub_note_id in enumerate(sub_note_ids):
             for j, reviewer_id in enumerate(reviewer_ids):
-                csv_line = '{note_id},{reviewer},{score}'.format(note_id=sub_note_id, reviewer=reviewer_id,
-                                                                 score=reviewer_scores[i, j])
+                csv_line = "{note_id},{reviewer},{score}".format(
+                    note_id=sub_note_id,
+                    reviewer=reviewer_id,
+                    score=reviewer_scores[i, j],
+                )
                 csv_scores.append(csv_line)
-                self.preliminary_scores.append((sub_note_ids[i], reviewer_id, reviewer_scores[i, j]))
+                self.preliminary_scores.append(
+                    (sub_note_ids[i], reviewer_id, reviewer_scores[i, j])
+                )
 
         if scores_path:
-            with open(scores_path, 'w') as f:
+            with open(scores_path, "w") as f:
                 for csv_line in csv_scores:
-                    f.write(csv_line + '\n')
+                    f.write(csv_line + "\n")
         return self.preliminary_scores
 
     def _sparse_scores_helper(self, all_scores, id_index):
@@ -188,10 +217,12 @@ class Model(object):
         # Get the first note_id or profile_id
         current_id = self.preliminary_scores[0][id_index]
         if id_index == 0:
-            desc = 'Note IDs'
+            desc = "Note IDs"
         else:
-            desc = 'Profiles IDs'
-        for note_id, profile_id, score in tqdm(self.preliminary_scores, total=len(self.preliminary_scores), desc=desc):
+            desc = "Profiles IDs"
+        for note_id, profile_id, score in tqdm(
+            self.preliminary_scores, total=len(self.preliminary_scores), desc=desc
+        ):
             if counter < self.sparse_value:
                 all_scores.add((note_id, profile_id, score))
             elif (note_id, profile_id)[id_index] != current_id:
@@ -202,31 +233,31 @@ class Model(object):
         return all_scores
 
     def sparse_scores(self, scores_path=None):
-        print('Sorting...')
+        print("Sorting...")
         self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
-        print('preliminary', self.preliminary_scores, len(self.preliminary_scores))
+        print("preliminary", self.preliminary_scores, len(self.preliminary_scores))
         all_scores = set()
         # They are first sorted by note_id
         all_scores = self._sparse_scores_helper(all_scores, 0)
 
         # Sort by profile_id
-        print('Sorting...')
+        print("Sorting...")
         self.preliminary_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
         all_scores = self._sparse_scores_helper(all_scores, 1)
 
-        print('Final Sort...')
+        print("Final Sort...")
         all_scores = sorted(list(all_scores), key=lambda x: (x[0], x[2]), reverse=True)
         if scores_path:
-            with open(scores_path, 'w') as f:
+            with open(scores_path, "w") as f:
                 for note_id, profile_id, score in all_scores:
-                    f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
+                    f.write("{0},{1},{2}\n".format(note_id, profile_id, score))
 
-        print('ALL SCORES', all_scores)
+        print("ALL SCORES", all_scores)
         return all_scores
 
     def _embed(self, note_id_to_abs):
         print(
-            f'Preprocessing notes',
+            "Preprocessing notes",
         )
         abs_values = list(note_id_to_abs.values())
         abs_embs = []
@@ -236,20 +267,20 @@ class Model(object):
                 tokens = self.model.sp.EncodeAsPieces(tokens)
                 tokens = " ".join(tokens)
             token_instances = Instance(tokens)
-            token_instances.populate_embeddings(self.model.vocab, self.model.zero_unk, self.model.args.ngrams)
+            token_instances.populate_embeddings(
+                self.model.vocab, self.model.zero_unk, self.model.args.ngrams
+            )
             if len(token_instances.embeddings) == 0:
                 token_instances.embeddings.append(self.model.vocab[unk_string])
             abs_embs.append(token_instances)
 
         # Create embeddings
-        print(
-            'Creating Embeddings'
-        )
+        print("Creating Embeddings")
         embeddings = np.zeros((len(abs_values), self.model.args.dim))
         for i in range(0, len(abs_embs), self.batch_size):
             max_idx = min(i + self.batch_size, len(abs_embs))
             curr_batch = abs_embs[i:max_idx]
-            gpu = False if self.device == 'cpu' else True
+            gpu = False if self.device == "cpu" else True
             wx1, wl1 = torchify_batch(curr_batch, gpu)
             vecs = self.model.encode(wx1, wl1)
             vecs = vecs.detach().cpu().numpy()

@@ -19,8 +19,9 @@ from sklearn import metrics
 import numpy as np
 from .. import utils
 
+
 def eval_map(list_of_list_of_labels, list_of_list_of_scores, randomize=True):
-    '''
+    """
     Compute Mean Average Precision
 
     Given two lists with one element per test example, compute the
@@ -32,7 +33,7 @@ def eval_map(list_of_list_of_labels, list_of_list_of_scores, randomize=True):
     :param list_of_list_of_labels: Binary relevance labels. One list per example.
     :param list_of_list_of_scores: Predicted relevance scores. One list per example.
     :return: the mean average precision
-    '''
+    """
 
     assert len(list_of_list_of_labels) == len(list_of_list_of_scores)
     avg_precision_scores = []
@@ -40,10 +41,7 @@ def eval_map(list_of_list_of_labels, list_of_list_of_scores, randomize=True):
     for labels_list, scores_list in zip(list_of_list_of_labels, list_of_list_of_scores):
 
         if sum(labels_list) > 0:
-            avg_precision = metrics.average_precision_score(
-                labels_list,
-                scores_list
-            )
+            avg_precision = metrics.average_precision_score(labels_list, scores_list)
 
             avg_precision_scores.append(avg_precision)
 

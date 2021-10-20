@@ -16,15 +16,18 @@ limitations under the License.
 import sys
 import numpy as np
 
+from expertise.models.centroid import eval_hits_at_k_file
 from .. import utils
 
-def eval_hits_at_k(list_of_list_of_labels,
-                   list_of_list_of_scores,
-                   k=10,
-                   randomize=True,
-                   oracle=False,
-                   ):
-    '''
+
+def eval_hits_at_k(
+    list_of_list_of_labels,
+    list_of_list_of_scores,
+    k=10,
+    randomize=True,
+    oracle=False,
+):
+    """
     Compute Hits at K
 
     The i^th element of each list is an array of scores or labels corresponding
@@ -38,19 +41,23 @@ def eval_hits_at_k(list_of_list_of_labels,
     :param randomize: whether to randomize the ordering
     :param oracle: break ties using the labels
     :return: the mean average precision
-    '''
+    """
 
     np.random.seed(19)
     assert len(list_of_list_of_labels) == len(list_of_list_of_scores)
     aps = []
     for i in range(len(list_of_list_of_labels)):
-        if randomize == True:
+        if randomize:
             perm = np.random.permutation(len(list_of_list_of_labels[i]))
-            list_of_list_of_labels[i] = list(np.asarray(list_of_list_of_labels[i])[perm])
-            list_of_list_of_scores[i] = list(np.asarray(list_of_list_of_scores[i])[perm])
+            list_of_list_of_labels[i] = list(
+                np.asarray(list_of_list_of_labels[i])[perm]
+            )
+            list_of_list_of_scores[i] = list(
+                np.asarray(list_of_list_of_scores[i])[perm]
+            )
         if oracle:
             zpd = zip(list_of_list_of_scores[i], list_of_list_of_labels[i])
-            sorted_zpd =sorted(zpd, key=lambda x: x[1], reverse=True)
+            sorted_zpd = sorted(zpd, key=lambda x: x[1], reverse=True)
             list_of_list_of_labels[i] = [x[1] for x in sorted_zpd]
             list_of_list_of_scores[i] = [x[0] for x in sorted_zpd]
         else:
@@ -68,6 +75,7 @@ def eval_hits_at_k(list_of_list_of_labels,
 
     return sum(aps) / len(aps)
 
+
 def load(filename):
     """Load the labels and scores for Hits at K evaluation.
 
@@ -77,7 +85,7 @@ def load(filename):
     :param filename: Filename to load.
     :return: list_of_list_of_labels, list_of_list_of_scores
     """
-    print('function deprecated')
+    print("function deprecated")
 
     # result_labels = []
     # result_scores = []
@@ -103,11 +111,16 @@ def load(filename):
     # result_scores.append(current_block_scores)
     # return result_labels,result_scores
 
+
 if __name__ == "__main__":
     """
-        Usage: filename [k=1] [oracle=False]
+    Usage: filename [k=1] [oracle=False]
     """
     filename = sys.argv[1]
     k = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-    oracle = sys.argv[3] == "True"  if len(sys.argv) > 3 else False
-    print("{}\t{}\t{}\t{}".format(filename,k,oracle, eval_hits_at_k_file(filename,k=k,oracle=oracle)))
+    oracle = sys.argv[3] == "True" if len(sys.argv) > 3 else False
+    print(
+        "{}\t{}\t{}\t{}".format(
+            filename, k, oracle, eval_hits_at_k_file(filename, k=k, oracle=oracle)
+        )
+    )

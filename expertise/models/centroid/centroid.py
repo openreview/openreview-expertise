@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import numpy as np
 
 import torch
@@ -9,6 +11,7 @@ from expertise import utils
 from expertise.evaluators.mean_avg_precision import eval_map
 from expertise.evaluators.hits_at_k import eval_hits_at_k
 
+
 class Model(torch.nn.Module):
     def __init__(self, config, vocab):
         super(Model, self).__init__()
@@ -16,7 +19,9 @@ class Model(torch.nn.Module):
         self.config = config
         self.vocab = vocab
 
-        self.embedding = nn.Embedding(len(vocab)+1, config.embedding_dim, padding_idx=0)
+        self.embedding = nn.Embedding(
+            len(vocab) + 1, config.embedding_dim, padding_idx=0
+        )
 
         # Vector of ones (used for loss)
         if self.config.use_cuda:
@@ -26,8 +31,10 @@ class Model(torch.nn.Module):
 
         self._bce_loss = BCEWithLogitsLoss()
 
-    def compute_loss(self, batch_source, pos_result, neg_result, batch_lengths, pos_len, neg_len):
-        """ Compute the loss (BPR) for a batch of examples
+    def compute_loss(
+        self, batch_source, pos_result, neg_result, batch_lengths, pos_len, neg_len
+    ):
+        """Compute the loss (BPR) for a batch of examples
         :param batch_source: a batch of source keyphrase indices (list of lists)
         :param pos_result: True aliases of the Mentions
         :param neg_result: False aliases of the Mentions
@@ -45,9 +52,10 @@ class Model(torch.nn.Module):
         # B by dim
         neg_embed = self.embed(neg_result, neg_len)
         loss = self._bce_loss(
-            utils.row_wise_dot(source_embed , pos_embed )
-            - utils.row_wise_dot(source_embed , neg_embed ),
-            self.ones[:batch_size])
+            utils.row_wise_dot(source_embed, pos_embed)
+            - utils.row_wise_dot(source_embed, neg_embed),
+            self.ones[:batch_size],
+        )
         return loss
 
     def score_pair(self, source, target, source_len, target_len):
@@ -89,27 +97,34 @@ class Model(torch.nn.Module):
         # B x 1 x d
         return averaged
 
-    def embed_dev(self, keyword_lists, keyword_lengths, print_embed=False, batch_size=None):
+    def embed_dev(
+        self, keyword_lists, keyword_lengths, print_embed=False, batch_size=None
+    ):
         """
         :param keyword_lists: Batch_size by max_num_keywords
         :return: batch_size by embedding dim
         """
         return self.embed(keyword_lists, keyword_lengths)
 
-    def score_dev_test_batch(self,
+    def score_dev_test_batch(
+        self,
         batch_queries,
         batch_query_lengths,
         batch_targets,
         batch_target_lengths,
-        batch_size
-        ):
+        batch_size,
+    ):
 
         if batch_size == self.config.dev_batch_size:
             source_embed = self.embed_dev(batch_queries, batch_query_lengths)
             target_embed = self.embed_dev(batch_targets, batch_target_lengths)
         else:
-            source_embed = self.embed_dev(batch_queries, batch_query_lengths, batch_size=batch_size)
-            target_embed = self.embed_dev(batch_targets, batch_target_lengths, batch_size=batch_size)
+            source_embed = self.embed_dev(
+                batch_queries, batch_query_lengths, batch_size=batch_size
+            )
+            target_embed = self.embed_dev(
+                batch_targets, batch_target_lengths, batch_size=batch_size
+            )
 
         scores = utils.row_wise_dot(source_embed, target_embed)
 
@@ -130,7 +145,7 @@ def generate_predictions(config, model, batcher):
 
     for idx, batch in enumerate(batcher.batches(batch_size=config.dev_batch_size)):
         if idx % 100 == 0:
-            print('Predicted {} batches'.format(idx))
+            print("Predicted {} batches".format(idx))
 
         batch_queries = []
         batch_query_lengths = []
@@ -143,21 +158,21 @@ def generate_predictions(config, model, batcher):
 
         for data in batch:
             # append a positive sample
-            batch_queries.append(data['source'])
-            batch_query_lengths.append(data['source_length'])
-            batch_query_ids.append(data['source_id'])
-            batch_targets.append(data['positive'])
-            batch_target_lengths.append(data['positive_length'])
-            batch_target_ids.append(data['positive_id'])
+            batch_queries.append(data["source"])
+            batch_query_lengths.append(data["source_length"])
+            batch_query_ids.append(data["source_id"])
+            batch_targets.append(data["positive"])
+            batch_target_lengths.append(data["positive_length"])
+            batch_target_ids.append(data["positive_id"])
             batch_labels.append(1)
 
             # append a negative sample
-            batch_queries.append(data['source'])
-            batch_query_lengths.append(data['source_length'])
-            batch_query_ids.append(data['source_id'])
-            batch_targets.append(data['negative'])
-            batch_target_lengths.append(data['negative_length'])
-            batch_target_ids.append(data['negative_id'])
+            batch_queries.append(data["source"])
+            batch_query_lengths.append(data["source_length"])
+            batch_query_ids.append(data["source_id"])
+            batch_targets.append(data["negative"])
+            batch_target_lengths.append(data["negative_length"])
+            batch_target_ids.append(data["negative_id"])
             batch_labels.append(0)
 
         scores = model.score_dev_test_batch(
@@ -165,7 +180,7 @@ def generate_predictions(config, model, batcher):
             np.asarray(batch_query_lengths),
             np.asarray(batch_targets),
             np.asarray(batch_target_lengths),
-            np.asarray(batch_size)
+            np.asarray(batch_size),
         )
 
         if type(batch_labels) is not list:
@@ -180,17 +195,17 @@ def generate_predictions(config, model, batcher):
             batch_targets,
             batch_target_ids,
             batch_labels,
-            scores
-            ):
+            scores,
+        ):
 
             # temporarily commenting out "source" and "target" because I think they are not needed.
             prediction = {
                 # 'source': source,
-                'source_id': source_id,
+                "source_id": source_id,
                 # 'target': target,
-                'target_id': target_id,
-                'label': label,
-                'score': float(score)
+                "target_id": target_id,
+                "label": label,
+                "score": float(score),
             }
 
             yield prediction
@@ -207,7 +222,7 @@ def generate_scores(config, model, batcher):
 
     for idx, batch in enumerate(batcher.batches(batch_size=config.dev_batch_size)):
         if idx % 100 == 0:
-            print('Predicted {} batches'.format(idx))
+            print("Predicted {} batches".format(idx))
 
         batch_queries = []
         batch_query_lengths = []
@@ -219,42 +234,39 @@ def generate_scores(config, model, batcher):
 
         for data in batch:
             # append a positive sample
-            batch_queries.append(data['source'])
-            batch_query_lengths.append(data['source_length'])
-            batch_query_ids.append(data['source_id'])
-            batch_targets.append(data['target'])
-            batch_target_lengths.append(data['target_length'])
-            batch_target_ids.append(data['target_id'])
+            batch_queries.append(data["source"])
+            batch_query_lengths.append(data["source_length"])
+            batch_query_ids.append(data["source_id"])
+            batch_targets.append(data["target"])
+            batch_target_lengths.append(data["target_length"])
+            batch_target_ids.append(data["target_id"])
 
         scores = model.score_dev_test_batch(
             np.asarray(batch_queries),
             np.asarray(batch_query_lengths),
             np.asarray(batch_targets),
             np.asarray(batch_target_lengths),
-            np.asarray(batch_size)
+            np.asarray(batch_size),
         )
 
         if type(scores) is not list:
             scores = list(scores.cpu().data.numpy().squeeze())
 
         for source, source_id, target, target_id, score in zip(
-            batch_queries,
-            batch_query_ids,
-            batch_targets,
-            batch_target_ids,
-            scores
-            ):
+            batch_queries, batch_query_ids, batch_targets, batch_target_ids, scores
+        ):
 
             # temporarily commenting out "source" and "target" because I think they are not needed.
             prediction = {
                 # 'source': source,
-                'source_id': source_id,
+                "source_id": source_id,
                 # 'target': target,
-                'target_id': target_id,
-                'score': float(score)
+                "target_id": target_id,
+                "score": float(score),
             }
 
             yield prediction
+
 
 def load_jsonl(filename):
 
@@ -262,13 +274,12 @@ def load_jsonl(filename):
     scores_by_forum = defaultdict(dict)
 
     for data in utils.jsonl_reader(filename):
-        forum = data['source_id']
-        reviewer = data['target_id']
-        label = data['label']
-        score = data['score']
+        forum = data["source_id"]
+        reviewer = data["target_id"]
+        label = data["label"]
+        score = data["score"]
         labels_by_forum[forum][reviewer] = label
         scores_by_forum[forum][reviewer] = score
-
 
     result_labels = []
     result_scores = []
@@ -287,10 +298,14 @@ def load_jsonl(filename):
 
     return result_labels, result_scores
 
+
 def eval_map_file(filename):
     list_of_list_of_labels, list_of_list_of_scores = utils.load_labels(filename)
     return eval_map(list_of_list_of_labels, list_of_list_of_scores)
 
+
 def eval_hits_at_k_file(filename, k=2, oracle=False):
-    list_of_list_of_labels,list_of_list_of_scores = utils.load_labels(filename)
-    return eval_hits_at_k(list_of_list_of_labels, list_of_list_of_scores, k=k,oracle=oracle)
+    list_of_list_of_labels, list_of_list_of_scores = utils.load_labels(filename)
+    return eval_hits_at_k(
+        list_of_list_of_labels, list_of_list_of_scores, k=k, oracle=oracle
+    )

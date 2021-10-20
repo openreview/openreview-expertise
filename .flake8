@@ -1,0 +1,18 @@
+[flake8]
+max-line-length = 79
+exclude = .tox,*.egg,build,temp
+select = E,W,F
+max-complexity = 18
+verbose = 2
+# https://pep8.readthedocs.io/en/latest/intro.html#error-codes
+format = pylint
+ignore =
+    E731
+    E741
+    W504
+    F401
+    F841
+    E203  # E203 - whitespace before ':'. Opposite convention enforced by black
+    E231  # E231: missing whitespace after ',', ';', or ':'; for black
+    E501  # E501 - line too long. Handled by black, we have longer lines
+    W503  # W503 - line break before binary operator, need for black

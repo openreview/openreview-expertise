@@ -1,6 +1,6 @@
-'''
+"""
 
-'''
+"""
 
 import argparse
 import os
@@ -8,6 +8,7 @@ import json
 from collections import OrderedDict
 import expertise
 from expertise.config import ModelConfig
+
 
 def train_model(args):
     config_path = os.path.abspath(args.config_path)
@@ -22,9 +23,10 @@ def train_model(args):
     config.save(config_path)
     print(config)
 
+
 parser = argparse.ArgumentParser()
-parser.add_argument('config_path', help="a config file for a model")
-parser.add_argument('additional_params', nargs=argparse.REMAINDER)
+parser.add_argument("config_path", help="a config file for a model")
+parser.add_argument("additional_params", nargs=argparse.REMAINDER)
 args = parser.parse_args()
 
 train_model(args)

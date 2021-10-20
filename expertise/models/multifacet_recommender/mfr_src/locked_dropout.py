@@ -2,9 +2,10 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+
 class LockedDropout(nn.Module):
     def __init__(self):
-        #super().__init__()
+        # super().__init__()
         super(LockedDropout, self).__init__()
 
     def forward(self, x, dropout=0.5):

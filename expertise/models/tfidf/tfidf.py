@@ -1,18 +1,13 @@
 from __future__ import absolute_import, print_function, unicode_literals
-import sys, os
-
-import re
 
 from collections import defaultdict
-from collections import Counter
 
-from gensim.similarities import SparseMatrixSimilarity
-from gensim.models import TfidfModel
 from gensim import corpora
+from gensim.models import TfidfModel
+from gensim.similarities import SparseMatrixSimilarity
 
-import ipdb
 
-class Model():
+class Model:
     def __init__(self, kp_archives_by_paperid, kp_archives_by_userid):
 
         self.dictionary = corpora.Dictionary()
@@ -52,20 +47,24 @@ class Model():
         ]
         """
 
-        self.bow_archives_by_paperid = {userid: [self.dictionary.doc2bow(doc) for doc in archive] \
-            for userid, archive in self.kp_archives_by_paperid.items()}
+        self.bow_archives_by_paperid = {
+            userid: [self.dictionary.doc2bow(doc) for doc in archive]
+            for userid, archive in self.kp_archives_by_paperid.items()
+        }
 
-        self.bow_archives_by_userid = {userid: [self.dictionary.doc2bow(doc) for doc in archive] \
-            for userid, archive in self.kp_archives_by_userid.items()}
+        self.bow_archives_by_userid = {
+            userid: [self.dictionary.doc2bow(doc) for doc in archive]
+            for userid, archive in self.kp_archives_by_userid.items()
+        }
 
         flattened_archives = [
-            bow for archive in self.bow_archives_by_paperid.values() for bow in archive]
+            bow for archive in self.bow_archives_by_paperid.values() for bow in archive
+        ]
 
         self.index = SparseMatrixSimilarity(
             [self.tfidf[bow] for bow in flattened_archives],
-            num_features=len(self.dictionary)
+            num_features=len(self.dictionary),
         )
-
 
     def predict(self, note_record):
         """
@@ -83,8 +82,14 @@ class Model():
 
         """
 
-        scores = [(signature, self.score(signature, note_record)) for signature, _ in self.bow_by_userid.iteritems()]
-        rank_list = [signature for signature, score in sorted(scores, key=lambda x: x[1], reverse=True)]
+        scores = [
+            (signature, self.score(signature, note_record))
+            for signature, _ in self.bow_by_userid.iteritems()
+        ]
+        rank_list = [
+            signature
+            for signature, score in sorted(scores, key=lambda x: x[1], reverse=True)
+        ]
 
         return rank_list
 
@@ -97,9 +102,11 @@ class Model():
         paper_bow = [(t[0], t[1]) for t in self.dictionary.doc2bow(paper_tokens)]
         reviewer_bow = [(t[0], t[1]) for t in self.dictionary.doc2bow(reviewer_tokens)]
 
-        forum_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf[paper_bow]})
-        reviewer_vector = defaultdict(lambda: 0, {idx: score for (idx, score) in self.tfidf[reviewer_bow]})
+        forum_vector = defaultdict(
+            lambda: 0, {idx: score for (idx, score) in self.tfidf[paper_bow]}
+        )
+        reviewer_vector = defaultdict(
+            lambda: 0, {idx: score for (idx, score) in self.tfidf[reviewer_bow]}
+        )
 
         return sum([forum_vector[k] * reviewer_vector[k] for k in forum_vector])
-
-

@@ -1,30 +1,26 @@
-import csv, importlib, itertools, json, math, os, pickle, random
-from collections import defaultdict
+import itertools
+import os
 
-import numpy as np
-
-import openreview
-from expertise.utils.vocab import Vocab
-from expertise.utils.batcher import Batcher
-from expertise.dataset import Dataset
 import expertise.utils as utils
+from expertise.dataset import Dataset
 from expertise.utils.data_to_sample import data_to_sample
 
+
 def setup(config):
-    print('starting setup')
-    setup_dir = os.path.join(config.experiment_dir, 'setup')
+    print("starting setup")
+    setup_dir = os.path.join(config.experiment_dir, "setup")
     if not os.path.exists(setup_dir):
         os.mkdir(setup_dir)
 
     dataset = Dataset(**config.dataset)
-    vocab = utils.load_pkl(os.path.join(config.kp_setup_dir, 'textrank_vocab.pkl'))
+    vocab = utils.load_pkl(os.path.join(config.kp_setup_dir, "textrank_vocab.pkl"))
 
-    (train_set_ids,
-     dev_set_ids,
-     test_set_ids) = utils.split_ids(list(dataset.submission_ids), seed=config.random_seed)
+    (train_set_ids, dev_set_ids, test_set_ids) = utils.split_ids(
+        list(dataset.submission_ids), seed=config.random_seed
+    )
 
     def fold_reader(id):
-        fold_file = f'{id}.jsonl'
+        fold_file = f"{id}.jsonl"
         fold_path = os.path.join(config.bpr_samples, fold_file)
         return utils.jsonl_reader(fold_path)
 
@@ -32,29 +28,31 @@ def setup(config):
     dev_folds = [fold_reader(i) for i in dev_set_ids]
     test_folds = [fold_reader(i) for i in test_set_ids]
 
-    train_samples = (data_to_sample(
-        data, vocab, config.max_num_keyphrases) for data in itertools.chain(*train_folds))
+    train_samples = (
+        data_to_sample(data, vocab, config.max_num_keyphrases)
+        for data in itertools.chain(*train_folds)
+    )
 
-    train_samples_path = os.path.join(
-        setup_dir, 'train_samples.jsonl')
+    train_samples_path = os.path.join(setup_dir, "train_samples.jsonl")
 
     utils.dump_jsonl(train_samples_path, train_samples)
 
-    dev_samples = (data_to_sample(
-        data, vocab, config.max_num_keyphrases) for data in itertools.chain(*dev_folds))
+    dev_samples = (
+        data_to_sample(data, vocab, config.max_num_keyphrases)
+        for data in itertools.chain(*dev_folds)
+    )
 
-    dev_samples_path = os.path.join(
-        setup_dir, 'dev_samples.jsonl')
+    dev_samples_path = os.path.join(setup_dir, "dev_samples.jsonl")
 
     utils.dump_jsonl(dev_samples_path, dev_samples)
 
-    test_samples = (data_to_sample(
-        data, vocab, config.max_num_keyphrases) for data in itertools.chain(*test_folds))
+    test_samples = (
+        data_to_sample(data, vocab, config.max_num_keyphrases)
+        for data in itertools.chain(*test_folds)
+    )
 
-    test_samples_path = os.path.join(
-        setup_dir, 'test_samples.jsonl')
+    test_samples_path = os.path.join(setup_dir, "test_samples.jsonl")
 
     utils.dump_jsonl(test_samples_path, test_samples)
 
     return config
-

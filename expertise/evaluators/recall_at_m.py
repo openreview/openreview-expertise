@@ -1,16 +1,11 @@
 from __future__ import print_function, absolute_import
 
-import sys, os
-
-from operator import itemgetter
-import pandas as pd
-import matplotlib.pyplot as plt
 import matplotlib
 
-matplotlib.style.use('ggplot')
+matplotlib.style.use("ggplot")
 
 
-class Evaluator():
+class Evaluator:
     """
     An Evaluator instance that evaluates
     recall_at_m =
@@ -30,30 +25,34 @@ class Evaluator():
         self.m_values = range(m)
 
     def recall_at_m(self, ranked_signatures, forum, m):
-        '''
+        """
         Among the top M users in the model's rank list,
         what percentage of all high bidders are included?
 
-        '''
+        """
 
         positive_bids = self.get_pos_bids_for_forum(forum)
-        positive_signatures = [bid['signature'] for bid in positive_bids]
+        positive_signatures = [bid["signature"] for bid in positive_bids]
 
         if not positive_signatures:
             # what value should be returned if there are no positives?
             return 1.0
         else:
             all_bids = self.get_all_bids_for_forum(forum)
-            bid_signatures = [bid['signature'] for bid in all_bids]
+            bid_signatures = [bid["signature"] for bid in all_bids]
 
             # only rank the reviewers who made a bid of some kind
             # filtered_ranked_signatures = [r for r in ranked_signatures if r in bid_signatures]
             # topM = filtered_ranked_signatures[:m]
             topM = ranked_signatures[:m]
 
-            positive_signatures_from_topM = [r for r in positive_signatures if r in topM]
+            positive_signatures_from_topM = [
+                r for r in positive_signatures if r in topM
+            ]
 
-            return float(len(positive_signatures_from_topM))/float(len(positive_signatures))
+            return float(len(positive_signatures_from_topM)) / float(
+                len(positive_signatures)
+            )
 
     def evaluate(self, ranklists):
         """
@@ -78,12 +77,12 @@ class Evaluator():
             yield forum, scores
 
     def get_all_bids_for_forum(self, forum_id):
-        """ Returns all bids for the forum_id """
+        """Returns all bids for the forum_id"""
         forum_bids = self.bids_by_forum[forum_id]
         return [{"signature": bid.signatures[0], "bid": bid.tag} for bid in forum_bids]
 
     def get_pos_bids_for_forum(self, forum_id):
-        """ Get all of the positive bids for a forum """
+        """Get all of the positive bids for a forum"""
         positive_labels = ["I want to review", "I can review"]
         forum_bids = self.get_all_bids_for_forum(forum_id)
         return [bid for bid in forum_bids if bid["bid"] in positive_labels]

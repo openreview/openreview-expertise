@@ -14,7 +14,9 @@ from .utils import max_pool, mean_pool
 
 
 class ParaModel(nn.Module):
-    def __init__(self, data, args, vocab, vocab_fr, model_dir='expertise/models/acl_scorer/'):
+    def __init__(
+        self, data, args, vocab, vocab_fr, model_dir="expertise/models/acl_scorer/"
+    ):
         super(ParaModel, self).__init__()
 
         self.raw_data = data
@@ -55,22 +57,32 @@ class ParaModel(nn.Module):
             self.sp.Load(self.model_dir + args.sp_model)
 
     def save_params(self, epoch):
-        torch.save({'state_dict': self.state_dict(),
-                    'vocab': self.vocab,
-                    'vocab_fr': self.vocab_fr,
-                    'args': self.args,
-                    'optimizer': self.optimizer.state_dict(),
-                    'epoch': epoch}, "{0}_{1}.pt".format(self.args.outfile, epoch))
+        torch.save(
+            {
+                "state_dict": self.state_dict(),
+                "vocab": self.vocab,
+                "vocab_fr": self.vocab_fr,
+                "args": self.args,
+                "optimizer": self.optimizer.state_dict(),
+                "epoch": epoch,
+            },
+            "{0}_{1}.pt".format(self.args.outfile, epoch),
+        )
         return "{0}_{1}.pt".format(self.args.outfile, epoch)
 
     def save_final_params(self):
         print("Saving final model...")
-        torch.save({'state_dict': self.state_dict(),
-                    'vocab': self.vocab,
-                    'vocab_fr': self.vocab_fr,
-                    'args': self.args,
-                    'optimizer': self.optimizer.state_dict(),
-                    'epoch': self.args.epochs}, "{0}".format(self.args.outfile))  # .pt is in input string
+        torch.save(
+            {
+                "state_dict": self.state_dict(),
+                "vocab": self.vocab,
+                "vocab_fr": self.vocab_fr,
+                "args": self.args,
+                "optimizer": self.optimizer.state_dict(),
+                "epoch": self.args.epochs,
+            },
+            "{0}".format(self.args.outfile),
+        )  # .pt is in input string
 
     def loss_function(self, g1, g2, p1, p2):
         g1g2 = self.cosine(g1, g2)
@@ -106,7 +118,7 @@ class ParaModel(nn.Module):
                 idx += self.seg_length
                 idx = min(idx, len(sent))
             if idx > len(sent):
-                seg = sent[start:len(sent)]
+                seg = sent[start : len(sent)]
                 splits.append(seg)
             splits = [" ".join(i) for i in splits]
             random.shuffle(splits)
@@ -176,14 +188,27 @@ class LSTM(ParaModel):
             self.e_hidden_init = self.e_hidden_init.cuda()
             self.e_cell_init = self.e_cell_init.cuda()
 
-        self.lstm = nn.LSTM(self.args.dim, self.hidden_dim, num_layers=1, bidirectional=True, batch_first=True)
+        self.lstm = nn.LSTM(
+            self.args.dim,
+            self.hidden_dim,
+            num_layers=1,
+            bidirectional=True,
+            batch_first=True,
+        )
 
         if not self.share_encoder:
-            self.lstm_fr = nn.LSTM(self.args.dim, self.hidden_dim, num_layers=1,
-                                   bidirectional=True, batch_first=True)
+            self.lstm_fr = nn.LSTM(
+                self.args.dim,
+                self.hidden_dim,
+                num_layers=1,
+                bidirectional=True,
+                batch_first=True,
+            )
 
         self.parameters = self.parameters()
-        self.optimizer = optim.Adam(filter(lambda p: p.requires_grad, self.parameters), self.args.lr)
+        self.optimizer = optim.Adam(
+            filter(lambda p: p.requires_grad, self.parameters), self.args.lr
+        )
 
         if self.gpu:
             self.cuda()
@@ -204,14 +229,17 @@ class LSTM(ParaModel):
         if fr and not self.share_encoder:
             if self.dropout > 0:
                 F.dropout(in_embs, training=self.training)
-            all_hids, (enc_last_hid, _) = self.lstm_fr(pack(in_embs[indices],
-                                                            lens.tolist(), batch_first=True),
-                                                       (e_hidden_init, e_cell_init))
+            all_hids, (enc_last_hid, _) = self.lstm_fr(
+                pack(in_embs[indices], lens.tolist(), batch_first=True),
+                (e_hidden_init, e_cell_init),
+            )
         else:
             if self.dropout > 0:
                 F.dropout(in_embs, training=self.training)
-            all_hids, (enc_last_hid, _) = self.lstm(pack(in_embs[indices],
-                                                         lens.tolist(), batch_first=True), (e_hidden_init, e_cell_init))
+            all_hids, (enc_last_hid, _) = self.lstm(
+                pack(in_embs[indices], lens.tolist(), batch_first=True),
+                (e_hidden_init, e_cell_init),
+            )
 
         _, _indices = torch.sort(indices, 0)
         all_hids = unpack(all_hids, batch_first=True)[0][_indices]

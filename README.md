@@ -43,13 +43,13 @@ cd specter
 wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
 tar -xzvf archive.tar.gz
 
-conda install pytorch cudatoolkit=10.1 -c pytorch 
+conda install pytorch cudatoolkit=10.1 -c pytorch
 pip install -r requirements.txt
 python setup.py install
 conda install filelock
 cd ..
 ```
-Pass the path to the cloned GitHub repository as `model_params.specter_dir`. 
+Pass the path to the cloned GitHub repository as `model_params.specter_dir`.
 
 If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint files from [here](https://drive.google.com/file/d/1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s/view?usp=sharing), extract it, and pass the paths:
 ```
@@ -146,7 +146,7 @@ python -m expertise.service --host localhost --port 5000
 
 By default, the app will run on `http://localhost:5000`. The endpoint `/expertise/test` should show a simple page indicating that Flask is running. Accessing the `/expertise` endpoint to compute affinity scores **requires** valid authentication in the headers of the request (i.e submitted from a logged in Python client)
 
-In order to start the Celery queue worker, use: 
+In order to start the Celery queue worker, use:
 ```
 celery --app expertise.service.server.celery_app worker
 ```
@@ -438,7 +438,7 @@ Here is an example:
 ```
 
 #### SentencePiece-ACL specific parameters (affinity scores):
-- `model_params.model_dir`: Path to the unpacked model directory. The model checkpoint will be loaded relative to this directory. 
+- `model_params.model_dir`: Path to the unpacked model directory. The model checkpoint will be loaded relative to this directory.
 - `model_params.batch_size`: Batch size when running SentencePiece Model. This defaults to 32.
 - `model_params.publications_path`: When running SentencePiece, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
 - `model_params.submissions_path`: When running SentencePiece, this is where the embedded abstracts/titles of the Submissions are stored.

@@ -9,14 +9,24 @@ import math
 from collections import defaultdict
 import faiss
 
+
 class Model(object):
-    def __init__(self, use_title=False, use_abstract=True, use_cuda=False, batch_size=8, average_score=False, max_score=True, knn=None, sparse_value=None,  skip_same_id=True, normalize=False):
+    def __init__(
+        self,
+        use_title=False,
+        use_abstract=True,
+        use_cuda=False,
+        batch_size=8,
+        average_score=False,
+        max_score=True,
+        knn=None,
+        sparse_value=None,
+        skip_same_id=True,
+        normalize=False,
+    ):
         if not use_title and not use_abstract:
-            raise ValueError('use_title and use_abstract cannot both be False')
-        self.metadata = {
-            'closest_match': {},
-            'no_expertise': set()
-        }
+            raise ValueError("use_title and use_abstract cannot both be False")
+        self.metadata = {"closest_match": {}, "no_expertise": set()}
         self.use_title = use_title
         self.use_abstract = use_abstract
 
@@ -41,30 +51,50 @@ class Model(object):
         self.pub_note_id_to_title = {}
         for profile_id, publications in archives_dataset.items():
             for publication in publications:
-                if self.use_abstract and self._is_valid_field(publication['content'], 'abstract'):
-                    self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
-                    self.pub_note_id_to_abstract[publication['id']] = publication['content']['abstract']
-                elif self.use_title and self._is_valid_field(publication['content'], 'title'):
-                    self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
-                    self.pub_note_id_to_title[publication['id']] = publication['content']['title']
+                if self.use_abstract and self._is_valid_field(
+                    publication["content"], "abstract"
+                ):
+                    self.pub_note_id_to_author_ids[publication["id"]].append(profile_id)
+                    self.pub_note_id_to_abstract[publication["id"]] = publication[
+                        "content"
+                    ]["abstract"]
+                elif self.use_title and self._is_valid_field(
+                    publication["content"], "title"
+                ):
+                    self.pub_note_id_to_author_ids[publication["id"]].append(profile_id)
+                    self.pub_note_id_to_title[publication["id"]] = publication[
+                        "content"
+                    ]["title"]
 
     def set_submissions_dataset(self, submissions_dataset):
         self.sub_note_id_to_abstract = {}
         self.sub_note_id_to_title = {}
         for note_id, submission in submissions_dataset.items():
-            if self.use_abstract and self._is_valid_field(submission['content'], 'abstract'):
-                self.sub_note_id_to_abstract[submission['id']] = submission['content']['abstract']
-            elif self.use_title and self._is_valid_field(submission['content'], 'title'):
-                self.sub_note_id_to_title[submission['id']] = submission['content']['title']
+            if self.use_abstract and self._is_valid_field(
+                submission["content"], "abstract"
+            ):
+                self.sub_note_id_to_abstract[submission["id"]] = submission["content"][
+                    "abstract"
+                ]
+            elif self.use_title and self._is_valid_field(
+                submission["content"], "title"
+            ):
+                self.sub_note_id_to_title[submission["id"]] = submission["content"][
+                    "title"
+                ]
 
     def set_other_submissions_dataset(self, other_submissions_dataset):
         self.other_sub_note_id_to_abstract = {}
         self.other_sub_note_id_to_title = {}
         for note_id, submission in other_submissions_dataset.items():
-            if self.use_abstract and 'abstract' in submission['content']:
-                self.other_sub_note_id_to_abstract[submission['id']] = submission['content']['abstract']
-            elif self.use_title and 'title' in submission['content']:
-                self.other_sub_note_id_to_title[submission['id']] = submission['content']['title']
+            if self.use_abstract and "abstract" in submission["content"]:
+                self.other_sub_note_id_to_abstract[submission["id"]] = submission[
+                    "content"
+                ]["abstract"]
+            elif self.use_title and "title" in submission["content"]:
+                self.other_sub_note_id_to_title[submission["id"]] = submission[
+                    "content"
+                ]["title"]
 
     def _is_valid_field(self, obj, field):
         return field in obj and obj.get(field)
@@ -76,7 +106,9 @@ class Model(object):
         vecs = elmo.embed_batch(toks_list)
         content_vecs = []
         for vec in vecs:
-            new_vec = np.transpose(vec, (1,0,2)).reshape(-1, vec.shape[0]*vec.shape[2])
+            new_vec = np.transpose(vec, (1, 0, 2)).reshape(
+                -1, vec.shape[0] * vec.shape[2]
+            )
             content_vecs.append(new_vec.mean(0))
         return np.vstack(content_vecs)
 
@@ -84,22 +116,24 @@ class Model(object):
         all_pubs = [(uid, pub) for uid, pub in uid2pub.items()]
         batched_pubs = []
         for i in range(math.ceil(len(all_pubs) / self.batch_size)):
-            batched_pubs.append(all_pubs[i * self.batch_size:(i + 1) * self.batch_size])
+            batched_pubs.append(
+                all_pubs[i * self.batch_size : (i + 1) * self.batch_size]
+            )
 
         uids = []
         vecs = []
-        for batch in tqdm(batched_pubs, total=len(batched_pubs), desc='Embedding'):
+        for batch in tqdm(batched_pubs, total=len(batched_pubs), desc="Embedding"):
             _uids = [x[0] for x in batch]
             _pubs = [x[1] for x in batch]
             try:
                 _vecs = self._extract_elmo(_pubs, self.tokenizer, self.elmo)
-            except:
+            except Exception:
                 print(_uids)
             uids.extend(_uids)
             vecs.append(_vecs)
 
         vecs = np.vstack(vecs)
-        uid2vec = {_uid : _vec for _uid, _vec in zip(uids, vecs)}
+        uid2vec = {_uid: _vec for _uid, _vec in zip(uids, vecs)}
 
         uid_index = []
         all_paper_vecs = []
@@ -114,62 +148,66 @@ class Model(object):
         return uid_index, all_papers_tensor
 
     def embed_submissions(self, submissions_path=None):
-        print('Embedding submissions...')
+        print("Embedding submissions...")
         if self.use_abstract:
             self.sub_note_id_to_vec = self._embed(self.sub_note_id_to_abstract)
         elif self.use_title:
             self.sub_note_id_to_vec = self._embed(self.sub_note_id_to_title)
 
-        with open(submissions_path, 'wb') as f:
+        with open(submissions_path, "wb") as f:
             pickle.dump(self.sub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
 
     def embed_other_submissions(self, other_submissions_path=None):
-        print('Embedding other submissions...')
+        print("Embedding other submissions...")
         if self.use_abstract:
-            self.other_sub_note_id_to_vec = self._embed(self.other_sub_note_id_to_abstract)
+            self.other_sub_note_id_to_vec = self._embed(
+                self.other_sub_note_id_to_abstract
+            )
         elif self.use_title:
             self.other_sub_note_id_to_vec = self._embed(self.other_sub_note_id_to_title)
 
-        with open(other_submissions_path, 'wb') as f:
+        with open(other_submissions_path, "wb") as f:
             pickle.dump(self.other_sub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
 
     def embed_publications(self, publications_path=None):
-        print('Embedding publications...')
+        print("Embedding publications...")
         if self.use_abstract:
             self.pub_note_id_to_vec = self._embed(self.pub_note_id_to_abstract)
         elif self.use_title:
             self.pub_note_id_to_vec = self._embed(self.pub_note_id_to_title)
 
-        with open(publications_path, 'wb') as f:
+        with open(publications_path, "wb") as f:
             pickle.dump(self.pub_note_id_to_vec, f, pickle.HIGHEST_PROTOCOL)
 
     def normalize_scores(self, score_matrix, axis=1):
-        '''
+        """
         If axis is 0, we normalize over the submissions
         If axis is 1, we normalize over the publications (recommended)
-        '''
+        """
         min_values = np.nanmin(score_matrix, axis=axis, keepdims=True)
         max_values = np.nanmax(score_matrix, axis=axis, keepdims=True)
         normalized = (score_matrix - min_values) / (max_values - min_values)
         normalized[np.isnan(normalized)] = 0.5
         return normalized
 
-    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
-        print('Loading cached publications...')
-        with open(publications_path, 'rb') as f:
+    def all_scores(
+        self, publications_path=None, submissions_path=None, scores_path=None
+    ):
+        print("Loading cached publications...")
+        with open(publications_path, "rb") as f:
             self.pub_note_id_to_vec = pickle.load(f)
-        print('Loading cached submissions...')
-        with open(submissions_path, 'rb') as f:
+        print("Loading cached submissions...")
+        with open(submissions_path, "rb") as f:
             self.sub_note_id_to_vec = pickle.load(f)
 
-        print('Computing all scores...')
+        print("Computing all scores...")
         index = faiss.IndexFlatL2(self.pub_note_id_to_vec[1].shape[1])
         index.add(self.pub_note_id_to_vec[1])
 
         if self.knn is None:
             self.knn = self.pub_note_id_to_vec[1].shape[0]
 
-        print('Querying the index...')
+        print("Querying the index...")
         # D and I are 2D matrices. The row indexes correspond to the submission index
         # of self.sub_note_id_to_vec[1]. That means that row 0 in D corresponds to the submission
         # self.sub_note_id_to_vec[1][0], row 1 to the submission self.sub_note_id_to_vec[1][1], and
@@ -193,7 +231,9 @@ class Model(object):
                 publication_id = self.pub_note_id_to_vec[0][publication_index]
                 profile_ids = self.pub_note_id_to_author_ids[publication_id]
                 for reviewer_id in profile_ids:
-                    submission_scores[note_id][reviewer_id].append(preliminary_scores[row][col])
+                    submission_scores[note_id][reviewer_id].append(
+                        preliminary_scores[row][col]
+                    )
 
         csv_scores = []
         self.preliminary_scores = []
@@ -223,37 +263,43 @@ class Model(object):
 
         for i, reviewer_ids in enumerate(reviewer_matrix):
             for j, reviewer_id in enumerate(reviewer_ids):
-                csv_line = '{note_id},{reviewer},{score}'.format(note_id=note_ids[i], reviewer=reviewer_id, score=scores_matrix[i, j])
+                csv_line = "{note_id},{reviewer},{score}".format(
+                    note_id=note_ids[i], reviewer=reviewer_id, score=scores_matrix[i, j]
+                )
                 csv_scores.append(csv_line)
-                self.preliminary_scores.append((note_ids[i], reviewer_id, scores_matrix[i, j]))
+                self.preliminary_scores.append(
+                    (note_ids[i], reviewer_id, scores_matrix[i, j])
+                )
 
         if scores_path:
-            with open(scores_path, 'w') as f:
+            with open(scores_path, "w") as f:
                 for csv_line in csv_scores:
-                    f.write(csv_line + '\n')
+                    f.write(csv_line + "\n")
         return self.preliminary_scores
 
-    def find_duplicates(self, submissions_path=None, other_submissions_path=None, scores_path=None):
-        print('Loading cached submissions...')
-        with open(submissions_path, 'rb') as f:
+    def find_duplicates(
+        self, submissions_path=None, other_submissions_path=None, scores_path=None
+    ):
+        print("Loading cached submissions...")
+        with open(submissions_path, "rb") as f:
             self.sub_note_id_to_vec = pickle.load(f)
 
         if other_submissions_path:
-            print('Loading other cached submissions...')
-            with open(other_submissions_path, 'rb') as f:
+            print("Loading other cached submissions...")
+            with open(other_submissions_path, "rb") as f:
                 self.other_sub_note_id_to_vec = pickle.load(f)
         else:
-            with open(submissions_path, 'rb') as f:
+            with open(submissions_path, "rb") as f:
                 self.other_sub_note_id_to_vec = pickle.load(f)
 
-        print('Computing all scores...')
+        print("Computing all scores...")
         index = faiss.IndexFlatL2(self.other_sub_note_id_to_vec[1].shape[1])
         index.add(self.other_sub_note_id_to_vec[1])
 
         if self.knn is None:
             self.knn = self.other_sub_note_id_to_vec[1].shape[0]
 
-        print('Querying the index...')
+        print("Querying the index...")
         D, I = index.search(self.sub_note_id_to_vec[1], self.knn)
         scores = (2 - D) / 2
 
@@ -265,14 +311,16 @@ class Model(object):
                 other_note_id = self.other_sub_note_id_to_vec[0][other_submission_index]
                 if not self.skip_same_id or note_id != other_note_id:
                     score = scores[row][col]
-                    csv_line = '{note_id},{other_note_id},{score}'.format(note_id=note_id, other_note_id=other_note_id, score=score)
+                    csv_line = "{note_id},{other_note_id},{score}".format(
+                        note_id=note_id, other_note_id=other_note_id, score=score
+                    )
                     csv_scores.append(csv_line)
                     all_scores.append((note_id, other_note_id, score))
 
         if scores_path:
-            with open(scores_path, 'w') as f:
+            with open(scores_path, "w") as f:
                 for csv_line in csv_scores:
-                    f.write(csv_line + '\n')
+                    f.write(csv_line + "\n")
         return all_scores
 
     def _sparse_scores_helper(self, all_scores, id_index):
@@ -280,10 +328,12 @@ class Model(object):
         # Get the first note_id or profile_id
         current_id = self.preliminary_scores[0][id_index]
         if id_index == 0:
-            desc = 'Note IDs'
+            desc = "Note IDs"
         else:
-            desc = 'Profiles IDs'
-        for note_id, profile_id, score in tqdm(self.preliminary_scores, total=len(self.preliminary_scores), desc=desc):
+            desc = "Profiles IDs"
+        for note_id, profile_id, score in tqdm(
+            self.preliminary_scores, total=len(self.preliminary_scores), desc=desc
+        ):
             if counter < self.sparse_value:
                 all_scores.add((note_id, profile_id, score))
             elif (note_id, profile_id)[id_index] != current_id:
@@ -294,24 +344,24 @@ class Model(object):
         return all_scores
 
     def sparse_scores(self, scores_path=None):
-        print('Sorting...')
+        print("Sorting...")
         self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
-        print('preliminary', self.preliminary_scores, len(self.preliminary_scores))
+        print("preliminary", self.preliminary_scores, len(self.preliminary_scores))
         all_scores = set()
         # They are first sorted by note_id
         all_scores = self._sparse_scores_helper(all_scores, 0)
 
         # Sort by profile_id
-        print('Sorting...')
+        print("Sorting...")
         self.preliminary_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
         all_scores = self._sparse_scores_helper(all_scores, 1)
 
-        print('Final Sort...')
+        print("Final Sort...")
         all_scores = sorted(list(all_scores), key=lambda x: (x[0], x[2]), reverse=True)
         if scores_path:
-            with open(scores_path, 'w') as f:
+            with open(scores_path, "w") as f:
                 for note_id, profile_id, score in all_scores:
-                    f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
+                    f.write("{0},{1},{2}\n".format(note_id, profile_id, score))
 
-        print('ALL SCORES', all_scores)
+        print("ALL SCORES", all_scores)
         return all_scores

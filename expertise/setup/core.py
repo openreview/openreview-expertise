@@ -3,6 +3,7 @@ from collections import OrderedDict
 import json
 import expertise
 
+
 def setup_model(args):
     config_path = os.path.abspath(args.config_path)
 
