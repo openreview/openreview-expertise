@@ -61,10 +61,11 @@ def create_app(config=None):
 
     return app
 
-def create_celery(app, config_source):
+def create_celery(app):
     """
     Initializes a celery application using Flask App
     """
+    config_source = app.config["CELERY_CONFIG"]
     celery = Celery(
         app.import_name,
         include=["expertise.service.celery_tasks"],
