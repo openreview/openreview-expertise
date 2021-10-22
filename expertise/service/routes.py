@@ -120,7 +120,8 @@ def jobs():
     try:
         # Parse query parameters
         job_id = flask.request.args.get('id', None)
-
+        if job_id is None:
+            raise openreview.OpenReviewException('Bad request: id is required')
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
