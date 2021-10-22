@@ -29,7 +29,7 @@ def get_client():
         baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
     )
 
-@BLUEPRINT.route('/test')
+@BLUEPRINT.route('/expertise/test')
 def test():
     """Test endpoint."""
     flask.current_app.logger.info('In test')
