@@ -120,10 +120,8 @@ def jobs():
     try:
         # Parse query parameters
         job_id = flask.request.args.get('id', None)
-        if job_id is None:
+        if job_id is None or len(job_id) == 0:
             raise openreview.OpenReviewException('Bad request: id is required')
-        elif len(job_id) == 0:
-            raise openreview.OpenReviewException('Bad request: id must have non-zero length')
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
@@ -215,10 +213,8 @@ def results():
     try:
         # Parse query parameters
         job_id = flask.request.args.get('id', None)
-        if job_id is None:
+        if job_id is None or len(job_id) == 0:
             raise openreview.OpenReviewException('Bad request: id is required')
-        elif len(job_id) == 0:
-            raise openreview.OpenReviewException('Bad request: id must have non-zero length')
         delete_on_get = flask.request.args.get('delete_on_get', 'False').lower() == 'true'
 
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
