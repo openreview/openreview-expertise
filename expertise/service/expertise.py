@@ -379,6 +379,7 @@ class ExpertiseService(object):
         result = {'results': []}
 
         search_dir = os.path.join(self.working_dir, job_id)
+        self.logger.info(f"Checking if {job_id} belongs to {user_id}")
         # Check for directory existence
         if not os.path.isdir(search_dir):
             raise openreview.OpenReviewException('Job not found')
@@ -393,6 +394,7 @@ class ExpertiseService(object):
         status = config['status']
         description = config['description']
 
+        self.logger.info(f"Able to access job at {job_id} - checking if scores are found")
         # Assemble scores
         if status != JobStatus.COMPLETED:
             ## TODO: change it to Job not found
