@@ -204,9 +204,14 @@ class ExpertiseService(object):
         # Look for files
         if os.path.isfile(os.path.join(search_dir, f"{config['name']}.csv")):
             file_dir = os.path.join(search_dir, f"{config['name']}.csv")
+        if file_dir is None:
+            raise OpenReviewException("Score file not found for job {job_id}".format(job_id=config["job_id"]))
+
         if os.path.isfile(os.path.join(search_dir, 'metadata.json')):
             metadata_dir = os.path.join(search_dir, 'metadata.json')
-            
+        if metadata_dir is None:
+            raise OpenReviewException("Metadata file not found for job {job_id}".format(job_id=config["job_id"]))
+
         return file_dir, metadata_dir
 
     def _add_to_user_index(self, user_id, job_id):
