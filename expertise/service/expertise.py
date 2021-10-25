@@ -146,14 +146,18 @@ class ExpertiseService(object):
                 failed_request = True
                 continue
             if field != 'model_params':
-                config[field] = request[field]
+                # Only write to config if 1) overwriting a default with non-None value or 2) if the field is not in the default config
+                if (field in config.keys() and request[field] is not None) or field not in config.keys():
+                    config[field] = request[field]
         if 'model_params' in request.keys():
             for field in request['model_params']:
                 if field not in self.optional_model_params:
                     error_fields['model_params'].append(field)
                     failed_request = True
                     continue
-                config['model_params'][field] = request['model_params'][field]
+                # Only write to config if 1) overwriting a default with non-None value or 2) if the field is not in the default config
+                if (field in config['model_params'].keys() and request['model_params'][field] is not None) or field not in config['model_params'].keys():
+                    config['model_params'][field] = request['model_params'][field]
 
         if failed_request:
             error_string = 'Bad request: '

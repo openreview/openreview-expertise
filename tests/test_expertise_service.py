@@ -290,8 +290,8 @@ class TestExpertiseService():
                     'match_group': ["ABC.cc"],
                     "model": "elmo",
                     "model_params": {
-                        "use_title": None,
-                        "use_abstract": None,
+                        "use_title": False,
+                        "use_abstract": False,
                         "average_score": None,
                         "max_score": None
                     }
