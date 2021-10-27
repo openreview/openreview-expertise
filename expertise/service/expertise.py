@@ -92,8 +92,9 @@ class ExpertiseService(object):
         config['description'] = descriptions[JobStatus.INITIALIZED]
 
         # Set SPECTER+MFR paths
-        if config.get('model', 'specter+mfr') == 'specter+mfr':
+        if 'specter' in config.get('model', 'specter+mfr'):
             config['model_params']['specter_dir'] = self.specter_dir
+        if 'mfr' in config.get('model', 'specter+mfr'):
             config['model_params']['mfr_feature_vocab_file'] = self.mfr_feature_vocab_file
             config['model_params']['mfr_checkpoint_dir'] = self.mfr_checkpoint_dir
 
