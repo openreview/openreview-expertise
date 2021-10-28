@@ -379,7 +379,7 @@ class TestExpertiseService:
         response = test_client.get(
             "/expertise/results", query_string={"id": f"{openreview_context['job_id']}"}
         )
-        assert response.status_code == 404
+        assert response.status_code == 500
 
         response = test_client.get(
             "/expertise/status", query_string={"id": f"{openreview_context['job_id']}"}
