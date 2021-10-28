@@ -209,6 +209,7 @@ class TestExpertiseService():
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['job_id']
+        time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
         assert len(response) == 1
         assert response[0]['name'] == 'test_run'
@@ -245,6 +246,15 @@ class TestExpertiseService():
         assert response[0]['status'] == 'Completed'
         assert response[0]['name'] == 'test_run'
         assert response[0]['description'] == 'Job is complete and the computed scores are ready'
+        
+        # Check config fields
+        returned_config = response[0]['config']
+        assert returned_config['name'] == 'test_run'
+        assert returned_config['paper_invitation'] == 'ABC.cc/-/Submission'
+        assert returned_config['model'] == 'elmo'
+        assert 'token' not in returned_config
+        assert 'baseurl' not in returned_config
+        assert 'user_id' not in returned_config
         assert job_id is not None
         openreview_context['job_id'] = job_id
 
@@ -358,6 +368,7 @@ class TestExpertiseService():
             assert response.status_code == 200, f'{response.json}'
             job_id = response.json['job_id']
             id_list.append(job_id)
+            time.sleep(2)
             response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
             assert len(response) == 1
             assert response[0]['name'] == 'test_run'

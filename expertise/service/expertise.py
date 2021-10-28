@@ -65,6 +65,22 @@ class ExpertiseService(object):
         self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
+    def _filter_config(self, running_config):
+        """
+        Filters out certain server-side fields of a config file in order to
+        form a presentable config to the user
+
+        :param running_config: Contains the config JSON as read from the servver
+        :type running_config: dict
+
+        :returns config: A modified version of config without the server fields
+        """
+        remove_fields = ['baseurl', 'token', 'user_id']
+        for key in remove_fields:
+            del running_config[key]
+
+        return running_config
+
     def _prepare_config(self, request) -> dict:
         """
         Overwrites/add specific key-value pairs in the submitted job config
@@ -355,13 +371,16 @@ class ExpertiseService(object):
                 config = json.loads(s)
             status = config['status']
             description = config['description']
-
+            
+            # Append filtered config to the status
+            filtered_config = self._filter_config(config)
             result['results'].append(
                 {
                     'job_id': job_dir,
                     'name': config['name'],
                     'status': status,
-                    'description': description
+                    'description': description,
+                    'config': filtered_config
                 }
             )
         return result
