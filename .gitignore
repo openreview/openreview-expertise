@@ -1,3 +1,6 @@
 openreview_expertise.egg-info
 
 __pycache__
+
+/tmp
+*.log

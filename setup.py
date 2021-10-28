@@ -30,7 +30,14 @@ setup(
         'sacremoses',
         'rank_bm25',
         'pytest',
-        'overrides==2.8.0'
+        'overrides==2.8.0',
+        'flask',
+        'flask-cors==3.0.9',
+        'cffi>=1.0.0',
+        'celery',
+        'redis',
+        'pytest-celery',
+        'shortuuid'
     ],
     zip_safe=False
 )
