@@ -72,3 +72,4 @@ The API gives the user the ability to query the status of their job at several s
 4. **Queued for Expertise**: Job has assembled the data and is waiting in queue for the expertise model
 5. **Running Expertise**: Job is running the selected expertise model to compute scores
 6. **Completed**: Job is complete and the computed scores are ready
+

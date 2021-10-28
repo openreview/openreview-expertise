@@ -25,18 +25,17 @@ def get_client():
         return mock_client()
 
     return openreview.Client(
-        token=token, baseurl=flask.current_app.config["OPENREVIEW_BASEURL"]
+        token=token,
+        baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
     )
 
-
-@BLUEPRINT.route("/test")
+@BLUEPRINT.route('/expertise/test')
 def test():
     """Test endpoint."""
-    flask.current_app.logger.info("In test")
-    return "OpenReview Expertise (test)"
+    flask.current_app.logger.info('In test')
+    return 'OpenReview Expertise (test)'
 
-
-@BLUEPRINT.route("/expertise", methods=["POST"])
+@BLUEPRINT.route('/expertise', methods=['POST'])
 def expertise():
     """
     Submit a job to create a dataset and execute an expertise model based on the submitted configuration
@@ -58,29 +57,24 @@ def expertise():
 
     user_id = get_user_id(openreview_client)
     if not user_id:
-        flask.current_app.logger.error("No Authorization token in headers")
-        return (
-            flask.jsonify({"error": "Forbidden: No Authorization token in headers"}),
-            403,
-        )
+        flask.current_app.logger.error('No Authorization token in headers')
+        return flask.jsonify({ 'error': 'Forbidden: No Authorization token in headers'}), 403
 
     try:
-        flask.current_app.logger.info("Received expertise request")
+        flask.current_app.logger.info('Received expertise request')
 
         # Parse request args
         user_request = flask.request.json
-        user_request["token"] = openreview_client.token
-        user_request["baseurl"] = flask.current_app.config["OPENREVIEW_BASEURL"]
-        user_request["user_id"] = user_id
+        user_request['token'] = openreview_client.token
+        user_request['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
+        user_request['user_id'] = user_id
 
-        job_id = ExpertiseService(
-            openreview_client, flask.current_app.config, flask.current_app.logger
-        ).start_expertise(user_request)
+        job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).start_expertise(user_request)
 
-        result = {"job_id": job_id}
-        flask.current_app.logger.info("Returning from request")
+        result = {'job_id': job_id }
+        flask.current_app.logger.info('Returning from request')
 
-        flask.current_app.logger.debug("POST returns " + str(result))
+        flask.current_app.logger.debug('POST returns ' + str(result))
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
@@ -89,14 +83,14 @@ def expertise():
         error_type = str(error_handle)
         status = 500
 
-        if "not found" in error_type.lower():
+        if 'not found' in error_type.lower():
             status = 404
-        elif "forbidden" in error_type.lower():
+        elif 'forbidden' in error_type.lower():
             status = 403
-        elif "bad request" in error_type.lower():
+        elif 'bad request' in error_type.lower():
             status = 400
 
-        return flask.jsonify({"error": error_type}), status
+        return flask.jsonify({'error': error_type}), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
@@ -123,20 +117,16 @@ def jobs():
     user_id = get_user_id(openreview_client)
 
     if not user_id:
-        flask.current_app.logger.error("No Authorization token in headers")
-        return (
-            flask.jsonify({"error": "Forbidden: No Authorization token in headers"}),
-            403,
-        )
+        flask.current_app.logger.error('No Authorization token in headers')
+        return flask.jsonify({ 'error': 'Forbidden: No Authorization token in headers'}), 403
 
     try:
         # Parse query parameters
-        job_id = flask.request.args.get("id", None)
-
-        result = ExpertiseService(
-            openreview_client, flask.current_app.config, flask.current_app.logger
-        ).get_expertise_status(user_id, job_id)
-        flask.current_app.logger.debug("GET returns " + str(result))
+        job_id = flask.request.args.get('id', None)
+        if job_id is None or len(job_id) == 0:
+            raise openreview.OpenReviewException('Bad request: id is required')
+        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
+        flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
@@ -233,26 +223,19 @@ def results():
     user_id = get_user_id(openreview_client)
 
     if not user_id:
-        flask.current_app.logger.error("No Authorization token in headers")
-        return (
-            flask.jsonify({"error": "Forbidden: No Authorization token in headers"}),
-            403,
-        )
+        flask.current_app.logger.error('No Authorization token in headers')
+        return flask.jsonify({ 'error': 'Forbidden: No Authorization token in headers'}), 403
 
     try:
         # Parse query parameters
-        job_id = flask.request.args.get("id", None)
-        if job_id is None:
-            raise openreview.OpenReviewException("Bad request: id is required")
-        delete_on_get = (
-            flask.request.args.get("delete_on_get", "False").lower() == "true"
-        )
+        job_id = flask.request.args.get('id', None)
+        if job_id is None or len(job_id) == 0:
+            raise openreview.OpenReviewException('Bad request: id is required')
+        delete_on_get = flask.request.args.get('delete_on_get', 'False').lower() == 'true'
 
-        result = ExpertiseService(
-            openreview_client, flask.current_app.config, flask.current_app.logger
-        ).get_expertise_results(user_id, job_id, delete_on_get)
+        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
 
-        flask.current_app.logger.debug("GET returns code 200")
+        flask.current_app.logger.debug('GET returns code 200')
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:

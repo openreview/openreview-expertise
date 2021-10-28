@@ -317,3 +317,36 @@ def test_get_profile():
     user_profile = openreview_client.get_profile()
     assert user_profile.id == "~Test_User1"
     assert user_profile.content["preferredEmail"] == "Test_User1@mail.com"
+
+def test_get_submissions_from_invitation():
+    openreview_client = mock_client()
+    config = {
+        'use_email_ids': False,
+        'match_group': 'ABC.cc',
+        'paper_invitation': 'ABC.cc/-/Submission'
+    }
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    submissions = or_expertise.get_submissions()
+    print(submissions)
+    assert json.dumps(submissions) == json.dumps({
+        'KHnr1r7H': {
+            "id": "KHnr1r7H",
+            "content": {
+                "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
+                "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
+            }
+        },
+        'YQtWeE8P': {
+            "id": "YQtWeE8P",
+            "content": {
+                "title": "Bypass L Com Iliac Art to B Com Ilia, Perc Endo Approach",
+                "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
+            }
+        }
+    })
+
+def test_get_profile():
+    openreview_client = mock_client()
+    user_profile = openreview_client.get_profile()
+    assert user_profile.id == '~Test_User1'
+    assert user_profile.content['preferredEmail'] == 'Test_User1@mail.com'

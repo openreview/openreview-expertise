@@ -52,8 +52,8 @@ def create_app(config=None):
 
     # app.config['ENV'] is automatically set by the FLASK_ENV environment variable.
     # by default, app.config['ENV'] == 'production'
-    app.config.from_pyfile("default.cfg")
-    app.config.from_pyfile("{}.cfg".format(app.config.get("ENV")), silent=True)
+    app.config.from_pyfile('default.cfg')
+    app.config.from_pyfile('{}.cfg'.format(app.config.get('ENV')), silent=True)
 
     if config and isinstance(config, dict):
         app.config.from_mapping(config)
@@ -69,14 +69,15 @@ def create_app(config=None):
     return app
 
 
-def create_celery(app, config_source):
+def create_celery(app):
     """
     Initializes a celery application using Flask App
     """
+    config_source = app.config["CELERY_CONFIG"]
     celery = Celery(
         app.import_name,
         include=["expertise.service.celery_tasks"],
-        config_source=config_source,
+        config_source=config_source
     )
 
     return celery
