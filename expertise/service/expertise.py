@@ -389,6 +389,8 @@ class ExpertiseService(object):
         # Assert that there should only be 1 matching job
         if len(job_subdirs) > 1:
             raise OpenReviewException('Single job not found: multiple matching jobs returned')
+        elif len(job_subdirs) == 0:
+            raise OpenReviewException('Job not found')
 
         job_dir = job_subdirs[0]
         search_dir = os.path.join(self.working_dir, job_dir)
