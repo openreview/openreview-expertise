@@ -22,9 +22,26 @@ Returns code `200` on successful job submission with: `{"job_id": "string"}`\
 Returns code `400` if there was an error in the submitted config
 
 ## `GET /expertise/status`
-This endpoint gets the status of all jobs submitted by the user, or a single job with the given `job_id`. A valid request body has the following format:
+This endpoint gets the status of a single job with the given `job_id`. A valid request body has the following format:
 ```
-{"id": "string" [Optional]}
+{"id": "string"}
+```
+
+Returns the status, if any, that were submitted by the user and has the job id:
+```
+{
+	"job_id": "string",
+	"name": "string",
+	"status": "string",
+	"description": "string",
+	"config": {...}
+}
+```
+
+## `GET /expertise/status/all`
+This endpoint gets the status of all jobs submitted by the user. A valid request body has the following format:
+```
+{}
 ```
 
 Returns a list of jobs, if any, that were submitted by the user and has the job id if provided:
@@ -35,7 +52,8 @@ Returns a list of jobs, if any, that were submitted by the user and has the job 
         "job_id": "string",
         "name": "string",
         "status": "string",
-        "description": "string"
+        "description": "string",
+        "config": {...}
       }
   ]
 }
