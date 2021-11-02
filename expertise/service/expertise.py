@@ -326,10 +326,9 @@ class ExpertiseService(object):
 
         return job_id
 
-    def get_expertise_status(self, user_id, job_id=None):
+    def get_expertise_all_status(self, user_id):
         """
         Searches the server for all jobs submitted by a user
-        If a job ID is provided, only fetch the status of this job
 
         :param user_id: The ID of the user accessing the data
         :type user_id: str
@@ -343,9 +342,6 @@ class ExpertiseService(object):
 
         job_subdirs = self._get_subdirs(user_id)
         self.logger.info(f"Searching {job_subdirs} for user {user_id}")
-        # If given an ID, only get the status of the single job
-        if job_id is not None:
-            job_subdirs = [name for name in job_subdirs if name == job_id]
 
         for job_dir in job_subdirs:
             search_dir = os.path.join(self.working_dir, job_dir)
@@ -370,6 +366,50 @@ class ExpertiseService(object):
                 }
             )
         return result
+
+    def get_expertise_status(self, user_id, job_id):
+        """
+        Searches the server for all jobs submitted by a user
+        Only fetch the status of the given job id
+
+        :param user_id: The ID of the user accessing the data
+        :type user_id: str
+
+        :param job_id: Optional ID of the specific job to look up
+        :type job_id: str
+
+        :returns: A dictionary with the key 'results' containing a list of job statuses
+        """
+
+        job_subdirs = self._get_subdirs(user_id)
+        self.logger.info(f"Searching {job_subdirs} for user {user_id}")
+        # If given an ID, only get the status of the single job
+        job_subdirs = [name for name in job_subdirs if name == job_id]
+
+        # Assert that there should only be 1 matching job
+        if len(job_subdirs) > 1:
+            raise OpenReviewException('Single job not found: multiple matching jobs returned')
+
+        job_dir = job_subdirs[0]
+        search_dir = os.path.join(self.working_dir, job_dir)
+
+        # Load the config file to fetch the job name and status
+        self.logger.info(f"Attempting to load {search_dir}/config.json")
+        with open(os.path.join(search_dir, 'config.json'), 'r') as f:
+            s = f"{''.join(f.readlines())}"
+            config = json.loads(s)
+        status = config['status']
+        description = config['description']
+        
+        # Append filtered config to the status
+        filtered_config = self._filter_config(config)
+        return {
+            'job_id': job_dir,
+            'name': config['name'],
+            'status': status,
+            'description': description,
+            'config': filtered_config
+        }
 
     def get_expertise_results(self, user_id, job_id, delete_on_get=False):
         """
