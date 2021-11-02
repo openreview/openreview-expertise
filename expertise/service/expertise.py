@@ -31,29 +31,12 @@ class JobDescription(dict, Enum):
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
     }
 
-
-def _get_default_config():
-    config = {
-        "dataset": {},
-        "model": "specter+mfr",
-        "model_params": {
-            "use_title": True,
-            "batch_size": 4,
-            "use_abstract": True,
-            "average_score": False,
-            "max_score": True,
-            "skip_specter": False,
-            "use_cuda": False
-        }
-    }
-    return config
-
-
 class ExpertiseService(object):
 
     def __init__(self, client, config, logger):
         self.client = client
         self.logger = logger
+        self.server_config = config
         self.working_dir = config['WORKING_DIR']
         self.specter_dir = config['SPECTER_DIR']
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
@@ -64,6 +47,9 @@ class ExpertiseService(object):
         self.optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
         self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+
+    def _get_default_config(self):
+        return self.server_config['DEFAULT_CONFIG']
 
     def _filter_config(self, running_config):
         """
@@ -142,7 +128,7 @@ class ExpertiseService(object):
         :raises Exception: If the request is missing a required field, contains an unexpected field or an
                            unexpected model param
         """
-        config = _get_default_config()
+        config = self._get_default_config()
 
         # Populate fields
         failed_request = False
