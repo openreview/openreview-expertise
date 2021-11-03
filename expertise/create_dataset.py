@@ -296,6 +296,10 @@ class OpenReviewExpertise(object):
         for invitation_id in invitation_ids:
             submissions.extend(list(openreview.tools.iterget_notes(
                 self.openreview_client, invitation=invitation_id)))
+        
+        if paper_id:
+            submissions.extend(list(openreview.tools.iterget_notes(
+                self.openreview_client, id=paper_id)))
 
         if paper_id:
             submissions.append(self.openreview_client.get_note(paper_id))
