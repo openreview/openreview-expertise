@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from collections import defaultdict
 import openreview
 import json
+import sys
 
 def mock_client():
     client = MagicMock(openreview.Client)
@@ -39,12 +40,18 @@ def mock_client():
 
         if offset != 0:
             return []
-
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         if invitation:
             notes=data['notes'][invitation]
             return [openreview.Note.from_json(note) for note in notes]
+        if id:
+            notes = []
+            for invitation in data['notes'].keys():
+                for note in data['notes'][invitation]:
+                    if note['id'] == id:
+                        notes.append(openreview.Note.from_json(note))
+            return notes
 
         if 'authorids' in content:
             authorid = content['authorids']
@@ -274,6 +281,24 @@ def test_get_submissions_from_invitation():
             "content": {
                 "title": "Bypass L Com Iliac Art to B Com Ilia, Perc Endo Approach",
                 "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
+            }
+        }
+    })
+
+def test_get_by_submissions_from_paper_id():
+    openreview_client = mock_client()
+    config = {
+        'paper_id': 'KHnr1r7H'
+    }
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    submissions = or_expertise.get_submissions()
+    print(submissions)
+    assert json.dumps(submissions) == json.dumps({
+        'KHnr1r7H': {
+            "id": "KHnr1r7H",
+            "content": {
+                "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
+                "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
             }
         }
     })
