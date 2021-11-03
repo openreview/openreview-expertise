@@ -56,6 +56,13 @@ def mock_client():
         if invitation:
             notes=data['notes'][invitation]
             return [openreview.Note.from_json(note) for note in notes]
+        if id:
+            notes = []
+            for invitation in data['notes'].keys():
+                for note in data['notes'][invitation]:
+                    if note['id'] == id:
+                        notes.append(openreview.Note.from_json(note))
+            return notes
 
         if 'authorids' in content:
             authorid = content['authorids']
