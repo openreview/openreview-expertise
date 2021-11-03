@@ -95,7 +95,7 @@ class TestExpertiseService():
         response = test_client.post(
             '/expertise',
             data = json.dumps({
-                    'name': 'test_run',
+                    'paper_invitation': 'ABC.cc/-/Submission',
                     'match_group': ["ABC.cc"],
                     "model": "specter+mfr",
                     "model_params": {
