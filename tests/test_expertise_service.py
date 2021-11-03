@@ -350,6 +350,82 @@ class TestExpertiseService():
         assert response['cdate'] <= response['mdate']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     
+    def test_request_journal(self, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+        # Make a request
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    'name': 'test_run',
+                    'match_group': ["ABC.cc"],
+                    'paper_id': 'KHnr1r7H',
+                    "model": "elmo",
+                    "model_params": {
+                        "use_title": False,
+                        "use_abstract": True,
+                        "average_score": True,
+                        "max_score": False
+                    }
+                }
+            ),
+            content_type='application/json'
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['job_id']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
+        assert len(response) == 1
+        assert response[0]['name'] == 'test_run'
+        assert response[0]['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
+        assert len(response) == 1
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response[0]['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
+            if response[0]['status'] == 'Error':
+                assert False, response[0]['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response[0]['status'] == 'Completed'
+        assert response[0]['name'] == 'test_run'
+        assert response[0]['description'] == 'Job is complete and the computed scores are ready'
+        
+        # Check config fields
+        returned_config = response[0]['config']
+        assert returned_config['name'] == 'test_run'
+        assert returned_config['paper_id'] == 'KHnr1r7H'
+        assert returned_config['model'] == 'elmo'
+        assert 'token' not in returned_config
+        assert 'baseurl' not in returned_config
+        assert 'user_id' not in returned_config
+        assert job_id is not None
+        openreview_context['job_id'] = job_id
+    
+    def test_get_results_by_job_id(self, openreview_context, celery_session_app, celery_session_worker):
+        test_client = openreview_context['test_client']
+        # Searches for journal results from the given job_id assuming the job has completed
+        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}"})
+        metadata = response.json['metadata']
+        assert metadata['submission_count'] == 1
+        response = response.json['results']
+        for item in response:
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            assert len(submission_id) >= 1
+            assert len(profile_id) >= 1
+            assert profile_id.startswith('~')
+            assert score >= 0 and score <= 1
+        
+        # Clean up journal request
+        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}", 'delete_on_get': True}).json['results']
+        assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
+
     def test_high_load(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         test_client = openreview_context['test_client']
