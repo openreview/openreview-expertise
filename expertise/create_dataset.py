@@ -289,11 +289,16 @@ class OpenReviewExpertise(object):
 
     def get_submissions(self):
         invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
+        paper_id = self.config.get('paper_id')
         submissions = []
 
         for invitation_id in invitation_ids:
             submissions.extend(list(openreview.tools.iterget_notes(
                 self.openreview_client, invitation=invitation_id)))
+        
+        if paper_id:
+            submissions.extend(list(openreview.tools.iterget_notes(
+                self.openreview_client, id=paper_id)))
 
         print('finding records of {} submissions'.format(len(submissions)))
         reduced_submissions = {}
@@ -346,7 +351,7 @@ class OpenReviewExpertise(object):
                         f.write(json.dumps(paper) + '\n')
 
         # if invitation ID is supplied, collect records for each submission
-        if 'paper_invitation' in self.config or 'csv_submissions' in self.config:
+        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config:
             submissions = self.get_submissions()
             with open(self.root.joinpath('submissions.json'), 'w') as f:
                 json.dump(submissions, f, indent=2)
