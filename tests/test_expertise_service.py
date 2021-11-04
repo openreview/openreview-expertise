@@ -406,7 +406,7 @@ class TestExpertiseService():
         assert job_id is not None
         openreview_context['job_id'] = job_id
     
-    def test_get_results_by_job_id(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_journal_results(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}"})
