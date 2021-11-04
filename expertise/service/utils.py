@@ -18,6 +18,14 @@ def mock_client():
     def get_token():
         return None
 
+    def get_note(id):
+        with open('tests/data/fakeData.json') as json_file:
+            data = json.load(json_file)
+        for invitation in data['notes'].keys():
+            for note in data['notes'][invitation]:
+                if note['id'] == id:
+                    return openreview.Note.from_json(note)
+
     def get_profile():
         mock_profile = {
             "id": "~Test_User1",
@@ -56,13 +64,6 @@ def mock_client():
         if invitation:
             notes=data['notes'][invitation]
             return [openreview.Note.from_json(note) for note in notes]
-        if id:
-            notes = []
-            for invitation in data['notes'].keys():
-                for note in data['notes'][invitation]:
-                    if note['id'] == id:
-                        notes.append(openreview.Note.from_json(note))
-            return notes
 
         if 'authorids' in content:
             authorid = content['authorids']
@@ -103,6 +104,7 @@ def mock_client():
         return return_value
 
     client.get_notes = MagicMock(side_effect=get_notes)
+    client.get_note = MagicMock(side_effect=get_note)
     client.get_group = MagicMock(side_effect=get_group)
     client.search_profiles = MagicMock(side_effect=search_profiles)
     client.get_profile = MagicMock(side_effect=get_profile)
