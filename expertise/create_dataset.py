@@ -8,6 +8,7 @@ and that papers have been submitted.
 from .config import ModelConfig
 
 import json, argparse, csv
+from copy import deepcopy
 from pathlib import Path
 from itertools import chain
 import openreview
@@ -298,6 +299,13 @@ class OpenReviewExpertise(object):
 
         if paper_id:
             submissions.append(self.openreview_client.get_note(paper_id))
+
+        # Bug: specter+mfr cannot handle a single submission
+        # Solution: create a copy of the note and modify the ID
+        if self.config.get('model') == 'specter+mfr' and len(submissions) == 1:
+            dummy = deepcopy(submissions[0])
+            dummy.id = 'dummy'
+            submissions.append(dummy)
 
         print('finding records of {} submissions'.format(len(submissions)))
         reduced_submissions = {}
