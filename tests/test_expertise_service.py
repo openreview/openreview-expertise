@@ -373,30 +373,28 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['job_id']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
-        assert len(response) == 1
-        assert response[0]['name'] == 'test_run'
-        assert response[0]['status'] != 'Error'
+        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
-        assert len(response) == 1
+        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response[0]['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
-            if response[0]['status'] == 'Error':
+            response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json
+            if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
-        assert response[0]['status'] == 'Completed'
-        assert response[0]['name'] == 'test_run'
-        assert response[0]['description'] == 'Job is complete and the computed scores are ready'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
         
         # Check config fields
-        returned_config = response[0]['config']
+        returned_config = response['config']
         assert returned_config['name'] == 'test_run'
         assert returned_config['paper_id'] == 'KHnr1r7H'
         assert returned_config['model'] == 'elmo'
@@ -411,7 +409,7 @@ class TestExpertiseService():
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
-        assert metadata['submission_count'] == 1
+        assert metadata['submission_count'] == 2
         response = response.json['results']
         for item in response:
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
