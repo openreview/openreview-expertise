@@ -63,6 +63,19 @@ https://www.overleaf.com/read/ygmygwtjbzfg
 
 https://www.overleaf.com/read/swqrxgqqvmyv
 
+If you plan to use SentencePiece Model, you can follow the training procedure mentioned [here](https://github.com/acl-org/reviewer-paper-matching) to train the model and pass the paths to the trained model directory. The model files directory structure expected by the expertise is as follows:
+```
+path_to_trained_model_dir/
+	scratch/
+	    abstracts.sp.20k.model
+	    abstracts.sp.20k.model.model
+	    abstracts.sp.20k.model.vocab
+	    abstracts.sp.20k.vocab
+	    similarity-model.pt
+```
+
+The `path_to_trained_model_dir` should be passed as `model_params.model_dir` in the config discussed in the Configuration section.
+
 ## Affinity Scores
 
 There are two steps to create affinity scores:
