@@ -29,7 +29,7 @@ class ExpertiseService(object):
         # Define expected/required API fields
         self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
         self.optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
-        self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'baseurl_v2', 'paper_invitation', 'paper_id']
+        self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'baseurl_v2', 'paper_invitation', 'paper_id', 'submission_group']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
     def _filter_config(self, running_config):

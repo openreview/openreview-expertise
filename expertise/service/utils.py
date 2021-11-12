@@ -7,6 +7,7 @@ import re
 from unittest.mock import MagicMock
 from enum import Enum
 
+import re
 # -----------------
 # -- Mock Client --
 # -----------------
@@ -39,16 +40,33 @@ def mock_client(version=1):
                     return openreview.Note.from_json(note)
         raise openreview.OpenReviewException({'name': 'NotFoundError', 'message': f"The Note {id} was not found", 'status': 404, 'details': {'path': 'id', 'value': id}})
 
-    def get_profile():
+    def get_profile(email_or_id = None):
         mock_profile = {
             "id": "~Test_User1",
             "content": {
-                "preferredEmail": "test_user1@mail.com",
+                "preferredEmail": "Test_User1@mail.com",
                 "emails": [
-                    "test_user1@mail.com"
+                    "Test_User1@mail.com"
                 ]
             }
         }
+        if email_or_id:
+            tildematch = re.compile('~.+')
+            if tildematch.match(email_or_id):
+                att = 'id'
+            else:
+                att = 'email'
+            with open('tests/data/fakeData.json') as json_file:
+                data = json.load(json_file)
+            profiles = data['profiles']
+            for profile in profiles:
+                profile = openreview.Profile.from_json(profile)
+                if att == 'id':
+                    if profile.id == email_or_id:
+                        return profile
+                else:
+                    if email_or_id in profile.content.get('emails'):
+                        return profile
         return openreview.Profile.from_json(mock_profile)
 
     def get_notes(id = None,
