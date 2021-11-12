@@ -300,11 +300,40 @@ class OpenReviewExpertise(object):
 
         return expertise
 
+    def get_papers_from_group(self, submission_group):
+        client = self.openreview_client
+        group_a_members = client.get_group(submission_group).members
+        pbar = tqdm(total=len(group_a_members), desc=submission_group + ' status...')
+        publications_by_profile_id = {}
+        all_papers = []
+
+        def get_status(profile_id):
+            pbar.update(1)
+            profile = openreview.tools.get_profile(client, profile_id)
+            if profile:
+                publications = list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': profile.id}))
+                return { 'profile_id': profile_id, 'papers': publications }
+        futures = []
+        with ThreadPoolExecutor(max_workers=self.config.get('max_workers')) as executor:
+            for profile_id in group_a_members:
+                futures.append(executor.submit(get_status, profile_id))
+        pbar.close()
+
+        for future in futures:
+            result = future.result()
+            publications_by_profile_id[result['profile_id']] = result['papers']
+            all_papers = all_papers + result['papers']
+        return all_papers, publications_by_profile_id
 
     def get_submissions(self):
         invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
         paper_id = self.config.get('paper_id')
+        submission_group = self.config.get('submission_group')
         submissions = []
+
+        if submission_group:
+            aggregate_papers, _ = self.get_papers_from_group(submission_group)
+            submissions.extend(aggregate_papers)
 
         for invitation_id in invitation_ids:
             # Assume invitation is valid for both APIs, but only 1
@@ -400,7 +429,7 @@ class OpenReviewExpertise(object):
                         f.write(json.dumps(paper) + '\n')
 
         # if invitation ID is supplied, collect records for each submission
-        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config:
+        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config or 'submission_group' in self.config:
             submissions = self.get_submissions()
             with open(self.root.joinpath('submissions.json'), 'w') as f:
                 json.dump(submissions, f, indent=2)
