@@ -672,10 +672,11 @@ class TestExpertiseService():
         assert metadata['submission_count'] == 7
         response = response.json['results']
         for item in response:
-            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
-            assert len(submission_id) >= 1
-            assert len(profile_id) >= 1
-            assert profile_id.startswith('~')
+            match_id, submitter_id, score = item['match_member'], item['submission_member'], float(item['score'])
+            assert len(match_id) >= 1
+            assert len(submitter_id) >= 1
+            assert match_id.startswith('~')
+            assert submitter_id.startswith('~')
             assert score >= 0 and score <= 1
         
         # Clean up journal request
