@@ -274,7 +274,6 @@ class ExpertiseService(object):
             ## TODO: change it to Job not found
             raise openreview.OpenReviewException(f"Scores not found - status: {status} | description: {description}")
         else:
-            # Search for scores files (only non-sparse scores)
             file_dir, metadata_dir = self._get_score_and_metadata_dir(search_dir)
             self.logger.info(f"Retrieving scores from {search_dir}")
             ret_list = []
