@@ -321,8 +321,17 @@ class OpenReviewExpertise(object):
 
         for future in futures:
             result = future.result()
-            publications_by_profile_id[result['profile_id']] = result['papers']
+            # Convert publications to json
+            papers_json_list = []
+            for paper_note in result['papers']:
+                papers_json_list.append(paper_note.to_json())
+            publications_by_profile_id[result['profile_id']] = papers_json_list
             all_papers = all_papers + result['papers']
+
+        # Dump publications by profile id
+        with open(self.root.joinpath('publications_by_profile_id.json'), 'w') as f:
+            json.dump(publications_by_profile_id, f, indent=2)
+        
         return all_papers, publications_by_profile_id
 
     def get_submissions(self):
