@@ -191,6 +191,54 @@ def all_jobs():
         flask.current_app.logger.error(str(error_handle))
         return flask.jsonify({'status': 'Error', 'description': 'Internal server error: {}'.format(error_handle)}), 500
 
+@BLUEPRINT.route('/expertise/delete', methods=['GET'])
+def delete_job():
+    """
+    Retrieves the config of a job to be deleted, and removes the job by deleting the job directory.
+
+    :param token: Authorization from a logged in user, which defines the set of accessible data
+    :type token: str
+
+    :param job_id: The ID of a submitted job
+    :type job_id: str
+    """
+    openreview_client = get_client()
+
+    user_id = get_user_id(openreview_client)
+
+    if not user_id:
+        flask.current_app.logger.error('No Authorization token in headers')
+        return flask.jsonify({'status': 'Error', 'description': 'Forbidden: No Authorization token in headers'}), 403
+
+    try:
+        # Parse query parameters
+        job_id = flask.request.args.get('id', None)
+        if job_id is None or len(job_id) == 0:
+            raise openreview.OpenReviewException('Bad request: id is required')
+        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).del_expertise_job(user_id, job_id)
+        flask.current_app.logger.debug('GET returns ' + str(result))
+        return flask.jsonify(result), 200
+
+    except openreview.OpenReviewException as error_handle:
+        flask.current_app.logger.error(str(error_handle))
+
+        error_type = str(error_handle)
+        status = 500
+
+        if 'not found' in error_type.lower():
+            status = 404
+        elif 'forbidden' in error_type.lower():
+            status = 403
+        elif 'bad request' in error_type.lower():
+            status = 400
+
+        return flask.jsonify({'status': 'Error', 'description': error_type}), status
+
+    # pylint:disable=broad-except
+    except Exception as error_handle:
+        flask.current_app.logger.error(str(error_handle))
+        return flask.jsonify({'status': 'Error', 'description': 'Internal server error: {}'.format(error_handle)}), 500
+
 @BLUEPRINT.route('/expertise/results', methods=['GET'])
 def results():
     """

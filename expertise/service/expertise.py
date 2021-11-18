@@ -379,7 +379,7 @@ class ExpertiseService(object):
         :param user_id: The ID of the user accessing the data
         :type user_id: str
 
-        :param job_id: Optional ID of the specific job to look up
+        :param job_id: ID of the specific job to look up
         :type job_id: str
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
@@ -484,3 +484,45 @@ class ExpertiseService(object):
             shutil.rmtree(search_dir)
 
         return result
+
+    def del_expertise_job(self, user_id, job_id):
+        """
+        Returns the filtered config of a job and deletes the job directory
+
+        :param user_id: The ID of the user accessing the data
+        :type user_id: str
+
+        :param job_id: ID of the specific job to look up
+        :type job_id: str
+
+        :returns: Filtered config of the job to be deleted
+        """
+
+        job_subdirs = self._get_subdirs(user_id)
+        self.logger.info(f"Searching {job_subdirs} for user {user_id}")
+        # If given an ID, only get the status of the single job
+        job_subdirs = [name for name in job_subdirs if name == job_id]
+
+        # Assert that there should only be 1 matching job
+        if len(job_subdirs) > 1:
+            raise OpenReviewException('Single job not found: multiple matching jobs returned')
+        elif len(job_subdirs) == 0:
+            raise OpenReviewException('Job not found')
+
+        job_dir = job_subdirs[0]
+        search_dir = os.path.join(self.working_dir, job_dir)
+
+        # Load the config file
+        self.logger.info(f"Attempting to load {search_dir}/config.json")
+        with open(os.path.join(search_dir, 'config.json'), 'r') as f:
+            s = f"{''.join(f.readlines())}"
+            config = json.loads(s)
+        
+        # Clear directory
+        self._del_from_user_index(config['user_id'], config['job_id'])
+        self.logger.info(f'Deleting {search_dir}')
+        shutil.rmtree(search_dir)
+
+        # Return filtered config
+        filtered_config = self._filter_config(config)
+        return filtered_config
