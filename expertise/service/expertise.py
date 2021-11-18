@@ -364,6 +364,8 @@ class ExpertiseService(object):
                     'name': config['name'],
                     'status': status,
                     'description': description,
+                    'cdate': config['cdate'],
+                    'mdate': config['mdate'],
                     'config': filtered_config
                 }
             )
@@ -412,6 +414,8 @@ class ExpertiseService(object):
             'name': config['name'],
             'status': status,
             'description': description,
+            'cdate': config['cdate'],
+            'mdate': config['mdate'],
             'config': filtered_config
         }
 
