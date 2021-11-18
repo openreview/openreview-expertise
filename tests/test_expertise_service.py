@@ -249,6 +249,7 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
+        assert response['cdate'] <= response['mdate']
         
         # Check config fields
         returned_config = response['config']
@@ -338,6 +339,7 @@ class TestExpertiseService():
         assert response['name'] == 'test_run'
         assert response['status'].strip() == 'Error'
         assert response['description'] == 'use_title and use_abstract cannot both be False'
+        assert response['cdate'] <= response['mdate']
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
         # Clean up error job
