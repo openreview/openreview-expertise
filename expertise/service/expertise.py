@@ -90,6 +90,7 @@ class ExpertiseService(object):
             config['model_params'][field] = root_dir
         config['job_dir'] = root_dir
         config['cdate'] = int(time.time())
+        config['mdate'] = config['cdate']
         config['status'] = JobStatus.INITIALIZED.value
         config['description'] = descriptions[JobStatus.INITIALIZED]
 
@@ -311,6 +312,7 @@ class ExpertiseService(object):
         config = self._prepare_config(request)
 
         self.logger.info(f'Config: {config}')
+        config['mdate'] = int(time.time())
         config['status'] = JobStatus.QUEUED
         config['description'] = descriptions[JobStatus.QUEUED]
 
