@@ -342,8 +342,13 @@ class TestExpertiseService():
         assert response['cdate'] <= response['mdate']
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
-        # Clean up error job
-        shutil.rmtree(f"./tests/jobs/{openreview_context['job_id']}")
+        # Clean up error job by calling the delete endpoint
+        response = test_client.get('/expertise/delete', query_string={'id': f"{openreview_context['job_id']}"}).json
+        assert response['name'] == 'test_run'
+        assert response['status'].strip() == 'Error'
+        assert response['description'] == 'use_title and use_abstract cannot both be False'
+        assert response['cdate'] <= response['mdate']
+        assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     
     def test_high_load(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
