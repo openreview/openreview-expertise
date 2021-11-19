@@ -181,8 +181,8 @@ class ExpertiseService(object):
 
         :returns: A list of subdirectories not prefixed by the given root directory
         """
-        subdirs = [name for name in os.listdir(self.working_dir) if os.path.isdir(os.path.join(self.working_dir, name))]
         if user_id.lower() in SUPERUSER_IDS:
+            subdirs = [name for name in os.listdir(self.working_dir) if os.path.isdir(os.path.join(self.working_dir, name))]
             return subdirs
         else:
             # If given a profile ID, assume looking for job dirs that contain a config with the
@@ -243,9 +243,9 @@ class ExpertiseService(object):
             else:
                 index[user_id].append(job_id)
         
-        # Write out the index
-        with open(os.path.join(self.working_dir, 'index.json'), 'w+') as f:
-            json.dump(index, f, ensure_ascii=False, indent=4)
+            # Write out the index
+            with open(os.path.join(self.working_dir, 'index.json'), 'w+') as f:
+                json.dump(index, f, ensure_ascii=False, indent=4)
     
     def _get_from_user_index(self, user_id):
         """
@@ -299,9 +299,9 @@ class ExpertiseService(object):
             else:
                 raise OpenReviewException('User not found: no jobs submitted with this user ID')
         
-        # Write out the index
-        with open(os.path.join(self.working_dir, 'index.json'), 'w+') as f:
-            json.dump(index, f, ensure_ascii=False, indent=4)
+            # Write out the index
+            with open(os.path.join(self.working_dir, 'index.json'), 'w+') as f:
+                json.dump(index, f, ensure_ascii=False, indent=4)
 
     def start_expertise(self, request):
         descriptions = JobDescription.VALS.value
