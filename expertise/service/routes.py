@@ -29,6 +29,37 @@ def get_client():
         baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
     )
 
+def format_error(status_code, description):
+    '''
+    Formulates an error that is in the same format as the OpenReview API errors
+
+    :param status_code: The status code determined by looking at the description
+    :type status_code: int
+
+    :param description: Useful information about the error
+    :type description: str
+
+    :returns template: A dictionary that zips all the information into a proper format
+    '''
+    # Parse status code
+    error_name = ''
+    if status_code == 400:
+        error_name = 'BadRequestError'
+    elif status_code == 403:
+        error_name = 'ForbiddenError'
+    elif status_code == 404:
+        error_name = 'NotFoundError'
+    elif status_code == 500:
+        error_name = 'InternalServerError'
+
+    template = {
+        'name': error_name,
+        'message': description,
+        'status': status_code
+    }
+
+    return template
+
 @BLUEPRINT.route('/expertise/test')
 def test():
     """Test endpoint."""
@@ -58,7 +89,7 @@ def expertise():
     user_id = get_user_id(openreview_client)
     if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify({'status': 'Error', 'description': 'Forbidden: No Authorization token in headers'}), 403
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
     try:
         flask.current_app.logger.info('Received expertise request')
@@ -90,12 +121,12 @@ def expertise():
         elif 'bad request' in error_type.lower():
             status = 400
 
-        return flask.jsonify({'status': 'Error', 'description': error_type}), status
+        return flask.jsonify(format_error(status, error_type)), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
-        return flask.jsonify({'status': 'Error', 'description': 'Internal server error: {}'.format(error_handle)}), 500
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 
 @BLUEPRINT.route('/expertise/status', methods=['GET'])
@@ -115,7 +146,7 @@ def jobs():
 
     if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify({'status': 'Error', 'description': 'Forbidden: No Authorization token in headers'}), 403
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
     try:
         # Parse query parameters
@@ -139,12 +170,12 @@ def jobs():
         elif 'bad request' in error_type.lower():
             status = 400
 
-        return flask.jsonify({'status': 'Error', 'description': error_type}), status
+        return flask.jsonify(format_error(status, error_type)), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
-        return flask.jsonify({'status': 'Error', 'description': 'Internal server error: {}'.format(error_handle)}), 500
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/status/all', methods=['GET'])
 def all_jobs():
@@ -163,7 +194,7 @@ def all_jobs():
 
     if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify({'status': 'Error', 'description': 'Forbidden: No Authorization token in headers'}), 403
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
     try:
         # Parse query parameters
@@ -184,12 +215,12 @@ def all_jobs():
         elif 'bad request' in error_type.lower():
             status = 400
 
-        return flask.jsonify({'status': 'Error', 'description': error_type}), status
+        return flask.jsonify(format_error(status, error_type)), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
-        return flask.jsonify({'status': 'Error', 'description': 'Internal server error: {}'.format(error_handle)}), 500
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/delete', methods=['GET'])
 def delete_job():
@@ -208,7 +239,7 @@ def delete_job():
 
     if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify({'status': 'Error', 'description': 'Forbidden: No Authorization token in headers'}), 403
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
     try:
         # Parse query parameters
@@ -232,12 +263,12 @@ def delete_job():
         elif 'bad request' in error_type.lower():
             status = 400
 
-        return flask.jsonify({'status': 'Error', 'description': error_type}), status
+        return flask.jsonify(format_error(status, error_type)), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
-        return flask.jsonify({'status': 'Error', 'description': 'Internal server error: {}'.format(error_handle)}), 500
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/results', methods=['GET'])
 def results():
@@ -260,7 +291,7 @@ def results():
 
     if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify({'status': 'Error', 'description': 'Forbidden: No Authorization token in headers'}), 403
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
     try:
         # Parse query parameters
@@ -287,9 +318,9 @@ def results():
         elif 'bad request' in error_type.lower():
             status = 400
 
-        return flask.jsonify({'status': 'Error', 'description': error_type}), status
+        return flask.jsonify(format_error(status, error_type)), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
-        return flask.jsonify({'status': 'Error', 'description': 'Internal server error: {}'.format(error_handle)}), 500
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500

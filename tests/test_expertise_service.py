@@ -85,9 +85,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert response.json['status'] == 'Error'
-        assert 'bad request' in response.json['description'].lower()
-        assert response.json['description'] == 'Bad request: missing required field: name match_group paper_invitation'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: missing required field: name match_group paper_invitation'
 
     def test_request_expertise_with_missing_required_fields(self, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field
@@ -109,9 +109,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert response.json['status'] == 'Error'
-        assert 'bad request' in response.json['description'].lower()
-        assert response.json['description'] == 'Bad request: missing required field: paper_invitation'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: missing required field: paper_invitation'
 
     def test_request_expertise_with_invalid_field(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra field that is not allowed
@@ -135,9 +135,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert response.json['status'] == 'Error'
-        assert 'bad request' in response.json['description'].lower()
-        assert response.json['description'] == 'Bad request: unexpected field: unexpected_field'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: unexpected field: unexpected_field'
 
     def test_request_expertise_with_invalid_and_missing_required_field(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra field that is not allowed
@@ -160,9 +160,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert response.json['status'] == 'Error'
-        assert 'bad request' in response.json['description'].lower()
-        assert response.json['description'] == 'Bad request: missing required field: name\nunexpected field: unexpected_field'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: missing required field: name\nunexpected field: unexpected_field'
 
     def test_request_expertise_with_invalid_model_param(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra model param field
@@ -186,9 +186,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert response.json['status'] == 'Error'
-        assert 'bad request' in response.json['description'].lower()
-        assert response.json['description'] == 'Bad request: unexpected model param: dummy_param'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: unexpected model param: dummy_param'
 
     def test_request_expertise_with_valid_parameters(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
