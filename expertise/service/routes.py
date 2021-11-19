@@ -286,7 +286,7 @@ def delete_job():
 
     if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify({'status': 'Error', 'description': 'Forbidden: No Authorization token in headers'}), 403
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
     try:
         # Parse query parameters
@@ -310,12 +310,12 @@ def delete_job():
         elif 'bad request' in error_type.lower():
             status = 400
 
-        return flask.jsonify({'status': 'Error', 'description': error_type}), status
+        return flask.jsonify(format_error(status, error_type)), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
-        return flask.jsonify({'status': 'Error', 'description': 'Internal server error: {}'.format(error_handle)}), 500
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/results', methods=['GET'])
 def results():
