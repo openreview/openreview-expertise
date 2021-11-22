@@ -332,7 +332,7 @@ class OpenReviewExpertise(object):
         with open(self.root.joinpath('publications_by_profile_id.json'), 'w') as f:
             json.dump(publications_by_profile_id, f, indent=2)
         
-        return all_papers, publications_by_profile_id
+        return all_papers
 
     def get_submissions(self):
         invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
@@ -341,7 +341,7 @@ class OpenReviewExpertise(object):
         submissions = []
 
         if submission_group:
-            aggregate_papers, _ = self.get_papers_from_group(submission_group)
+            aggregate_papers = self.get_papers_from_group(submission_group)
             submissions.extend(aggregate_papers)
 
         for invitation_id in invitation_ids:

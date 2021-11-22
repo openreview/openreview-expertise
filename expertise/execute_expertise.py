@@ -3,7 +3,6 @@ import openreview, os, json, csv
 from .create_dataset import OpenReviewExpertise
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
-from expertise import dataset
 
 # Move run.py functionality to a function that accepts a config dict
 def execute_expertise(config):
