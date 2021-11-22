@@ -132,9 +132,8 @@ def test_convert_to_list():
 def test_get_papers_from_group():
     openreview_client = mock_client()
     or_expertise = OpenReviewExpertise(openreview_client, {})
-    all_papers, publications_by_profile_id = or_expertise.get_papers_from_group('ABC.cc')
+    all_papers = or_expertise.get_papers_from_group('ABC.cc')
     assert len(all_papers) == 148
-    assert len(publications_by_profile_id.keys()) == 100
 
 def test_get_profile_ids():
     openreview_client = mock_client()
