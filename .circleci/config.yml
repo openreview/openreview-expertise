@@ -42,9 +42,8 @@ jobs:
             python setup.py install
             conda install -y filelock
             cd ..
-            wget https://drive.google.com/file/d/1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s/view?usp=sharing
-            tar -xzvf multifacet_recommender_data.tar.gz
-            mv ~/expertise-utils/multifacet_recommender_data ~/expertise-utils/multifacet_recommender
+            wget --load-cookies /tmp/cookies.txt "https://drive.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://drive.google.com/uc?export=download&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s" -O multifacet_recommender.tar.gz && rm -rf /tmp/cookies.txt
+            tar -xzvf multifacet_recommender.tar.gz
             cd ~/openreview-expertise
             pip install -e .
             conda install intel-openmp==2019.4
