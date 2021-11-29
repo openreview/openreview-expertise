@@ -30,6 +30,20 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             python --version
+            mkdir ~/expertise-utils
+            cd ~/expertise-utils
+            git clone https://github.com/allenai/specter.git
+            cd specter
+            wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
+            tar -xzvf archive.tar.gz
+            conda install pytorch cudatoolkit=10.1 -c pytorch 
+            pip install -r requirements.txt
+            python setup.py install
+            conda install filelock
+            cd ..
+            wget https://drive.google.com/file/d/1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s/view?usp=sharing
+            tar -xzvf multifacet_recommender_data.tar.gz
+            mv ~/expertise-utils/multifacet_recommender_data ~/expertise-utils/multifacet_recommender
             cd ~/openreview-expertise
             pip install -e .
             conda install intel-openmp==2019.4
