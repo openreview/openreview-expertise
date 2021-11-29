@@ -44,7 +44,7 @@ jobs:
             cd ..
             wget --load-cookies /tmp/cookies.txt "https://drive.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://drive.google.com/uc?export=download&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s" -O mfr.tar.gz && rm -rf /tmp/cookies.txt
             tar -xzvf mfr.tar.gz
-            mv -r ./mfr/multifacet_recommender_data .
+            mv ./mfr/multifacet_recommender_data .
             mv ./multifacet_recommender_data ./multifacet_recommender
             cd ~/openreview-expertise
             pip install -e .
