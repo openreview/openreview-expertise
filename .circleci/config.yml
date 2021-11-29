@@ -46,7 +46,7 @@ jobs:
             tar -xzvf multifacet_recommender.tar.gz
             cd ~/openreview-expertise
             pip install -e .
-            conda install intel-openmp==2019.4
+            conda install -y intel-openmp==2019.4
             conda install -y faiss-cpu -c pytorch
       - run:
           name: Run tests
