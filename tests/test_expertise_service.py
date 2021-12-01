@@ -97,7 +97,7 @@ class TestExpertiseService():
             data = json.dumps({
                     'name': 'test_run',
                     'match_group': ["ABC.cc"],
-                    "model": "elmo",
+                    "model": "specter+mfr",
                     "model_params": {
                         "use_title": False,
                         "use_abstract": True,
@@ -123,7 +123,7 @@ class TestExpertiseService():
                     'match_group': ["ABC.cc"],
                     'paper_invitation': 'ABC.cc/-/Submission',
                     'unexpected_field': 'ABC.cc/-/Submission',
-                    "model": "elmo",
+                    "model": "specter+mfr",
                     "model_params": {
                         "use_title": False,
                         "use_abstract": True,
@@ -148,7 +148,7 @@ class TestExpertiseService():
                     'match_group': ["ABC.cc"],
                     'paper_invitation': 'ABC.cc/-/Submission',
                     'unexpected_field': 'ABC.cc/-/Submission',
-                    "model": "elmo",
+                    "model": "specter+mfr",
                     "model_params": {
                         "use_title": False,
                         "use_abstract": True,
@@ -173,7 +173,7 @@ class TestExpertiseService():
                     'name': 'test_run',
                     'match_group': ["ABC.cc"],
                     'paper_invitation': 'ABC.cc/-/Submission',
-                    "model": "elmo",
+                    "model": "specter+mfr",
                     "model_params": {
                         'dummy_param': '64',
                         "use_title": False,
@@ -201,7 +201,7 @@ class TestExpertiseService():
                     'name': 'test_run',
                     'match_group': ["ABC.cc"],
                     'paper_invitation': 'ABC.cc/-/Submission',
-                    "model": "elmo",
+                    "model": "specter+mfr",
                     "model_params": {
                         "use_title": False,
                         "use_abstract": True,
@@ -255,7 +255,7 @@ class TestExpertiseService():
         returned_config = response['config']
         assert returned_config['name'] == 'test_run'
         assert returned_config['paper_invitation'] == 'ABC.cc/-/Submission'
-        assert returned_config['model'] == 'elmo'
+        assert returned_config['model'] == 'specter+mfr'
         assert 'token' not in returned_config
         assert 'baseurl' not in returned_config
         assert 'user_id' not in returned_config
@@ -302,12 +302,12 @@ class TestExpertiseService():
                     'name': 'test_run',
                     'paper_invitation': 'ABC.cc/-/Submission',
                     'match_group': ["ABC.cc"],
-                    "model": "elmo",
+                    "model": "specter+mfr",
                     "model_params": {
                         "use_title": False,
                         "use_abstract": False,
-                        "average_score": None,
-                        "max_score": None
+                        "average_score": False,
+                        "max_score": False
                     }
                 }
             ),
@@ -330,7 +330,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/status', query_string={'id': f"{openreview_context['job_id']}"}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response['status'] == 'Processing' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', query_string={'id': f"{openreview_context['job_id']}"}).json
             try_time = time.time() - start_time
@@ -338,7 +338,7 @@ class TestExpertiseService():
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['name'] == 'test_run'
         assert response['status'].strip() == 'Error'
-        assert response['description'] == 'use_title and use_abstract cannot both be False'
+        assert response['description'] == '(Only) One of max_score or average_score must be True'
         assert response['cdate'] <= response['mdate']
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
@@ -346,7 +346,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/delete', query_string={'id': f"{openreview_context['job_id']}"}).json
         assert response['name'] == 'test_run'
         assert response['status'].strip() == 'Error'
-        assert response['description'] == 'use_title and use_abstract cannot both be False'
+        assert response['description'] == '(Only) One of max_score or average_score must be True'
         assert response['cdate'] <= response['mdate']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     
@@ -363,7 +363,7 @@ class TestExpertiseService():
                         'name': 'test_run',
                         'match_group': ["ABC.cc"],
                         'paper_invitation': 'ABC.cc/-/Submission',
-                        "model": "elmo",
+                        "model": "specter+mfr",
                         "model_params": {
                             "use_title": False,
                             "use_abstract": True,
