@@ -26,40 +26,6 @@ def create_elmo():
         return elmoModel
     return simple_elmo
 
-def test_elmo_scores(tmp_path, create_elmo):
-    config = {
-        'name': 'test_elmo',
-        'model_params': {
-            'use_title': False,
-            'use_abstract': True,
-            'use_cuda': False,
-            'batch_size': 1,
-            'average_score': True,
-            'max_score': False,
-            'knn': None,
-            'normalize': False,
-            'skip_elmo': False
-        }
-    }
-
-    elmoModel = create_elmo(config)
-
-    if not config['model_params'].get('skip_elmo', False):
-        publications_path = tmp_path / 'publications'
-        publications_path.mkdir()
-        submissions_path = tmp_path / 'submissions'
-        submissions_path.mkdir()
-        elmoModel.embed_publications(publications_path=publications_path.joinpath('pub2vec.pkl'))
-        elmoModel.embed_submissions(submissions_path=submissions_path.joinpath('sub2vec.pkl'))
-
-    scores_path = tmp_path / 'scores'
-    scores_path.mkdir()
-    all_scores = elmoModel.all_scores(
-        publications_path=publications_path.joinpath('pub2vec.pkl'),
-        submissions_path=submissions_path.joinpath('sub2vec.pkl'),
-        scores_path=scores_path.joinpath(config['name'] + '.csv')
-    )
-
 def test_normalize_scores(create_elmo):
     config = {
         'name': 'test_elmo',
@@ -139,45 +105,3 @@ def test_duplicate_detection(tmp_path):
     for sub_1, sub_2, score in duplicates:
         if score > 0.99:
             assert sub_1 == 'duplicate' or sub_2 == 'duplicate'
-
-def test_sparse_scores(tmp_path, create_elmo):
-    config = {
-        'name': 'test_elmo',
-        'model_params': {
-            'use_title': False,
-            'use_abstract': True,
-            'use_cuda': False,
-            'batch_size': 1,
-            'average_score': True,
-            'max_score': False,
-            'knn': None,
-            'normalize': False,
-            'skip_elmo': False,
-            'sparse_value': 1
-        }
-    }
-
-    elmoModel = create_elmo(config)
-
-    if not config['model_params'].get('skip_elmo', False):
-        publications_path = tmp_path / 'publications'
-        publications_path.mkdir()
-        submissions_path = tmp_path / 'submissions'
-        submissions_path.mkdir()
-        elmoModel.embed_publications(publications_path=publications_path.joinpath('pub2vec.pkl'))
-        elmoModel.embed_submissions(submissions_path=submissions_path.joinpath('sub2vec.pkl'))
-
-    scores_path = tmp_path / 'scores'
-    scores_path.mkdir()
-    all_scores = elmoModel.all_scores(
-        publications_path=publications_path.joinpath('pub2vec.pkl'),
-        submissions_path=submissions_path.joinpath('sub2vec.pkl'),
-        scores_path=scores_path.joinpath(config['name'] + '.csv')
-    )
-
-    if config['model_params'].get('sparse_value'):
-        all_scores = elmoModel.sparse_scores(
-            scores_path=scores_path.joinpath(config['name'] + '_sparse.csv')
-        )
-
-    assert len(all_scores) == 8
