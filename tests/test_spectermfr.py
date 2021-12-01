@@ -67,3 +67,45 @@ def test_smfr_scores(tmp_path, create_smfr):
         mfr_submissions_path=None,
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
+
+def test_sparse_scores(tmp_path, create_smfr):
+    config = {
+        'name': 'test_spectermfr',
+        'model_params': {
+            'use_title': False,
+            'use_abstract': True,
+            'use_cuda': False,
+            'batch_size': 1,
+            'average_score': True,
+            'max_score': False,
+            'work_dir': tmp_path,
+            'sparse_value': 1
+        }
+    }
+    smfrModel = create_smfr(config)
+
+    publications_path = tmp_path / 'publications'
+    publications_path.mkdir()
+    submissions_path = tmp_path / 'submissions'
+    submissions_path.mkdir()
+    smfrModel.embed_publications(publications_path.joinpath('pub2vec.jsonl'),
+            mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+    smfrModel.embed_submissions(submissions_path.joinpath('sub2vec.jsonl'),
+            mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+
+    scores_path = tmp_path / 'scores'
+    scores_path.mkdir()
+    all_scores = smfrModel.all_scores(
+        specter_publications_path=publications_path.joinpath('pub2vec.jsonl'),
+        mfr_publications_path=None,
+        specter_submissions_path=submissions_path.joinpath('sub2vec.jsonl'),
+        mfr_submissions_path=None,
+        scores_path=scores_path.joinpath(config['name'] + '.csv')
+    )
+
+    if config['model_params'].get('sparse_value'):
+        all_scores = smfrModel.sparse_scores(
+            scores_path=scores_path.joinpath(config['name'] + '_sparse.csv')
+        )
+
+    assert len(all_scores) == 8
