@@ -55,7 +55,6 @@ def format_error(status_code, description):
     template = {
         'name': error_name,
         'message': description,
-        'status': status_code
     }
 
     return template
