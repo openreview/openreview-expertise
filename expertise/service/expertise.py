@@ -31,29 +31,12 @@ class JobDescription(dict, Enum):
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
     }
 
-
-def _get_default_config():
-    config = {
-        "dataset": {},
-        "model": "specter+mfr",
-        "model_params": {
-            "use_title": True,
-            "batch_size": 4,
-            "use_abstract": True,
-            "average_score": False,
-            "max_score": True,
-            "skip_specter": False,
-            "use_cuda": False
-        }
-    }
-    return config
-
-
 class ExpertiseService(object):
 
     def __init__(self, client, config, logger):
         self.client = client
         self.logger = logger
+        self.server_config = config
         self.working_dir = config['WORKING_DIR']
         self.specter_dir = config['SPECTER_DIR']
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
@@ -64,6 +47,9 @@ class ExpertiseService(object):
         self.optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
         self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+
+    def _get_default_config(self):
+        return self.server_config['DEFAULT_CONFIG']
 
     def _filter_config(self, running_config):
         """
@@ -103,7 +89,8 @@ class ExpertiseService(object):
         for field in self.path_fields:
             config['model_params'][field] = root_dir
         config['job_dir'] = root_dir
-        config['cdate'] = int(time.time())
+        config['cdate'] = int(time.time() * 1000)
+        config['mdate'] = config['cdate']
         config['status'] = JobStatus.INITIALIZED.value
         config['description'] = descriptions[JobStatus.INITIALIZED]
 
@@ -142,7 +129,7 @@ class ExpertiseService(object):
         :raises Exception: If the request is missing a required field, contains an unexpected field or an
                            unexpected model param
         """
-        config = _get_default_config()
+        config = self._get_default_config()
 
         # Populate fields
         failed_request = False
@@ -194,8 +181,8 @@ class ExpertiseService(object):
 
         :returns: A list of subdirectories not prefixed by the given root directory
         """
-        subdirs = [name for name in os.listdir(self.working_dir) if os.path.isdir(os.path.join(self.working_dir, name))]
         if user_id.lower() in SUPERUSER_IDS:
+            subdirs = [name for name in os.listdir(self.working_dir) if os.path.isdir(os.path.join(self.working_dir, name))]
             return subdirs
         else:
             # If given a profile ID, assume looking for job dirs that contain a config with the
@@ -256,9 +243,9 @@ class ExpertiseService(object):
             else:
                 index[user_id].append(job_id)
         
-        # Write out the index
-        with open(os.path.join(self.working_dir, 'index.json'), 'w+') as f:
-            json.dump(index, f, ensure_ascii=False, indent=4)
+            # Write out the index
+            with open(os.path.join(self.working_dir, 'index.json'), 'w+') as f:
+                json.dump(index, f, ensure_ascii=False, indent=4)
     
     def _get_from_user_index(self, user_id):
         """
@@ -312,9 +299,9 @@ class ExpertiseService(object):
             else:
                 raise OpenReviewException('User not found: no jobs submitted with this user ID')
         
-        # Write out the index
-        with open(os.path.join(self.working_dir, 'index.json'), 'w+') as f:
-            json.dump(index, f, ensure_ascii=False, indent=4)
+            # Write out the index
+            with open(os.path.join(self.working_dir, 'index.json'), 'w+') as f:
+                json.dump(index, f, ensure_ascii=False, indent=4)
 
     def start_expertise(self, request):
         descriptions = JobDescription.VALS.value
@@ -325,6 +312,7 @@ class ExpertiseService(object):
         config = self._prepare_config(request)
 
         self.logger.info(f'Config: {config}')
+        config['mdate'] = int(time.time() * 1000)
         config['status'] = JobStatus.QUEUED
         config['description'] = descriptions[JobStatus.QUEUED]
 
@@ -340,10 +328,9 @@ class ExpertiseService(object):
 
         return job_id
 
-    def get_expertise_status(self, user_id, job_id=None):
+    def get_expertise_all_status(self, user_id):
         """
         Searches the server for all jobs submitted by a user
-        If a job ID is provided, only fetch the status of this job
 
         :param user_id: The ID of the user accessing the data
         :type user_id: str
@@ -357,9 +344,6 @@ class ExpertiseService(object):
 
         job_subdirs = self._get_subdirs(user_id)
         self.logger.info(f"Searching {job_subdirs} for user {user_id}")
-        # If given an ID, only get the status of the single job
-        if job_id is not None:
-            job_subdirs = [name for name in job_subdirs if name == job_id]
 
         for job_dir in job_subdirs:
             search_dir = os.path.join(self.working_dir, job_dir)
@@ -380,10 +364,60 @@ class ExpertiseService(object):
                     'name': config['name'],
                     'status': status,
                     'description': description,
+                    'cdate': config['cdate'],
+                    'mdate': config['mdate'],
                     'config': filtered_config
                 }
             )
         return result
+
+    def get_expertise_status(self, user_id, job_id):
+        """
+        Searches the server for all jobs submitted by a user
+        Only fetch the status of the given job id
+
+        :param user_id: The ID of the user accessing the data
+        :type user_id: str
+
+        :param job_id: ID of the specific job to look up
+        :type job_id: str
+
+        :returns: A dictionary with the key 'results' containing a list of job statuses
+        """
+
+        job_subdirs = self._get_subdirs(user_id)
+        self.logger.info(f"Searching {job_subdirs} for user {user_id}")
+        # If given an ID, only get the status of the single job
+        job_subdirs = [name for name in job_subdirs if name == job_id]
+
+        # Assert that there should only be 1 matching job
+        if len(job_subdirs) > 1:
+            raise OpenReviewException('Single job not found: multiple matching jobs returned')
+        elif len(job_subdirs) == 0:
+            raise OpenReviewException('Job not found')
+
+        job_dir = job_subdirs[0]
+        search_dir = os.path.join(self.working_dir, job_dir)
+
+        # Load the config file to fetch the job name and status
+        self.logger.info(f"Attempting to load {search_dir}/config.json")
+        with open(os.path.join(search_dir, 'config.json'), 'r') as f:
+            s = f"{''.join(f.readlines())}"
+            config = json.loads(s)
+        status = config['status']
+        description = config['description']
+        
+        # Append filtered config to the status
+        filtered_config = self._filter_config(config)
+        return {
+            'job_id': job_dir,
+            'name': config['name'],
+            'status': status,
+            'description': description,
+            'cdate': config['cdate'],
+            'mdate': config['mdate'],
+            'config': filtered_config
+        }
 
     def get_expertise_results(self, user_id, job_id, delete_on_get=False):
         """
@@ -450,3 +484,45 @@ class ExpertiseService(object):
             shutil.rmtree(search_dir)
 
         return result
+
+    def del_expertise_job(self, user_id, job_id):
+        """
+        Returns the filtered config of a job and deletes the job directory
+
+        :param user_id: The ID of the user accessing the data
+        :type user_id: str
+
+        :param job_id: ID of the specific job to look up
+        :type job_id: str
+
+        :returns: Filtered config of the job to be deleted
+        """
+
+        job_subdirs = self._get_subdirs(user_id)
+        self.logger.info(f"Searching {job_subdirs} for user {user_id}")
+        # If given an ID, only get the status of the single job
+        job_subdirs = [name for name in job_subdirs if name == job_id]
+
+        # Assert that there should only be 1 matching job
+        if len(job_subdirs) > 1:
+            raise OpenReviewException('Single job not found: multiple matching jobs returned')
+        elif len(job_subdirs) == 0:
+            raise OpenReviewException('Job not found')
+
+        job_dir = job_subdirs[0]
+        search_dir = os.path.join(self.working_dir, job_dir)
+
+        # Load the config file
+        self.logger.info(f"Attempting to load {search_dir}/config.json")
+        with open(os.path.join(search_dir, 'config.json'), 'r') as f:
+            s = f"{''.join(f.readlines())}"
+            config = json.loads(s)
+        
+        # Clear directory
+        self._del_from_user_index(config['user_id'], config['job_id'])
+        self.logger.info(f'Deleting {search_dir}')
+        shutil.rmtree(search_dir)
+
+        # Return filtered config
+        filtered_config = self._filter_config(config)
+        return filtered_config

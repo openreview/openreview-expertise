@@ -85,8 +85,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert 'bad request' in response.json['error'].lower()
-        assert response.json['error'] == 'Bad request: missing required field: name match_group paper_invitation'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: missing required field: name match_group paper_invitation'
 
     def test_request_expertise_with_missing_required_fields(self, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field
@@ -108,8 +109,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert 'bad request' in response.json['error'].lower()
-        assert response.json['error'] == 'Bad request: missing required field: paper_invitation'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: missing required field: paper_invitation'
 
     def test_request_expertise_with_invalid_field(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra field that is not allowed
@@ -133,8 +135,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert 'bad request' in response.json['error'].lower()
-        assert response.json['error'] == 'Bad request: unexpected field: unexpected_field'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: unexpected field: unexpected_field'
 
     def test_request_expertise_with_invalid_and_missing_required_field(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra field that is not allowed
@@ -157,8 +160,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert 'bad request' in response.json['error'].lower()
-        assert response.json['error'] == 'Bad request: missing required field: name\nunexpected field: unexpected_field'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: missing required field: name\nunexpected field: unexpected_field'
 
     def test_request_expertise_with_invalid_model_param(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra model param field
@@ -182,8 +186,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert 'bad request' in response.json['error'].lower()
-        assert response.json['error'] == 'Bad request: unexpected model param: dummy_param'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: unexpected model param: dummy_param'
 
     def test_request_expertise_with_valid_parameters(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
@@ -210,10 +215,9 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['job_id']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
-        assert len(response) == 1
-        assert response[0]['name'] == 'test_run'
-        assert response[0]['status'] != 'Error'
+        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
         # assert response[0]['description'] == 'Server received config and allocated space'
 
         # # Attempt getting results of an incomplete job
@@ -231,24 +235,24 @@ class TestExpertiseService():
         # assert response[0]['description'] == 'Server received config and allocated space'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
-        assert len(response) == 1
+        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response[0]['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
-            if response[0]['status'] == 'Error':
-                assert False, response[0]['description']
+            response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
-        assert response[0]['status'] == 'Completed'
-        assert response[0]['name'] == 'test_run'
-        assert response[0]['description'] == 'Job is complete and the computed scores are ready'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+        assert response['cdate'] <= response['mdate']
         
         # Check config fields
-        returned_config = response[0]['config']
+        returned_config = response['config']
         assert returned_config['name'] == 'test_run'
         assert returned_config['paper_invitation'] == 'ABC.cc/-/Submission'
         assert returned_config['model'] == 'elmo'
@@ -323,23 +327,28 @@ class TestExpertiseService():
         response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}"})
         assert response.status_code == 404
 
-        response = test_client.get('/expertise/status', query_string={'id': f"{openreview_context['job_id']}"}).json['results']
-        assert len(response) == 1
+        response = test_client.get('/expertise/status', query_string={'id': f"{openreview_context['job_id']}"}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response[0]['status'] == 'Processing' and try_time <= MAX_TIMEOUT:
+        while response['status'] == 'Processing' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'id': f"{openreview_context['job_id']}"}).json['results']
+            response = test_client.get('/expertise/status', query_string={'id': f"{openreview_context['job_id']}"}).json
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
-        assert response[0]['name'] == 'test_run'
-        assert response[0]['status'].strip() == 'Error'
-        assert response[0]['description'] == 'use_title and use_abstract cannot both be False'
+        assert response['name'] == 'test_run'
+        assert response['status'].strip() == 'Error'
+        assert response['description'] == 'use_title and use_abstract cannot both be False'
+        assert response['cdate'] <= response['mdate']
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
-        # Clean up error job
-        shutil.rmtree(f"./tests/jobs/{openreview_context['job_id']}")
+        # Clean up error job by calling the delete endpoint
+        response = test_client.get('/expertise/delete', query_string={'id': f"{openreview_context['job_id']}"}).json
+        assert response['name'] == 'test_run'
+        assert response['status'].strip() == 'Error'
+        assert response['description'] == 'use_title and use_abstract cannot both be False'
+        assert response['cdate'] <= response['mdate']
+        assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     
     def test_high_load(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
@@ -369,10 +378,9 @@ class TestExpertiseService():
             job_id = response.json['job_id']
             id_list.append(job_id)
             time.sleep(2)
-            response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json['results']
-            assert len(response) == 1
-            assert response[0]['name'] == 'test_run'
-            assert response[0]['status'] != 'Error'
+            response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json
+            assert response['name'] == 'test_run'
+            assert response['status'] != 'Error'
 
         assert id_list is not None
         openreview_context['job_id'] = id_list
@@ -386,29 +394,28 @@ class TestExpertiseService():
         last_job_id = id_list[num_requests - 1]
 
         # Assert that the last request completes
-        response = test_client.get('/expertise/status', query_string={'id': f'{last_job_id}'}).json['results']
-        assert len(response) == 1
+        response = test_client.get('/expertise/status', query_string={'id': f'{last_job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response[0]['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'id': f'{last_job_id}'}).json['results']
-            if response[0]['status'] == 'Error':
-                assert False, response[0]['description']
+            response = test_client.get('/expertise/status', query_string={'id': f'{last_job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
-        assert response[0]['status'] == 'Completed'
-        assert response[0]['name'] == 'test_run'
-        assert response[0]['description'] == 'Job is complete and the computed scores are ready'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
 
         # Now fetch and empty out all previous jobs
         for id in id_list:
             # Assert that they are complete
-            response = test_client.get('/expertise/status', query_string={'id': f'{id}'}).json['results']
-            assert response[0]['status'] == 'Completed'
-            assert response[0]['name'] == 'test_run'
-            assert response[0]['description'] == 'Job is complete and the computed scores are ready'
+            response = test_client.get('/expertise/status', query_string={'id': f'{id}'}).json
+            assert response['status'] == 'Completed'
+            assert response['name'] == 'test_run'
+            assert response['description'] == 'Job is complete and the computed scores are ready'
 
             response = test_client.get('/expertise/results', query_string={'id': f"{id}", 'delete_on_get': True})
             metadata = response.json['metadata']

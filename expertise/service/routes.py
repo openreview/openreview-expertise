@@ -29,6 +29,36 @@ def get_client():
         baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
     )
 
+def format_error(status_code, description):
+    '''
+    Formulates an error that is in the same format as the OpenReview API errors
+
+    :param status_code: The status code determined by looking at the description
+    :type status_code: int
+
+    :param description: Useful information about the error
+    :type description: str
+
+    :returns template: A dictionary that zips all the information into a proper format
+    '''
+    # Parse status code
+    error_name = ''
+    if status_code == 400:
+        error_name = 'BadRequestError'
+    elif status_code == 403:
+        error_name = 'ForbiddenError'
+    elif status_code == 404:
+        error_name = 'NotFoundError'
+    elif status_code == 500:
+        error_name = 'InternalServerError'
+
+    template = {
+        'name': error_name,
+        'message': description,
+    }
+
+    return template
+
 @BLUEPRINT.route('/expertise/test')
 def test():
     """Test endpoint."""
@@ -58,7 +88,7 @@ def expertise():
     user_id = get_user_id(openreview_client)
     if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify({ 'error': 'Forbidden: No Authorization token in headers'}), 403
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
     try:
         flask.current_app.logger.info('Received expertise request')
@@ -90,12 +120,12 @@ def expertise():
         elif 'bad request' in error_type.lower():
             status = 400
 
-        return flask.jsonify({'error': error_type}), status
+        return flask.jsonify(format_error(status, error_type)), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
-        return flask.jsonify({'error': 'Internal server error: {}'.format(error_handle)}), 500
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 
 @BLUEPRINT.route('/expertise/status', methods=['GET'])
@@ -115,7 +145,7 @@ def jobs():
 
     if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify({ 'error': 'Forbidden: No Authorization token in headers'}), 403
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
     try:
         # Parse query parameters
@@ -136,13 +166,15 @@ def jobs():
             status = 404
         elif 'forbidden' in error_type.lower():
             status = 403
+        elif 'bad request' in error_type.lower():
+            status = 400
 
-        return flask.jsonify({'error': error_type}), status
+        return flask.jsonify(format_error(status, error_type)), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
-        return flask.jsonify({'error': 'Internal server error: {}'.format(error_handle)}), 500
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/status/all', methods=['GET'])
 def all_jobs():
@@ -161,11 +193,11 @@ def all_jobs():
 
     if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify({ 'error': 'Forbidden: No Authorization token in headers'}), 403
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
     try:
         # Parse query parameters
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, None)
+        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
@@ -179,13 +211,63 @@ def all_jobs():
             status = 404
         elif 'forbidden' in error_type.lower():
             status = 403
+        elif 'bad request' in error_type.lower():
+            status = 400
 
-        return flask.jsonify({'error': error_type}), status
+        return flask.jsonify(format_error(status, error_type)), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
-        return flask.jsonify({'error': 'Internal server error: {}'.format(error_handle)}), 500
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
+
+@BLUEPRINT.route('/expertise/delete', methods=['GET'])
+def delete_job():
+    """
+    Retrieves the config of a job to be deleted, and removes the job by deleting the job directory.
+
+    :param token: Authorization from a logged in user, which defines the set of accessible data
+    :type token: str
+
+    :param job_id: The ID of a submitted job
+    :type job_id: str
+    """
+    openreview_client = get_client()
+
+    user_id = get_user_id(openreview_client)
+
+    if not user_id:
+        flask.current_app.logger.error('No Authorization token in headers')
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
+
+    try:
+        # Parse query parameters
+        job_id = flask.request.args.get('id', None)
+        if job_id is None or len(job_id) == 0:
+            raise openreview.OpenReviewException('Bad request: id is required')
+        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).del_expertise_job(user_id, job_id)
+        flask.current_app.logger.debug('GET returns ' + str(result))
+        return flask.jsonify(result), 200
+
+    except openreview.OpenReviewException as error_handle:
+        flask.current_app.logger.error(str(error_handle))
+
+        error_type = str(error_handle)
+        status = 500
+
+        if 'not found' in error_type.lower():
+            status = 404
+        elif 'forbidden' in error_type.lower():
+            status = 403
+        elif 'bad request' in error_type.lower():
+            status = 400
+
+        return flask.jsonify(format_error(status, error_type)), status
+
+    # pylint:disable=broad-except
+    except Exception as error_handle:
+        flask.current_app.logger.error(str(error_handle))
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/results', methods=['GET'])
 def results():
@@ -208,7 +290,7 @@ def results():
 
     if not user_id:
         flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify({ 'error': 'Forbidden: No Authorization token in headers'}), 403
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
     try:
         # Parse query parameters
@@ -235,9 +317,9 @@ def results():
         elif 'bad request' in error_type.lower():
             status = 400
 
-        return flask.jsonify({'error': error_type}), status
+        return flask.jsonify(format_error(status, error_type)), status
 
     # pylint:disable=broad-except
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
-        return flask.jsonify({'error', 'Internal server error: {}'.format(error_handle)}), 500
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
