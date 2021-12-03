@@ -25,7 +25,7 @@ def update_status(job_dir, new_status, desc=None):
         config['description'] = descriptions[new_status]
     else:
         config['description'] = desc
-    config['mdate'] = int(time.time())
+    config['mdate'] = int(time.time() * 1000)
     with open(os.path.join(config['job_dir'], 'config.json'), 'w+') as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
 
