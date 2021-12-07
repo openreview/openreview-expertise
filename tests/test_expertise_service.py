@@ -353,7 +353,7 @@ class TestExpertiseService():
     def test_high_load(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         test_client = openreview_context['test_client']
-        num_requests = 5
+        num_requests = 3
         id_list = []
         # Make n requests
         for _ in range(num_requests):
