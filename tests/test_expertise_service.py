@@ -85,8 +85,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert 'bad request' in response.json['error'].lower()
-        assert response.json['error'] == 'Bad request: missing required field: name match_group'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: missing required field: name match_group'
 
     def test_request_expertise_with_missing_required_fields(self, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field
@@ -108,8 +109,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 400, f'{response.json}'
-        assert 'bad request' in response.json['error'].lower()
-        assert response.json['error'] == 'Bad request: missing required field: name'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: missing required field: name'
 
     def test_request_expertise_with_invalid_field(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra field that is not allowed
