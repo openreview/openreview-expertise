@@ -57,6 +57,12 @@ If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint
 "model_checkpoint_dir": <path_to_untarred_dir>/mfr_model_checkpoint/
 ```
 
+If you plan on running the tests, the checkpoints __must__ be located at the following paths relative to the `openreview-expertise` directory:
+```
+../expertise-utils/multifacet_recommender/feature_vocab_file
+../expertise-utils/multifacet_recommender/mfr_model_checkpoint/
+```
+
 More information about SPECTER+MFR, read these papers:
 
 https://www.overleaf.com/read/ygmygwtjbzfg

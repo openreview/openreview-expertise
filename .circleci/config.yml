@@ -17,6 +17,7 @@ jobs:
             apt install -y wget
             apt install -y make gcc
             apt install -y build-essential
+            apt install -y git
             cd $HOME
             wget "https://repo.anaconda.com/miniconda/Miniconda3-4.7.10-Linux-x86_64.sh" -O miniconda.sh
             printf '%s' "8a324adcc9eaf1c09e22a992bb6234d91a94146840ee6b11c114ecadafc68121  miniconda.sh" | sha256sum -c
@@ -30,9 +31,23 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             python --version
+            mkdir ~/expertise-utils
+            cd ~/expertise-utils
+            git clone https://github.com/allenai/specter.git
+            cd specter
+            wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
+            tar -xzvf archive.tar.gz
+            conda install pytorch cudatoolkit=10.1 -c pytorch 
+            pip install -r requirements.txt
+            python setup.py install
+            conda install -y filelock
+            cd ..
+            wget --load-cookies /tmp/cookies.txt "https://drive.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://drive.google.com/uc?export=download&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s" -O mfr.tar.gz && rm -rf /tmp/cookies.txt
+            tar -xzvf mfr.tar.gz
+            mv ./multifacet_recommender_data ./multifacet_recommender
             cd ~/openreview-expertise
             pip install -e .
-            conda install intel-openmp==2019.4
+            conda install -y intel-openmp==2019.4
             conda install -y faiss-cpu -c pytorch
       - run:
           name: Run tests
