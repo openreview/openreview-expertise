@@ -49,10 +49,15 @@ class ExpertiseService(object):
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
         # For the optional fields, add camel case equivalents
+        camel_case_params = []
         for param in self.optional_model_params:
-            self.optional_model_params.append(self.to_camel(param))
+            camel_case_params.append(self.to_camel(param))
+        self.optional_model_params.extend(camel_case_params)
+
+        camel_case_fields = []
         for field in self.optional_fields:
-            self.optional_fields.append(self.to_camel(field))
+            camel_case_fields.append(self.to_camel(field))
+        self.optional_fields.extend(camel_case_fields)
 
     def _get_default_config(self):
         return self.server_config['DEFAULT_CONFIG']
