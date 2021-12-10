@@ -48,6 +48,12 @@ class ExpertiseService(object):
         self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'baseurl_v2', 'paper_invitation', 'paper_id']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
+        # For the optional fields, add camel case equivalents
+        for param in self.optional_model_params:
+            self.optional_model_params.append(self.to_camel(param))
+        for field in self.optional_fields:
+            self.optional_fields.append(self.to_camel(field))
+
     def _get_default_config(self):
         return self.server_config['DEFAULT_CONFIG']
 
@@ -116,6 +122,12 @@ class ExpertiseService(object):
 
         return config
 
+    def to_camel(self, underscore):
+        """
+        Given a string with underscores, convert it to camel case
+        """
+        return underscore.split('_')[0] + ''.join(x.capitalize() or '_' for x in underscore.split('_')[1:])
+
     def _validate_fields(self, request) -> dict:
         """
         If the server has detected any errors in the proposed config, assemble the error and raise the exception
@@ -139,7 +151,8 @@ class ExpertiseService(object):
             'model_params': []
         }
         for field in self.req_fields:
-            if field not in request:
+            # If not in the request, check the camel case equivalent
+            if field not in request and self.to_camel(field) not in request:
                 error_fields['required'].append(field)
                 failed_request = True
                 continue
