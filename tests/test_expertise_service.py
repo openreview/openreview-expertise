@@ -223,14 +223,14 @@ class TestExpertiseService():
             '/expertise',
             data = json.dumps({
                     'name': 'test_run',
-                    'match_group': ["ABC.cc"],
-                    'paper_invitation': 'ABC.cc/-/Submission',
+                    'matchGroup': ["ABC.cc"],
+                    'paperInvitation': 'ABC.cc/-/Submission',
                     "model": "specter+mfr",
-                    "model_params": {
-                        "use_title": False,
-                        "use_abstract": True,
-                        "average_score": True,
-                        "max_score": False
+                    "modelParams": {
+                        "useTitle": False,
+                        "useAbstract": True,
+                        "averageScore": True,
+                        "maxScore": False
                     }
                 }
             ),

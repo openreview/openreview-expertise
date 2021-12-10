@@ -94,7 +94,7 @@ class ExpertiseService(object):
         self.logger.info(f"Config validation passed - setting server-side fields")
 
         # Populate with server-side fields
-        root_dir = os.path.join(self.working_dir, request['job_id'])
+        root_dir = os.path.join(self.working_dir, config['job_id'])
         descriptions = JobDescription.VALS.value
         config['dataset']['directory'] = root_dir
         for field in self.path_fields:
@@ -161,11 +161,16 @@ class ExpertiseService(object):
                 error_fields['required'].append(field)
                 failed_request = True
                 continue
-            config[field] = request[field]
+            if field in request:
+                config[field] = request[field]
+                del request[field]
+            else:
+                config[field] = request[self.to_camel(field)]
+                del request[self.to_camel(field)]
 
         # Check for model params camel case and overwrite it
         if 'modelParams' in request.keys():
-            request['modelParams'] = request['model_params']
+            request['model_params'] = request['modelParams']
             del request['modelParams']
 
         if 'model_params' in request.keys():
@@ -179,7 +184,7 @@ class ExpertiseService(object):
                     config['model_params'][field] = request['model_params'][field]
         
         for field in request.keys():
-            if field not in self.optional_fields and field not in self.req_fields:
+            if field not in self.optional_fields:
                 error_fields['unexpected'].append(field)
                 failed_request = True
                 continue
