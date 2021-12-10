@@ -157,15 +157,12 @@ class ExpertiseService(object):
                 failed_request = True
                 continue
             config[field] = request[field]
-        for field in request.keys():
-            if field not in self.optional_fields and field not in self.req_fields:
-                error_fields['unexpected'].append(field)
-                failed_request = True
-                continue
-            if field != 'model_params':
-                # Only write to config if 1) overwriting a default with non-None value or 2) if the field is not in the default config
-                if (field in config.keys() and request[field] is not None) or field not in config.keys():
-                    config[field] = request[field]
+
+        # Check for model params camel case and overwrite it
+        if 'modelParams' in request.keys():
+            request['modelParams'] = request['model_params']
+            del request['modelParams']
+
         if 'model_params' in request.keys():
             for field in request['model_params']:
                 if field not in self.optional_model_params:
@@ -175,6 +172,16 @@ class ExpertiseService(object):
                 # Only write to config if 1) overwriting a default with non-None value or 2) if the field is not in the default config
                 if (field in config['model_params'].keys() and request['model_params'][field] is not None) or field not in config['model_params'].keys():
                     config['model_params'][field] = request['model_params'][field]
+        
+        for field in request.keys():
+            if field not in self.optional_fields and field not in self.req_fields:
+                error_fields['unexpected'].append(field)
+                failed_request = True
+                continue
+            if field != 'model_params':
+                # Only write to config if 1) overwriting a default with non-None value or 2) if the field is not in the default config
+                if (field in config.keys() and request[field] is not None) or field not in config.keys():
+                    config[field] = request[field]
 
         # Check for either paper_invitation or paper_id
         if 'paper_invitation' not in config and 'paper_id' not in config:
