@@ -87,7 +87,31 @@ class TestExpertiseService():
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
-        assert response.json['message'] == 'Bad request: missing required field: name match_group'
+        assert response.json['message'] == 'Bad request: missing required field: name match_group paper_invitation/paper_id'
+
+    def test_request_expertise_with_no_paper(self, openreview_context, celery_session_app, celery_session_worker):
+        # Submitting a partially filled out config without a required field
+        test_client = openreview_context['test_client']
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    'name': 'test_run',
+                    'match_group': ["ABC.cc"],
+                    "model": "specter+mfr",
+                    "model_params": {
+                        "use_title": False,
+                        "use_abstract": True,
+                        "average_score": True,
+                        "max_score": False
+                    }
+                }
+            ),
+            content_type='application/json'
+        )
+        assert response.status_code == 400, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: missing required field: paper_invitation/paper_id'
 
     def test_request_expertise_with_missing_required_fields(self, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field

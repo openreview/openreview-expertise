@@ -163,6 +163,11 @@ class ExpertiseService(object):
                 if (field in config['model_params'].keys() and request['model_params'][field] is not None) or field not in config['model_params'].keys():
                     config['model_params'][field] = request['model_params'][field]
 
+        # Check for either paper_invitation or paper_id
+        if 'paper_invitation' not in config and 'paper_id' not in config:
+            error_fields['required'].append('paper_invitation/paper_id')
+            failed_request = True
+
         if failed_request:
             error_string = 'Bad request: '
             if len(error_fields['required']) > 0:
