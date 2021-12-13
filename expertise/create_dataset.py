@@ -53,7 +53,7 @@ class OpenReviewExpertise(object):
 
         if self.get_api_version() == 1:
             return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id})
-        else:
+        elif self.get_api_version() == 2:
             return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': { 'value': [author_id] }})
 
 
@@ -81,12 +81,21 @@ class OpenReviewExpertise(object):
                 continue
             if getattr(publication, 'cdate') is None:
                 publication.cdate = getattr(publication, 'tcdate', 0)
+
+            # Get title + abstract depending on API version
+            if self.get_api_version() == 1:
+                pub_title = publication.content.get('title')
+                pub_abstr = publication.content.get('abstract')
+            elif self.get_api_version() == 2:
+                pub_title = publication.content.get('title').get('value')
+                pub_abstr = publication.content.get('abstract').get('value')
+            
             reduced_publication = {
                 'id': publication.id,
                 'cdate': publication.cdate,
                 'content': {
-                    'title': publication.content.get('title'),
-                    'abstract': publication.content.get('abstract')
+                    'title': pub_title,
+                    'abstract': pub_abstr
                 }
             }
             unsorted_publications.append(reduced_publication)
