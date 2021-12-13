@@ -361,7 +361,7 @@ class TestExpertiseService():
                     'name': 'test_run',
                     'match_group': ["ABC.cc"],
                     'paper_id': 'KHnr1r7H',
-                    "model": "elmo",
+                    "model": "specter+mfr",
                     "model_params": {
                         "use_title": False,
                         "use_abstract": True,
@@ -399,7 +399,7 @@ class TestExpertiseService():
         returned_config = response['config']
         assert returned_config['name'] == 'test_run'
         assert returned_config['paper_id'] == 'KHnr1r7H'
-        assert returned_config['model'] == 'elmo'
+        assert returned_config['model'] == 'specter+mfr'
         assert 'token' not in returned_config
         assert 'baseurl' not in returned_config
         assert 'user_id' not in returned_config
