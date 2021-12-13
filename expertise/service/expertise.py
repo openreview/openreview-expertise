@@ -43,9 +43,9 @@ class ExpertiseService(object):
         self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
 
         # Define expected/required API fields
-        self.req_fields = ['name', 'match_group', 'paper_invitation', 'user_id', 'job_id']
+        self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
         self.optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
-        self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl']
+        self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'paper_invitation', 'paper_id']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
     def _get_default_config(self):
@@ -162,6 +162,11 @@ class ExpertiseService(object):
                 # Only write to config if 1) overwriting a default with non-None value or 2) if the field is not in the default config
                 if (field in config['model_params'].keys() and request['model_params'][field] is not None) or field not in config['model_params'].keys():
                     config['model_params'][field] = request['model_params'][field]
+
+        # Check for either paper_invitation or paper_id
+        if 'paper_invitation' not in config and 'paper_id' not in config:
+            error_fields['required'].append('paper_invitation/paper_id')
+            failed_request = True
 
         if failed_request:
             error_string = 'Bad request: '

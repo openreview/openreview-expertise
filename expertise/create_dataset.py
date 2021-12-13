@@ -8,6 +8,7 @@ and that papers have been submitted.
 from .config import ModelConfig
 
 import json, argparse, csv
+from openreview import Note
 from pathlib import Path
 from itertools import chain
 import openreview
@@ -289,11 +290,22 @@ class OpenReviewExpertise(object):
 
     def get_submissions(self):
         invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
+        paper_id = self.config.get('paper_id')
         submissions = []
 
         for invitation_id in invitation_ids:
             submissions.extend(list(openreview.tools.iterget_notes(
                 self.openreview_client, invitation=invitation_id)))
+
+        if paper_id:
+            submissions.append(self.openreview_client.get_note(paper_id))
+
+        # Bug: specter+mfr cannot handle a single submission
+        # Solution: create a copy of the note and modify the ID
+        if self.config.get('model') == 'specter+mfr' and len(submissions) == 1:
+            dummy = submissions[0].to_json()
+            dummy['id'] = 'dummy'
+            submissions.append(Note.from_json(dummy))
 
         print('finding records of {} submissions'.format(len(submissions)))
         reduced_submissions = {}
@@ -346,7 +358,7 @@ class OpenReviewExpertise(object):
                         f.write(json.dumps(paper) + '\n')
 
         # if invitation ID is supplied, collect records for each submission
-        if 'paper_invitation' in self.config or 'csv_submissions' in self.config:
+        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config:
             submissions = self.get_submissions()
             with open(self.root.joinpath('submissions.json'), 'w') as f:
                 json.dump(submissions, f, indent=2)

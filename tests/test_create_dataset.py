@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from collections import defaultdict
 import openreview
 import json
+import sys
 
 def mock_client():
     client = MagicMock(openreview.Client)
@@ -18,6 +19,14 @@ def mock_client():
             }
         }
         return openreview.Profile.from_json(mock_profile)
+
+    def get_note(id):
+        with open('tests/data/fakeData.json') as json_file:
+            data = json.load(json_file)
+        for invitation in data['notes'].keys():
+            for note in data['notes'][invitation]:
+                if note['id'] == id:
+                    return openreview.Note.from_json(note)
 
     def get_notes(id = None,
         paperhash = None,
@@ -39,7 +48,6 @@ def mock_client():
 
         if offset != 0:
             return []
-
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         if invitation:
@@ -86,6 +94,7 @@ def mock_client():
         return return_value
 
     client.get_notes = MagicMock(side_effect=get_notes)
+    client.get_note = MagicMock(side_effect=get_note)
     client.get_group = MagicMock(side_effect=get_group)
     client.search_profiles = MagicMock(side_effect=search_profiles)
     client.get_profile = MagicMock(side_effect=get_profile)
@@ -274,6 +283,24 @@ def test_get_submissions_from_invitation():
             "content": {
                 "title": "Bypass L Com Iliac Art to B Com Ilia, Perc Endo Approach",
                 "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
+            }
+        }
+    })
+
+def test_get_by_submissions_from_paper_id():
+    openreview_client = mock_client()
+    config = {
+        'paper_id': 'KHnr1r7H'
+    }
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    submissions = or_expertise.get_submissions()
+    print(submissions)
+    assert json.dumps(submissions) == json.dumps({
+        'KHnr1r7H': {
+            "id": "KHnr1r7H",
+            "content": {
+                "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
+                "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
             }
         }
     })
