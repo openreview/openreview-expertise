@@ -29,6 +29,9 @@ class OpenReviewExpertise(object):
             'no_publications': []
         }
 
+    def get_api_version(self):
+        return self.config.get('version', 1)
+
     def convert_to_list(self, config_invitations):
         if (isinstance(config_invitations, str)):
             invitations = [config_invitations]
@@ -48,7 +51,10 @@ class OpenReviewExpertise(object):
             note_ids = [e.head for e in bids if e.label in ['Very High', 'High']]
             return [n for n in self.openreview_client.get_notes_by_ids(ids=note_ids) if n.invitation == paper_invitation]
 
-        return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id})
+        if self.get_api_version() == 1:
+            return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id})
+        else:
+            return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': { 'value': [author_id] }})
 
 
     def get_publications(self, author_id):
