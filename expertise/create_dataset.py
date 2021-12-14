@@ -332,11 +332,20 @@ class OpenReviewExpertise(object):
         reduced_submissions = {}
         for paper in tqdm(submissions, total=len(submissions)):
             paper_id = paper.id
+
+            # Get title + abstract depending on API version
+            if self.get_api_version() == 1:
+                paper_title = paper.content.get('title')
+                paper_abstr = paper.content.get('abstract')
+            elif self.get_api_version() == 2:
+                paper_title = paper.content.get('title').get('value')
+                paper_abstr = paper.content.get('abstract').get('value')
+
             reduced_submissions[paper_id] = {
                 'id': paper_id,
                 'content': {
-                    'title': paper.content.get('title'),
-                    'abstract': paper.content.get('abstract')
+                    'title': paper_title,
+                    'abstract': paper_abstr
                 }
             }
 
