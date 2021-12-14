@@ -358,5 +358,7 @@ class TestExpertiseV2():
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
         # Clean up directory
         shutil.rmtree(f"./tests/jobs/")
-        os.remove('pytest.log')
-        os.remove('default.log')
+        if os.path.isfile('pytest.log'):
+            os.remove('pytest.log')
+        if os.path.isfile('default.log'):
+            os.remove('default.log')

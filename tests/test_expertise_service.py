@@ -530,8 +530,10 @@ class TestExpertiseService():
 
         # Clean up directory
         shutil.rmtree(f"./tests/jobs/")
-        os.remove('pytest.log')
-        os.remove('default.log')
+        if os.path.isfile('pytest.log'):
+            os.remove('pytest.log')
+        if os.path.isfile('default.log'):
+            os.remove('default.log')
 
 # def test_elmo_queue(openreview_context, celery_session_app, celery_session_worker):
 #     test_client = openreview_context['test_client']
