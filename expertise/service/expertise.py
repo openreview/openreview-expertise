@@ -43,7 +43,7 @@ class ExpertiseService(object):
         self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
 
         # Define expected/required API fields
-        self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
+        self.req_fields = ['name', 'match_group', 'user_id', 'job_id', 'version']
         self.optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
         self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'paper_invitation', 'paper_id']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
