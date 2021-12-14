@@ -318,9 +318,6 @@ class OpenReviewExpertise(object):
         if paper_id:
             submissions.append(self.openreview_client.get_note(paper_id))
 
-        if paper_id:
-            submissions.append(self.openreview_client.get_note(paper_id))
-
         # Bug: specter+mfr cannot handle a single submission
         # Solution: create a copy of the note and modify the ID
         if self.config.get('model') == 'specter+mfr' and len(submissions) == 1:
