@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 # -----------------
 # -- Mock Client --
 # -----------------
-def mock_client():
+def mock_client(version=1):
     client = MagicMock(openreview.Client)
 
     def get_user():
@@ -19,8 +19,13 @@ def mock_client():
         return None
 
     def get_note(id):
-        with open('tests/data/fakeData.json') as json_file:
-            data = json.load(json_file)
+        if version == 1:
+            with open('tests/data/fakeData.json') as json_file:
+                data = json.load(json_file)
+        elif version == 2:
+            with open('tests/data/api2Data.json') as json_file:
+                data = json.load(json_file)
+
         for invitation in data['notes'].keys():
             for note in data['notes'][invitation]:
                 if note['id'] == id:
@@ -58,15 +63,21 @@ def mock_client():
 
         if offset != 0:
             return []
+        if version == 1:
+            with open('tests/data/expertiseServiceData.json') as json_file:
+                data = json.load(json_file)
+        elif version == 2:
+            with open('tests/data/api2Data.json') as json_file:
+                data = json.load(json_file)
 
-        with open('tests/data/expertiseServiceData.json') as json_file:
-            data = json.load(json_file)
         if invitation:
             notes=data['notes'][invitation]
             return [openreview.Note.from_json(note) for note in notes]
 
         if 'authorids' in content:
             authorid = content['authorids']
+            if isinstance(authorid, dict):
+                authorid = authorid['value'][0]
             profiles = data['profiles']
             for profile in profiles:
                 if authorid == profile['id']:
@@ -75,14 +86,22 @@ def mock_client():
         return []
 
     def get_group(group_id):
-        with open('tests/data/expertiseServiceData.json') as json_file:
-            data = json.load(json_file)
+        if version == 1:
+            with open('tests/data/expertiseServiceData.json') as json_file:
+                data = json.load(json_file)
+        elif version == 2:
+            with open('tests/data/api2Data.json') as json_file:
+                data = json.load(json_file)
         group = openreview.Group.from_json(data['groups'][group_id])
         return group
 
     def search_profiles(confirmedEmails=None, ids=None, term=None):
-        with open('tests/data/expertiseServiceData.json') as json_file:
-            data = json.load(json_file)
+        if version == 1:
+            with open('tests/data/expertiseServiceData.json') as json_file:
+                data = json.load(json_file)
+        elif version == 2:
+            with open('tests/data/api2Data.json') as json_file:
+                data = json.load(json_file)
         profiles = data['profiles']
         profiles_dict_emails = {}
         profiles_dict_tilde = {}

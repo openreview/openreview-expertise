@@ -244,10 +244,7 @@ class OpenReviewExpertise(object):
         seen_keys = set()
         filtered_papers = []
         for n in member_papers:
-            if self.get_api_version() == 1:
-                paper_title = openreview.tools.get_paperhash('', n['content']['title'])
-            elif self.get_api_version() == 2:
-                paper_title = openreview.tools.get_paperhash('', n['content']['title']['value'])
+            paper_title = openreview.tools.get_paperhash('', n['content']['title'])
             if paper_title and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys:
                 filtered_papers.append(n)
             seen_keys.add(paper_title)
