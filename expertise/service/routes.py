@@ -95,6 +95,7 @@ def expertise():
 
         # Parse request args
         user_request = flask.request.json
+        user_request['version'] = user_request.get('version', 1)
         user_request['token'] = openreview_client.token
         user_request['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
         user_request['user_id'] = user_id
