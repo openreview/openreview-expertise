@@ -3,7 +3,17 @@ from unittest.mock import patch, MagicMock
 from collections import defaultdict
 import openreview
 import json
+import random
+from pathlib import Path
 import sys
+import pytest
+import os
+import time
+import numpy as np
+import shutil
+import expertise.service
+from expertise.dataset import ArchivesDataset, SubmissionsDataset
+from expertise.models import elmo
 
 def mock_client():
     client = MagicMock(openreview.Client)
@@ -103,110 +113,185 @@ def mock_client():
 
     return client
 
-def test_get_publications():
-    openreview_client = mock_client()
-    config = {
-        'dataset': {
-            'top_recent_pubs': 3,
+class TestExpertiseV2():
+
+    job_id = None
+
+    @pytest.fixture(scope='session')
+    def celery_config(self):
+        return {
+            "broker_url": "redis://localhost:6379/10",
+            "result_backend": "redis://localhost:6379/10",
+            "task_track_started": True,
+            "task_serializer": "pickle",
+            "result_serializer": "pickle",
+            "accept_content": ["pickle", "application/x-python-serialize"],
+            "task_create_missing_queues": True,
         }
-    }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
-    publications = or_expertise.get_publications('~Carlos_Mondragon1')
-    assert publications == []
 
-    publications = or_expertise.get_publications('~Harold_Rice8')
-    assert len(publications) == 3
-    for pub in publications:
-        content = pub['content']
-        assert 'value' in content['title'].keys()
-        assert 'value' in content['abstract'].keys()
-    
-    config = {
-        'dataset': {
-            'top_recent_pubs': 3,
-        },
-        'version': 2
-    }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
-    publications = or_expertise.get_publications('~Harold_Rice8')
-    assert len(publications) == 3
-    for pub in publications:
-        content = pub['content']
-        assert isinstance(content['title'], str)
-        assert isinstance(content['abstract'], str)
+    @pytest.fixture(scope='session')
+    def celery_includes(self):
+        return ["expertise.service.celery_tasks"]
 
-
-def test_get_submissions_from_invitation():
-    openreview_client = mock_client()
-    config = {
-        'use_email_ids': False,
-        'match_group': 'ABC.cc',
-        'paper_invitation': 'ABC.cc/-/Submission',
-        'version': 1
-    }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
-    submissions = or_expertise.get_submissions()
-    print(submissions)
-    assert 'value' in submissions['KHnr1r7H']['content']['title'].keys()
-    assert 'value' in submissions['KHnr1r7H']['content']['abstract'].keys()
-
-    config = {
-        'use_email_ids': False,
-        'match_group': 'ABC.cc',
-        'paper_invitation': 'ABC.cc/-/Submission',
-        'version': 2
-    }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
-    submissions = or_expertise.get_submissions()
-    print(submissions)
-    assert not isinstance(submissions['KHnr1r7H']['content']['title'], dict)
-    assert isinstance(submissions['KHnr1r7H']['content']['title'], str)
-    assert not isinstance(submissions['KHnr1r7H']['content']['abstract'], dict)
-    assert isinstance(submissions['KHnr1r7H']['content']['abstract'], str)
-    assert json.dumps(submissions) == json.dumps({
-        'KHnr1r7H': {
-            "id": "KHnr1r7H",
-            "content": {
-                "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
-                "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
-            }
-        },
-        'YQtWeE8P': {
-            "id": "YQtWeE8P",
-            "content": {
-                "title": "Bypass L Com Iliac Art to B Com Ilia, Perc Endo Approach",
-                "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
-            }
+    @pytest.fixture(scope='session')
+    def celery_worker_parameters(self):
+        return {
+            "queues": ("userpaper", "expertise"),
+            "perform_ping_check": False,
+            "concurrency": 1,
         }
-    })
 
-def test_get_by_submissions_from_paper_id():
-    openreview_client = mock_client()
-    config = {
-        'paper_id': 'KHnr1r7H',
-        'version': 1
-    }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
-    submissions = or_expertise.get_submissions()
-    print(submissions)
-    assert 'value' in submissions['KHnr1r7H']['content']['title'].keys()
-    assert 'value' in submissions['KHnr1r7H']['content']['abstract'].keys()
+    @pytest.fixture(scope='session')
+    def openreview_context(self):
+        """
+        A pytest fixture for setting up a clean expertise-api test instance:
+        `scope` argument is set to 'function', so each function will get a clean test instance.
+        """
+        config = {
+            "LOG_FILE": "pytest.log",
+            "OPENREVIEW_USERNAME": "openreview.net",
+            "OPENREVIEW_PASSWORD": "1234",
+            "OPENREVIEW_BASEURL": "http://localhost:3000",
+            "SUPERUSER_FIRSTNAME": "Super",
+            "SUPERUSER_LASTNAME": "User",
+            "SUPERUSER_TILDE_ID": "~Super_User1",
+            "SUPERUSER_EMAIL": "info@openreview.net",
+            "SPECTER_DIR": '../expertise-utils/specter/',
+            "MFR_VOCAB_DIR": '../expertise-utils/multifacet_recommender/feature_vocab_file',
+            "MFR_CHECKPOINT_DIR": '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/',
+            "WORKING_DIR": './tests/jobs',
+            "CHECK_EVERY": 3600,
+            "DELETE_AFTER": 3600,
+            "IN_TEST": True
+        }
+        app = expertise.service.create_app(
+            config=config
+        )
 
-    config = {
-        'paper_id': 'KHnr1r7H',
-        'version': 2
-    }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
-    submissions = or_expertise.get_submissions()
-    print(submissions)
-    assert not isinstance(submissions['KHnr1r7H']['content']['title'], dict)
-    assert not isinstance(submissions['KHnr1r7H']['content']['abstract'], dict)
-    assert json.dumps(submissions) == json.dumps({
-        'KHnr1r7H': {
-            "id": "KHnr1r7H",
-            "content": {
-                "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
-                "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
+        with app.app_context():
+            yield {
+                "app": app,
+                "test_client": app.test_client(),
+                "config": config
+            }
+
+    def test_request_expertise_with_no_config(self, openreview_context, celery_session_app, celery_session_worker):
+        test_client = openreview_context['test_client']
+        # Submitting an empty config with no required fields
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({}),
+            content_type='application/json'
+        )
+        assert response.status_code == 400, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: missing required field: name match_group paper_invitation/paper_id'
+
+    def test_get_publications(self):
+        openreview_client = mock_client()
+        config = {
+            'dataset': {
+                'top_recent_pubs': 3,
             }
         }
-    })
+        or_expertise = OpenReviewExpertise(openreview_client, config)
+        publications = or_expertise.get_publications('~Carlos_Mondragon1')
+        assert publications == []
+
+        publications = or_expertise.get_publications('~Harold_Rice8')
+        assert len(publications) == 3
+        for pub in publications:
+            content = pub['content']
+            assert 'value' in content['title'].keys()
+            assert 'value' in content['abstract'].keys()
+        
+        config = {
+            'dataset': {
+                'top_recent_pubs': 3,
+            },
+            'version': 2
+        }
+        or_expertise = OpenReviewExpertise(openreview_client, config)
+        publications = or_expertise.get_publications('~Harold_Rice8')
+        assert len(publications) == 3
+        for pub in publications:
+            content = pub['content']
+            assert isinstance(content['title'], str)
+            assert isinstance(content['abstract'], str)
+
+
+    def test_get_submissions_from_invitation(self):
+        openreview_client = mock_client()
+        config = {
+            'use_email_ids': False,
+            'match_group': 'ABC.cc',
+            'paper_invitation': 'ABC.cc/-/Submission',
+            'version': 1
+        }
+        or_expertise = OpenReviewExpertise(openreview_client, config)
+        submissions = or_expertise.get_submissions()
+        print(submissions)
+        assert 'value' in submissions['KHnr1r7H']['content']['title'].keys()
+        assert 'value' in submissions['KHnr1r7H']['content']['abstract'].keys()
+
+        config = {
+            'use_email_ids': False,
+            'match_group': 'ABC.cc',
+            'paper_invitation': 'ABC.cc/-/Submission',
+            'version': 2
+        }
+        or_expertise = OpenReviewExpertise(openreview_client, config)
+        submissions = or_expertise.get_submissions()
+        print(submissions)
+        assert not isinstance(submissions['KHnr1r7H']['content']['title'], dict)
+        assert isinstance(submissions['KHnr1r7H']['content']['title'], str)
+        assert not isinstance(submissions['KHnr1r7H']['content']['abstract'], dict)
+        assert isinstance(submissions['KHnr1r7H']['content']['abstract'], str)
+        assert json.dumps(submissions) == json.dumps({
+            'KHnr1r7H': {
+                "id": "KHnr1r7H",
+                "content": {
+                    "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
+                    "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
+                }
+            },
+            'YQtWeE8P': {
+                "id": "YQtWeE8P",
+                "content": {
+                    "title": "Bypass L Com Iliac Art to B Com Ilia, Perc Endo Approach",
+                    "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
+                }
+            }
+        })
+
+    def test_get_by_submissions_from_paper_id(self):
+        openreview_client = mock_client()
+        config = {
+            'paper_id': 'KHnr1r7H',
+            'version': 1
+        }
+        or_expertise = OpenReviewExpertise(openreview_client, config)
+        submissions = or_expertise.get_submissions()
+        print(submissions)
+        assert 'value' in submissions['KHnr1r7H']['content']['title'].keys()
+        assert 'value' in submissions['KHnr1r7H']['content']['abstract'].keys()
+
+        config = {
+            'paper_id': 'KHnr1r7H',
+            'version': 2
+        }
+        or_expertise = OpenReviewExpertise(openreview_client, config)
+        submissions = or_expertise.get_submissions()
+        print(submissions)
+        assert not isinstance(submissions['KHnr1r7H']['content']['title'], dict)
+        assert not isinstance(submissions['KHnr1r7H']['content']['abstract'], dict)
+        assert json.dumps(submissions) == json.dumps({
+            'KHnr1r7H': {
+                "id": "KHnr1r7H",
+                "content": {
+                    "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
+                    "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
+                }
+            }
+        })
