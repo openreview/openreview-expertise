@@ -403,12 +403,19 @@ if __name__ == '__main__':
     config = ModelConfig(config_file_path=args.config)
 
     print(config)
-
-    client = openreview.Client(
-        username=args.username,
-        password=args.password,
-        baseurl=args.baseurl
-    )
+    
+    if config.get('version') == 1:
+        client = openreview.Client(
+            username=args.username,
+            password=args.password,
+            baseurl=args.baseurl
+        )
+    elif config.get('version') == 2:
+        client = openreview.api.OpenReviewClient(
+            username=args.username,
+            password=args.password,
+            baseurl=args.baseurl
+        )
 
     expertise = OpenReviewExpertise(client, config)
     expertise.run()
