@@ -39,8 +39,9 @@ def run_userpaper(self, config: dict, logger: logging.Logger):
                 baseurl=config['baseurl']
             )
         else:
-            openreview_client = mock_client(version=config.get('version'))
-        execute_create_dataset(openreview_client, config=config)
+            openreview_client = mock_client(version=1)
+            openreview_client_v2 = mock_client(version=2)
+        execute_create_dataset(openreview_client, config=config, client_v2=openreview_client_v2)
         update_status(config['job_dir'], JobStatus.EXPERTISE_QUEUED)
         run_expertise.apply_async(
                 (config, logger),
