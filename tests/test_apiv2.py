@@ -14,102 +14,7 @@ import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import elmo
-
-def mock_client():
-    client = MagicMock(openreview.Client)
-
-    def get_profile():
-        mock_profile = {
-            "id": "~Test_User1",
-            "content": {
-                "preferredEmail": "Test_User1@mail.com",
-                "emails": [
-                    "Test_User1@mail.com"
-                ]
-            }
-        }
-        return openreview.Profile.from_json(mock_profile)
-
-    def get_note(id):
-        with open('tests/data/api2Data.json') as json_file:
-            data = json.load(json_file)
-        for invitation in data['notes'].keys():
-            for note in data['notes'][invitation]:
-                if note['id'] == id:
-                    return openreview.Note.from_json(note)
-
-    def get_notes(id = None,
-        paperhash = None,
-        forum = None,
-        original = None,
-        invitation = None,
-        replyto = None,
-        tauthor = None,
-        signature = None,
-        writer = None,
-        trash = None,
-        number = None,
-        content = None,
-        limit = None,
-        offset = None,
-        mintcdate = None,
-        details = None,
-        sort = None):
-
-        if offset != 0:
-            return []
-        with open('tests/data/api2Data.json') as json_file:
-            data = json.load(json_file)
-        if invitation:
-            notes=data['notes'][invitation]
-            return [openreview.Note.from_json(note) for note in notes]
-
-        if 'authorids' in content:
-            authorid = content['authorids']
-            profiles = data['profiles']
-            for profile in profiles:
-                if authorid == profile['id']:
-                    return [openreview.Note.from_json(note) for note in profile['publications']]
-
-        return []
-
-    def get_group(group_id):
-        with open('tests/data/api2Data.json') as json_file:
-            data = json.load(json_file)
-        group = openreview.Group.from_json(data['groups'][group_id])
-        return group
-
-    def search_profiles(confirmedEmails=None, ids=None, term=None):
-        with open('tests/data/api2Data.json') as json_file:
-            data = json.load(json_file)
-        profiles = data['profiles']
-        profiles_dict_emails = {}
-        profiles_dict_tilde = {}
-        for profile in profiles:
-            profile = openreview.Profile.from_json(profile)
-            if profile.content.get('emails') and len(profile.content.get('emails')):
-                profile.content['emailsConfirmed'] = profile.content.get('emails')
-                profiles_dict_emails[profile.content['emails'][0]] = profile
-            profiles_dict_tilde[profile.id] = profile
-        if confirmedEmails:
-            return_value = {}
-            for email in confirmedEmails:
-                if profiles_dict_emails.get(email, False):
-                    return_value[email] = profiles_dict_emails[email]
-
-        if ids:
-            return_value = []
-            for tilde_id in ids:
-                return_value.append(profiles_dict_tilde[tilde_id])
-        return return_value
-
-    client.get_notes = MagicMock(side_effect=get_notes)
-    client.get_note = MagicMock(side_effect=get_note)
-    client.get_group = MagicMock(side_effect=get_group)
-    client.search_profiles = MagicMock(side_effect=search_profiles)
-    client.get_profile = MagicMock(side_effect=get_profile)
-
-    return client
+from expertise.service.utils import mock_client
 
 class TestExpertiseV2():
 
@@ -174,13 +79,13 @@ class TestExpertiseV2():
             }
 
     def test_get_publications(self):
-        openreview_client = mock_client()
+        openreview_client = mock_client(version=1)
         config = {
             'dataset': {
                 'top_recent_pubs': 3,
             }
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
         publications = or_expertise.get_publications('~Carlos_Mondragon1')
         assert publications == []
 
@@ -197,7 +102,7 @@ class TestExpertiseV2():
             },
             'version': 2
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
         publications = or_expertise.get_publications('~Harold_Rice8')
         assert len(publications) == 3
         for pub in publications:
@@ -207,14 +112,14 @@ class TestExpertiseV2():
 
 
     def test_get_submissions_from_invitation(self):
-        openreview_client = mock_client()
+        openreview_client = mock_client(version=1)
         config = {
             'use_email_ids': False,
             'match_group': 'ABC.cc',
             'paper_invitation': 'ABC.cc/-/Submission',
             'version': 1
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert 'value' in submissions['KHnr1r7H']['content']['title'].keys()
@@ -226,7 +131,7 @@ class TestExpertiseV2():
             'paper_invitation': 'ABC.cc/-/Submission',
             'version': 2
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert not isinstance(submissions['KHnr1r7H']['content']['title'], dict)
@@ -251,12 +156,12 @@ class TestExpertiseV2():
         })
 
     def test_get_by_submissions_from_paper_id(self):
-        openreview_client = mock_client()
+        openreview_client = mock_client(version=1)
         config = {
             'paper_id': 'KHnr1r7H',
             'version': 1
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert 'value' in submissions['KHnr1r7H']['content']['title'].keys()
@@ -266,7 +171,7 @@ class TestExpertiseV2():
             'paper_id': 'KHnr1r7H',
             'version': 2
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert not isinstance(submissions['KHnr1r7H']['content']['title'], dict)
@@ -291,7 +196,7 @@ class TestExpertiseV2():
             data = json.dumps({
                     'name': 'test_run',
                     'match_group': ["ABC.cc"],
-                    'paper_id': 'KHnr1r7H',
+                    'paper_id': 'KHnr1r7h',
                     "model": "specter+mfr",
                     "model_params": {
                         "use_title": False,

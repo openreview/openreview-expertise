@@ -22,14 +22,11 @@ class OpenReviewExpertise(object):
         # If no V2 client was provided, log in with the V1 client credentials
         if openreview_client_v2:
             self.openreview_client_v2 = openreview_client_v2
-        elif self.get_api_version() == 2:
+        else:
             self.openreview_client_v2 = openreview.api.OpenReviewClient(
                 token=openreview_client.token,
                 baseurl=openreview_client.baseurl
             )
-        else:
-            self.openreview_client_v2 = None
-
         self.config = config
         self.root = Path(config.get('dataset', {}).get('directory', './'))
         self.excluded_ids_by_user = defaultdict(list)
