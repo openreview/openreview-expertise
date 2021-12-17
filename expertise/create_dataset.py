@@ -314,11 +314,22 @@ class OpenReviewExpertise(object):
         submissions = []
 
         for invitation_id in invitation_ids:
-            submissions.extend(list(openreview.tools.iterget_notes(
-                self.openreview_client, invitation=invitation_id)))
+            submissions_v1 = list(openreview.tools.iterget_notes(
+                self.openreview_client, invitation=invitation_id))
+
+            if not submissions_v1:
+                submissions.extend(list(openreview.tools.iterget_notes(
+                    self.openreview_client_v2, invitation=invitation_id)))
+            else:
+                submissions.extend(submissions_v1)
 
         if paper_id:
-            submissions.append(self.openreview_client.get_note(paper_id))
+            submission_v1 = self.openreview_client.get_note(paper_id)
+
+            if not submission_v1:
+                submissions.append(self.openreview_client_v2.get_note(paper_id))
+            else:
+                submissions.append(submission_v1)
 
         # Bug: specter+mfr cannot handle a single submission
         # Solution: create a copy of the note and modify the ID
