@@ -34,16 +34,10 @@ def run_userpaper(self, config: dict, logger: logging.Logger):
     try:
         update_status(config['job_dir'], JobStatus.FETCHING_DATA)
         if config.get('token'):
-            if config.get('version') == 1:
-                openreview_client = openreview.Client(
-                    token=config['token'],
-                    baseurl=config['baseurl']
-                )
-            elif config.get('version') == 2:
-                openreview_client = openreview.api.OpenReviewClient(
-                    token=config['token'],
-                    baseurl=config['baseurl']
-                )
+            openreview_client = openreview.Client(
+                token=config['token'],
+                baseurl=config['baseurl']
+            )
         else:
             openreview_client = mock_client(version=config.get('version'))
         execute_create_dataset(openreview_client, config=config)

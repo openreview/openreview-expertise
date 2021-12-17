@@ -19,6 +19,14 @@ from collections import defaultdict
 class OpenReviewExpertise(object):
     def __init__(self, openreview_client, config):
         self.openreview_client = openreview_client
+        if self.get_api_version() == 2:
+            self.openreview_client_v2 = openreview.api.OpenReviewClient(
+                token=openreview_client.token,
+                baseurl=openreview_client.baseurl
+            )
+        else:
+            self.openreview_client_v2 = None
+
         self.config = config
         self.root = Path(config.get('dataset', {}).get('directory', './'))
         self.excluded_ids_by_user = defaultdict(list)
@@ -404,20 +412,11 @@ if __name__ == '__main__':
 
     print(config)
     
-    if config.get('version') == 1:
-        client = openreview.Client(
-            username=args.username,
-            password=args.password,
-            baseurl=args.baseurl
-        )
-    elif config.get('version') == 2:
-        client = openreview.api.OpenReviewClient(
-            username=args.username,
-            password=args.password,
-            baseurl=args.baseurl
-        )
-    else:
-        raise openreview.OpenReviewException('Version number not supported')
+    client = openreview.Client(
+        username=args.username,
+        password=args.password,
+        baseurl=args.baseurl
+    )
 
     expertise = OpenReviewExpertise(client, config)
     expertise.run()
