@@ -89,8 +89,8 @@ class OpenReviewExpertise(object):
                 publication.cdate = getattr(publication, 'tcdate', 0)
 
             # Get title + abstract depending on API version
-                pub_title = publication.content.get('title', {})
-                pub_abstr = publication.content.get('abstract', {})
+            pub_title = publication.content.get('title', {})
+            pub_abstr = publication.content.get('abstract', {})
             if isinstance(pub_title, dict) and isinstance(pub_abstr, dict):
                 pub_title = pub_title.get('value')
                 pub_abstr = pub_abstr.get('value')
@@ -344,12 +344,11 @@ class OpenReviewExpertise(object):
             paper_id = paper.id
 
             # Get title + abstract depending on API version
-            if self.get_api_version() == 1:
-                paper_title = paper.content.get('title')
-                paper_abstr = paper.content.get('abstract')
-            elif self.get_api_version() == 2:
-                paper_title = paper.content.get('title', {}).get('value')
-                paper_abstr = paper.content.get('abstract', {}).get('value')
+            paper_title = paper.content.get('title', {})
+            paper_abstr = paper.content.get('abstract', {})
+            if isinstance(paper_title, dict) and isinstance(paper_abstr, dict):
+                paper_title = paper_title.get('value')
+                paper_abstr = paper_abstr.get('value')
 
             reduced_submissions[paper_id] = {
                 'id': paper_id,
