@@ -87,8 +87,8 @@ class OpenReviewExpertise(object):
                 pub_title = publication.content.get('title')
                 pub_abstr = publication.content.get('abstract')
             elif self.get_api_version() == 2:
-                pub_title = publication.content.get('title').get('value')
-                pub_abstr = publication.content.get('abstract').get('value')
+                pub_title = publication.content.get('title', {}).get('value')
+                pub_abstr = publication.content.get('abstract', {}).get('value')
             
             reduced_publication = {
                 'id': publication.id,
@@ -332,8 +332,8 @@ class OpenReviewExpertise(object):
                 paper_title = paper.content.get('title')
                 paper_abstr = paper.content.get('abstract')
             elif self.get_api_version() == 2:
-                paper_title = paper.content.get('title').get('value')
-                paper_abstr = paper.content.get('abstract').get('value')
+                paper_title = paper.content.get('title', {}).get('value')
+                paper_abstr = paper.content.get('abstract', {}).get('value')
 
             reduced_submissions[paper_id] = {
                 'id': paper_id,
