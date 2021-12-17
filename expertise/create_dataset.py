@@ -15,13 +15,15 @@ import openreview
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
+from expertise.service.utils import mock_client
 
 class OpenReviewExpertise(object):
-    def __init__(self, openreview_client, config, openreview_client_v2=None):
+    def __init__(self, openreview_client, config):
         self.openreview_client = openreview_client
-        # If no V2 client was provided, log in with the V1 client credentials
-        if openreview_client_v2:
-            self.openreview_client_v2 = openreview_client_v2
+        # Log in a V2 client if valid token
+        # If token is none, create a mock V2 client
+        if openreview_client.token is None:
+            self.openreview_client_v2 = mock_client(version=2)
         else:
             self.openreview_client_v2 = openreview.api.OpenReviewClient(
                 token=openreview_client.token,
@@ -36,9 +38,6 @@ class OpenReviewExpertise(object):
             'no_publications_count': 0,
             'no_publications': []
         }
-
-    def get_api_version(self):
-        return self.config.get('version', 1)
 
     def convert_to_list(self, config_invitations):
         if (isinstance(config_invitations, str)):

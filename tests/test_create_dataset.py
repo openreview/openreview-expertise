@@ -98,11 +98,13 @@ def mock_client():
     client.get_group = MagicMock(side_effect=get_group)
     client.search_profiles = MagicMock(side_effect=search_profiles)
     client.get_profile = MagicMock(side_effect=get_profile)
+    client.token = None
 
     return client
 
 def test_convert_to_list():
-    or_expertise = OpenReviewExpertise(MagicMock(openreview.Client), {})
+    openreview_client = mock_client()
+    or_expertise = OpenReviewExpertise(openreview_client, {})
     groupList = or_expertise.convert_to_list('group.cc')
     assert groupList == ['group.cc']
 

@@ -85,11 +85,11 @@ class TestExpertiseV2():
                 'top_recent_pubs': 3,
             }
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         publications = or_expertise.get_publications('~Carlos_Mondragon1')
         assert publications == []
 
-        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         publications = or_expertise.get_publications('~Harold_Rice8')
         assert len(publications) == 3
         for pub in publications:
@@ -107,7 +107,7 @@ class TestExpertiseV2():
             'match_group': 'ABC.cc',
             'paper_invitation': 'ABC.cc/-/Submission',
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert not isinstance(submissions['KHnr1r7H']['content']['title'], dict)
@@ -136,7 +136,7 @@ class TestExpertiseV2():
         config = {
             'paper_id': 'KHnr1r7h',
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert not isinstance(submissions['KHnr1r7h']['content']['title'], dict)
