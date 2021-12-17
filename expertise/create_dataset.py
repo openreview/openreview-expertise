@@ -59,11 +59,9 @@ class OpenReviewExpertise(object):
             note_ids = [e.head for e in bids if e.label in ['Very High', 'High']]
             return [n for n in self.openreview_client.get_notes_by_ids(ids=note_ids) if n.invitation == paper_invitation]
 
-        if self.get_api_version() == 1:
-            return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id})
-        elif self.get_api_version() == 2:
-            return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id})
-
+        notes_v1 = list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id}))
+        notes_v2 = list(openreview.tools.iterget_notes(self.openreview_client_v2, content={'authorids': author_id}))
+        return notes_v1 + notes_v2
 
     def get_publications(self, author_id):
 
