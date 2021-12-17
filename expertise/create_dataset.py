@@ -17,9 +17,12 @@ from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 
 class OpenReviewExpertise(object):
-    def __init__(self, openreview_client, config):
+    def __init__(self, openreview_client, config, openreview_client_v2=None):
         self.openreview_client = openreview_client
-        if self.get_api_version() == 2:
+        # If no V2 client was provided, log in with the V1 client credentials
+        if openreview_client_v2:
+            self.openreview_client_v2 = openreview_client_v2
+        elif self.get_api_version() == 2:
             self.openreview_client_v2 = openreview.api.OpenReviewClient(
                 token=openreview_client.token,
                 baseurl=openreview_client.baseurl
