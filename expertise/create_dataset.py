@@ -416,6 +416,8 @@ if __name__ == '__main__':
             password=args.password,
             baseurl=args.baseurl
         )
+    else:
+        raise openreview.OpenReviewException('Version number not supported')
 
     expertise = OpenReviewExpertise(client, config)
     expertise.run()

@@ -25,6 +25,8 @@ def mock_client(version=1):
         elif version == 2:
             with open('tests/data/api2Data.json') as json_file:
                 data = json.load(json_file)
+        else:
+            raise openreview.OpenReviewException('Version number not supported')
 
         for invitation in data['notes'].keys():
             for note in data['notes'][invitation]:
@@ -69,6 +71,8 @@ def mock_client(version=1):
         elif version == 2:
             with open('tests/data/api2Data.json') as json_file:
                 data = json.load(json_file)
+        else:
+            raise openreview.OpenReviewException('Version number not supported')
 
         if invitation:
             notes=data['notes'][invitation]
@@ -92,6 +96,8 @@ def mock_client(version=1):
         elif version == 2:
             with open('tests/data/api2Data.json') as json_file:
                 data = json.load(json_file)
+        else:
+            raise openreview.OpenReviewException('Version number not supported')
         group = openreview.Group.from_json(data['groups'][group_id])
         return group
 
@@ -102,6 +108,8 @@ def mock_client(version=1):
         elif version == 2:
             with open('tests/data/api2Data.json') as json_file:
                 data = json.load(json_file)
+        else:
+            raise openreview.OpenReviewException('Version number not supported')
         profiles = data['profiles']
         profiles_dict_emails = {}
         profiles_dict_tilde = {}
