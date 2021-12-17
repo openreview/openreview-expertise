@@ -89,19 +89,6 @@ class TestExpertiseV2():
         publications = or_expertise.get_publications('~Carlos_Mondragon1')
         assert publications == []
 
-        publications = or_expertise.get_publications('~Harold_Rice8')
-        assert len(publications) == 3
-        for pub in publications:
-            content = pub['content']
-            assert 'value' in content['title'].keys()
-            assert 'value' in content['abstract'].keys()
-        
-        config = {
-            'dataset': {
-                'top_recent_pubs': 3,
-            },
-            'version': 2
-        }
         or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
         publications = or_expertise.get_publications('~Harold_Rice8')
         assert len(publications) == 3
@@ -112,24 +99,13 @@ class TestExpertiseV2():
 
 
     def test_get_submissions_from_invitation(self):
+        # Returns the V1 submissions
         openreview_client = mock_client(version=1)
-        config = {
-            'use_email_ids': False,
-            'match_group': 'ABC.cc',
-            'paper_invitation': 'ABC.cc/-/Submission',
-            'version': 1
-        }
-        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
-        submissions = or_expertise.get_submissions()
-        print(submissions)
-        assert 'value' in submissions['KHnr1r7H']['content']['title'].keys()
-        assert 'value' in submissions['KHnr1r7H']['content']['abstract'].keys()
 
         config = {
             'use_email_ids': False,
             'match_group': 'ABC.cc',
             'paper_invitation': 'ABC.cc/-/Submission',
-            'version': 2
         }
         or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
         submissions = or_expertise.get_submissions()
@@ -158,30 +134,19 @@ class TestExpertiseV2():
     def test_get_by_submissions_from_paper_id(self):
         openreview_client = mock_client(version=1)
         config = {
-            'paper_id': 'KHnr1r7H',
-            'version': 1
+            'paper_id': 'KHnr1r7h',
         }
         or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
         submissions = or_expertise.get_submissions()
         print(submissions)
-        assert 'value' in submissions['KHnr1r7H']['content']['title'].keys()
-        assert 'value' in submissions['KHnr1r7H']['content']['abstract'].keys()
-
-        config = {
-            'paper_id': 'KHnr1r7H',
-            'version': 2
-        }
-        or_expertise = OpenReviewExpertise(openreview_client, config, mock_client(version=2))
-        submissions = or_expertise.get_submissions()
-        print(submissions)
-        assert not isinstance(submissions['KHnr1r7H']['content']['title'], dict)
-        assert not isinstance(submissions['KHnr1r7H']['content']['abstract'], dict)
+        assert not isinstance(submissions['KHnr1r7h']['content']['title'], dict)
+        assert not isinstance(submissions['KHnr1r7h']['content']['abstract'], dict)
         assert json.dumps(submissions) == json.dumps({
-            'KHnr1r7H': {
-                "id": "KHnr1r7H",
+            'KHnr1r7h': {
+                "id": "KHnr1r7h",
                 "content": {
-                    "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
-                    "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
+                    "title": "Right Metatarsal, Endoscopic Approach",
+                    "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel."
                 }
             }
         })
@@ -234,7 +199,7 @@ class TestExpertiseV2():
         # Check config fields
         returned_config = response['config']
         assert returned_config['name'] == 'test_run'
-        assert returned_config['paper_id'] == 'KHnr1r7H'
+        assert returned_config['paper_id'] == 'KHnr1r7h'
         assert returned_config['model'] == 'specter+mfr'
         assert 'token' not in returned_config
         assert 'baseurl' not in returned_config
