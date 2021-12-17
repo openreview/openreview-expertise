@@ -89,12 +89,11 @@ class OpenReviewExpertise(object):
                 publication.cdate = getattr(publication, 'tcdate', 0)
 
             # Get title + abstract depending on API version
-            if self.get_api_version() == 1:
-                pub_title = publication.content.get('title')
-                pub_abstr = publication.content.get('abstract')
-            elif self.get_api_version() == 2:
-                pub_title = publication.content.get('title', {}).get('value')
-                pub_abstr = publication.content.get('abstract', {}).get('value')
+                pub_title = publication.content.get('title', {})
+                pub_abstr = publication.content.get('abstract', {})
+            if isinstance(pub_title, dict) and isinstance(pub_abstr, dict):
+                pub_title = pub_title.get('value')
+                pub_abstr = pub_abstr.get('value')
             
             reduced_publication = {
                 'id': publication.id,
