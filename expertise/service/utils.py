@@ -80,8 +80,6 @@ def mock_client(version=1):
 
         if 'authorids' in content:
             authorid = content['authorids']
-            if isinstance(authorid, dict):
-                authorid = authorid['value'][0]
             profiles = data['profiles']
             for profile in profiles:
                 if authorid == profile['id']:

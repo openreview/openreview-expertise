@@ -54,7 +54,7 @@ class OpenReviewExpertise(object):
         if self.get_api_version() == 1:
             return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id})
         elif self.get_api_version() == 2:
-            return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': { 'value': [author_id] }})
+            return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id})
 
 
     def get_publications(self, author_id):
