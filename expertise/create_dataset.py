@@ -417,7 +417,7 @@ if __name__ == '__main__':
     config = ModelConfig(config_file_path=args.config)
 
     print(config)
-    
+
     client = openreview.Client(
         username=args.username,
         password=args.password,
