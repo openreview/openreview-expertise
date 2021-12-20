@@ -18,8 +18,16 @@ from collections import defaultdict
 from expertise.service.utils import mock_client
 
 class OpenReviewExpertise(object):
-    def __init__(self, openreview_client, config):
+    def __init__(self, openreview_client, config, baseurl_v2=None):
         self.openreview_client = openreview_client
+        # Fetch baseurl for API 2 - if not provided, must be in config
+        # Otherwise, raise an exception
+        if baseurl_v2 is None:
+            if 'baseurl_v2' not in config.keys():
+                raise openreview.OpenReviewException('Baseurl V2 not provided and not in config')
+            else:
+                baseurl_v2 = config.get('baseurl_v2')
+
         # Log in a V2 client if valid token
         # If token is none, create a mock V2 client
         if openreview_client.token is None:
@@ -27,7 +35,7 @@ class OpenReviewExpertise(object):
         else:
             self.openreview_client_v2 = openreview.api.OpenReviewClient(
                 token=openreview_client.token,
-                baseurl=openreview_client.baseurl
+                baseurl=baseurl_v2
             )
         self.config = config
         self.root = Path(config.get('dataset', {}).get('directory', './'))
@@ -411,6 +419,7 @@ if __name__ == '__main__':
     parser.add_argument('--username')
     parser.add_argument('--password')
     parser.add_argument('--baseurl')
+    parser.add_argument('--baseurl_v2')
     args = parser.parse_args()
 
     config = ModelConfig(config_file_path=args.config)
@@ -423,5 +432,5 @@ if __name__ == '__main__':
         baseurl=args.baseurl
     )
 
-    expertise = OpenReviewExpertise(client, config)
+    expertise = OpenReviewExpertise(client, config, baseurl_v2=args.baseurl_v2)
     expertise.run()
