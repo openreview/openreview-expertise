@@ -89,7 +89,7 @@ class OpenReviewExpertise(object):
                 if not 'title' in publication.content or not publication.content.get('title'):
                     continue
             # Exclude blind Notes
-            if getattr(publication, 'original') is not None:
+            if hasattr(publication, 'original') and getattr(publication, 'original') is not None:
                 continue
             if getattr(publication, 'cdate') is None:
                 publication.cdate = getattr(publication, 'tcdate', 0)
