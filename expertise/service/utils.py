@@ -32,6 +32,7 @@ def mock_client(version=1):
             for note in data['notes'][invitation]:
                 if note['id'] == id:
                     return openreview.Note.from_json(note)
+        raise openreview.OpenReviewException('Note not found')
 
     def get_profile():
         mock_profile = {
