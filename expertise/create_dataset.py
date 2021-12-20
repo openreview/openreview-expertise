@@ -313,6 +313,8 @@ class OpenReviewExpertise(object):
         submissions = []
 
         for invitation_id in invitation_ids:
+            # Assume invitation is valid for both APIs, but only 1
+            # will have the associated notes
             submissions_v1 = list(openreview.tools.iterget_notes(
                 self.openreview_client, invitation=invitation_id))
 

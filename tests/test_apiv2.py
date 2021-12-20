@@ -98,7 +98,7 @@ class TestExpertiseV2():
             assert isinstance(content['abstract'], str)
 
 
-    def test_get_submissions_from_invitation(self):
+    def test_get_submissions_from_invitation_v1(self):
         # Returns the V1 submissions
         openreview_client = mock_client(version=1)
 
@@ -127,6 +127,39 @@ class TestExpertiseV2():
                 "content": {
                     "title": "Bypass L Com Iliac Art to B Com Ilia, Perc Endo Approach",
                     "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
+                }
+            }
+        })
+
+    def test_get_submissions_from_invitation_v2(self):
+        # Returns the V1 submissions
+        openreview_client = mock_client(version=1)
+
+        config = {
+            'use_email_ids': False,
+            'match_group': 'ABC.cc',
+            'paper_invitation': 'ABC.cc/-/Blind_Submission',
+        }
+        or_expertise = OpenReviewExpertise(openreview_client, config)
+        submissions = or_expertise.get_submissions()
+        print(submissions)
+        assert not isinstance(submissions['KHnr1r7h']['content']['title'], dict)
+        assert isinstance(submissions['KHnr1r7h']['content']['title'], str)
+        assert not isinstance(submissions['KHnr1r7h']['content']['abstract'], dict)
+        assert isinstance(submissions['KHnr1r7h']['content']['abstract'], str)
+        assert json.dumps(submissions) == json.dumps({
+            'KHnr1r7h': {
+                "id": "KHnr1r7h",
+                "content": {
+                    "title": "Right Metatarsal, Endoscopic Approach",
+                    "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel."
+                }
+            },
+            'YQtWeE8p': {
+                "id": "YQtWeE8p",
+                "content": {
+                    "title": "Iliac Art to B Com Ilia, Perc Endo Approach",
+                    "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam."
                 }
             }
         })
