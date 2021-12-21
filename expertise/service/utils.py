@@ -32,7 +32,7 @@ def mock_client(version=1):
             for note in data['notes'][invitation]:
                 if note['id'] == id:
                     return openreview.Note.from_json(note)
-        raise openreview.OpenReviewException('Note not found')
+        raise openreview.OpenReviewException({'name': 'NotFoundError', 'message': f"The Note {id} was not found", 'status': 404, 'details': {'path': 'id', 'value': id}})
 
     def get_profile():
         mock_profile = {

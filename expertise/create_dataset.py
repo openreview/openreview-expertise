@@ -335,11 +335,27 @@ class OpenReviewExpertise(object):
                 self.openreview_client_v2, invitation=invitation_id)))
 
         if paper_id:
+            # If note not found, keep executing and raise an overall exception later
+            # Otherwise if the exception is anything else, raise it again
+            note_v1, note_v2 = None, None
             try:
-                submission_v1 = self.openreview_client.get_note(paper_id)
-                submissions.append(submission_v1)
-            except:
-                submissions.append(self.openreview_client_v2.get_note(paper_id))
+                note_v1 = self.openreview_client.get_note(paper_id)
+                submissions.append(note_v1)
+            except openreview.OpenReviewException as e:
+                err_name = e.args[0].get('name').lower()
+                if err_name != 'notfounderror':
+                    raise e
+
+            try:
+                note_v2 = self.openreview_client_v2.get_note(paper_id)
+                submissions.append(note_v2)
+            except openreview.OpenReviewException as e:
+                err_name = e.args[0].get('name').lower()
+                if err_name != 'notfounderror':
+                    raise e
+
+            if not note_v1 and not note_v2:
+                raise openreview.OpenReviewException(f"Note {paper_id} not found")
 
         # Bug: specter+mfr cannot handle a single submission
         # Solution: create a copy of the note and modify the ID
