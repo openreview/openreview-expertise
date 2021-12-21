@@ -18,27 +18,9 @@ from collections import defaultdict
 from expertise.service.utils import mock_client
 
 class OpenReviewExpertise(object):
-    def __init__(self, openreview_client, openreview_client_v2, config, baseurl_v2=None):
+    def __init__(self, openreview_client, openreview_client_v2, config):
         self.openreview_client = openreview_client
-        # Log in a V2 client if valid token
-        # If token is none, create a mock V2 client
-        if openreview_client.token is None:
-            self.openreview_client_v2 = mock_client(version=2)
-        else:
-            self.openreview_client_v2 = openreview_client_v2
-            '''
-            # Fetch baseurl for API 2 - if not provided, must be in config
-            # Otherwise, raise an exception
-            if baseurl_v2 is None:
-                if 'baseurl_v2' not in config.keys():
-                    raise openreview.OpenReviewException('Baseurl V2 not provided and not in config')
-                else:
-                    baseurl_v2 = config.get('baseurl_v2')
-            self.openreview_client_v2 = openreview.api.OpenReviewClient(
-                token=openreview_client.token,
-                baseurl=baseurl_v2
-            )
-            '''
+        self.openreview_client_v2 = openreview_client_v2
         self.config = config
         self.root = Path(config.get('dataset', {}).get('directory', './'))
         self.excluded_ids_by_user = defaultdict(list)
