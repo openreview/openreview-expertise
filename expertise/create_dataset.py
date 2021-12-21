@@ -15,10 +15,12 @@ import openreview
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
+from expertise.service.utils import mock_client
 
 class OpenReviewExpertise(object):
-    def __init__(self, openreview_client, config):
+    def __init__(self, openreview_client, openreview_client_v2, config):
         self.openreview_client = openreview_client
+        self.openreview_client_v2 = openreview_client_v2
         self.config = config
         self.root = Path(config.get('dataset', {}).get('directory', './'))
         self.excluded_ids_by_user = defaultdict(list)
@@ -48,8 +50,9 @@ class OpenReviewExpertise(object):
             note_ids = [e.head for e in bids if e.label in ['Very High', 'High']]
             return [n for n in self.openreview_client.get_notes_by_ids(ids=note_ids) if n.invitation == paper_invitation]
 
-        return openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id})
-
+        notes_v1 = list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id}))
+        notes_v2 = list(openreview.tools.iterget_notes(self.openreview_client_v2, content={'authorids': author_id}))
+        return notes_v1 + notes_v2
 
     def get_publications(self, author_id):
 
@@ -71,16 +74,26 @@ class OpenReviewExpertise(object):
                 if not 'title' in publication.content or not publication.content.get('title'):
                     continue
             # Exclude blind Notes
-            if getattr(publication, 'original') is not None:
+            if getattr(publication, 'original', None) is not None:
                 continue
             if getattr(publication, 'cdate') is None:
                 publication.cdate = getattr(publication, 'tcdate', 0)
+
+            # Get title + abstract depending on API version
+            pub_title = publication.content.get('title')
+            if isinstance(pub_title, dict):
+                pub_title = pub_title.get('value')
+
+            pub_abstr = publication.content.get('abstract')
+            if isinstance(pub_abstr, dict):
+                pub_abstr = pub_abstr.get('value')
+            
             reduced_publication = {
                 'id': publication.id,
                 'cdate': publication.cdate,
                 'content': {
-                    'title': publication.content.get('title'),
-                    'abstract': publication.content.get('abstract')
+                    'title': pub_title,
+                    'abstract': pub_abstr
                 }
             }
             unsorted_publications.append(reduced_publication)
@@ -294,11 +307,37 @@ class OpenReviewExpertise(object):
         submissions = []
 
         for invitation_id in invitation_ids:
+            # Assume invitation is valid for both APIs, but only 1
+            # will have the associated notes
+            submissions_v1 = list(openreview.tools.iterget_notes(
+                self.openreview_client, invitation=invitation_id))
+
+            submissions.extend(submissions_v1)
             submissions.extend(list(openreview.tools.iterget_notes(
-                self.openreview_client, invitation=invitation_id)))
+                self.openreview_client_v2, invitation=invitation_id)))
 
         if paper_id:
-            submissions.append(self.openreview_client.get_note(paper_id))
+            # If note not found, keep executing and raise an overall exception later
+            # Otherwise if the exception is anything else, raise it again
+            note_v1, note_v2 = None, None
+            try:
+                note_v1 = self.openreview_client.get_note(paper_id)
+                submissions.append(note_v1)
+            except openreview.OpenReviewException as e:
+                err_name = e.args[0].get('name').lower()
+                if err_name != 'notfounderror':
+                    raise e
+
+            try:
+                note_v2 = self.openreview_client_v2.get_note(paper_id)
+                submissions.append(note_v2)
+            except openreview.OpenReviewException as e:
+                err_name = e.args[0].get('name').lower()
+                if err_name != 'notfounderror':
+                    raise e
+
+            if not note_v1 and not note_v2:
+                raise openreview.OpenReviewException(f"Note {paper_id} not found")
 
         # Bug: specter+mfr cannot handle a single submission
         # Solution: create a copy of the note and modify the ID
@@ -311,11 +350,21 @@ class OpenReviewExpertise(object):
         reduced_submissions = {}
         for paper in tqdm(submissions, total=len(submissions)):
             paper_id = paper.id
+
+            # Get title + abstract depending on API version
+            paper_title = paper.content.get('title')
+            if isinstance(paper_title, dict):
+                paper_title = paper_title.get('value')
+
+            paper_abstr = paper.content.get('abstract')
+            if isinstance(paper_abstr, dict):
+                paper_abstr = paper_abstr.get('value')
+
             reduced_submissions[paper_id] = {
                 'id': paper_id,
                 'content': {
-                    'title': paper.content.get('title'),
-                    'abstract': paper.content.get('abstract')
+                    'title': paper_title,
+                    'abstract': paper_abstr
                 }
             }
 
@@ -374,6 +423,7 @@ if __name__ == '__main__':
     parser.add_argument('--username')
     parser.add_argument('--password')
     parser.add_argument('--baseurl')
+    parser.add_argument('--baseurl_v2')
     args = parser.parse_args()
 
     config = ModelConfig(config_file_path=args.config)
@@ -386,5 +436,11 @@ if __name__ == '__main__':
         baseurl=args.baseurl
     )
 
-    expertise = OpenReviewExpertise(client, config)
+    client_v2 = openreview.api.OpenReviewClient(
+        username=args.username,
+        password=args.password,
+        baseurl=args.baseurl_v2
+    )
+
+    expertise = OpenReviewExpertise(client, client_v2, config)
     expertise.run()
