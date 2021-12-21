@@ -1,4 +1,5 @@
 from expertise.create_dataset import OpenReviewExpertise
+from expertise.service.utils import mock_client as mock_v2
 from unittest.mock import patch, MagicMock
 from collections import defaultdict
 import openreview
@@ -104,7 +105,8 @@ def mock_client():
 
 def test_convert_to_list():
     openreview_client = mock_client()
-    or_expertise = OpenReviewExpertise(openreview_client, {})
+    openreview_client_v2 = mock_v2(version=2)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, {})
     groupList = or_expertise.convert_to_list('group.cc')
     assert groupList == ['group.cc']
 
@@ -113,7 +115,8 @@ def test_convert_to_list():
 
 def test_get_profile_ids():
     openreview_client = mock_client()
-    or_expertise = OpenReviewExpertise(openreview_client, {})
+    openreview_client_v2 = mock_v2(version=2)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, {})
     ids, _ = or_expertise.get_profile_ids(group_ids=['ABC.cc'])
     assert len(ids) == 100
     for tilde_id, email_id in ids:
@@ -141,7 +144,8 @@ def test_get_profile_ids():
 
 def test_get_publications():
     openreview_client = mock_client()
-    or_expertise = OpenReviewExpertise(openreview_client, {})
+    openreview_client_v2 = mock_v2(version=2)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, {})
     publications = or_expertise.get_publications('~Carlos_Mondragon1')
     assert publications == []
 
@@ -154,7 +158,7 @@ def test_get_publications():
             'minimum_pub_date': minimum_pub_date
         }
     }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
     publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
@@ -166,7 +170,7 @@ def test_get_publications():
             'top_recent_pubs': top_recent_pubs
         }
     }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
     publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
@@ -179,7 +183,7 @@ def test_get_publications():
             'minimum_pub_date': minimum_pub_date
         }
     }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
     publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 1
     assert publications[0]['cdate'] > minimum_pub_date
@@ -193,7 +197,7 @@ def test_get_publications():
             }
         }
     }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
     publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
@@ -208,7 +212,7 @@ def test_get_publications():
             }
         }
     }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
     publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
@@ -216,13 +220,14 @@ def test_get_publications():
 
 def test_get_submissions():
     openreview_client = mock_client()
+    openreview_client_v2 = mock_v2(version=2)
     config = {
         'dataset': {
             'directory': 'tests/data/'
         },
         'csv_submissions': 'csv_submissions.csv'
     }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
     submissions = or_expertise.get_submissions()
     print(submissions)
     assert json.dumps(submissions) == json.dumps({
@@ -248,11 +253,12 @@ def get_paperhash(prefix, title):
 @patch('openreview.tools.get_paperhash', side_effect=get_paperhash)
 def test_retrieve_expertise(get_paperhash):
     openreview_client = mock_client()
+    openreview_client_v2 = mock_v2(version=2)
     config = {
         'use_email_ids': False,
         'match_group': 'ABC.cc'
     }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
     expertise = or_expertise.retrieve_expertise()
 
     with open('tests/data/fakeData.json') as json_file:
@@ -264,12 +270,13 @@ def test_retrieve_expertise(get_paperhash):
 
 def test_get_submissions_from_invitation():
     openreview_client = mock_client()
+    openreview_client_v2 = mock_v2(version=2)
     config = {
         'use_email_ids': False,
         'match_group': 'ABC.cc',
         'paper_invitation': 'ABC.cc/-/Submission'
     }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
     submissions = or_expertise.get_submissions()
     print(submissions)
     assert json.dumps(submissions) == json.dumps({
@@ -291,10 +298,11 @@ def test_get_submissions_from_invitation():
 
 def test_get_by_submissions_from_paper_id():
     openreview_client = mock_client()
+    openreview_client_v2 = mock_v2(version=2)
     config = {
         'paper_id': 'KHnr1r7H'
     }
-    or_expertise = OpenReviewExpertise(openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
     submissions = or_expertise.get_submissions()
     print(submissions)
     assert json.dumps(submissions) == json.dumps({

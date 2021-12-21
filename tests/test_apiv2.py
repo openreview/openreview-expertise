@@ -80,16 +80,17 @@ class TestExpertiseV2():
 
     def test_get_publications(self):
         openreview_client = mock_client(version=1)
+        openreview_client_v2 = mock_client(version=2)
         config = {
             'dataset': {
                 'top_recent_pubs': 3,
             }
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
         publications = or_expertise.get_publications('~Carlos_Mondragon1')
         assert publications == []
 
-        or_expertise = OpenReviewExpertise(openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
         publications = or_expertise.get_publications('~Harold_Rice8')
         assert len(publications) == 3
         for pub in publications:
@@ -101,13 +102,14 @@ class TestExpertiseV2():
     def test_get_submissions_from_invitation_v1(self):
         # Returns the V1 submissions
         openreview_client = mock_client(version=1)
+        openreview_client_v2 = mock_client(version=2)
 
         config = {
             'use_email_ids': False,
             'match_group': 'ABC.cc',
             'paper_invitation': 'ABC.cc/-/Submission',
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert not isinstance(submissions['KHnr1r7H']['content']['title'], dict)
@@ -134,13 +136,14 @@ class TestExpertiseV2():
     def test_get_submissions_from_invitation_v2(self):
         # Returns the V1 submissions
         openreview_client = mock_client(version=1)
+        openreview_client_v2 = mock_client(version=2)
 
         config = {
             'use_email_ids': False,
             'match_group': 'ABC.cc',
             'paper_invitation': 'ABC.cc/-/Blind_Submission',
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert not isinstance(submissions['KHnr1r7h']['content']['title'], dict)
@@ -166,10 +169,12 @@ class TestExpertiseV2():
 
     def test_get_by_submissions_from_paper_id(self):
         openreview_client = mock_client(version=1)
+        openreview_client_v2 = mock_client(version=2)
+
         config = {
             'paper_id': 'KHnr1r7h',
         }
-        or_expertise = OpenReviewExpertise(openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert not isinstance(submissions['KHnr1r7h']['content']['title'], dict)

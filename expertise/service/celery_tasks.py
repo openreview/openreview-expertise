@@ -38,9 +38,14 @@ def run_userpaper(self, config: dict, logger: logging.Logger):
                 token=config['token'],
                 baseurl=config['baseurl']
             )
+            openreview_client_v2 = openreview.api.OpenReviewClient(
+                token=config['token'],
+                baseurl=config['baseurl_v2']
+            )
         else:
-            openreview_client = mock_client()
-        execute_create_dataset(openreview_client, config=config)
+            openreview_client = mock_client(version=1)
+            openreview_client_v2 = mock_client(version=2)
+        execute_create_dataset(openreview_client, openreview_client_v2, config=config)
         update_status(config['job_dir'], JobStatus.EXPERTISE_QUEUED)
         run_expertise.apply_async(
                 (config, logger),
