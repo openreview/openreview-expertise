@@ -1,0 +1,32 @@
+# This workflow deploys the master brance to the dev site
+
+name: dev-deployment
+
+# Controls when the workflow will run
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: false
+        default: 'master'
+  # Triggers the workflow on push events but only for the master branch
+  push:
+    branches: [ master ]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@master
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+      - name: Configure gcloud
+        run: gcloud config set compute/zone us-central1-c
+      - name: Run deploy script
+        run: |
+          gcloud compute ssh openreview@instance-matching-server --command '/bin/expertise_build_dev.sh -b ${{ github.event.inputs.branch }}' --quiet
