@@ -3,7 +3,7 @@ from expertise.service.utils import mock_client as mock_v2
 from unittest.mock import patch, MagicMock
 from collections import defaultdict
 import openreview
-import json, re
+import json, re, shutil, os
 
 def mock_client():
     client = MagicMock(openreview.Client)
@@ -131,9 +131,12 @@ def test_convert_to_list():
 
 def test_get_papers_from_group():
     openreview_client = mock_client()
-    or_expertise = OpenReviewExpertise(openreview_client, {})
+    openreview_client_v2 = mock_v2(version=2)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, {})
     all_papers = or_expertise.get_papers_from_group('ABC.cc')
     assert len(all_papers) == 148
+    if os.path.isfile('publications_by_profile_id.json'):
+        os.remove('publications_by_profile_id.json')
 
 def test_get_profile_ids():
     openreview_client = mock_client()
