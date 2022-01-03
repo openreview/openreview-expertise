@@ -11,6 +11,7 @@ from collections import defaultdict
 import json
 import os
 import torch
+import faiss
 from tqdm import tqdm
 from typing import Optional
 
@@ -394,4 +395,70 @@ class SpecterPredictor:
                     f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
 
         print('Sparse score computation complete')
+        return all_scores
+
+    def find_duplicates(self, submissions_path=None, other_submissions_path=None, scores_path=None):
+        def load_emb_file(emb_file):
+            paper_emb_size_default = 768
+            id_list = []
+            emb_list = []
+            bad_id_set = set()
+            for line in emb_file:
+                paper_data = json.loads(line.rstrip())
+                paper_id = paper_data['paper_id']
+                paper_emb_size = len(paper_data['embedding'])
+                assert paper_emb_size == 0 or paper_emb_size == paper_emb_size_default
+                if paper_emb_size == 0:
+                    paper_emb = [0] * paper_emb_size_default
+                    bad_id_set.add(paper_id)
+                else:
+                    paper_emb = paper_data['embedding']
+                id_list.append(paper_id)
+                emb_list.append(paper_emb)
+            emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
+            emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
+            print(len(bad_id_set))
+            return emb_tensor, id_list, bad_id_set
+        def jsonl_to_list(path):
+            with open(path, 'rb') as f:
+                emb_tensor, paper_ids, _ = load_emb_file(f)
+                emb_tensor = emb_tensor.cpu().detach().numpy()
+            return [paper_ids, emb_tensor]
+
+        print('Loading cached submissions...')
+        # Perform jsonl loading
+        sub_note_id_to_vec = jsonl_to_list(submissions_path)
+
+        if other_submissions_path:
+            print('Loading other cached submissions...')
+            other_sub_note_id_to_vec = jsonl_to_list(other_submissions_path)
+        else:
+            other_sub_note_id_to_vec = jsonl_to_list(submissions_path)
+
+        print('Computing all scores...')
+        index = faiss.IndexFlatL2(other_sub_note_id_to_vec[1].shape[1])
+        index.add(other_sub_note_id_to_vec[1])
+
+        knn = other_sub_note_id_to_vec[1].shape[0]
+
+        print('Querying the index...')
+        D, I = index.search(sub_note_id_to_vec[1], knn)
+        scores = (2 - D) / 2
+
+        csv_scores = []
+        all_scores = []
+        for row, other_submission_indexes in enumerate(I):
+            note_id = sub_note_id_to_vec[0][row]
+            for col, other_submission_index in enumerate(other_submission_indexes):
+                other_note_id = other_sub_note_id_to_vec[0][other_submission_index]
+                if note_id != other_note_id:
+                    score = scores[row][col]
+                    csv_line = '{note_id},{other_note_id},{score}'.format(note_id=note_id, other_note_id=other_note_id, score=score)
+                    csv_scores.append(csv_line)
+                    all_scores.append((note_id, other_note_id, score))
+
+        if scores_path:
+            with open(scores_path, 'w') as f:
+                for csv_line in csv_scores:
+                    f.write(csv_line + '\n')
         return all_scores
