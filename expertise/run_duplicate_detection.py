@@ -60,8 +60,8 @@ if __name__ == '__main__':
             specter_predictor.set_submissions_dataset(submissions_dataset)
             specter_predictor.embed_submissions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'))
             if other_submissions_dataset:
-                specter_predictor.set_submissions_dataset(other_submissions_dataset)
-            specter_predictor.embed_submissions(other_submissions_path=Path(config['model_params']['submissions_path']).joinpath('osub2vec.jsonl'))
+                specter_predictor.set_other_submissions_dataset(other_submissions_dataset)
+                specter_predictor.embed_other_submissions(other_submissions_path=Path(config['model_params']['submissions_path']).joinpath('osub2vec.jsonl'))
         duplicates = specter_predictor.find_duplicates(
             submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'),
             other_submissions_path=(Path(config['model_params']['other_submissions_path']).joinpath('osub2vec.jsonl') if other_submissions_dataset else None),
