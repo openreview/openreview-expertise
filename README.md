@@ -26,9 +26,11 @@ pip install -e <location of this repository>
 
 Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR) or SPECTER+MFR with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
 
-We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
+We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo and SPECTER to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
 
-Run this command if you plan to use ELMo (Using CPU is fine):
+Run this command if you plan to:
+- Use ELMo (Using CPU is fine)
+- Use SPECTER for duplicate detection
 ```
 conda install intel-openmp==2019.4
 conda install faiss-cpu -c pytorch
@@ -115,7 +117,7 @@ There are two steps to detect duplicates:
 The dataset can be generated using the [OpenReview python API](https://github.com/openreview/openreview-py) which should be installed when this repository is installed. You can generate your own dataset from some other source as long as it is compliant with the format shown in the Datasets section.
 Start by creating an "experiment directory" (`experiment_dir`), and a JSON config file (e.g. `config.json`) in it. Go to the Configuration File section for details on how to create the `config.json`.
 
-Duplicate detection uses ELMo exclusively, since we always normalize the scores for BM25. ELMo scores have values from 0 to 1. The closer a score is to 1, the more similar the submissions are. The `normalize` option for ELMo is disabled for duplicate detection.
+Duplicate detection uses ELMo or SPECTER, and we always normalize the scores for BM25. Scores have values from 0 to 1. The closer a score is to 1, the more similar the submissions are. The `normalize` option for ELMo is disabled for duplicate detection.
 
 Create a dataset by running the following command (this is optional if you already have the dataset):
 ```
@@ -125,11 +127,11 @@ python -m expertise.create_dataset config.json \
 	--username <your_username> \
 ```
 
-For ELMo run the following command
+Then run the following command
 ```
 python -m expertise.run_duplicate_detection config.json
 ```
-The output will generate a `.csv` file with the name pattern `<config_name>.csv`. Read the `Configuration File` section to understand how to create one. For duplicate detection, the parameters that apply are in `Affinity Scores Configuration Options`, `ELMo specific parameters (affinity scores)`, and `ELMo specific parameters (duplicate detection)`.
+The output will generate a `.csv` file with the name pattern `<config_name>.csv`. Read the `Configuration File` section to understand how to create one. For ELMo duplicate detection, the parameters that apply are in `Affinity Scores Configuration Options`, `ELMo specific parameters (affinity scores)`, and `ELMo specific parameters (duplicate detection)`.
 
 ## Running the Server
 The server is implemented in Flask and can be started from the command line:
