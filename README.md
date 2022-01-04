@@ -26,7 +26,7 @@ pip install -e <location of this repository>
 
 Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR) or SPECTER+MFR with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
 
-We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo and SPECTER to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
+We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo and SPECTER (for duplicate detection) to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
 
 Run this command if you plan to:
 - Use ELMo (Using CPU is fine)
