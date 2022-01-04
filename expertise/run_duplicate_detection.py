@@ -24,23 +24,46 @@ if __name__ == '__main__':
         other_submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('other_submissions.json'))
     else:
         other_submissions_dataset = False
+    if config['model'] == 'elmo':
+        elmoModel = elmo.Model(
+            use_title=config['model_params'].get('use_title', False),
+            use_abstract=config['model_params'].get('use_abstract', True),
+            use_cuda=config['model_params'].get('use_cuda', False),
+            batch_size=config['model_params'].get('batch_size', 4),
+            knn=config['model_params'].get('knn', 10),
+            skip_same_id=(not other_submissions_dataset)
+        )
+        if not config['model_params'].get('skip_elmo', False):
+            elmoModel.set_submissions_dataset(submissions_dataset)
+            elmoModel.embed_submissions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'))
+            if other_submissions_dataset:
+                elmoModel.set_other_submissions_dataset(other_submissions_dataset)
+                elmoModel.embed_other_submissions(other_submissions_path=Path(config['model_params']['other_submissions_path']).joinpath('osub2vec.pkl'))
+        elmoModel.find_duplicates(
+            submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'),
+            other_submissions_path=(Path(config['model_params']['other_submissions_path']).joinpath('osub2vec.pkl') if other_submissions_dataset else None),
+            scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+        )
 
-    elmoModel = elmo.Model(
-        use_title=config['model_params'].get('use_title', False),
-        use_abstract=config['model_params'].get('use_abstract', True),
-        use_cuda=config['model_params'].get('use_cuda', False),
-        batch_size=config['model_params'].get('batch_size', 4),
-        knn=config['model_params'].get('knn', 10),
-        skip_same_id=(not other_submissions_dataset)
-    )
-    if not config['model_params'].get('skip_elmo', False):
-        elmoModel.set_submissions_dataset(submissions_dataset)
-        elmoModel.embed_submissions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'))
-        if other_submissions_dataset:
-            elmoModel.set_other_submissions_dataset(other_submissions_dataset)
-            elmoModel.embed_other_submissions(other_submissions_path=Path(config['model_params']['other_submissions_path']).joinpath('osub2vec.pkl'))
-    elmoModel.find_duplicates(
-        submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'),
-        other_submissions_path=(Path(config['model_params']['other_submissions_path']).joinpath('osub2vec.pkl') if other_submissions_dataset else None),
-        scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
-    )
+    if config['model'] == 'specter':
+        from .models import multifacet_recommender
+        specter_predictor = multifacet_recommender.SpecterPredictor(
+            specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
+            work_dir=config['model_params'].get('work_dir', "./"),
+            average_score=config['model_params'].get('average_score', False),
+            max_score=config['model_params'].get('max_score', True),
+            batch_size=config['model_params'].get('batch_size', 16),
+            use_cuda=config['model_params'].get('use_cuda', False),
+            sparse_value=config['model_params'].get('sparse_value')
+        )
+        if not config['model_params'].get('skip_specter', False):
+            specter_predictor.set_submissions_dataset(submissions_dataset)
+            specter_predictor.embed_submissions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'))
+            if other_submissions_dataset:
+                specter_predictor.set_submissions_dataset(other_submissions_dataset)
+            specter_predictor.embed_submissions(other_submissions_path=Path(config['model_params']['submissions_path']).joinpath('osub2vec.jsonl'))
+        duplicates = specter_predictor.find_duplicates(
+            submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'),
+            other_submissions_path=(Path(config['model_params']['other_submissions_path']).joinpath('osub2vec.jsonl') if other_submissions_dataset else None),
+            scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+        )
