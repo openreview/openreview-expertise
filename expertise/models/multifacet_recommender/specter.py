@@ -186,6 +186,73 @@ class SpecterPredictor:
         with open(os.path.join(self.work_dir, "specter_submission_paper_ids.txt"), 'w') as f_out:
             f_out.write('\n'.join(paper_ids_list)+'\n')
 
+    def set_other_submissions_dataset(self, submissions_dataset):
+        self.other_sub_note_id_to_abstract = {}
+        self.other_sub_note_id_to_title = {}
+        output_dict = {}
+        paper_ids_list = []
+        for note_id, submission in submissions_dataset.items():
+            self.sub_note_id_to_title[submission['id']] = submission['content'].get('title', "")
+            self.sub_note_id_to_abstract[submission['id']] = submission['content'].get('abstract', "")
+            paper_ids_list.append(submission['id'])
+            output_dict[submission['id']] = {"title": self.sub_note_id_to_title[submission['id']],
+                                             "abstract": self.sub_note_id_to_abstract[submission['id']],
+                                             "paper_id": submission["id"],
+                                             "authors": []}
+        with open(os.path.join(self.work_dir, "specter_other_submission_paper_data.json"), 'w') as f_out:
+            json.dump(output_dict, f_out, indent=1)
+        with open(os.path.join(self.work_dir, "specter_other_submission_paper_ids.txt"), 'w') as f_out:
+            f_out.write('\n'.join(paper_ids_list)+'\n')
+
+    def embed_other_submissions(self, other_submissions_path=None):
+        print('Embedding other submissions...')
+        metadata_file = os.path.join(self.work_dir, "specter_other_submission_paper_data.json")
+        ids_file = os.path.join(self.work_dir, "specter_other_submission_paper_ids.txt")
+
+        # Overrides default config in the saved specter archive
+        overrides = json.dumps({'model': {'predict_mode': 'true', 'include_venue': 'false',
+                                          'text_field_embedder': {
+                                              'token_embedders': {
+                                                  'bert': {
+                                                      'pretrained_model': os.path.join(self.specter_dir,
+                                                                                       "data/scibert_scivocab_uncased/scibert.tar.gz")
+                                                  }
+                                              }
+                                          }
+                                          },
+                                "train_data_path": os.path.join(self.specter_dir, "data/train.csv"),
+                                "validation_data_path": os.path.join(self.specter_dir, "data/val.csv"),
+                                "test_data_path": os.path.join(self.specter_dir, "data/test.csv"),
+                                'dataset_reader': {'type': 'specter_data_reader', 'predict_mode': 'true',
+                                                   'paper_features_path': metadata_file,
+                                                   'included_text_fields': 'abstract title',
+                                                   'cache_path': os.path.join(self.specter_dir,
+                                                                              'data/dataset-instance-cache/'),
+                                                   'data_file': os.path.join(self.specter_dir, 'data/train.json'),
+                                                   'token_indexers': {
+                                                       'bert': {
+                                                           "pretrained_model": os.path.join(self.specter_dir,
+                                                                                            "data/scibert_scivocab_uncased/vocab.txt")
+                                                       }
+                                                   }
+                                                   },
+                                'vocabulary': {'directory_path': self.vocab_dir}
+                                })
+
+        archive = load_archive(self.model_archive_file,
+                               weights_file=None,
+                               cuda_device=self.cuda_device,
+                               overrides=overrides)
+        predictor = predictor_from_archive(archive, self.predictor_name, metadata_file)
+
+        manager = _PredictManagerCustom(predictor,
+                                        ids_file,
+                                        other_submissions_path,
+                                        self.batch_size,
+                                        False,
+                                        False)
+        manager.run()
+
     def embed_submissions(self, submissions_path=None):
         print('Embedding submissions...')
         metadata_file = os.path.join(self.work_dir, "specter_submission_paper_data.json")
