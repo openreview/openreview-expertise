@@ -12,6 +12,7 @@ import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import elmo
+from expertise.clean_tmp import clean_tmp_files
 
 
 class TestExpertiseService():
@@ -75,6 +76,18 @@ class TestExpertiseService():
                 "test_client": app.test_client(),
                 "config": config
             }
+
+    def test_cleanup_tmp(self, openreview_context, celery_session_app, celery_session_worker):
+        # Create directories
+        os.mkdir('/tmp/tmptest')
+        os.mkdir('/tmp/tmp1234')
+        os.mkdir('/tmp/tmp5678')
+
+        clean_tmp_files()
+
+        assert not os.path.isdir('/tmp/tmp1234')
+        assert not os.path.isdir('/tmp/tmp5678')
+        assert not os.path.isdir('/tmp/tmptest')
 
     def test_request_expertise_with_no_config(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
