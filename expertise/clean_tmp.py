@@ -1,8 +1,8 @@
-import glob, shutil
+import glob, shutil, tempfile
 
 def clean_tmp_files():
     """Removes files from the tmp directory that are created by SPECTER"""
-    dirs = glob.glob("/tmp/tmp*/")
+    dirs = glob.glob(f"{tempfile.gettempdir()}/tmp*/")
     for dir in dirs:
         print(f"removing {dir}")
         shutil.rmtree(dir)
