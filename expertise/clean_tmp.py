@@ -4,10 +4,10 @@ from openreview import OpenReviewException
 
 logging.basicConfig(encoding='utf-8', level=logging.INFO)
 
-def get_oldest_time():
+def get_oldest_time(job_dir):
     """Finds the creation date of the oldest running job, returns sys.maxsize if all jobs finished/have an error"""
     oldest_time = sys.maxsize
-    root_dir = 'jobs'
+    root_dir = job_dir
 
     if not os.path.isdir(root_dir):
         raise OpenReviewException('Error: server has not recieved any jobs/jobs folder is missing')
@@ -33,12 +33,12 @@ def get_oldest_time():
 
     return oldest_time
 
-def clean_tmp_files():
+def clean_tmp_files(job_dir):
     """Removes files from the tmp directory that are created by SPECTER"""
     logging.info('Cleaning temp files...')
     dirs = glob.glob(f"{tempfile.gettempdir()}/tmp*/")
 
-    del_time = get_oldest_time()
+    del_time = get_oldest_time(job_dir)
 
     for dir in dirs:
         cdate = int(os.stat(dir).st_ctime * 1000)
@@ -49,4 +49,4 @@ def clean_tmp_files():
             logging.info(f"Keeping {dir} - Files may be in use")
 
 if __name__ == '__main__':
-    clean_tmp_files()
+    clean_tmp_files('jobs')

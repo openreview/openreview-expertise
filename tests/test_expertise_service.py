@@ -77,18 +77,6 @@ class TestExpertiseService():
                 "config": config
             }
 
-    def test_cleanup_tmp(self, openreview_context, celery_session_app, celery_session_worker):
-        # Create directories
-        os.mkdir('/tmp/tmptest')
-        os.mkdir('/tmp/tmp1234')
-        os.mkdir('/tmp/tmp5678')
-
-        clean_tmp_files()
-
-        assert not os.path.isdir('/tmp/tmp1234')
-        assert not os.path.isdir('/tmp/tmp5678')
-        assert not os.path.isdir('/tmp/tmptest')
-
     def test_request_expertise_with_no_config(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Submitting an empty config with no required fields
@@ -232,6 +220,7 @@ class TestExpertiseService():
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
         # Make a request
+        os.mkdir('/tmp/tmp1234')
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -249,6 +238,15 @@ class TestExpertiseService():
             ),
             content_type='application/json'
         )
+
+        # Attempt to clear tmp directories - 1234 should be removed but 5678 should stay
+        time.sleep(2)
+        clean_tmp_files('./tests/jobs')
+        assert not os.path.isdir('/tmp/tmp1234')
+        os.mkdir('/tmp/tmp5678')
+        clean_tmp_files('./tests/jobs')
+        assert os.path.isdir('/tmp/tmp5678')
+    
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['job_id']
         time.sleep(2)
@@ -298,6 +296,10 @@ class TestExpertiseService():
         assert 'user_id' not in returned_config
         assert job_id is not None
         openreview_context['job_id'] = job_id
+
+        # 5678 should now be deleted
+        clean_tmp_files('./tests/jobs')
+        assert not os.path.isdir('/tmp/tmp5678')
 
     def test_get_results_by_job_id(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
