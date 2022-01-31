@@ -158,3 +158,43 @@ def get_user_id(openreview_client):
     """
     user = openreview_client.user
     return user.get('user', {}).get('id') if user else None
+
+class ServerConfig(object):
+    '''
+    Helps translate fields from API requests to fields usable by the expertise system
+    '''
+    def __init__(self, starting_config = {}):
+        # Loads all fields from the staring config
+        # Required fields get None by default
+        self.name = None
+        self.match_group = None
+        self.user_id = None
+        self.job_id = None
+
+        # Optional fields
+        self.model = starting_config.get('model', None)
+        self.model_params = starting_config.get('model_params', {})
+        self.exclusion_inv = starting_config.get('exclusion_inv', None)
+        self.token = starting_config.get('token', None)
+        self.baseurl = starting_config.get('baseurl', None)
+        self.baseurl_v2 = starting_config.get('baseurl_v2', None)
+        self.paper_invitation = starting_config.get('paper_invitation', None)
+        self.paper_id = starting_config.get('paper_id', None)
+
+        # Optional model params
+        model_params = starting_config.get('model_params', {})
+        self.model_params = {}
+        self.model_params['use_title'] = model_params.get('use_title', None)
+        self.model_params['use_abstract'] = model_params.get('use_abstract', None)
+        self.model_params['average_score'] = model_params.get('average_score', None)
+        self.model_params['max_score'] = model_params.get('max_score', None)
+        self.model_params['skip_specter'] = model_params.get('skip_specter', None)
+
+    def from_request(self, request):
+        pass
+
+    def from_json(self, config):
+        pass
+
+    def to_json(self):
+        pass
