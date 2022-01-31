@@ -161,11 +161,11 @@ def get_user_id(openreview_client):
     return user.get('user', {}).get('id') if user else None
 
 class ServerConfig(object):
-    '''
+    """
     Helps translate fields from API requests to fields usable by the expertise system
-    '''
+    """
     def __init__(self, starting_config = {}):
-        # Loads all fields from the starting config
+        '''Loads all fields from the starting config'''
         # Required fields get None by default
         self.name = None
         self.match_group = None
@@ -261,10 +261,13 @@ class ServerConfig(object):
         _load_entity_a(entity_a)
         _load_entity_b(entity_b)
 
-        # TODO: Validate paper_id or paper_invitation
+        # Assert paper_id/paper_invitation logic
+        if self.paper_id is not None and self.paper_invitation is not None:
+            raise openreview.OpenReviewException("Both paper_id and paper_invitation are provided")
+        elif self.paper_id is None and self.paper_invitation is None:
+            raise openreview.OpenReviewException("Must provide either paper_id or paper_invitation")
 
         # Retrieve information from model object
-        # TODO: Handle hard coded model params
         model_params = request.get('model', {})
         skip_params = ['name', 'batchSize', 'skipCuda']
         self.model = self._get_required_field(model_params, 'model', 'name')
