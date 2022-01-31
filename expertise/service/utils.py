@@ -1,5 +1,6 @@
 import openreview
 import json
+import re
 from unittest.mock import MagicMock
 
 # -----------------
@@ -164,24 +165,24 @@ class ServerConfig(object):
     Helps translate fields from API requests to fields usable by the expertise system
     '''
     def __init__(self, starting_config = {}):
-        # Loads all fields from the staring config
+        # Loads all fields from the starting config
         # Required fields get None by default
         self.name = None
         self.match_group = None
         self.user_id = None
         self.job_id = None
-
-        # Optional fields
-        self.model = starting_config.get('model', None)
-        self.model_params = starting_config.get('model_params', {})
-        self.exclusion_inv = starting_config.get('exclusion_inv', None)
         self.token = starting_config.get('token', None)
         self.baseurl = starting_config.get('baseurl', None)
         self.baseurl_v2 = starting_config.get('baseurl_v2', None)
+
+        # Optional fields
+        self.model = starting_config.get('model', None)
+        self.exclusion_inv = starting_config.get('exclusion_inv', None)
         self.paper_invitation = starting_config.get('paper_invitation', None)
         self.paper_id = starting_config.get('paper_id', None)
 
         # Optional model params
+        self.model_params = starting_config.get('model_params', {})
         model_params = starting_config.get('model_params', {})
         self.model_params = {}
         self.model_params['use_title'] = model_params.get('use_title', None)
@@ -189,12 +190,125 @@ class ServerConfig(object):
         self.model_params['average_score'] = model_params.get('average_score', None)
         self.model_params['max_score'] = model_params.get('max_score', None)
         self.model_params['skip_specter'] = model_params.get('skip_specter', None)
+        self.model_params['batch_size'] = model_params.get('batch_size', 1)
+        self.model_params['skip_cuda'] = model_params.get('skip_cuda', False)
+    
+    def _get_required_field(self, req, superkey, key):
+        try:
+            field = req[key]
+        except KeyError:
+            raise openreview.OpenReviewException(f"Required field missing in {superkey}: {key}")
+        return field
+
+    def _load_entity(self, entity_id, entity):
+        '''Load information from an entity into the config'''
+        def _get_from_entity(key):
+            return self._get_required_field(entity, entity_id, key)
+
+        type = _get_from_entity('type')
+        # Handle type group
+        if type == 'Group':
+            if 'memberOf' in entity.keys():
+                members_group = _get_from_entity('memberOf')
+                exc_inv = entity.get('expertise', {}).get('exclusion', {}).get('invitation', None)
+
+                self.match_group = members_group
+                self.exclusion_inv = exc_inv
+            else:
+                raise openreview.OpenReviewException(f"No valid {type} properties in {entity_id}")
+        # Handle type note
+        elif type == 'Note':
+            if 'invitation' in entity.keys():
+                inv = _get_from_entity('invitation')
+                self.paper_invitation = inv
+            elif 'id' in entity.keys():
+                id = _get_from_entity('id')
+                self.paper_id = id
+            else:
+                raise openreview.OpenReviewException(f"No valid {type} properties in {entity_id}")
+        else:
+            raise openreview.OpenReviewException(f"Invalid type in {entity_id}")
 
     def from_request(self, request):
-        pass
+        '''Load information from the Flask JSON request'''
+        # Precondition: default fields are properly loaded
+        root_key = 'request'
+        def _load_entity_a(entity):
+            self._load_entity('entityA', entity)
 
-    def from_json(self, config):
-        pass
+        def _load_entity_b(entity):
+            self._load_entity('entityB', entity)
+
+        def _get_field_from_request(field):
+            return self._get_required_field(request, root_key, field)
+
+        def _camel_to_snake(camel_str):
+            camel_str = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', camel_str)
+            return re.sub('([a-z0-9])([A-Z])', r'\1_\2', camel_str).lower()
+
+        # Load job/server metadata
+        self.name = _get_field_from_request('name')
+        self.user_id = _get_field_from_request('user_id')
+        self.job_id = _get_field_from_request('job_id')
+        self.token = _get_field_from_request('token')
+        self.baseurl = _get_field_from_request('baseurl')
+        self.baseurl_v2 = _get_field_from_request('baseurl_v2')
+
+        # Retrieve information from entities
+        entity_a = _get_field_from_request('entityA')
+        entity_b = _get_field_from_request('entityB')
+
+        _load_entity_a(entity_a)
+        _load_entity_b(entity_b)
+
+        # TODO: Validate paper_id or paper_invitation
+
+        # Retrieve information from model object
+        # TODO: Handle hard coded model params
+        model_params = request.get('model', {})
+        skip_params = ['name', 'batchSize', 'skipCuda']
+        self.model = self._get_required_field(model_params, 'model', 'name')
+        for param in model_params.keys():
+            # Handle special cases
+            if param in skip_params: continue
+
+            if param == 'scoreComputation':
+                compute_with = model_params.get('scoreComputation', None)
+                if compute_with == 'max':
+                    self.model_params['max_score'] = True
+                    self.model_params['avg_score'] = False
+                elif compute_with == 'avg':
+                    self.model_params['max_score'] = False
+                    self.model_params['avg_score'] = True
+                else:
+                    raise openreview.OpenReviewException("Incorrect value in field 'scoreComputation' in 'model' object")
+                continue
+            
+            # Handle general case
+            snake_param = _camel_to_snake(param)
+            self.model_params[snake_param] = model_params[param]
 
     def to_json(self):
-        pass
+        pre_body = {
+            'name': self.name,
+            'match_group': self.match_group,
+            'user_id': self.user_id,
+            'job_id': self.job_id,
+            'token': self.token,
+            'baseurl': self.baseurl,
+            'baseurl_v2': self.baseurl_v2,
+            'model': self.model,
+            'exclusion_inv': self.exclusion_inv,
+            'paper_invitation': self.paper_invitation,
+            'paper_id': self.paper_id,
+            'model_params': self.model_params
+        }
+
+        # Remove objects that are none
+        body = {}
+        body_items = pre_body.items()
+        for key, val in body_items:
+            if val is not None:
+                body[key] = val
+        
+        return body
