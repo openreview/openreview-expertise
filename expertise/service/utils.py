@@ -198,7 +198,7 @@ class ServerConfig(object):
         try:
             field = req[key]
         except KeyError:
-            raise openreview.OpenReviewException(f"Required field missing in {superkey}: {key}")
+            raise openreview.OpenReviewException(f"Bad request: required field missing in {superkey}: {key}")
         return field
 
     def _load_entity(self, entity_id, entity):
@@ -216,7 +216,7 @@ class ServerConfig(object):
                 self.match_group = members_group
                 self.exclusion_inv = exc_inv
             else:
-                raise openreview.OpenReviewException(f"No valid {type} properties in {entity_id}")
+                raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
         # Handle type note
         elif type == 'Note':
             if 'invitation' in entity.keys():
@@ -226,9 +226,9 @@ class ServerConfig(object):
                 id = _get_from_entity('id')
                 self.paper_id = id
             else:
-                raise openreview.OpenReviewException(f"No valid {type} properties in {entity_id}")
+                raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
         else:
-            raise openreview.OpenReviewException(f"Invalid type in {entity_id}")
+            raise openreview.OpenReviewException(f"Bad request: invalid type in {entity_id}")
 
     def from_request(self, request):
         '''Load information from the Flask JSON request'''
@@ -264,9 +264,9 @@ class ServerConfig(object):
 
         # Assert paper_id/paper_invitation logic
         if self.paper_id is not None and self.paper_invitation is not None:
-            raise openreview.OpenReviewException("Both paper_id and paper_invitation are provided")
+            raise openreview.OpenReviewException("Bad request: both paper_id and paper_invitation are provided")
         elif self.paper_id is None and self.paper_invitation is None:
-            raise openreview.OpenReviewException("Must provide either paper_id or paper_invitation")
+            raise openreview.OpenReviewException("Bad request: must provide either paper_id or paper_invitation")
 
         # Retrieve information from model object
         model_params = request.get('model', {})
@@ -287,7 +287,7 @@ class ServerConfig(object):
                     self.model_params['max_score'] = False
                     self.model_params['average_score'] = True
                 else:
-                    raise openreview.OpenReviewException("Incorrect value in field 'scoreComputation' in 'model' object")
+                    raise openreview.OpenReviewException("Bad request: incorrect value in field 'scoreComputation' in 'model' object")
                 continue
             
             # Handle general case
