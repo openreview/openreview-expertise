@@ -174,6 +174,7 @@ class ServerConfig(object):
         self.token = starting_config.get('token', None)
         self.baseurl = starting_config.get('baseurl', None)
         self.baseurl_v2 = starting_config.get('baseurl_v2', None)
+        self.dataset = starting_config.get('dataset', {})
 
         # Optional fields
         self.model = starting_config.get('model', None)
@@ -233,14 +234,14 @@ class ServerConfig(object):
         '''Load information from the Flask JSON request'''
         # Precondition: default fields are properly loaded
         root_key = 'request'
+        def _get_field_from_request(field):
+            return self._get_required_field(request, root_key, field)
+
         def _load_entity_a(entity):
             self._load_entity('entityA', entity)
 
         def _load_entity_b(entity):
             self._load_entity('entityB', entity)
-
-        def _get_field_from_request(field):
-            return self._get_required_field(request, root_key, field)
 
         def _camel_to_snake(camel_str):
             camel_str = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', camel_str)
@@ -269,8 +270,10 @@ class ServerConfig(object):
 
         # Retrieve information from model object
         model_params = request.get('model', {})
+        if model_params:
+            self.model = self._get_required_field(model_params, 'model', 'name')
+
         skip_params = ['name', 'batchSize', 'skipCuda']
-        self.model = self._get_required_field(model_params, 'model', 'name')
         for param in model_params.keys():
             # Handle special cases
             if param in skip_params: continue
@@ -279,10 +282,10 @@ class ServerConfig(object):
                 compute_with = model_params.get('scoreComputation', None)
                 if compute_with == 'max':
                     self.model_params['max_score'] = True
-                    self.model_params['avg_score'] = False
+                    self.model_params['average_score'] = False
                 elif compute_with == 'avg':
                     self.model_params['max_score'] = False
-                    self.model_params['avg_score'] = True
+                    self.model_params['average_score'] = True
                 else:
                     raise openreview.OpenReviewException("Incorrect value in field 'scoreComputation' in 'model' object")
                 continue
@@ -300,6 +303,7 @@ class ServerConfig(object):
             'token': self.token,
             'baseurl': self.baseurl,
             'baseurl_v2': self.baseurl_v2,
+            'dataset': self.dataset,
             'model': self.model,
             'exclusion_inv': self.exclusion_inv,
             'paper_invitation': self.paper_invitation,

@@ -8,6 +8,7 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
+from .utils import ServerConfig
 
 SUPERUSER_IDS = ['openreview.net']
 user_index_file_lock = Lock()
@@ -90,7 +91,11 @@ class ExpertiseService(object):
                         when it is not expected
         """
         # Validate fields
-        config = self._validate_fields(request)
+        #config = self._validate_fields(request)
+        config_obj = ServerConfig(self._get_default_config())
+        config_obj.from_request(request)
+        config = config_obj.to_json()
+
         self.logger.info(f"Config validation passed - setting server-side fields")
 
         # Populate with server-side fields
