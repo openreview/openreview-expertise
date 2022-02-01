@@ -8,7 +8,6 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
-from .utils import ServerConfig
 
 SUPERUSER_IDS = ['openreview.net']
 user_index_file_lock = Lock()
@@ -49,17 +48,6 @@ class ExpertiseService(object):
         self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'baseurl_v2', 'paper_invitation', 'paper_id']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
-        # For the optional fields, add camel case equivalents
-        camel_case_params = []
-        for param in self.optional_model_params:
-            camel_case_params.append(self.to_camel(param))
-        self.optional_model_params.extend(camel_case_params)
-
-        camel_case_fields = []
-        for field in self.optional_fields:
-            camel_case_fields.append(self.to_camel(field))
-        self.optional_fields.extend(camel_case_fields)
-
     def _get_default_config(self):
         return self.server_config['DEFAULT_CONFIG']
 
@@ -91,15 +79,11 @@ class ExpertiseService(object):
                         when it is not expected
         """
         # Validate fields
-        #config = self._validate_fields(request)
-        config_obj = ServerConfig(self._get_default_config())
-        config_obj.from_request(request)
-        config = config_obj.to_json()
-
+        config = self._validate_fields(request)
         self.logger.info(f"Config validation passed - setting server-side fields")
 
         # Populate with server-side fields
-        root_dir = os.path.join(self.working_dir, config['job_id'])
+        root_dir = os.path.join(self.working_dir, request['job_id'])
         descriptions = JobDescription.VALS.value
         config['dataset']['directory'] = root_dir
         for field in self.path_fields:
@@ -132,12 +116,6 @@ class ExpertiseService(object):
 
         return config
 
-    def to_camel(self, underscore):
-        """
-        Given a string with underscores, convert it to camel case
-        """
-        return underscore.split('_')[0] + ''.join(x.capitalize() or '_' for x in underscore.split('_')[1:])
-
     def _validate_fields(self, request) -> dict:
         """
         If the server has detected any errors in the proposed config, assemble the error and raise the exception
@@ -161,23 +139,20 @@ class ExpertiseService(object):
             'model_params': []
         }
         for field in self.req_fields:
-            # If not in the request, check the camel case equivalent
-            if field not in request and self.to_camel(field) not in request:
+            if field not in request:
                 error_fields['required'].append(field)
                 failed_request = True
                 continue
-            if field in request:
-                config[field] = request[field]
-                del request[field]
-            else:
-                config[field] = request[self.to_camel(field)]
-                del request[self.to_camel(field)]
-
-        # Check for model params camel case and overwrite it
-        if 'modelParams' in request.keys():
-            request['model_params'] = request['modelParams']
-            del request['modelParams']
-
+            config[field] = request[field]
+        for field in request.keys():
+            if field not in self.optional_fields and field not in self.req_fields:
+                error_fields['unexpected'].append(field)
+                failed_request = True
+                continue
+            if field != 'model_params':
+                # Only write to config if 1) overwriting a default with non-None value or 2) if the field is not in the default config
+                if (field in config.keys() and request[field] is not None) or field not in config.keys():
+                    config[field] = request[field]
         if 'model_params' in request.keys():
             for field in request['model_params']:
                 if field not in self.optional_model_params:
@@ -187,16 +162,6 @@ class ExpertiseService(object):
                 # Only write to config if 1) overwriting a default with non-None value or 2) if the field is not in the default config
                 if (field in config['model_params'].keys() and request['model_params'][field] is not None) or field not in config['model_params'].keys():
                     config['model_params'][field] = request['model_params'][field]
-        
-        for field in request.keys():
-            if field not in self.optional_fields:
-                error_fields['unexpected'].append(field)
-                failed_request = True
-                continue
-            if field != 'model_params':
-                # Only write to config if 1) overwriting a default with non-None value or 2) if the field is not in the default config
-                if (field in config.keys() and request[field] is not None) or field not in config.keys():
-                    config[field] = request[field]
 
         # Check for either paper_invitation or paper_id
         if 'paper_invitation' not in config and 'paper_id' not in config:
