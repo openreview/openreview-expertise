@@ -197,15 +197,21 @@ class TestExpertiseV2():
         response = test_client.post(
             '/expertise',
             data = json.dumps({
-                    'name': 'test_run',
-                    'match_group': ["ABC.cc"],
-                    'paper_id': 'KHnr1r7h',
-                    "model": "specter+mfr",
-                    "model_params": {
-                        "use_title": False,
-                        "use_abstract": True,
-                        "average_score": True,
-                        "max_score": False
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'id': 'KHnr1r7H'
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
                     }
                 }
             ),
