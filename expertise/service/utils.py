@@ -249,6 +249,8 @@ class ServerConfig(object):
 
         # Load job/server metadata
         self.name = _get_field_from_request('name')
+
+        # These are automatically provided by the server
         self.user_id = _get_field_from_request('user_id')
         self.job_id = _get_field_from_request('job_id')
         self.token = _get_field_from_request('token')
@@ -315,7 +317,8 @@ class ServerConfig(object):
         body = {}
         body_items = pre_body.items()
         for key, val in body_items:
-            if val is not None:
+            # Allow a None token
+            if val is not None or key == 'token':
                 body[key] = val
-        
+
         return body

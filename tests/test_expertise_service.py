@@ -87,22 +87,55 @@ class TestExpertiseService():
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
-        assert response.json['message'] == 'Bad request: missing required field: name match_group paper_invitation/paper_id'
+        assert response.json['message'] == 'Bad request: required field missing in request: name'
 
-    def test_request_expertise_with_no_paper(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_no_second_entity(self, openreview_context, celery_session_app, celery_session_worker):
+        # Submitting a partially filled out config without a required field (only group entity)
+        test_client = openreview_context['test_client']
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc" ,
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json'
+        )
+        assert response.status_code == 400, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: required field missing in request: entityB'
+
+    def test_request_expertise_with_missing_required_field_in_entity(self, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field
         test_client = openreview_context['test_client']
         response = test_client.post(
             '/expertise',
             data = json.dumps({
-                    'name': 'test_run',
-                    'match_group': ["ABC.cc"],
-                    "model": "specter+mfr",
-                    "model_params": {
-                        "use_title": False,
-                        "use_abstract": True,
-                        "average_score": True,
-                        "max_score": False
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
                     }
                 }
             ),
@@ -111,48 +144,26 @@ class TestExpertiseService():
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
-        assert response.json['message'] == 'Bad request: missing required field: paper_invitation/paper_id'
+        assert response.json['message'] == 'Bad request: no valid Group properties in entityA'
 
-    def test_request_expertise_with_missing_required_fields(self, openreview_context, celery_session_app, celery_session_worker):
-        # Submitting a partially filled out config without a required field
-        test_client = openreview_context['test_client']
-        response = test_client.post(
-            '/expertise',
-            data = json.dumps({
-                    'paper_invitation': 'ABC.cc/-/Submission',
-                    'match_group': ["ABC.cc"],
-                    "model": "specter+mfr",
-                    "model_params": {
-                        "use_title": False,
-                        "use_abstract": True,
-                        "average_score": True,
-                        "max_score": False
-                    }
-                }
-            ),
-            content_type='application/json'
-        )
-        assert response.status_code == 400, f'{response.json}'
-        assert 'Error' in response.json['name']
-        assert 'bad request' in response.json['message'].lower()
-        assert response.json['message'] == 'Bad request: missing required field: name'
-
-    def test_request_expertise_with_invalid_field(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_empty_entity(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra field that is not allowed
         test_client = openreview_context['test_client']
         response = test_client.post(
             '/expertise',
             data = json.dumps({
-                    'name': 'test_run',
-                    'match_group': ["ABC.cc"],
-                    'paper_invitation': 'ABC.cc/-/Submission',
-                    'unexpected_field': 'ABC.cc/-/Submission',
-                    "model": "specter+mfr",
-                    "model_params": {
-                        "use_title": False,
-                        "use_abstract": True,
-                        "average_score": True,
-                        "max_score": False
+                    "name": "test_run",
+                    "entityA": { },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
                     }
                 }
             ),
@@ -161,58 +172,7 @@ class TestExpertiseService():
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
-        assert response.json['message'] == 'Bad request: unexpected field: unexpected_field'
-
-    def test_request_expertise_with_invalid_and_missing_required_field(self, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a working config with an extra field that is not allowed
-        test_client = openreview_context['test_client']
-        response = test_client.post(
-            '/expertise',
-            data = json.dumps({
-                    'match_group': ["ABC.cc"],
-                    'paper_invitation': 'ABC.cc/-/Submission',
-                    'unexpected_field': 'ABC.cc/-/Submission',
-                    "model": "specter+mfr",
-                    "model_params": {
-                        "use_title": False,
-                        "use_abstract": True,
-                        "average_score": True,
-                        "max_score": False
-                    }
-                }
-            ),
-            content_type='application/json'
-        )
-        assert response.status_code == 400, f'{response.json}'
-        assert 'Error' in response.json['name']
-        assert 'bad request' in response.json['message'].lower()
-        assert response.json['message'] == 'Bad request: missing required field: name\nunexpected field: unexpected_field'
-
-    def test_request_expertise_with_invalid_model_param(self, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a working config with an extra model param field
-        test_client = openreview_context['test_client']
-        response = test_client.post(
-            '/expertise',
-            data = json.dumps({
-                    'name': 'test_run',
-                    'match_group': ["ABC.cc"],
-                    'paper_invitation': 'ABC.cc/-/Submission',
-                    "model": "specter+mfr",
-                    "model_params": {
-                        'dummy_param': '64',
-                        "use_title": False,
-                        "use_abstract": True,
-                        "average_score": True,
-                        "max_score": False
-                    }
-                }
-            ),
-            content_type='application/json'
-        )
-        assert response.status_code == 400, f'{response.json}'
-        assert 'Error' in response.json['name']
-        assert 'bad request' in response.json['message'].lower()
-        assert response.json['message'] == 'Bad request: unexpected model param: dummy_param'
+        assert response.json['message'] == 'Bad request: required field missing in entityA: type'
 
     def test_request_expertise_with_valid_parameters(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
@@ -222,15 +182,21 @@ class TestExpertiseService():
         response = test_client.post(
             '/expertise',
             data = json.dumps({
-                    'name': 'test_run',
-                    'matchGroup': ["ABC.cc"],
-                    'paperInvitation': 'ABC.cc/-/Submission',
-                    "model": "specter+mfr",
-                    "modelParams": {
-                        "useTitle": False,
-                        "useAbstract": True,
-                        "averageScore": True,
-                        "maxScore": False
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
                     }
                 }
             ),
@@ -323,15 +289,22 @@ class TestExpertiseService():
         response = test_client.post(
             '/expertise',
             data = json.dumps({
-                    'name': 'test_run',
-                    'paper_invitation': 'ABC.cc/-/Submission',
-                    'match_group': ["ABC.cc"],
-                    "model": "specter+mfr",
-                    "model_params": {
-                        "use_title": False,
-                        "use_abstract": False,
-                        "average_score": False,
-                        "max_score": False
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'sparseValue': 'notAnInt',
+                            'useTitle': None, 
+                            'useAbstract': None, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
                     }
                 }
             ),
@@ -362,7 +335,7 @@ class TestExpertiseService():
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['name'] == 'test_run'
         assert response['status'].strip() == 'Error'
-        assert response['description'] == '(Only) One of max_score or average_score must be True'
+        assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
         assert response['cdate'] <= response['mdate']
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
@@ -370,7 +343,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/delete', query_string={'id': f"{openreview_context['job_id']}"}).json
         assert response['name'] == 'test_run'
         assert response['status'].strip() == 'Error'
-        assert response['description'] == '(Only) One of max_score or average_score must be True'
+        assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
         assert response['cdate'] <= response['mdate']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     
@@ -382,15 +355,21 @@ class TestExpertiseService():
         response = test_client.post(
             '/expertise',
             data = json.dumps({
-                    'name': 'test_run',
-                    'match_group': ["ABC.cc"],
-                    'paper_id': 'KHnr1r7H',
-                    "model": "specter+mfr",
-                    "model_params": {
-                        "use_title": False,
-                        "use_abstract": True,
-                        "average_score": True,
-                        "max_score": False
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'id': 'KHnr1r7H'
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
                     }
                 }
             ),
@@ -459,15 +438,21 @@ class TestExpertiseService():
             response = test_client.post(
                 '/expertise',
                 data = json.dumps({
-                        'name': 'test_run',
-                        'match_group': ["ABC.cc"],
-                        'paper_invitation': 'ABC.cc/-/Submission',
-                        "model": "specter+mfr",
-                        "model_params": {
-                            "use_title": False,
-                            "use_abstract": True,
-                            "average_score": True,
-                            "max_score": False
+                        "name": "test_run",
+                        "entityA": {
+                            'type': "Group",
+                            'memberOf': "ABC.cc",
+                        },
+                        "entityB": { 
+                            'type': "Note",
+                            'id': 'KHnr1r7H'
+                        },
+                        "model": {
+                                "name": "specter+mfr",
+                                'useTitle': False, 
+                                'useAbstract': True, 
+                                'skipSpecter': False,
+                                'scoreComputation': 'avg'
                         }
                     }
                 ),
