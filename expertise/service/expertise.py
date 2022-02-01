@@ -8,6 +8,7 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
+from .utils import ServerConfig
 
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus
 
