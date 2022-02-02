@@ -119,14 +119,20 @@ class ExpertiseService(object):
 
         :returns: A list of subdirectories not prefixed by the given root directory
         """
+        subdirs = [name for name in os.listdir(self.working_dir) if os.path.isdir(os.path.join(self.working_dir, name))]
         if user_id.lower() in SUPERUSER_IDS:
-            subdirs = [name for name in os.listdir(self.working_dir) if os.path.isdir(os.path.join(self.working_dir, name))]
             return subdirs
-        else:
-            # If given a profile ID, assume looking for job dirs that contain a config with the
-            # matching profile id
-            filtered_dirs = self._get_from_user_index(user_id)
-            return filtered_dirs
+
+        # Search all directories for matching user ID
+        filtered_dirs = []
+        for job_dir in subdirs:
+            with open(os.path.join(self.working_dir, job_dir, 'config.json')) as f:
+                config = json.load(f)
+            if config['user_id'] == user_id:
+                filtered_dirs.append(job_dir)
+
+        # filtered_dirs = self._get_from_user_index(user_id)
+        return filtered_dirs
 
     def _get_score_and_metadata_dir(self, search_dir):
         """
