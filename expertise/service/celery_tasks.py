@@ -30,16 +30,16 @@ def update_status(job_dir, new_status, desc=None):
         json.dump(config, f, ensure_ascii=False, indent=4)
 
 @celery.task(name='userpaper', track_started=True, bind=True, time_limit=3600 * 24)
-def run_userpaper(self, config: dict, logger: logging.Logger):
+def run_userpaper(self, config: dict, token: str, logger: logging.Logger):
     try:
         update_status(config['job_dir'], JobStatus.FETCHING_DATA)
-        if config.get('token'):
+        if token:
             openreview_client = openreview.Client(
-                token=config['token'],
+                token=token,
                 baseurl=config['baseurl']
             )
             openreview_client_v2 = openreview.api.OpenReviewClient(
-                token=config['token'],
+                token=token,
                 baseurl=config['baseurl_v2']
             )
         else:

@@ -62,7 +62,7 @@ class ExpertiseService(object):
 
         :returns config: A modified version of config without the server fields
         """
-        remove_fields = ['baseurl', 'token', 'user_id']
+        remove_fields = ['baseurl', 'user_id']
         for key in remove_fields:
             del running_config[key]
 
@@ -105,19 +105,13 @@ class ExpertiseService(object):
             config['model_params']['mfr_checkpoint_dir'] = self.mfr_checkpoint_dir
 
         # Create directory and config file
+        token = config.pop('token')
         if not os.path.isdir(config['dataset']['directory']):
             os.makedirs(config['dataset']['directory'])
         with open(os.path.join(root_dir, 'config.json'), 'w+') as f:
-            ## Remove the token before saving this in the file system
-            token = config.get('token', None)
-            if token is not None:
-                del config['token']
-                json.dump(config, f, ensure_ascii=False, indent=4)
-                config['token'] = token
-            else:
-                json.dump(config, f, ensure_ascii=False, indent=4)
+            json.dump(config, f, ensure_ascii=False, indent=4)
 
-        return config
+        return config, token
 
     def _validate_fields(self, request) -> dict:
         """
@@ -317,7 +311,7 @@ class ExpertiseService(object):
         request['job_id'] = job_id
 
         from .celery_tasks import run_userpaper
-        config = self._prepare_config(request)
+        config, token = self._prepare_config(request)
 
         self.logger.info(f'Config: {config}')
         config['mdate'] = int(time.time() * 1000)
@@ -327,7 +321,7 @@ class ExpertiseService(object):
         # Config has passed validation - add it to the user index
         self._add_to_user_index(config['user_id'], config['job_id'])
         run_userpaper.apply_async(
-            (config, self.logger),
+            (config, token, self.logger),
             queue='userpaper',
             task_id=job_id
         )
