@@ -204,7 +204,7 @@ class TestExpertiseV2():
                     },
                     "entityB": { 
                         'type': "Note",
-                        'id': 'KHnr1r7H'
+                        'id': 'KHnr1r7h'
                     },
                     "model": {
                             "name": "specter+mfr",
