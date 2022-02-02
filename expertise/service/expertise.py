@@ -131,7 +131,6 @@ class ExpertiseService(object):
             if config['user_id'] == user_id:
                 filtered_dirs.append(job_dir)
 
-        # filtered_dirs = self._get_from_user_index(user_id)
         return filtered_dirs
 
     def _get_score_and_metadata_dir(self, search_dir):
@@ -162,91 +161,6 @@ class ExpertiseService(object):
 
         return file_dir, metadata_dir
 
-    def _add_to_user_index(self, user_id, job_id):
-        """
-        Records that a valid job has been submitted under the given user ID
-
-        :param user_id: The user ID that the job was submitted by
-        :type user_id: str
-
-        :param job_id: The ID of the job to be added to the record
-        :type job_id: str
-        """
-        # Load existing index, otherwise initialize and empty index
-        with user_index_file_lock:
-            index_path = os.path.join(self.working_dir, 'index.json')
-            if os.path.isfile(index_path):
-                with open(os.path.join(self.working_dir, 'index.json'), 'r') as f:
-                    index = json.load(f)
-            else:
-                index = {}
-
-            # Add job_id to the user_id list in the index dict
-            if user_id not in index.keys():
-                index[user_id] = [job_id]
-            else:
-                index[user_id].append(job_id)
-        
-            # Write out the index
-            with open(os.path.join(self.working_dir, 'index.json'), 'w+') as f:
-                json.dump(index, f, ensure_ascii=False, indent=4)
-    
-    def _get_from_user_index(self, user_id):
-        """
-        Fetch a list of submitted job IDs for a given user ID
-
-        :param user_id: The user ID that the jobs were submitted by
-        :type user_id: str
-
-        :param job_id: The ID of the job to be added to the record
-        :type job_id: str
-
-        :returns jobs: A list of strings, each of which is an ID for a job submitted by the user
-        """
-        # Load existing index
-        with user_index_file_lock:
-            index_path = os.path.join(self.working_dir, 'index.json')
-            if os.path.isfile(index_path):
-                with open(os.path.join(self.working_dir, 'index.json'), 'r') as f:
-                    index = json.load(f)
-            else:
-                raise OpenReviewException('Bad request: no jobs have been submitted yet')
-
-            # Return the entire list of job IDs
-            if user_id in index.keys():
-                return index[user_id]
-            else:
-                raise OpenReviewException('User not found: no jobs submitted with this user ID')
-    
-    def _del_from_user_index(self, user_id, job_id):
-        """
-        Removes a job ID from the record
-
-        :param user_id: The user ID that the job was submitted by
-        :type user_id: str
-
-        :param job_id: The ID of the job to be added to the record
-        :type job_id: str
-        """
-        # Load existing index, otherwise throw an error
-        with user_index_file_lock:
-            index_path = os.path.join(self.working_dir, 'index.json')
-            if os.path.isfile(index_path):
-                with open(os.path.join(self.working_dir, 'index.json'), 'r') as f:
-                    index = json.load(f)
-            else:
-                raise OpenReviewException('Bad request: no jobs have been submitted yet')
-
-            # Remove the job ID from the list
-            if user_id in index.keys():
-                index[user_id].remove(job_id)
-            else:
-                raise OpenReviewException('User not found: no jobs submitted with this user ID')
-        
-            # Write out the index
-            with open(os.path.join(self.working_dir, 'index.json'), 'w+') as f:
-                json.dump(index, f, ensure_ascii=False, indent=4)
-
     def start_expertise(self, request):
         descriptions = JobDescription.VALS.value
         job_id = shortuuid.ShortUUID().random(length=5)
@@ -261,7 +175,6 @@ class ExpertiseService(object):
         config['description'] = descriptions[JobStatus.QUEUED]
 
         # Config has passed validation - add it to the user index
-        self._add_to_user_index(config['user_id'], config['job_id'])
         run_userpaper.apply_async(
             (config, token, self.logger),
             queue='userpaper',
@@ -427,7 +340,6 @@ class ExpertiseService(object):
 
         # Clear directory
         if delete_on_get:
-            self._del_from_user_index(config['user_id'], config['job_id'])
             self.logger.info(f'Deleting {search_dir}')
             shutil.rmtree(search_dir)
 
@@ -467,7 +379,6 @@ class ExpertiseService(object):
             config = json.loads(s)
         
         # Clear directory
-        self._del_from_user_index(config['user_id'], config['job_id'])
         self.logger.info(f'Deleting {search_dir}')
         shutil.rmtree(search_dir)
 
