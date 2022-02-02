@@ -116,6 +116,34 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == 'Bad request: required field missing in request: entityB'
 
+    def test_request_expertise_with_empty_entity(self, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working config with an extra field that is not allowed
+        test_client = openreview_context['test_client']
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": { },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json'
+        )
+        assert response.status_code == 400, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == 'Bad request: required field missing in entityA: type'
+
     def test_request_expertise_with_missing_required_field_in_entity(self, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field
         test_client = openreview_context['test_client']
@@ -146,14 +174,18 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == 'Bad request: no valid Group properties in entityA'
 
-    def test_request_expertise_with_empty_entity(self, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a working config with an extra field that is not allowed
+    def test_request_expertise_with_unexpected_entity(self, openreview_context, celery_session_app, celery_session_worker):
+        # Submitting a partially filled out config without a required field (only group entity)
         test_client = openreview_context['test_client']
         response = test_client.post(
             '/expertise',
             data = json.dumps({
                     "name": "test_run",
-                    "entityA": { },
+                    "entityC": {},
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc" ,
+                    },
                     "entityB": { 
                         'type': "Note",
                         'invitation': "ABC.cc/-/Submission" 
@@ -172,7 +204,71 @@ class TestExpertiseService():
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
-        assert response.json['message'] == 'Bad request: required field missing in entityA: type'
+        assert response.json['message'] == "Bad request: unexpected fields in request: ['entityC']"
+
+    def test_request_expertise_with_unexpected_field_in_entity(self, openreview_context, celery_session_app, celery_session_worker):
+        # Submitting a partially filled out config without a required field (only group entity)
+        test_client = openreview_context['test_client']
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                        'unexpected_field': 'unexpected_field'
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg',
+                    }
+                }
+            ),
+            content_type='application/json'
+        )
+        assert response.status_code == 400, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == "Bad request: unexpected fields in entityA: ['unexpected_field']"
+
+    def test_request_expertise_with_unexpected_model_param(self, openreview_context, celery_session_app, celery_session_worker):
+        # Submitting a partially filled out config without a required field (only group entity)
+        test_client = openreview_context['test_client']
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg',
+                            'unexpected_field': 'unexpected_field'
+                    }
+                }
+            ),
+            content_type='application/json'
+        )
+        assert response.status_code == 400, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == "Bad request: unexpected fields in model: ['unexpected_field']"
 
     def test_request_expertise_with_valid_parameters(self, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID

@@ -86,7 +86,7 @@ class ExpertiseService(object):
         self.logger.info(f"Config validation passed - setting server-side fields")
 
         # Populate with server-side fields
-        root_dir = os.path.join(self.working_dir, request['job_id'])
+        root_dir = os.path.join(self.working_dir, config['job_id'])
         descriptions = JobDescription.VALS.value
         config['dataset']['directory'] = root_dir
         for field in self.path_fields:

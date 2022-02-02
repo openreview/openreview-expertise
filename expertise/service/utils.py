@@ -183,6 +183,14 @@ class ServerConfig(object):
         self.paper_id = starting_config.get('paper_id', None)
 
         # Optional model params
+        self.allowed_model_params = [
+            'name',
+            'sparseValue',
+            'useTitle',
+            'useAbstract',
+            'scoreComputation',
+            'skipSpecter'
+        ]
         self.model_params = starting_config.get('model_params', {})
         model_params = starting_config.get('model_params', {})
         self.model_params = {}
@@ -196,7 +204,7 @@ class ServerConfig(object):
     
     def _get_required_field(self, req, superkey, key):
         try:
-            field = req[key]
+            field = req.pop(key)
         except KeyError:
             raise openreview.OpenReviewException(f"Bad request: required field missing in {superkey}: {key}")
         return field
@@ -211,7 +219,7 @@ class ServerConfig(object):
         if type == 'Group':
             if 'memberOf' in entity.keys():
                 members_group = _get_from_entity('memberOf')
-                exc_inv = entity.get('expertise', {}).get('exclusion', {}).get('invitation', None)
+                exc_inv = entity.pop('expertise', {}).pop('exclusion', {}).pop('invitation', None)
 
                 self.match_group = members_group
                 self.exclusion_inv = exc_inv
@@ -229,6 +237,10 @@ class ServerConfig(object):
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
         else:
             raise openreview.OpenReviewException(f"Bad request: invalid type in {entity_id}")
+
+        # Check for extra entity fields
+        if len(entity.keys()) > 0:
+            raise openreview.OpenReviewException(f"Bad request: unexpected fields in {entity_id}: {list(entity.keys())}")
 
     def from_request(self, request):
         '''Load information from the Flask JSON request'''
@@ -271,15 +283,16 @@ class ServerConfig(object):
             raise openreview.OpenReviewException("Bad request: must provide either paper_id or paper_invitation")
 
         # Retrieve information from model object
-        model_params = request.get('model', {})
+        model_params = request.pop('model', {})
         if model_params:
             self.model = self._get_required_field(model_params, 'model', 'name')
 
-        skip_params = ['name', 'batchSize', 'skipCuda']
+        # Assert that JSON request should be empty
+        if len(request.keys()) > 0:
+            raise openreview.OpenReviewException(f"Bad request: unexpected fields in request: {list(request.keys())}")
+
         for param in model_params.keys():
             # Handle special cases
-            if param in skip_params: continue
-
             if param == 'scoreComputation':
                 compute_with = model_params.get('scoreComputation', None)
                 if compute_with == 'max':
@@ -289,10 +302,13 @@ class ServerConfig(object):
                     self.model_params['max_score'] = False
                     self.model_params['average_score'] = True
                 else:
-                    raise openreview.OpenReviewException("Bad request: incorrect value in field 'scoreComputation' in 'model' object")
+                    raise openreview.OpenReviewException("Bad request: invalid value in field 'scoreComputation' in 'model' object")
                 continue
             
             # Handle general case
+            if param not in self.allowed_model_params:
+                raise openreview.OpenReviewException(f"Bad request: unexpected fields in model: {[param]}")
+
             snake_param = _camel_to_snake(param)
             self.model_params[snake_param] = model_params[param]
 
