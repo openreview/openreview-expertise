@@ -374,7 +374,7 @@ class TestExpertiseService():
         # Clean up directories by setting the "delete_on_get" flag
         assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
-        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}", 'delete_on_get': True}).json['results']
+        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
         ## Assert the next expertise results should return empty result
@@ -521,7 +521,7 @@ class TestExpertiseService():
             assert score >= 0 and score <= 1
         
         # Clean up journal request
-        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}", 'delete_on_get': True}).json['results']
+        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
     def test_high_load(self, openreview_context, celery_session_app, celery_session_worker):
@@ -597,7 +597,7 @@ class TestExpertiseService():
             assert response['name'] == 'test_run'
             assert response['description'] == 'Job is complete and the computed scores are ready'
 
-            response = test_client.get('/expertise/results', query_string={'id': f"{id}", 'delete_on_get': True})
+            response = test_client.get('/expertise/results', query_string={'id': f"{id}", 'deleteOnGet': True})
             metadata = response.json['metadata']
             assert metadata['submission_count'] == 2
             response = response.json['results']

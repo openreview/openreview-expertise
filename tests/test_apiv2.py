@@ -267,7 +267,7 @@ class TestExpertiseV2():
             assert score >= 0 and score <= 1
         
         # Clean up journal request
-        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}", 'delete_on_get': True}).json['results']
+        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
         # Clean up directory
         shutil.rmtree(f"./tests/jobs/")
