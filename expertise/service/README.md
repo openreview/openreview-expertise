@@ -1,19 +1,34 @@
 # API Endpoints
 ## `POST /expertise`
-This endpoint accepts a subset of fields that would be expected in a `config.json` file as described in the `README.md` of the root directory. A valid request body has the following format:
+A valid request body has the following format:
 ```
 {
-  "name": "string",
-  "match_group": "string",
-  "paper_invitation": "string",
-  "exclusion_inv": "string" [Optional],
-  "model": "specter+mfr" [Optional],
-  "model_params" [Optional]: {
-      "use_title": true,
-      "use_abstract": true,
-      "average_score": false,
-      "max_score": true,
-      "skip_specter": false
+  "name": string
+  "entityA": {
+  	"type": string,
+	"memberOf": string,
+	"id": string,
+	"invitation": string,
+	"expertise": {
+		"exclusion": { "invitation": string }
+	}
+  },
+  "entityB": {
+  	"type": string,
+	"memberOf": string,
+	"id": string,
+	"invitation": string,
+	"expertise": {
+		"exclusion": { "invitation": string }
+	}
+  },
+  "model": {
+  	"name": string,
+	"sparseValue": int,
+	"useTitle": boolean,
+	"useAbstract": boolean,
+	"scoreComputation": "avg" or "max",
+	"skipSpecter": boolean
   }
 }
 ```
@@ -30,10 +45,10 @@ This endpoint gets the status of a single job with the given `job_id`. A valid r
 Returns the status, if any, that were submitted by the user and has the job id:
 ```
 {
-	"job_id": "string",
-	"name": "string",
-	"status": "string",
-	"description": "string",
+	"job_id": string,
+	"name": string,
+	"status": string,
+	"description": string,
 	"config": {...}
 }
 ```
@@ -49,10 +64,10 @@ Returns a list of jobs, if any, that were submitted by the user and has the job 
 {
   "results": [
       {
-        "job_id": "string",
-        "name": "string",
-        "status": "string",
-        "description": "string",
+        "job_id": string,
+        "name": string,
+        "status": string,
+        "description": string,
         "config": {...}
       }
   ]
@@ -63,8 +78,8 @@ Returns a list of jobs, if any, that were submitted by the user and has the job 
 This endpoint retrieves the results of a job with the matching job ID and optionally removes the scores from the server after retrieval. A valid request body has the following format:
 ```
 {
-  "id": "string",
-  "delete_on_get": false [Optional],
+  "id": string,
+  "deleteOnGet": false [Optional],
 }
 ```
 
