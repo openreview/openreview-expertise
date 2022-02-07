@@ -8,7 +8,7 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
-from .utils import ServerConfig
+from .utils import ServerConfig, APIRequest
 
 SUPERUSER_IDS = ['openreview.net']
 user_index_file_lock = Lock()
@@ -80,10 +80,10 @@ class ExpertiseService(object):
                         when it is not expected
         """
         # Validate fields
-        validate_obj = ServerConfig(self._get_default_config())
-        validate_obj.from_request(request)
-        config = validate_obj.to_json()
-        self.logger.info(f"Config validation passed - setting server-side fields")
+        validated_request = APIRequest()
+        validated_request.from_json(request)
+        config = ServerConfig(self._get_default_config(), validated_request).to_json()
+        self.logger.info(f"Config validation passed - setting server-side fields in {config}")
 
         # Populate with server-side fields
         root_dir = os.path.join(self.working_dir, config['job_id'])

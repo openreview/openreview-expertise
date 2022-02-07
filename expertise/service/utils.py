@@ -160,29 +160,166 @@ def get_user_id(openreview_client):
     user = openreview_client.user
     return user.get('user', {}).get('id') if user else None
 
+def _get_required_field(req, superkey, key):
+    try:
+        field = req.pop(key)
+    except KeyError:
+        raise openreview.OpenReviewException(f"Bad request: required field missing in {superkey}: {key}")
+    return field
+
+class APIRequest(object):
+    """
+    Validates and load objects and fields from POST requests
+    """
+    def __init__(self,
+            name = None,
+            user_id = None,
+            job_id = None,
+            token = None,
+            baseurl = None,
+            baseurl_v2 = None):
+            
+        self.name = name
+        self.user_id = user_id
+        self.job_id = job_id
+        self.token = token
+        self.baseurl = baseurl
+        self.baseurl_v2 = baseurl_v2
+        self.entityA = {}
+        self.entityB = {}
+        self.model = {}
+
+    def from_json(self, request = {}):
+        root_key = 'request'
+        def _get_field_from_request(field):
+            return _get_required_field(request, root_key, field)
+
+        def _load_entity_a(entity):
+            self._load_entity('entityA', entity, self.entityA)
+
+        def _load_entity_b(entity):
+            self._load_entity('entityB', entity, self.entityB)
+
+        def _camel_to_snake(camel_str):
+            camel_str = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', camel_str)
+            return re.sub('([a-z0-9])([A-Z])', r'\1_\2', camel_str).lower()
+        
+        # Get the name of the job
+        self.name = _get_field_from_request('name')
+
+        # These are automatically provided by the server
+        self.user_id = _get_field_from_request('user_id')
+        self.job_id = _get_field_from_request('job_id')
+        self.token = _get_field_from_request('token')
+        self.baseurl = _get_field_from_request('baseurl')
+        self.baseurl_v2 = _get_field_from_request('baseurl_v2')
+
+        # Validate entityA and entityB
+        entity_a = _get_field_from_request('entityA')
+        entity_b = _get_field_from_request('entityB')
+
+        _load_entity_a(entity_a)
+        _load_entity_b(entity_b)
+
+        # Optionally check for model object
+        self.model = request.pop('model', {})
+
+        # Check for empty request
+        if len(request.keys()) > 0:
+            raise openreview.OpenReviewException(f"Bad request: unexpected fields in {root_key}: {list(request.keys())}")
+    
+    def _load_entity(self, entity_id, source_entity, target_entity):
+        '''Load information from an entity into the config'''
+        def _get_from_entity(key):
+            return _get_required_field(source_entity, entity_id, key)
+
+        type = _get_from_entity('type')
+        target_entity['type'] = type
+        # Handle type group
+        if type == 'Group':
+            if 'memberOf' in source_entity.keys():
+                target_entity['memberOf'] = _get_from_entity('memberOf')
+                # Check for optional expertise field
+                if 'expertise' in source_entity.keys():
+                    target_entity['expertise'] = source_entity.pop('expertise')
+            else:
+                raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
+        # Handle type note
+        elif type == 'Note':
+            if 'invitation' in source_entity.keys() and 'id' in source_entity.keys():
+                raise openreview.OpenReviewException(f"Bad request: only provide a single id or single invitation in {entity_id}")
+
+            if 'invitation' in source_entity.keys():
+                target_entity['invitation'] = _get_from_entity('invitation')
+            elif 'id' in source_entity.keys():
+                target_entity['id'] = _get_from_entity('id')
+            else:
+                raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
+        else:
+            raise openreview.OpenReviewException(f"Bad request: invalid type in {entity_id}")
+
+        # Check for extra entity fields
+        if len(source_entity.keys()) > 0:
+            raise openreview.OpenReviewException(f"Bad request: unexpected fields in {entity_id}: {list(source_entity.keys())}")
+
+
 class ServerConfig(object):
     """
     Helps translate fields from API requests to fields usable by the expertise system
     """
-    def __init__(self, starting_config = {}):
-        '''Loads all fields from the starting config'''
-        # Required fields get None by default
-        self.name = None
-        self.match_group = None
-        self.user_id = None
-        self.job_id = None
-        self.token = starting_config.get('token', None)
-        self.baseurl = starting_config.get('baseurl', None)
-        self.baseurl_v2 = starting_config.get('baseurl_v2', None)
+    def __init__(self, starting_config = {}, api_request: APIRequest = None):
+        """
+        Sets default fields from the starting_config and attempts to override from api_request fields
+        """
+        def _camel_to_snake(camel_str):
+            camel_str = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', camel_str)
+            return re.sub('([a-z0-9])([A-Z])', r'\1_\2', camel_str).lower()
+    
+        # Set metadata fields from request
+        self.name = api_request.name
+        self.user_id = api_request.user_id
+        self.job_id = api_request.job_id
+        self.token = api_request.token
+        self.baseurl = api_request.baseurl
+        self.baseurl_v2 = api_request.baseurl_v2
         self.dataset = starting_config.get('dataset', {})
 
-        # Optional fields
-        self.model = starting_config.get('model', None)
-        self.exclusion_inv = starting_config.get('exclusion_inv', None)
-        self.paper_invitation = starting_config.get('paper_invitation', None)
-        self.paper_id = starting_config.get('paper_id', None)
+        # Handle Group cases
+        # (for now, only single match group)
+        self.match_group = starting_config.get('match_group', None)
+        if api_request.entityA['type'] == 'Group':
+            self.match_group = api_request.entityA['memberOf']
+        elif api_request.entityB['type'] == 'Group':
+            self.match_group = api_request.entityB['memberOf']
 
-        # Optional model params
+        # Handle Note cases
+        self.paper_invitation = None
+        self.paper_id = None
+        self.exclusion_inv = None
+
+        if api_request.entityA['type'] == 'Note':
+            inv, id = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None)
+            excl_inv = api_request.entityA.get('expertise', None)
+
+            if inv:
+                self.paper_invitation = inv
+            if id:
+                self.paper_id = id
+            if excl_inv:
+                self.exclusion_inv = excl_inv.get('exclusion', {}).get('invitation', None)
+        elif api_request.entityB['type'] == 'Note':
+            inv, id = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None)
+            excl_inv = api_request.entityB.get('expertise', None)
+
+            if inv:
+                self.paper_invitation = inv
+            if id:
+                self.paper_id = id
+            if excl_inv:
+                self.exclusion_inv = excl_inv.get('exclusion', {}).get('invitation', None)
+
+
+        # Load optional model params from default config
         self.allowed_model_params = [
             'name',
             'sparseValue',
@@ -191,6 +328,7 @@ class ServerConfig(object):
             'scoreComputation',
             'skipSpecter'
         ]
+        self.model = starting_config.get('model', None)
         self.model_params = starting_config.get('model_params', {})
         model_params = starting_config.get('model_params', {})
         self.model_params = {}
@@ -201,116 +339,30 @@ class ServerConfig(object):
         self.model_params['skip_specter'] = model_params.get('skip_specter', None)
         self.model_params['batch_size'] = model_params.get('batch_size', 1)
         self.model_params['skip_cuda'] = model_params.get('skip_cuda', False)
-    
-    def _get_required_field(self, req, superkey, key):
-        try:
-            field = req.pop(key)
-        except KeyError:
-            raise openreview.OpenReviewException(f"Bad request: required field missing in {superkey}: {key}")
-        return field
 
-    def _load_entity(self, entity_id, entity):
-        '''Load information from an entity into the config'''
-        def _get_from_entity(key):
-            return self._get_required_field(entity, entity_id, key)
+        # Attempt to load any API request model params
+        api_model = api_request.model
+        if api_model:
+            for param in api_model.keys():
+                # Handle special cases
+                if param == 'scoreComputation':
+                    compute_with = api_model.get('scoreComputation', None)
+                    if compute_with == 'max':
+                        self.model_params['max_score'] = True
+                        self.model_params['average_score'] = False
+                    elif compute_with == 'avg':
+                        self.model_params['max_score'] = False
+                        self.model_params['average_score'] = True
+                    else:
+                        raise openreview.OpenReviewException("Bad request: invalid value in field 'scoreComputation' in 'model' object")
+                    continue
+                
+                # Handle general case
+                if param not in self.allowed_model_params:
+                    raise openreview.OpenReviewException(f"Bad request: unexpected fields in model: {[param]}")
 
-        type = _get_from_entity('type')
-        # Handle type group
-        if type == 'Group':
-            if 'memberOf' in entity.keys():
-                members_group = _get_from_entity('memberOf')
-                exc_inv = entity.pop('expertise', {}).pop('exclusion', {}).pop('invitation', None)
-
-                self.match_group = members_group
-                self.exclusion_inv = exc_inv
-            else:
-                raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
-        # Handle type note
-        elif type == 'Note':
-            if 'invitation' in entity.keys():
-                inv = _get_from_entity('invitation')
-                self.paper_invitation = inv
-            elif 'id' in entity.keys():
-                id = _get_from_entity('id')
-                self.paper_id = id
-            else:
-                raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
-        else:
-            raise openreview.OpenReviewException(f"Bad request: invalid type in {entity_id}")
-
-        # Check for extra entity fields
-        if len(entity.keys()) > 0:
-            raise openreview.OpenReviewException(f"Bad request: unexpected fields in {entity_id}: {list(entity.keys())}")
-
-    def from_request(self, request):
-        '''Load information from the Flask JSON request'''
-        # Precondition: default fields are properly loaded
-        root_key = 'request'
-        def _get_field_from_request(field):
-            return self._get_required_field(request, root_key, field)
-
-        def _load_entity_a(entity):
-            self._load_entity('entityA', entity)
-
-        def _load_entity_b(entity):
-            self._load_entity('entityB', entity)
-
-        def _camel_to_snake(camel_str):
-            camel_str = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', camel_str)
-            return re.sub('([a-z0-9])([A-Z])', r'\1_\2', camel_str).lower()
-
-        # Load job/server metadata
-        self.name = _get_field_from_request('name')
-
-        # These are automatically provided by the server
-        self.user_id = _get_field_from_request('user_id')
-        self.job_id = _get_field_from_request('job_id')
-        self.token = _get_field_from_request('token')
-        self.baseurl = _get_field_from_request('baseurl')
-        self.baseurl_v2 = _get_field_from_request('baseurl_v2')
-
-        # Retrieve information from entities
-        entity_a = _get_field_from_request('entityA')
-        entity_b = _get_field_from_request('entityB')
-
-        _load_entity_a(entity_a)
-        _load_entity_b(entity_b)
-
-        # Assert paper_id/paper_invitation logic
-        if self.paper_id is not None and self.paper_invitation is not None:
-            raise openreview.OpenReviewException("Bad request: both paper_id and paper_invitation are provided")
-        elif self.paper_id is None and self.paper_invitation is None:
-            raise openreview.OpenReviewException("Bad request: must provide either paper_id or paper_invitation")
-
-        # Retrieve information from model object
-        model_params = request.pop('model', {})
-        if model_params:
-            self.model = self._get_required_field(model_params, 'model', 'name')
-
-        # Assert that JSON request should be empty
-        if len(request.keys()) > 0:
-            raise openreview.OpenReviewException(f"Bad request: unexpected fields in request: {list(request.keys())}")
-
-        for param in model_params.keys():
-            # Handle special cases
-            if param == 'scoreComputation':
-                compute_with = model_params.get('scoreComputation', None)
-                if compute_with == 'max':
-                    self.model_params['max_score'] = True
-                    self.model_params['average_score'] = False
-                elif compute_with == 'avg':
-                    self.model_params['max_score'] = False
-                    self.model_params['average_score'] = True
-                else:
-                    raise openreview.OpenReviewException("Bad request: invalid value in field 'scoreComputation' in 'model' object")
-                continue
-            
-            # Handle general case
-            if param not in self.allowed_model_params:
-                raise openreview.OpenReviewException(f"Bad request: unexpected fields in model: {[param]}")
-
-            snake_param = _camel_to_snake(param)
-            self.model_params[snake_param] = model_params[param]
+                snake_param = _camel_to_snake(param)
+                self.model_params[snake_param] = api_model[param]
 
     def to_json(self):
         pre_body = {
