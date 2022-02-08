@@ -158,7 +158,8 @@ def execute_expertise(config):
                 scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
-    if 'submission_group' in config:
+    group_ids = config.get('match_group', [])
+    if isinstance(group_ids, list) and len(group_ids) > 1:
         # Fetch scores
         scores = {}
         original_score_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')

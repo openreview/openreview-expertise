@@ -256,6 +256,11 @@ class OpenReviewExpertise(object):
         use_email_ids = self.config.get('use_email_ids', False)
         group_ids = self.convert_to_list(self.config.get('match_group', []))
         reviewer_ids = self.convert_to_list(self.config.get('reviewer_ids', []))
+
+        # If there is more than 1 group, only take the first group
+        if len(group_ids) > 1:
+            group_ids = [group_ids[0]]
+
         valid_members, invalid_members = self.get_profile_ids(group_ids=group_ids, reviewer_ids=reviewer_ids)
 
         self.metadata['no_profile'] = invalid_members
@@ -337,8 +342,13 @@ class OpenReviewExpertise(object):
     def get_submissions(self):
         invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
         paper_id = self.config.get('paper_id')
-        submission_group = self.config.get('submission_group')
+        submission_group = None
         submissions = []
+
+        # If there is more than 1 group, set the second group as the submission group
+        group_ids = self.convert_to_list(self.config.get('match_group', []))
+        if len(group_ids) > 1:
+            submission_group = [group_ids[1]]
 
         if submission_group:
             aggregate_papers = self.get_papers_from_group(submission_group)
@@ -437,8 +447,11 @@ class OpenReviewExpertise(object):
                     for paper in pubs:
                         f.write(json.dumps(paper) + '\n')
 
+        # Retrieve match groups to detect group-group matching
+        group_group_matching = len(self.convert_to_list(self.config.get('match_group', []))) > 1
+
         # if invitation ID is supplied, collect records for each submission
-        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config or 'submission_group' in self.config:
+        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config or group_group_matching:
             submissions = self.get_submissions()
             with open(self.root.joinpath('submissions.json'), 'w') as f:
                 json.dump(submissions, f, indent=2)

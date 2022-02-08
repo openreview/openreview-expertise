@@ -29,7 +29,7 @@ class ExpertiseService(object):
         # Define expected/required API fields
         self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
         self.optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
-        self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'baseurl_v2', 'paper_invitation', 'paper_id', 'submission_group']
+        self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'baseurl_v2', 'paper_invitation', 'paper_id']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
     def _filter_config(self, running_config):
@@ -277,7 +277,11 @@ class ExpertiseService(object):
             file_dir, metadata_dir = self._get_score_and_metadata_dir(search_dir)
             self.logger.info(f"Retrieving scores from {search_dir}")
             ret_list = []
-            if 'submission_group' not in config.keys():
+
+            # Check for output format
+            group_group_matching = len(self.convert_to_list(self.config.get('match_group', []))) > 1
+
+            if not group_group_matching:
                 with open(file_dir, 'r') as csv_file:
                     data_reader = reader(csv_file)
                     for row in data_reader:
