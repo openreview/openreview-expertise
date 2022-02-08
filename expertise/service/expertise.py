@@ -134,6 +134,11 @@ class ExpertiseService(object):
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
 
+        # Lists are unhashable - convert match group to tuple if a list
+        group_ids = config.get('match_group', [])
+        if isinstance(group_ids, list):
+            config['match_group'] = tuple(group_ids)
+
         # Config has passed validation - add it to the user index
         run_userpaper.apply_async(
             (config, token, self.logger),
@@ -279,7 +284,8 @@ class ExpertiseService(object):
             ret_list = []
 
             # Check for output format
-            group_group_matching = len(self.convert_to_list(self.config.get('match_group', []))) > 1
+            group_ids = config.get('match_group', [])
+            group_group_matching = (isinstance(group_ids, list) or isinstance(group_ids, tuple)) and len(group_ids) > 1
 
             if not group_group_matching:
                 with open(file_dir, 'r') as csv_file:

@@ -159,7 +159,7 @@ def execute_expertise(config):
             )
 
     group_ids = config.get('match_group', [])
-    if isinstance(group_ids, list) and len(group_ids) > 1:
+    if (isinstance(group_ids, list) or isinstance(group_ids, tuple)) and len(group_ids) > 1:
         # Fetch scores
         scores = {}
         original_score_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')

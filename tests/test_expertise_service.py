@@ -617,8 +617,7 @@ class TestExpertiseService():
             '/expertise',
             data = json.dumps({
                     'name': 'test_run',
-                    'match_group': ["ABC.cc"],
-                    'submission_group': 'ABC.cc',
+                    'match_group': ["ABC.cc", "ABC.cc"],
                     "model": "elmo",
                     "model_params": {
                         "use_title": False,
@@ -656,7 +655,6 @@ class TestExpertiseService():
         # Check config fields
         returned_config = response['config']
         assert returned_config['name'] == 'test_run'
-        assert returned_config['submission_group'] == 'ABC.cc'
         assert returned_config['model'] == 'elmo'
         assert 'token' not in returned_config
         assert 'baseurl' not in returned_config

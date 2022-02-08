@@ -34,9 +34,11 @@ class OpenReviewExpertise(object):
     def convert_to_list(self, config_invitations):
         if (isinstance(config_invitations, str)):
             invitations = [config_invitations]
+        elif (isinstance(config_invitations, tuple)):
+            invitations = list(config_invitations)
         else:
             invitations = config_invitations
-        assert isinstance(invitations, list), 'Input should be a str or a list'
+        assert isinstance(invitations, list), 'Input should be a str, list, or tuple'
         return invitations
 
     def get_paper_notes(self, author_id, dataset_params):
@@ -348,7 +350,7 @@ class OpenReviewExpertise(object):
         # If there is more than 1 group, set the second group as the submission group
         group_ids = self.convert_to_list(self.config.get('match_group', []))
         if len(group_ids) > 1:
-            submission_group = [group_ids[1]]
+            submission_group = group_ids[1]
 
         if submission_group:
             aggregate_papers = self.get_papers_from_group(submission_group)
