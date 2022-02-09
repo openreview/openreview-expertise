@@ -616,14 +616,21 @@ class TestExpertiseService():
         response = test_client.post(
             '/expertise',
             data = json.dumps({
-                    'name': 'test_run',
-                    'match_group': ["ABC.cc", "ABC.cc"],
-                    "model": "elmo",
-                    "model_params": {
-                        "use_title": False,
-                        "use_abstract": True,
-                        "average_score": True,
-                        "max_score": False
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                    },
+                    "entityB": { 
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
                     }
                 }
             ),
@@ -655,7 +662,7 @@ class TestExpertiseService():
         # Check config fields
         returned_config = response['config']
         assert returned_config['name'] == 'test_run'
-        assert returned_config['model'] == 'elmo'
+        assert returned_config['model'] == 'specter+mfr'
         assert 'token' not in returned_config
         assert 'baseurl' not in returned_config
         assert 'user_id' not in returned_config
@@ -667,7 +674,7 @@ class TestExpertiseService():
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
-        assert metadata['submission_count'] == 7
+        assert metadata['submission_count'] == 6
         response = response.json['results']
         for item in response:
             match_id, submitter_id, score = item['match_member'], item['submission_member'], float(item['score'])
@@ -678,7 +685,7 @@ class TestExpertiseService():
             assert score >= 0 and score <= 1
         
         # Clean up journal request
-        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}", 'delete_on_get': True}).json['results']
+        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
         # Clean up directory
