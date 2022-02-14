@@ -89,7 +89,6 @@ class ExpertiseService(object):
         job_id = shortuuid.ShortUUID().random(length=5)
         config['user_id'] = get_user_id(self.client)
         config['job_id'] = job_id
-        config['token'] = self.client.token
         config['baseurl'] = self.server_config['OPENREVIEW_BASEURL']
         config['baseurl_v2'] = self.server_config['OPENREVIEW_BASEURL_V2']
 
@@ -112,13 +111,12 @@ class ExpertiseService(object):
             config['model_params']['mfr_checkpoint_dir'] = self.mfr_checkpoint_dir
 
         # Create directory and config file
-        token = config.pop('token')
         if not os.path.isdir(config['dataset']['directory']):
             os.makedirs(config['dataset']['directory'])
         with open(os.path.join(root_dir, 'config.json'), 'w+') as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
 
-        return config, token
+        return config, self.client.token
 
     def _get_subdirs(self, user_id):
         """
