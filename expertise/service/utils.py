@@ -263,7 +263,7 @@ class APIRequest(object):
             raise openreview.OpenReviewException(f"Bad request: unexpected fields in {entity_id}: {list(source_entity.keys())}")
 
 
-class ServerConfig(object):
+class JobConfig(object):
     """
     Helps translate fields from API requests to fields usable by the expertise system
     """

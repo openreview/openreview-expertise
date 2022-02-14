@@ -8,7 +8,7 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
-from .utils import ServerConfig, APIRequest
+from .utils import JobConfig, APIRequest
 
 SUPERUSER_IDS = ['openreview.net']
 user_index_file_lock = Lock()
@@ -82,7 +82,7 @@ class ExpertiseService(object):
         # Validate fields
         validated_request = APIRequest()
         validated_request.from_json(request)
-        config = ServerConfig(self._get_default_config(), validated_request).to_json()
+        config = JobConfig(self._get_default_config(), validated_request).to_json()
         self.logger.info(f"Config validation passed - setting server-side fields in {config}")
 
         # Populate with server-side fields
