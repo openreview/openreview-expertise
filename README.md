@@ -155,7 +155,7 @@ See `/expertise/service/README.md` for documentation on the API design and endpo
 
 When SPECTER is run as a service, it creates ~1GB of extra files get stored in a temporary directory and are not automatically cleaned up. In order to cleanup these files, you can run the following command. **WARNING**: Any currently running jobs have the potential to fail when performing this operation
 ```
-python -m expertise.clean_tmp
+./clean_tmp
 ```
 
 ### Configuration
