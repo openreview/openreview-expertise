@@ -8,7 +8,7 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
-from .utils import JobConfig, APIRequest
+from .utils import JobConfig, APIRequest, get_user_id
 
 SUPERUSER_IDS = ['openreview.net']
 user_index_file_lock = Lock()
@@ -86,6 +86,13 @@ class ExpertiseService(object):
         self.logger.info(f"Config validation passed - setting server-side fields in {config}")
 
         # Populate with server-side fields
+        job_id = shortuuid.ShortUUID().random(length=5)
+        config['user_id'] = get_user_id(self.client)
+        config['job_id'] = job_id
+        config['token'] = self.client.token
+        config['baseurl'] = self.server_config['OPENREVIEW_BASEURL']
+        config['baseurl_v2'] = self.server_config['OPENREVIEW_BASEURL_V2']
+
         root_dir = os.path.join(self.working_dir, config['job_id'])
         descriptions = JobDescription.VALS.value
         config['dataset']['directory'] = root_dir
@@ -163,11 +170,10 @@ class ExpertiseService(object):
 
     def start_expertise(self, request):
         descriptions = JobDescription.VALS.value
-        job_id = shortuuid.ShortUUID().random(length=5)
-        request['job_id'] = job_id
 
         from .celery_tasks import run_userpaper
         config, token = self._prepare_config(request)
+        job_id = config['job_id']
 
         self.logger.info(f'Config: {config}')
         config['mdate'] = int(time.time() * 1000)

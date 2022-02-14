@@ -95,10 +95,6 @@ def expertise():
 
         # Parse request args
         user_request = flask.request.json
-        user_request['token'] = openreview_client.token
-        user_request['baseurl'] = flask.current_app.config['OPENREVIEW_BASEURL']
-        user_request['baseurl_v2'] = flask.current_app.config['OPENREVIEW_BASEURL_V2']
-        user_request['user_id'] = user_id
 
         job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).start_expertise(user_request)
 

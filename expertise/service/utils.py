@@ -172,19 +172,9 @@ class APIRequest(object):
     Validates and load objects and fields from POST requests
     """
     def __init__(self,
-            name = None,
-            user_id = None,
-            job_id = None,
-            token = None,
-            baseurl = None,
-            baseurl_v2 = None):
+            name = None):
             
         self.name = name
-        self.user_id = user_id
-        self.job_id = job_id
-        self.token = token
-        self.baseurl = baseurl
-        self.baseurl_v2 = baseurl_v2
         self.entityA = {}
         self.entityB = {}
         self.model = {}
@@ -200,19 +190,8 @@ class APIRequest(object):
         def _load_entity_b(entity):
             self._load_entity('entityB', entity, self.entityB)
 
-        def _camel_to_snake(camel_str):
-            camel_str = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', camel_str)
-            return re.sub('([a-z0-9])([A-Z])', r'\1_\2', camel_str).lower()
-        
         # Get the name of the job
         self.name = _get_field_from_request('name')
-
-        # These are automatically provided by the server
-        self.user_id = _get_field_from_request('user_id')
-        self.job_id = _get_field_from_request('job_id')
-        self.token = _get_field_from_request('token')
-        self.baseurl = _get_field_from_request('baseurl')
-        self.baseurl_v2 = _get_field_from_request('baseurl_v2')
 
         # Validate entityA and entityB
         entity_a = _get_field_from_request('entityA')
@@ -277,11 +256,6 @@ class JobConfig(object):
     
         # Set metadata fields from request
         self.name = api_request.name
-        self.user_id = api_request.user_id
-        self.job_id = api_request.job_id
-        self.token = api_request.token
-        self.baseurl = api_request.baseurl
-        self.baseurl_v2 = api_request.baseurl_v2
         self.dataset = starting_config.get('dataset', {})
 
         # Handle Group cases
@@ -368,11 +342,6 @@ class JobConfig(object):
         pre_body = {
             'name': self.name,
             'match_group': self.match_group,
-            'user_id': self.user_id,
-            'job_id': self.job_id,
-            'token': self.token,
-            'baseurl': self.baseurl,
-            'baseurl_v2': self.baseurl_v2,
             'dataset': self.dataset,
             'model': self.model,
             'exclusion_inv': self.exclusion_inv,
