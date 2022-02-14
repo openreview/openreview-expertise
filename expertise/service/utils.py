@@ -312,7 +312,7 @@ class JobConfig(object):
         self.model_params['max_score'] = model_params.get('max_score', None)
         self.model_params['skip_specter'] = model_params.get('skip_specter', None)
         self.model_params['batch_size'] = model_params.get('batch_size', 1)
-        self.model_params['skip_cuda'] = model_params.get('skip_cuda', False)
+        self.model_params['use_cuda'] = model_params.get('use_cuda', False)
 
         # Attempt to load any API request model params
         api_model = api_request.model
