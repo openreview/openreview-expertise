@@ -171,16 +171,13 @@ class APIRequest(object):
     """
     Validates and load objects and fields from POST requests
     """
-    def __init__(self,
-            name = None):
+    def __init__(self, request):
             
-        self.name = name
         self.entityA = {}
         self.entityB = {}
         self.model = {}
-
-    def from_json(self, request = {}):
         root_key = 'request'
+
         def _get_field_from_request(field):
             return _get_required_field(request, root_key, field)
 

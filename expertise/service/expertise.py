@@ -80,8 +80,7 @@ class ExpertiseService(object):
                         when it is not expected
         """
         # Validate fields
-        validated_request = APIRequest()
-        validated_request.from_json(request)
+        validated_request = APIRequest(request)
         config = JobConfig(self._get_default_config(), validated_request).to_json()
         self.logger.info(f"Config validation passed - setting server-side fields in {config}")
 
