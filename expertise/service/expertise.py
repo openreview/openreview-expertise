@@ -8,36 +8,18 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
-from .utils import JobConfig, APIRequest, get_user_id
+
+from .utils import JobConfig, APIRequest, JobDescription, JobStatus
 
 SUPERUSER_IDS = ['openreview.net']
 user_index_file_lock = Lock()
-
-class JobStatus(str, Enum):
-    INITIALIZED = 'Initialized'
-    QUEUED = 'Queued'
-    FETCHING_DATA  = 'Fetching Data'
-    EXPERTISE_QUEUED = 'Queued for Expertise'
-    RUN_EXPERTISE = 'Running Expertise'
-    COMPLETED = 'Completed'
-    ERROR = 'Error'
-
-class JobDescription(dict, Enum):
-    VALS = {
-        JobStatus.INITIALIZED: 'Server received config and allocated space',
-        JobStatus.QUEUED: 'Job is waiting to start fetching OpenReview data',
-        JobStatus.FETCHING_DATA: 'Job is currently fetching data from OpenReview',
-        JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
-        JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
-        JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
-    }
-
 class ExpertiseService(object):
 
     def __init__(self, client, config, logger):
         self.client = client
         self.logger = logger
         self.server_config = config
+        self.default_expertise_config = config['DEFAULT_CONFIG']
         self.working_dir = config['WORKING_DIR']
         self.specter_dir = config['SPECTER_DIR']
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
@@ -49,24 +31,19 @@ class ExpertiseService(object):
         self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'baseurl_v2', 'paper_invitation', 'paper_id']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
-    def _get_default_config(self):
-        return self.server_config['DEFAULT_CONFIG']
-
     def _filter_config(self, running_config):
         """
         Filters out certain server-side fields of a config file in order to
         form a presentable config to the user
 
         :param running_config: Contains the config JSON as read from the servver
-        :type running_config: dict
+        :type running_config: JobConfig
 
         :returns config: A modified version of config without the server fields
         """
-        remove_fields = ['baseurl', 'user_id']
-        for key in remove_fields:
-            del running_config[key]
 
-        return running_config
+        running_config.baseurl = None
+        running_config.user_id = None
 
     def _prepare_config(self, request) -> dict:
         """
@@ -81,39 +58,20 @@ class ExpertiseService(object):
         """
         # Validate fields
         validated_request = APIRequest(request)
-        config = JobConfig(self._get_default_config(), validated_request).to_json()
-        self.logger.info(f"Config validation passed - setting server-side fields in {config}")
-
-        # Populate with server-side fields
-        job_id = shortuuid.ShortUUID().random(length=5)
-        config['user_id'] = get_user_id(self.client)
-        config['job_id'] = job_id
-        config['baseurl'] = self.server_config['OPENREVIEW_BASEURL']
-        config['baseurl_v2'] = self.server_config['OPENREVIEW_BASEURL_V2']
-
-        root_dir = os.path.join(self.working_dir, config['job_id'])
-        descriptions = JobDescription.VALS.value
-        config['dataset']['directory'] = root_dir
-        for field in self.path_fields:
-            config['model_params'][field] = root_dir
-        config['job_dir'] = root_dir
-        config['cdate'] = int(time.time() * 1000)
-        config['mdate'] = config['cdate']
-        config['status'] = JobStatus.INITIALIZED.value
-        config['description'] = descriptions[JobStatus.INITIALIZED]
-
-        # Set SPECTER+MFR paths
-        if 'specter' in config.get('model', 'specter+mfr'):
-            config['model_params']['specter_dir'] = self.specter_dir
-        if 'mfr' in config.get('model', 'specter+mfr'):
-            config['model_params']['mfr_feature_vocab_file'] = self.mfr_feature_vocab_file
-            config['model_params']['mfr_checkpoint_dir'] = self.mfr_checkpoint_dir
+        config = JobConfig.from_request(
+            api_request = validated_request,
+            starting_config = self.default_expertise_config,
+            openreview_client= self.client,
+            server_config = self.server_config,
+            working_dir = self.working_dir
+        )
+        self.logger.info(f"Config validation passed - {config.to_json()}")
 
         # Create directory and config file
-        if not os.path.isdir(config['dataset']['directory']):
-            os.makedirs(config['dataset']['directory'])
-        with open(os.path.join(root_dir, 'config.json'), 'w+') as f:
-            json.dump(config, f, ensure_ascii=False, indent=4)
+        if not os.path.isdir(config.dataset['directory']):
+            os.makedirs(config.dataset['directory'])
+        with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
+            json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
 
         return config, self.client.token
 
@@ -131,8 +89,8 @@ class ExpertiseService(object):
         filtered_dirs = []
         for job_dir in subdirs:
             with open(os.path.join(self.working_dir, job_dir, 'config.json')) as f:
-                config = json.load(f)
-            if config['user_id'] == user_id:
+                config = JobConfig.from_json(json.load(f))
+            if config.user_id == user_id:
                 filtered_dirs.append(job_dir)
 
         return filtered_dirs
@@ -150,18 +108,18 @@ class ExpertiseService(object):
         # Search for scores files (only non-sparse scores)
         file_dir, metadata_dir = None, None
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            config = json.load(f)
+            config = JobConfig.from_json(json.load(f))
 
         # Look for files
-        if os.path.isfile(os.path.join(search_dir, f"{config['name']}.csv")):
-            file_dir = os.path.join(search_dir, f"{config['name']}.csv")
+        if os.path.isfile(os.path.join(search_dir, f"{config.name}.csv")):
+            file_dir = os.path.join(search_dir, f"{config.name}.csv")
         if file_dir is None:
-            raise OpenReviewException("Score file not found for job {job_id}".format(job_id=config["job_id"]))
+            raise OpenReviewException("Score file not found for job {job_id}".format(job_id=config.job_id))
 
         if os.path.isfile(os.path.join(search_dir, 'metadata.json')):
             metadata_dir = os.path.join(search_dir, 'metadata.json')
         if metadata_dir is None:
-            raise OpenReviewException("Metadata file not found for job {job_id}".format(job_id=config["job_id"]))
+            raise OpenReviewException("Metadata file not found for job {job_id}".format(job_id=config.job_id))
 
         return file_dir, metadata_dir
 
@@ -170,21 +128,21 @@ class ExpertiseService(object):
 
         from .celery_tasks import run_userpaper
         config, token = self._prepare_config(request)
-        job_id = config['job_id']
+        job_id = config.job_id
 
-        self.logger.info(f'Config: {config}')
-        config['mdate'] = int(time.time() * 1000)
-        config['status'] = JobStatus.QUEUED
-        config['description'] = descriptions[JobStatus.QUEUED]
+        config.mdate = int(time.time() * 1000)
+        config.status = JobStatus.QUEUED
+        config.description = descriptions[JobStatus.QUEUED]
 
         # Config has passed validation - add it to the user index
         run_userpaper.apply_async(
-            (config, token, self.logger),
+            (config.to_json(), token, self.logger),
             queue='userpaper',
             task_id=job_id
         )
-        with open(os.path.join(config['job_dir'], 'config.json'), 'w+') as f:
-            json.dump(config, f, ensure_ascii=False, indent=4)
+        self.logger.info(f"\nconf: {config.to_json()}\n")
+        with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
+            json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
 
         return job_id
 
@@ -212,21 +170,21 @@ class ExpertiseService(object):
             self.logger.info(f"Attempting to load {search_dir}/config.json")
             with open(os.path.join(search_dir, 'config.json'), 'r') as f:
                 s = f"{''.join(f.readlines())}"
-                config = json.loads(s)
-            status = config['status']
-            description = config['description']
+                config = JobConfig.from_json(json.loads(s))
+            status = config.status
+            description = config.description
             
             # Append filtered config to the status
-            filtered_config = self._filter_config(config)
+            self._filter_config(config)
             result['results'].append(
                 {
                     'job_id': job_dir,
-                    'name': config['name'],
+                    'name': config.name,
                     'status': status,
                     'description': description,
-                    'cdate': config['cdate'],
-                    'mdate': config['mdate'],
-                    'config': filtered_config
+                    'cdate': config.cdate,
+                    'mdate': config.mdate,
+                    'config': config.to_json()
                 }
             )
         return result
@@ -263,20 +221,20 @@ class ExpertiseService(object):
         self.logger.info(f"Attempting to load {search_dir}/config.json")
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
             s = f"{''.join(f.readlines())}"
-            config = json.loads(s)
-        status = config['status']
-        description = config['description']
+            config = JobConfig.from_json(json.loads(s))
+        status = config.status
+        description = config.description
         
         # Append filtered config to the status
-        filtered_config = self._filter_config(config)
+        self._filter_config(config)
         return {
             'job_id': job_dir,
-            'name': config['name'],
+            'name': config.name,
             'status': status,
             'description': description,
-            'cdate': config['cdate'],
-            'mdate': config['mdate'],
-            'config': filtered_config
+            'cdate': config.cdate,
+            'mdate': config.mdate,
+            'config': config.to_json()
         }
 
     def get_expertise_results(self, user_id, job_id, delete_on_get=False):
@@ -305,13 +263,13 @@ class ExpertiseService(object):
 
         # Validate profile ID
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            config = json.load(f)
-        if user_id != config['user_id'] and user_id.lower() not in SUPERUSER_IDS:
+            config = JobConfig.from_json(json.load(f))
+        if user_id != config.user_id and user_id.lower() not in SUPERUSER_IDS:
             raise OpenReviewException("Forbidden: Insufficient permissions to access job")
 
         # Fetch status
-        status = config['status']
-        description = config['description']
+        status = config.status
+        description = config.description
 
         self.logger.info(f"Able to access job at {job_id} - checking if scores are found")
         # Assemble scores
@@ -379,12 +337,12 @@ class ExpertiseService(object):
         self.logger.info(f"Attempting to load {search_dir}/config.json")
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
             s = f"{''.join(f.readlines())}"
-            config = json.loads(s)
+            config = JobConfig.from_json(json.loads(s))
         
         # Clear directory
         self.logger.info(f'Deleting {search_dir}')
         shutil.rmtree(search_dir)
 
         # Return filtered config
-        filtered_config = self._filter_config(config)
-        return filtered_config
+        self._filter_config(config)
+        return config.to_json()
