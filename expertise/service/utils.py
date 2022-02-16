@@ -333,6 +333,10 @@ class JobConfig(object):
 
         return body
 
+    def save(self):
+        with open(os.path.join(self.job_dir, 'config.json'), 'w+') as f:
+            json.dump(self.to_json(), f, ensure_ascii=False, indent=4)
+
     def from_request(api_request: APIRequest,
         starting_config = {},
         openreview_client = None,

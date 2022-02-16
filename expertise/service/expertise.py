@@ -70,8 +70,7 @@ class ExpertiseService(object):
         # Create directory and config file
         if not os.path.isdir(config.dataset['directory']):
             os.makedirs(config.dataset['directory'])
-        with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
-            json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
+        config.save()
 
         return config, self.client.token
 
@@ -136,13 +135,12 @@ class ExpertiseService(object):
 
         # Config has passed validation - add it to the user index
         run_userpaper.apply_async(
-            (config.to_json(), token, self.logger),
+            (config, token, self.logger),
             queue='userpaper',
             task_id=job_id
         )
         self.logger.info(f"\nconf: {config.to_json()}\n")
-        with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
-            json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
+        config.save()
 
         return job_id
 
