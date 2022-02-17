@@ -1,6 +1,11 @@
 import openreview
+import shortuuid
+import os
+import time
 import json
+import re
 from unittest.mock import MagicMock
+from enum import Enum
 
 # -----------------
 # -- Mock Client --
@@ -158,3 +163,321 @@ def get_user_id(openreview_client):
     """
     user = openreview_client.user
     return user.get('user', {}).get('id') if user else None
+
+def _get_required_field(req, superkey, key):
+    try:
+        field = req.pop(key)
+    except KeyError:
+        raise openreview.OpenReviewException(f"Bad request: required field missing in {superkey}: {key}")
+    return field
+
+class JobStatus(str, Enum):
+    INITIALIZED = 'Initialized'
+    QUEUED = 'Queued'
+    FETCHING_DATA  = 'Fetching Data'
+    EXPERTISE_QUEUED = 'Queued for Expertise'
+    RUN_EXPERTISE = 'Running Expertise'
+    COMPLETED = 'Completed'
+    ERROR = 'Error'
+
+class JobDescription(dict, Enum):
+    VALS = {
+        JobStatus.INITIALIZED: 'Server received config and allocated space',
+        JobStatus.QUEUED: 'Job is waiting to start fetching OpenReview data',
+        JobStatus.FETCHING_DATA: 'Job is currently fetching data from OpenReview',
+        JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
+        JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
+        JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
+    }
+class APIRequest(object):
+    """
+    Validates and load objects and fields from POST requests
+    """
+    def __init__(self, request):
+            
+        self.entityA = {}
+        self.entityB = {}
+        self.model = {}
+        root_key = 'request'
+
+        def _get_field_from_request(field):
+            return _get_required_field(request, root_key, field)
+
+        def _load_entity_a(entity):
+            self._load_entity('entityA', entity, self.entityA)
+
+        def _load_entity_b(entity):
+            self._load_entity('entityB', entity, self.entityB)
+
+        # Get the name of the job
+        self.name = _get_field_from_request('name')
+
+        # Validate entityA and entityB
+        entity_a = _get_field_from_request('entityA')
+        entity_b = _get_field_from_request('entityB')
+
+        _load_entity_a(entity_a)
+        _load_entity_b(entity_b)
+
+        # Optionally check for model object
+        self.model = request.pop('model', {})
+
+        # Check for empty request
+        if len(request.keys()) > 0:
+            raise openreview.OpenReviewException(f"Bad request: unexpected fields in {root_key}: {list(request.keys())}")
+    
+    def _load_entity(self, entity_id, source_entity, target_entity):
+        '''Load information from an entity into the config'''
+        def _get_from_entity(key):
+            return _get_required_field(source_entity, entity_id, key)
+
+        type = _get_from_entity('type')
+        target_entity['type'] = type
+        # Handle type group
+        if type == 'Group':
+            if 'memberOf' in source_entity.keys():
+                target_entity['memberOf'] = _get_from_entity('memberOf')
+                # Check for optional expertise field
+                if 'expertise' in source_entity.keys():
+                    target_entity['expertise'] = source_entity.pop('expertise')
+            else:
+                raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
+        # Handle type note
+        elif type == 'Note':
+            if 'invitation' in source_entity.keys() and 'id' in source_entity.keys():
+                raise openreview.OpenReviewException(f"Bad request: only provide a single id or single invitation in {entity_id}")
+
+            if 'invitation' in source_entity.keys():
+                target_entity['invitation'] = _get_from_entity('invitation')
+            elif 'id' in source_entity.keys():
+                target_entity['id'] = _get_from_entity('id')
+            else:
+                raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
+        else:
+            raise openreview.OpenReviewException(f"Bad request: invalid type in {entity_id}")
+
+        # Check for extra entity fields
+        if len(source_entity.keys()) > 0:
+            raise openreview.OpenReviewException(f"Bad request: unexpected fields in {entity_id}: {list(source_entity.keys())}")
+
+
+class JobConfig(object):
+    """
+    Helps translate fields from API requests to fields usable by the expertise system
+    """
+    def __init__(self,
+        name=None,
+        user_id=None,
+        job_id=None,
+        baseurl=None,
+        baseurl_v2=None,
+        job_dir=None,
+        cdate=None,
+        mdate=None,
+        status=None,
+        description=None,
+        match_group=None,
+        dataset=None,
+        model=None,
+        exclusion_inv=None,
+        paper_invitation=None,
+        paper_id=None,
+        model_params=None):
+        
+        self.name = name
+        self.user_id = user_id
+        self.job_id = job_id
+        self.baseurl = baseurl
+        self.baseurl_v2 = baseurl_v2
+        self.job_dir = job_dir
+        self.cdate = cdate
+        self.mdate = mdate
+        self.status = status
+        self.description = description
+        self.match_group = match_group
+        self.dataset = dataset
+        self.model = model
+        self.exclusion_inv = exclusion_inv
+        self.paper_invitation = paper_invitation
+        self.paper_id = paper_id
+        self.model_params = model_params
+
+    def to_json(self):
+        pre_body = {
+            'name': self.name,
+            'user_id': self.user_id,
+            'job_id': self.job_id,
+            'baseurl': self.baseurl,
+            'baseurl_v2': self.baseurl_v2,
+            'job_dir': self.job_dir,
+            'cdate': self.cdate,
+            'mdate': self.mdate,
+            'status': self.status,
+            'description': self.description,
+            'match_group': self.match_group,
+            'dataset': self.dataset,
+            'model': self.model,
+            'exclusion_inv': self.exclusion_inv,
+            'paper_invitation': self.paper_invitation,
+            'paper_id': self.paper_id,
+            'model_params': self.model_params
+        }
+
+        # Remove objects that are none
+        body = {}
+        body_items = pre_body.items()
+        for key, val in body_items:
+            # Allow a None token
+            if val is not None or key == 'token':
+                body[key] = val
+
+        return body
+
+    def save(self):
+        with open(os.path.join(self.job_dir, 'config.json'), 'w+') as f:
+            json.dump(self.to_json(), f, ensure_ascii=False, indent=4)
+
+    def from_request(api_request: APIRequest,
+        starting_config = {},
+        openreview_client = None,
+        server_config = {},
+        working_dir = None):
+        """
+        Sets default fields from the starting_config and attempts to override from api_request fields
+        """
+        def _camel_to_snake(camel_str):
+            camel_str = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', camel_str)
+            return re.sub('([a-z0-9])([A-Z])', r'\1_\2', camel_str).lower()
+
+        descriptions = JobDescription.VALS.value
+        config = JobConfig()
+
+        # Set metadata fields from request
+        config.name = api_request.name
+        config.user_id = get_user_id(openreview_client)
+        config.job_id = shortuuid.ShortUUID().random(length=5)
+        config.baseurl = server_config['OPENREVIEW_BASEURL']
+        config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
+
+        root_dir = os.path.join(working_dir, config.job_id)
+        config.dataset = starting_config.get('dataset', {})
+        config.dataset['directory'] = root_dir
+        config.job_dir = root_dir
+        config.cdate = int(time.time() * 1000)
+        config.mdate = config.cdate
+        config.status = JobStatus.INITIALIZED.value
+        config.description = descriptions[JobStatus.INITIALIZED]
+
+        # Handle Group cases
+        # (for now, only single match group)
+        config.match_group = starting_config.get('match_group', None)
+        if api_request.entityA['type'] == 'Group':
+            config.match_group = api_request.entityA['memberOf']
+        elif api_request.entityB['type'] == 'Group':
+            config.match_group = api_request.entityB['memberOf']
+
+        # Handle Note cases
+        config.paper_invitation = None
+        config.paper_id = None
+        config.exclusion_inv = None
+
+        if api_request.entityA['type'] == 'Note':
+            inv, id = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None)
+            excl_inv = api_request.entityA.get('expertise', None)
+
+            if inv:
+                config.paper_invitation = inv
+            if id:
+                config.paper_id = id
+            if excl_inv:
+                config.exclusion_inv = excl_inv.get('exclusion', {}).get('invitation', None)
+        elif api_request.entityB['type'] == 'Note':
+            inv, id = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None)
+            excl_inv = api_request.entityB.get('expertise', None)
+
+            if inv:
+                config.paper_invitation = inv
+            if id:
+                config.paper_id = id
+            if excl_inv:
+                config.exclusion_inv = excl_inv.get('exclusion', {}).get('invitation', None)
+
+
+        # Load optional model params from default config
+        path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+        allowed_model_params = [
+            'name',
+            'sparseValue',
+            'useTitle',
+            'useAbstract',
+            'scoreComputation',
+            'skipSpecter'
+        ]
+        config.model = starting_config.get('model', None)
+        model_params = starting_config.get('model_params', {})
+        config.model_params = {}
+        config.model_params['use_title'] = model_params.get('use_title', None)
+        config.model_params['use_abstract'] = model_params.get('use_abstract', None)
+        config.model_params['average_score'] = model_params.get('average_score', None)
+        config.model_params['max_score'] = model_params.get('max_score', None)
+        config.model_params['skip_specter'] = model_params.get('skip_specter', None)
+        config.model_params['batch_size'] = model_params.get('batch_size', 1)
+        config.model_params['use_cuda'] = model_params.get('use_cuda', False)
+
+        # Attempt to load any API request model params
+        api_model = api_request.model
+        if api_model:
+            for param in api_model.keys():
+                # Handle special cases
+                if param == 'scoreComputation':
+                    compute_with = api_model.get('scoreComputation', None)
+                    if compute_with == 'max':
+                        config.model_params['max_score'] = True
+                        config.model_params['average_score'] = False
+                    elif compute_with == 'avg':
+                        config.model_params['max_score'] = False
+                        config.model_params['average_score'] = True
+                    else:
+                        raise openreview.OpenReviewException("Bad request: invalid value in field 'scoreComputation' in 'model' object")
+                    continue
+                
+                # Handle general case
+                if param not in allowed_model_params:
+                    raise openreview.OpenReviewException(f"Bad request: unexpected fields in model: {[param]}")
+
+                snake_param = _camel_to_snake(param)
+                config.model_params[snake_param] = api_model[param]
+        
+        # Set server-side path fields
+        for field in path_fields:
+            config.model_params[field] = root_dir
+
+        if 'specter' in config.model:
+            config.model_params['specter_dir'] = server_config['SPECTER_DIR']
+        if 'mfr' in config.model:
+            config.model_params['mfr_feature_vocab_file'] = server_config['MFR_VOCAB_DIR']
+            config.model_params['mfr_checkpoint_dir'] = server_config['MFR_CHECKPOINT_DIR']
+
+        return config
+    
+    def from_json(job_config):
+        config = JobConfig(
+            name = job_config.get('name'),
+            user_id = job_config.get('user_id'),
+            job_id = job_config.get('job_id'),
+            baseurl = job_config.get('baseurl'),
+            baseurl_v2 = job_config.get('baseurl_v2'),
+            job_dir = job_config.get('job_dir'),
+            cdate = job_config.get('cdate'),
+            mdate = job_config.get('mdate'),
+            status = job_config.get('status'),
+            description = job_config.get('description'),
+            match_group = job_config.get('match_group'),
+            dataset = job_config.get('dataset'),
+            model = job_config.get('model'),
+            exclusion_inv = job_config.get('exclusion_inv'),
+            paper_invitation = job_config.get('paper_invitation'),
+            paper_id = job_config.get('paper_id'),
+            model_params = job_config.get('model_params')
+        )
+        return config
