@@ -112,12 +112,12 @@ class ExpertiseService(object):
         # Look for files
         if os.path.isfile(os.path.join(search_dir, f"{config.name}.csv")):
             file_dir = os.path.join(search_dir, f"{config.name}.csv")
-        if file_dir is None:
+        else:
             raise OpenReviewException("Score file not found for job {job_id}".format(job_id=config.job_id))
 
         if os.path.isfile(os.path.join(search_dir, 'metadata.json')):
             metadata_dir = os.path.join(search_dir, 'metadata.json')
-        if metadata_dir is None:
+        else:
             raise OpenReviewException("Metadata file not found for job {job_id}".format(job_id=config.job_id))
 
         return file_dir, metadata_dir
@@ -167,8 +167,7 @@ class ExpertiseService(object):
             # Load the config file to fetch the job name and status
             self.logger.info(f"Attempting to load {search_dir}/config.json")
             with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-                s = f"{''.join(f.readlines())}"
-                config = JobConfig.from_json(json.loads(s))
+                config = JobConfig.from_json(json.load(f))
             status = config.status
             description = config.description
             
@@ -218,8 +217,7 @@ class ExpertiseService(object):
         # Load the config file to fetch the job name and status
         self.logger.info(f"Attempting to load {search_dir}/config.json")
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            s = f"{''.join(f.readlines())}"
-            config = JobConfig.from_json(json.loads(s))
+            config = JobConfig.from_json(json.load(f))
         status = config.status
         description = config.description
         
@@ -334,8 +332,7 @@ class ExpertiseService(object):
         # Load the config file
         self.logger.info(f"Attempting to load {search_dir}/config.json")
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            s = f"{''.join(f.readlines())}"
-            config = JobConfig.from_json(json.loads(s))
+            config = JobConfig.from_json(json.load(f))
         
         # Clear directory
         self.logger.info(f'Deleting {search_dir}')
