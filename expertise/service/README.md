@@ -39,7 +39,7 @@ Returns code `400` if there was an error in the submitted config
 ## `GET /expertise/status`
 This endpoint gets the status of a single job with the given `job_id`. A valid request body has the following format:
 ```
-{"id": "string"}
+{"job_id": "string"}
 ```
 
 Returns the status, if any, that were submitted by the user and has the job id:
@@ -78,7 +78,7 @@ Returns a list of jobs, if any, that were submitted by the user and has the job 
 This endpoint retrieves the results of a job with the matching job ID and optionally removes the scores from the server after retrieval. A valid request body has the following format:
 ```
 {
-  "id": string,
+  "job_id": string,
   "deleteOnGet": false [Optional],
 }
 ```
