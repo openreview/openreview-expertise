@@ -34,11 +34,9 @@ class OpenReviewExpertise(object):
     def convert_to_list(self, config_invitations):
         if (isinstance(config_invitations, str)):
             invitations = [config_invitations]
-        elif (isinstance(config_invitations, tuple)):
-            invitations = list(config_invitations)
         else:
             invitations = config_invitations
-        assert isinstance(invitations, list), 'Input should be a str, list, or tuple'
+        assert isinstance(invitations, list), 'Input should be a str or a list'
         return invitations
 
     def get_paper_notes(self, author_id, dataset_params):
@@ -450,7 +448,9 @@ class OpenReviewExpertise(object):
                         f.write(json.dumps(paper) + '\n')
 
         # Retrieve match groups to detect group-group matching
-        group_group_matching = len(self.convert_to_list(self.config.get('match_group', []))) > 1
+        group_group_matching = len(
+            self.convert_to_list(self.config.get('match_group', []))
+        ) > 1
 
         # if invitation ID is supplied, collect records for each submission
         if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config or group_group_matching:
