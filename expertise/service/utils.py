@@ -294,7 +294,7 @@ class JobConfig(object):
         mdate=None,
         status=None,
         description=None,
-        match_group=None,
+        match_group=[],
         dataset=None,
         model=None,
         exclusion_inv=None,
@@ -388,11 +388,11 @@ class JobConfig(object):
 
         # Handle Group cases
         # (for now, only single match group)
-        config.match_group = starting_config.get('match_group', None)
+        config.match_group = starting_config.get('match_group', [])
         if api_request.entityA['type'] == 'Group':
-            config.match_group = api_request.entityA['memberOf']
-        elif api_request.entityB['type'] == 'Group':
-            config.match_group = api_request.entityB['memberOf']
+            config.match_group.append(api_request.entityA['memberOf'])
+        if api_request.entityB['type'] == 'Group':
+            config.match_group.append(api_request.entityB['memberOf'])
 
         # Handle Note cases
         config.paper_invitation = None
