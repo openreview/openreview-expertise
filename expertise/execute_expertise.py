@@ -3,12 +3,14 @@ import openreview, os, json, csv
 from .create_dataset import OpenReviewExpertise
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
+from .utils.utils import aggregate_by_group
 
 # Move run.py functionality to a function that accepts a config dict
 def execute_expertise(config):
 
     config = ModelConfig(config_dict=config)
-    
+    group_ids = config.get('match_group', [])
+
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
     if Path(config['dataset']['directory']).joinpath('submissions').exists():
         submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
@@ -158,56 +160,8 @@ def execute_expertise(config):
                 scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
-    group_ids = config.get('match_group', [])
-    if (isinstance(group_ids, list) or isinstance(group_ids, tuple)) and len(group_ids) > 1:
-        # Fetch scores
-        scores = {}
-        original_score_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
-        with open(original_score_path, 'r') as f:
-            csv_reader = csv.reader(f)
-            for line in csv_reader:
-                paper_id = line[0]
-                ac_id = line[1]
-                score = line[2]
-                if paper_id not in scores:
-                    scores[paper_id] = {}
-                scores[paper_id][ac_id] = score
-
-        dataset_root = Path(config.get('dataset', {}).get('directory', './'))
-        # Fetch archive members
-        archive_members = []
-        archive_files = os.listdir(dataset_root.joinpath('archives'))
-        for author_file in archive_files:
-            archive_members.append(author_file.split('.')[0])
-
-        # Fetch submission members
-        with open(dataset_root.joinpath('publications_by_profile_id.json'), 'r') as f:
-            publications_by_profile_id = json.load(f)
-        submission_members = publications_by_profile_id.keys()
-
-        # Perform averaging
-        average_score = {}
-        for profile_id in submission_members:
-            paper_ids = [p['id'] for p in publications_by_profile_id[profile_id]]
-            for archive_id in archive_members:
-                score_sum = 0
-                score_length = 0
-                for paper_id in paper_ids:
-                    if archive_id in scores.get(paper_id, {}):
-                        score_sum += float(scores[paper_id][archive_id])
-                        score_length += 1
-                if profile_id not in average_score:
-                    average_score[profile_id] = {}
-                if score_length:
-                    average_score[profile_id][archive_id] = round(score_sum/score_length, 2)
-        
-        # Overwrite out new scores
-        with open(original_score_path, 'w') as outfile:
-            csvwriter = csv.writer(outfile, delimiter=',')
-            for submission_member, archive_scores in average_score.items():
-                for archive_member, score in archive_scores.items():
-                    csvwriter.writerow([archive_member, submission_member, score])
-
+    if isinstance(group_ids, list) and len(group_ids) > 1:
+        aggregate_by_group(config)
 
 def execute_create_dataset(client, client_v2, config=None):
 
