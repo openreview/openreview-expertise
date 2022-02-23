@@ -4,10 +4,15 @@ import os
 import time
 import json
 import re
+import redis, pickle
 from unittest.mock import MagicMock
 from enum import Enum
 
 import re
+REDIS_ADDR = 'localhost'
+REDIS_PORT = 6379
+REDIS_DB = 10
+
 # -----------------
 # -- Mock Client --
 # -----------------
@@ -355,8 +360,16 @@ class JobConfig(object):
         return body
 
     def save(self):
+        # First save in Redis
+        db = redis.Redis(
+            host = REDIS_ADDR,
+            port = REDIS_PORT,
+            db = REDIS_DB
+        )
+        db.set(self.job_id, pickle.dumps(self))
+        ret_config = pickle.loads(db.get(self.job_id))
         with open(os.path.join(self.job_dir, 'config.json'), 'w+') as f:
-            json.dump(self.to_json(), f, ensure_ascii=False, indent=4)
+            json.dump(ret_config.to_json(), f, ensure_ascii=False, indent=4)
 
     def from_request(api_request: APIRequest,
         starting_config = {},
