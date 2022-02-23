@@ -514,7 +514,6 @@ class TestExpertiseService():
         response = response.json['results']
         for item in response:
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
-            assert submission_id != 'dummy'
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
