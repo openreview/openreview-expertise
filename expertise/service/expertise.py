@@ -8,6 +8,7 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
+
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus
 
 SUPERUSER_IDS = ['openreview.net']
@@ -272,13 +273,14 @@ class ExpertiseService(object):
             ## TODO: change it to Job not found
             raise openreview.OpenReviewException(f"Scores not found - status: {status} | description: {description}")
         else:
+            # Search for scores files (only non-sparse scores)
             file_dir, metadata_dir = self._get_score_and_metadata_dir(search_dir)
             self.logger.info(f"Retrieving scores from {search_dir}")
             ret_list = []
 
             # Check for output format
             group_ids = config.match_group
-            group_group_matching = (isinstance(group_ids, list) or isinstance(group_ids, tuple)) and len(group_ids) > 1
+            group_group_matching = isinstance(group_ids, list) and len(group_ids) > 1
 
             if not group_group_matching:
                 with open(file_dir, 'r') as csv_file:
