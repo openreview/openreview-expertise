@@ -282,7 +282,17 @@ class APIRequest(object):
         # Check for extra entity fields
         if len(source_entity.keys()) > 0:
             raise openreview.OpenReviewException(f"Bad request: unexpected fields in {entity_id}: {list(source_entity.keys())}")
+        
+    def to_json(self):
+        body = {
+            'name': self.name,
+            'entityA': self.entityA,
+            'entityB': self.entityB,
+        }
+        if self.model:
+            body['model'] = self.model
 
+        return body
 
 class JobConfig(object):
     """
@@ -339,8 +349,6 @@ class JobConfig(object):
             'job_dir': self.job_dir,
             'cdate': self.cdate,
             'mdate': self.mdate,
-            'status': self.status,
-            'description': self.description,
             'match_group': self.match_group,
             'alternate_match_group': self.alternate_match_group,
             'dataset': self.dataset,
@@ -362,16 +370,43 @@ class JobConfig(object):
         return body
 
     def save(self):
-        # First save in Redis
+        db = JobConfig._init_redis()
+        db.set(self.job_id, pickle.dumps(self))
+    
+    def load_all_jobs(user_id):
+        """
+        Searches all keys for configs with matching user id
+        """
+        db = JobConfig._init_redis()
+        configs = []
+        for job_id in db.scan_iter():
+            current_config = pickle.loads(db.get(job_id))
+            assert isinstance(current_config, JobConfig), f"Retrieved incorrect type: {type(current_config)}\n{current_config}\nkey:{job_id}"
+            if not isinstance(current_config, JobConfig): continue
+            if current_config.user_id == user_id:
+                configs.append(current_config)
+
+        return configs
+
+    def load_job(job_id, user_id):
+        """
+        Retrieves a config based on job id
+        """
+        db = JobConfig._init_redis()
+        if not db.exists(job_id):
+            raise openreview.OpenReviewException('Job not found')
+        config = pickle.loads(db.get(job_id))
+        if config.user_id != user_id:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
+        return config
+
+    def _init_redis():
         db = redis.Redis(
             host = REDIS_ADDR,
             port = REDIS_PORT,
             db = REDIS_DB
         )
-        db.set(self.job_id, pickle.dumps(self))
-        ret_config = pickle.loads(db.get(self.job_id))
-        with open(os.path.join(self.job_dir, 'config.json'), 'w+') as f:
-            json.dump(ret_config.to_json(), f, ensure_ascii=False, indent=4)
+        return db
 
     def from_request(api_request: APIRequest,
         starting_config = {},

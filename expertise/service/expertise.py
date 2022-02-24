@@ -70,6 +70,9 @@ class ExpertiseService(object):
         # Create directory and config file
         if not os.path.isdir(config.dataset['directory']):
             os.makedirs(config.dataset['directory'])
+        with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
+            json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
+        self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
         config.save()
 
         return config, self.client.token
@@ -158,16 +161,16 @@ class ExpertiseService(object):
         """
         result = {'results': []}
 
-        job_subdirs = self._get_subdirs(user_id)
-        self.logger.info(f"Searching {job_subdirs} for user {user_id}")
+        #job_subdirs = self._get_subdirs(user_id)
+        #self.logger.info(f"Searching {job_subdirs} for user {user_id}")
 
-        for job_dir in job_subdirs:
-            search_dir = os.path.join(self.working_dir, job_dir)
+        for config in JobConfig.load_all_jobs(user_id):
+            #search_dir = os.path.join(self.working_dir, job_dir)
 
             # Load the config file to fetch the job name and status
-            self.logger.info(f"Attempting to load {search_dir}/config.json")
-            with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-                config = JobConfig.from_json(json.load(f))
+            #self.logger.info(f"Attempting to load {search_dir}/config.json")
+            #with open(os.path.join(search_dir, 'config.json'), 'r') as f:
+            #    config = JobConfig.from_json(json.load(f))
             status = config.status
             description = config.description
             
@@ -175,7 +178,7 @@ class ExpertiseService(object):
             self._filter_config(config)
             result['results'].append(
                 {
-                    'job_id': job_dir,
+                    'job_id': config.job_id,
                     'name': config.name,
                     'status': status,
                     'description': description,
@@ -200,31 +203,32 @@ class ExpertiseService(object):
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
 
-        job_subdirs = self._get_subdirs(user_id)
-        self.logger.info(f"Searching {job_subdirs} for user {user_id}")
+        #job_subdirs = self._get_subdirs(user_id)
+        #self.logger.info(f"Searching {job_subdirs} for user {user_id}")
         # If given an ID, only get the status of the single job
-        job_subdirs = [name for name in job_subdirs if name == job_id]
+        #job_subdirs = [name for name in job_subdirs if name == job_id]
 
         # Assert that there should only be 1 matching job
-        if len(job_subdirs) > 1:
-            raise OpenReviewException('Single job not found: multiple matching jobs returned')
-        elif len(job_subdirs) == 0:
-            raise OpenReviewException('Job not found')
+        #if len(job_subdirs) > 1:
+        #    raise OpenReviewException('Single job not found: multiple matching jobs returned')
+        #elif len(job_subdirs) == 0:
+        #    raise OpenReviewException('Job not found')
 
-        job_dir = job_subdirs[0]
-        search_dir = os.path.join(self.working_dir, job_dir)
+        #job_dir = job_subdirs[0]
+        #search_dir = os.path.join(self.working_dir, job_dir)
 
         # Load the config file to fetch the job name and status
-        self.logger.info(f"Attempting to load {search_dir}/config.json")
-        with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            config = JobConfig.from_json(json.load(f))
+        #self.logger.info(f"Attempting to load {search_dir}/config.json")
+        #with open(os.path.join(search_dir, 'config.json'), 'r') as f:
+        #    config = JobConfig.from_json(json.load(f))
+        config = JobConfig.load_job(job_id, user_id)
         status = config.status
         description = config.description
         
         # Append filtered config to the status
         self._filter_config(config)
         return {
-            'job_id': job_dir,
+            'job_id': config.job_dir,
             'name': config.name,
             'status': status,
             'description': description,
@@ -258,8 +262,9 @@ class ExpertiseService(object):
             raise openreview.OpenReviewException('Job not found')
 
         # Validate profile ID
-        with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            config = JobConfig.from_json(json.load(f))
+        #with open(os.path.join(search_dir, 'config.json'), 'r') as f:
+            #config = JobConfig.from_json(json.load(f))
+        config = JobConfig.load_job(job_id, user_id)
         if user_id != config.user_id and user_id.lower() not in SUPERUSER_IDS:
             raise OpenReviewException("Forbidden: Insufficient permissions to access job")
 
