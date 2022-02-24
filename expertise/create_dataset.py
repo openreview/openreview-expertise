@@ -339,13 +339,6 @@ class OpenReviewExpertise(object):
             if not note_v1 and not note_v2:
                 raise openreview.OpenReviewException(f"Note {paper_id} not found")
 
-        # Bug: specter+mfr cannot handle a single submission
-        # Solution: create a copy of the note and modify the ID
-        if self.config.get('model') == 'specter+mfr' and len(submissions) == 1:
-            dummy = submissions[0].to_json()
-            dummy['id'] = 'dummy'
-            submissions.append(Note.from_json(dummy))
-
         print('finding records of {} submissions'.format(len(submissions)))
         reduced_submissions = {}
         for paper in tqdm(submissions, total=len(submissions)):

@@ -280,10 +280,6 @@ class ExpertiseService(object):
             with open(file_dir, 'r') as csv_file:
                 data_reader = reader(csv_file)
                 for row in data_reader:
-                    # For single paper retrieval, filter out scores against the dummy submission
-                    if row[0] == 'dummy':
-                        continue
-
                     ret_list.append({
                         'submission': row[0],
                         'user': row[1],

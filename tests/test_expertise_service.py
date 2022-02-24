@@ -510,11 +510,10 @@ class TestExpertiseService():
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', query_string={'job_id': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
-        assert metadata['submission_count'] == 2
+        assert metadata['submission_count'] == 1
         response = response.json['results']
         for item in response:
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
-            assert submission_id != 'dummy'
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
@@ -599,7 +598,7 @@ class TestExpertiseService():
 
             response = test_client.get('/expertise/results', query_string={'job_id': f"{id}", 'deleteOnGet': True})
             metadata = response.json['metadata']
-            assert metadata['submission_count'] == 2
+            assert metadata['submission_count'] == 1
             response = response.json['results']
             for item in response:
                 submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
