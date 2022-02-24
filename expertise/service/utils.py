@@ -327,6 +327,8 @@ class JobConfig(object):
         self.paper_id = paper_id
         self.model_params = model_params
 
+        self.api_request = None
+
     def to_json(self):
         pre_body = {
             'name': self.name,
@@ -392,6 +394,7 @@ class JobConfig(object):
         config.job_id = shortuuid.ShortUUID().random(length=5)
         config.baseurl = server_config['OPENREVIEW_BASEURL']
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
+        config.api_request = api_request    
 
         root_dir = os.path.join(working_dir, config.job_id)
         config.dataset = starting_config.get('dataset', {})
