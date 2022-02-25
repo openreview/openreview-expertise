@@ -9,7 +9,6 @@ from .utils.utils import aggregate_by_group
 def execute_expertise(config):
 
     config = ModelConfig(config_dict=config)
-    group_ids = config.get('match_group', [])
 
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
     if Path(config['dataset']['directory']).joinpath('submissions').exists():
@@ -160,7 +159,7 @@ def execute_expertise(config):
                 scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
-    if isinstance(group_ids, list) and len(group_ids) > 1:
+    if 'alternate_match_group' in config.keys():
         aggregate_by_group(config)
 
 def execute_create_dataset(client, client_v2, config=None):

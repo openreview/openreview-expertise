@@ -294,7 +294,8 @@ class JobConfig(object):
         mdate=None,
         status=None,
         description=None,
-        match_group=[],
+        match_group=None,
+        alternate_match_group=None,
         dataset=None,
         model=None,
         exclusion_inv=None,
@@ -313,6 +314,7 @@ class JobConfig(object):
         self.status = status
         self.description = description
         self.match_group = match_group
+        self.alternate_match_group = alternate_match_group
         self.dataset = dataset
         self.model = model
         self.exclusion_inv = exclusion_inv
@@ -333,6 +335,7 @@ class JobConfig(object):
             'status': self.status,
             'description': self.description,
             'match_group': self.match_group,
+            'alternate_match_group': self.alternate_match_group,
             'dataset': self.dataset,
             'model': self.model,
             'exclusion_inv': self.exclusion_inv,
@@ -387,12 +390,13 @@ class JobConfig(object):
         config.description = descriptions[JobStatus.INITIALIZED]
 
         # Handle Group cases
-        # (for now, only single match group)
-        config.match_group = starting_config.get('match_group', [])
+        config.match_group = starting_config.get('match_group', None)
+        config.alternate_match_group = starting_config.get('alternate_match_group', None)
+
         if api_request.entityA['type'] == 'Group':
-            config.match_group.append(api_request.entityA['memberOf'])
+            config.match_group = [api_request.entityA['memberOf']]
         if api_request.entityB['type'] == 'Group':
-            config.match_group.append(api_request.entityB['memberOf'])
+            config.alternate_match_group = [api_request.entityB['memberOf']]
 
         # Handle Note cases
         config.paper_invitation = None
@@ -491,6 +495,7 @@ class JobConfig(object):
             status = job_config.get('status'),
             description = job_config.get('description'),
             match_group = job_config.get('match_group'),
+            alternate_match_group=job_config.get('alternate_match_group'),
             dataset = job_config.get('dataset'),
             model = job_config.get('model'),
             exclusion_inv = job_config.get('exclusion_inv'),

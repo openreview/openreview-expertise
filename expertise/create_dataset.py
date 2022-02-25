@@ -257,10 +257,6 @@ class OpenReviewExpertise(object):
         group_ids = self.convert_to_list(self.config.get('match_group', []))
         reviewer_ids = self.convert_to_list(self.config.get('reviewer_ids', []))
 
-        # If there is more than 1 group, only take the first group
-        if len(group_ids) > 1:
-            group_ids = [group_ids[0]]
-
         valid_members, invalid_members = self.get_profile_ids(group_ids=group_ids, reviewer_ids=reviewer_ids)
 
         self.metadata['no_profile'] = invalid_members
@@ -305,10 +301,13 @@ class OpenReviewExpertise(object):
 
         return expertise
 
-    def get_papers_from_group(self, submission_group):
+    def get_papers_from_group(self, submission_groups):
+        submission_groups = self.convert_to_list(submission_groups)
         client = self.openreview_client
-        group_a_members = client.get_group(submission_group).members
-        pbar = tqdm(total=len(group_a_members), desc=submission_group + ' status...')
+        group_a_members = []
+        for group_id in submission_groups:
+            group_a_members.extend(client.get_group(group_id).members)
+        pbar = tqdm(total=len(group_a_members), desc='submissions status...')
         publications_by_profile_id = {}
         all_papers = []
 
@@ -342,16 +341,11 @@ class OpenReviewExpertise(object):
     def get_submissions(self):
         invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
         paper_id = self.config.get('paper_id')
-        submission_group = None
+        submission_groups = self.convert_to_list(self.config.get('alternate_match_group', []))
         submissions = []
 
-        # If there is more than 1 group, set the second group as the submission group
-        group_ids = self.convert_to_list(self.config.get('match_group', []))
-        if len(group_ids) > 1:
-            submission_group = group_ids[1]
-
-        if submission_group:
-            aggregate_papers = self.get_papers_from_group(submission_group)
+        if submission_groups:
+            aggregate_papers = self.get_papers_from_group(submission_groups)
             submissions.extend(aggregate_papers)
 
         for invitation_id in invitation_ids:
@@ -448,9 +442,7 @@ class OpenReviewExpertise(object):
                         f.write(json.dumps(paper) + '\n')
 
         # Retrieve match groups to detect group-group matching
-        group_group_matching = len(
-            self.convert_to_list(self.config.get('match_group', []))
-        ) > 1
+        group_group_matching = 'alternate_match_group' in self.config.keys()
 
         # if invitation ID is supplied, collect records for each submission
         if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config or group_group_matching:

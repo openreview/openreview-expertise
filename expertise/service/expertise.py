@@ -279,8 +279,7 @@ class ExpertiseService(object):
             ret_list = []
 
             # Check for output format
-            group_ids = config.match_group
-            group_group_matching = isinstance(group_ids, list) and len(group_ids) > 1
+            group_group_matching = config.alternate_match_group is not None
 
             if not group_group_matching:
                 with open(file_dir, 'r') as csv_file:
