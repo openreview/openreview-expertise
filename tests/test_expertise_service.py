@@ -438,8 +438,6 @@ class TestExpertiseService():
         # Clean up error job by calling the delete endpoint
         response = test_client.get('/expertise/delete', query_string={'job_id': f"{openreview_context['job_id']}"}).json
         assert response['name'] == 'test_run'
-        assert response['status'].strip() == 'Error'
-        assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
         assert response['cdate'] <= response['mdate']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     

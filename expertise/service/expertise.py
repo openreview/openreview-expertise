@@ -43,6 +43,7 @@ class ExpertiseService(object):
         """
 
         running_config.baseurl = None
+        running_config.baseurl_v2 = None
         running_config.user_id = None
 
     def _prepare_config(self, request) -> dict:
@@ -335,29 +336,15 @@ class ExpertiseService(object):
 
         :returns: Filtered config of the job to be deleted
         """
-
-        job_subdirs = self._get_subdirs(user_id)
-        self.logger.info(f"Searching {job_subdirs} for user {user_id}")
-        # If given an ID, only get the status of the single job
-        job_subdirs = [name for name in job_subdirs if name == job_id]
-
-        # Assert that there should only be 1 matching job
-        if len(job_subdirs) > 1:
-            raise OpenReviewException('Single job not found: multiple matching jobs returned')
-        elif len(job_subdirs) == 0:
-            raise OpenReviewException('Job not found')
-
-        job_dir = job_subdirs[0]
-        search_dir = os.path.join(self.working_dir, job_dir)
-
-        # Load the config file
-        self.logger.info(f"Attempting to load {search_dir}/config.json")
-        with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            config = JobConfig.from_json(json.load(f))
+        config = JobConfig.load_job(job_id, user_id)
         
-        # Clear directory
-        self.logger.info(f'Deleting {search_dir}')
-        shutil.rmtree(search_dir)
+        # Clear directory and Redis entry
+        self.logger.info(f"Deleting {config.job_dir} for {user_id}")
+        if os.path.isdir(config.job_dir):
+            shutil.rmtree(config.job_dir)
+        else:
+            self.logger.info(f"No files found - only removing Redis entry")
+        JobConfig.remove_job(user_id, job_id)
 
         # Return filtered config
         self._filter_config(config)

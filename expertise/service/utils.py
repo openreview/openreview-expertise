@@ -370,19 +370,27 @@ class JobConfig(object):
         return body
 
     def save(self):
+        # Modify Redis keys with matchable prefix
         db = JobConfig._init_redis()
-        db.set(self.job_id, pickle.dumps(self))
+        db.set(f"job:{self.job_id}", pickle.dumps(self))
     
     def load_all_jobs(user_id):
         """
         Searches all keys for configs with matching user id
+        If a Redis entry exists but the files do not, remove the entry from Redis and do not return this job
+        Returns empty list if no jobs found
         """
         db = JobConfig._init_redis()
         configs = []
-        for job_id in db.scan_iter():
-            current_config = pickle.loads(db.get(job_id))
-            assert isinstance(current_config, JobConfig), f"Retrieved incorrect type: {type(current_config)}\n{current_config}\nkey:{job_id}"
-            if not isinstance(current_config, JobConfig): continue
+
+        for job_key in db.scan_iter("job:*"):
+            current_config = pickle.loads(db.get(job_key))
+
+            if not os.path.isdir(current_config.job_dir):
+                print(f"No files found {job_key} - skipping")
+                JobConfig.remove_job(user_id, current_config.job_id)
+                continue
+
             if current_config.user_id == user_id:
                 configs.append(current_config)
 
@@ -393,11 +401,27 @@ class JobConfig(object):
         Retrieves a config based on job id
         """
         db = JobConfig._init_redis()
-        if not db.exists(job_id):
+        job_key = f"job:{job_id}"
+
+        if not db.exists(job_key):
             raise openreview.OpenReviewException('Job not found')
-        config = pickle.loads(db.get(job_id))
+        config = pickle.loads(db.get(job_key))
         if config.user_id != user_id:
             raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
+
+        return config
+    
+    def remove_job(user_id, job_id):
+        db = JobConfig._init_redis()
+        job_key = f"job:{job_id}"
+
+        if not db.exists(job_key):
+            raise openreview.OpenReviewException('Job not found')
+        config = pickle.loads(db.get(job_key))
+        if config.user_id != user_id:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to modify job')
+
+        db.delete(job_key)
         return config
 
     def _init_redis():
