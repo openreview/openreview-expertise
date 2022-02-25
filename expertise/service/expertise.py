@@ -248,6 +248,7 @@ class ExpertiseService(object):
             group_group_matching = config.alternate_match_group is not None
 
             if not group_group_matching:
+                # If reviewer-paper matching, use standard 'user' and 'score' keys
                 with open(file_dir, 'r') as csv_file:
                     data_reader = reader(csv_file)
                     for row in data_reader:
@@ -262,7 +263,7 @@ class ExpertiseService(object):
                         })
                 result['results'] = ret_list
             else:
-                # If submission group, group under different keys
+                # If group-group matching, report results using "*_member" keys
                 with open(file_dir, 'r') as csv_file:
                     data_reader = reader(csv_file)
                     for row in data_reader:
