@@ -12,6 +12,7 @@ import re
 REDIS_ADDR = 'localhost'
 REDIS_PORT = 6379
 REDIS_DB = 10
+SUPERUSER_IDS = ['openreview.net']
 
 # -----------------
 # -- Mock Client --
@@ -391,7 +392,7 @@ class JobConfig(object):
                 JobConfig.remove_job(user_id, current_config.job_id)
                 continue
 
-            if current_config.user_id == user_id:
+            if current_config.user_id == user_id or user_id in SUPERUSER_IDS:
                 configs.append(current_config)
 
         return configs
@@ -404,9 +405,13 @@ class JobConfig(object):
         job_key = f"job:{job_id}"
 
         if not db.exists(job_key):
-            raise openreview.OpenReviewException('Job not found')
+            raise openreview.OpenReviewException('Job not found')        
         config = pickle.loads(db.get(job_key))
-        if config.user_id != user_id:
+        if not os.path.isdir(config.job_dir):
+            JobConfig.remove_job(user_id, job_id)
+            raise openreview.OpenReviewException('Job not found')
+
+        if config.user_id != user_id and user_id not in SUPERUSER_IDS:
             raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
 
         return config
@@ -418,7 +423,7 @@ class JobConfig(object):
         if not db.exists(job_key):
             raise openreview.OpenReviewException('Job not found')
         config = pickle.loads(db.get(job_key))
-        if config.user_id != user_id:
+        if config.user_id != user_id and user_id not in SUPERUSER_IDS:
             raise openreview.OpenReviewException('Forbidden: Insufficient permissions to modify job')
 
         db.delete(job_key)

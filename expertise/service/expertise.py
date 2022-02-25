@@ -9,9 +9,8 @@ from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
 
-from .utils import JobConfig, APIRequest, JobDescription, JobStatus
+from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS
 
-SUPERUSER_IDS = ['openreview.net']
 user_index_file_lock = Lock()
 class ExpertiseService(object):
 
@@ -162,16 +161,7 @@ class ExpertiseService(object):
         """
         result = {'results': []}
 
-        #job_subdirs = self._get_subdirs(user_id)
-        #self.logger.info(f"Searching {job_subdirs} for user {user_id}")
-
         for config in JobConfig.load_all_jobs(user_id):
-            #search_dir = os.path.join(self.working_dir, job_dir)
-
-            # Load the config file to fetch the job name and status
-            #self.logger.info(f"Attempting to load {search_dir}/config.json")
-            #with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            #    config = JobConfig.from_json(json.load(f))
             status = config.status
             description = config.description
             
@@ -203,25 +193,6 @@ class ExpertiseService(object):
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
-
-        #job_subdirs = self._get_subdirs(user_id)
-        #self.logger.info(f"Searching {job_subdirs} for user {user_id}")
-        # If given an ID, only get the status of the single job
-        #job_subdirs = [name for name in job_subdirs if name == job_id]
-
-        # Assert that there should only be 1 matching job
-        #if len(job_subdirs) > 1:
-        #    raise OpenReviewException('Single job not found: multiple matching jobs returned')
-        #elif len(job_subdirs) == 0:
-        #    raise OpenReviewException('Job not found')
-
-        #job_dir = job_subdirs[0]
-        #search_dir = os.path.join(self.working_dir, job_dir)
-
-        # Load the config file to fetch the job name and status
-        #self.logger.info(f"Attempting to load {search_dir}/config.json")
-        #with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-        #    config = JobConfig.from_json(json.load(f))
         config = JobConfig.load_job(job_id, user_id)
         status = config.status
         description = config.description
@@ -256,32 +227,21 @@ class ExpertiseService(object):
         """
         result = {'results': []}
 
-        search_dir = os.path.join(self.working_dir, job_id)
-        self.logger.info(f"Checking if {job_id} belongs to {user_id}")
-        # Check for directory existence
-        if not os.path.isdir(search_dir):
-            raise openreview.OpenReviewException('Job not found')
-
-        # Validate profile ID
-        #with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            #config = JobConfig.from_json(json.load(f))
+        # Get and validate profile ID
         config = JobConfig.load_job(job_id, user_id)
-        if user_id != config.user_id and user_id.lower() not in SUPERUSER_IDS:
-            raise OpenReviewException("Forbidden: Insufficient permissions to access job")
 
         # Fetch status
         status = config.status
         description = config.description
 
-        self.logger.info(f"Able to access job at {job_id} - checking if scores are found")
+        self.logger.info(f"{user_id} able to access job at {job_id} - checking if scores are found")
         # Assemble scores
         if status != JobStatus.COMPLETED:
-            ## TODO: change it to Job not found
             raise openreview.OpenReviewException(f"Scores not found - status: {status} | description: {description}")
         else:
             # Search for scores files (only non-sparse scores)
-            file_dir, metadata_dir = self._get_score_and_metadata_dir(search_dir)
-            self.logger.info(f"Retrieving scores from {search_dir}")
+            file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
+            self.logger.info(f"Retrieving scores from {config.job_dir}")
             ret_list = []
 
             # Check for output format
@@ -319,8 +279,9 @@ class ExpertiseService(object):
 
         # Clear directory
         if delete_on_get:
-            self.logger.info(f'Deleting {search_dir}')
-            shutil.rmtree(search_dir)
+            self.logger.info(f'Deleting {config.job_dir}')
+            shutil.rmtree(config.job_dir)
+            JobConfig.remove_job(user_id, job_id)
 
         return result
 
