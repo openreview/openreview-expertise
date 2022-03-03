@@ -290,7 +290,7 @@ class APIRequest(object):
             'entityA': self.entityA,
             'entityB': self.entityB,
         }
-        if self.model:
+        if len(self.model.keys()) > 0:
             body['model'] = self.model
 
         return body
