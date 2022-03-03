@@ -304,9 +304,12 @@ class OpenReviewExpertise(object):
     def get_papers_from_group(self, submission_groups):
         submission_groups = self.convert_to_list(submission_groups)
         client = self.openreview_client
-        group_a_members = []
-        for group_id in submission_groups:
-            group_a_members.extend(client.get_group(group_id).members)
+
+        # Cast from [(tilde_id, email)] -> [tilde_id]
+        group_a_members, invalid_members = self.get_profile_ids(group_ids=submission_groups)
+        group_a_members = [member_pair[0] for member_pair in group_a_members]
+        self.metadata['no_profile_submission'] = invalid_members 
+
         pbar = tqdm(total=len(group_a_members), desc='submissions status...')
         publications_by_profile_id = {}
         all_papers = []
