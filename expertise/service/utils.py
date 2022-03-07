@@ -424,6 +424,9 @@ class JobConfig(object):
             if excl_inv:
                 config.exclusion_inv = excl_inv.get('exclusion', {}).get('invitation', None)
 
+        # Validate that other paper fields are none if an alternate match group is present
+        if config.alternate_match_group is not None and (config.paper_id is not None or config.paper_invitation is not None):
+            raise openreview.OpenReviewException('Bad request: Cannot provide paper id/invitation and alternate match group')
 
         # Load optional model params from default config
         path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
