@@ -3,13 +3,12 @@ from expertise.service.utils import mock_client as mock_v2
 from unittest.mock import patch, MagicMock
 from collections import defaultdict
 import openreview
-import json
-import sys
+import json, re, shutil, os
 
 def mock_client():
     client = MagicMock(openreview.Client)
 
-    def get_profile():
+    def get_profile(email_or_id = None):
         mock_profile = {
             "id": "~Test_User1",
             "content": {
@@ -19,6 +18,23 @@ def mock_client():
                 ]
             }
         }
+        if email_or_id:
+            tildematch = re.compile('~.+')
+            if tildematch.match(email_or_id):
+                att = 'id'
+            else:
+                att = 'email'
+            with open('tests/data/fakeData.json') as json_file:
+                data = json.load(json_file)
+            profiles = data['profiles']
+            for profile in profiles:
+                profile = openreview.Profile.from_json(profile)
+                if att == 'id':
+                    if profile.id == email_or_id:
+                        return profile
+                else:
+                    if email_or_id in profile.content.get('emails'):
+                        return profile
         return openreview.Profile.from_json(mock_profile)
 
     def get_note(id):
@@ -112,6 +128,15 @@ def test_convert_to_list():
 
     groupList = or_expertise.convert_to_list(['group.cc', 'group.aa'])
     assert groupList == ['group.cc', 'group.aa']
+
+def test_get_papers_from_group():
+    openreview_client = mock_client()
+    openreview_client_v2 = mock_v2(version=2)
+    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, {})
+    all_papers = or_expertise.get_papers_from_group('ABC.cc')
+    assert len(all_papers) == 148
+    if os.path.isfile('publications_by_profile_id.json'):
+        os.remove('publications_by_profile_id.json')
 
 def test_get_profile_ids():
     openreview_client = mock_client()

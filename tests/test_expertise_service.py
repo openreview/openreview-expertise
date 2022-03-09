@@ -608,6 +608,86 @@ class TestExpertiseService():
                 assert score >= 0 and score <= 1
             assert not os.path.isdir(f"./tests/jobs/{id}")
 
+    def test_request_group_group(self, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+        # Make a request
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                    },
+                    "entityB": { 
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json'
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['job_id']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response[0]['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+        
+        # Check config fields
+        returned_config = response['config']
+        assert returned_config['name'] == 'test_run'
+        assert returned_config['model'] == 'specter+mfr'
+        assert 'token' not in returned_config
+        assert 'baseurl' not in returned_config
+        assert 'user_id' not in returned_config
+        assert job_id is not None
+        openreview_context['job_id'] = job_id
+    
+    def test_get_group_results(self, openreview_context, celery_session_app, celery_session_worker):
+        test_client = openreview_context['test_client']
+        # Searches for journal results from the given job_id assuming the job has completed
+        response = test_client.get('/expertise/results', query_string={'job_id': f"{openreview_context['job_id']}"})
+        metadata = response.json['metadata']
+        assert metadata['submission_count'] == 6
+        response = response.json['results']
+        for item in response:
+            match_id, submitter_id, score = item['match_member'], item['submission_member'], float(item['score'])
+            assert len(match_id) >= 1
+            assert len(submitter_id) >= 1
+            assert match_id.startswith('~')
+            assert submitter_id.startswith('~')
+            assert score >= 0 and score <= 1
+        
+        # Clean up journal request
+        response = test_client.get('/expertise/results', query_string={'job_id': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
+        assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
+
         # Clean up directory
         shutil.rmtree(f"./tests/jobs/")
         if os.path.isfile('pytest.log'):

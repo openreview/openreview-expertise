@@ -7,6 +7,7 @@ import re
 from unittest.mock import MagicMock
 from enum import Enum
 
+import re
 # -----------------
 # -- Mock Client --
 # -----------------
@@ -39,16 +40,33 @@ def mock_client(version=1):
                     return openreview.Note.from_json(note)
         raise openreview.OpenReviewException({'name': 'NotFoundError', 'message': f"The Note {id} was not found", 'status': 404, 'details': {'path': 'id', 'value': id}})
 
-    def get_profile():
+    def get_profile(email_or_id = None):
         mock_profile = {
             "id": "~Test_User1",
             "content": {
-                "preferredEmail": "test_user1@mail.com",
+                "preferredEmail": "Test_User1@mail.com",
                 "emails": [
-                    "test_user1@mail.com"
+                    "Test_User1@mail.com"
                 ]
             }
         }
+        if email_or_id:
+            tildematch = re.compile('~.+')
+            if tildematch.match(email_or_id):
+                att = 'id'
+            else:
+                att = 'email'
+            with open('tests/data/fakeData.json') as json_file:
+                data = json.load(json_file)
+            profiles = data['profiles']
+            for profile in profiles:
+                profile = openreview.Profile.from_json(profile)
+                if att == 'id':
+                    if profile.id == email_or_id:
+                        return profile
+                else:
+                    if email_or_id in profile.content.get('emails'):
+                        return profile
         return openreview.Profile.from_json(mock_profile)
 
     def get_notes(id = None,
@@ -277,6 +295,7 @@ class JobConfig(object):
         status=None,
         description=None,
         match_group=None,
+        alternate_match_group=None,
         dataset=None,
         model=None,
         exclusion_inv=None,
@@ -295,6 +314,7 @@ class JobConfig(object):
         self.status = status
         self.description = description
         self.match_group = match_group
+        self.alternate_match_group = alternate_match_group
         self.dataset = dataset
         self.model = model
         self.exclusion_inv = exclusion_inv
@@ -315,6 +335,7 @@ class JobConfig(object):
             'status': self.status,
             'description': self.description,
             'match_group': self.match_group,
+            'alternate_match_group': self.alternate_match_group,
             'dataset': self.dataset,
             'model': self.model,
             'exclusion_inv': self.exclusion_inv,
@@ -369,12 +390,13 @@ class JobConfig(object):
         config.description = descriptions[JobStatus.INITIALIZED]
 
         # Handle Group cases
-        # (for now, only single match group)
         config.match_group = starting_config.get('match_group', None)
+        config.alternate_match_group = starting_config.get('alternate_match_group', None)
+
         if api_request.entityA['type'] == 'Group':
-            config.match_group = api_request.entityA['memberOf']
-        elif api_request.entityB['type'] == 'Group':
-            config.match_group = api_request.entityB['memberOf']
+            config.match_group = [api_request.entityA['memberOf']]
+        if api_request.entityB['type'] == 'Group':
+            config.alternate_match_group = [api_request.entityB['memberOf']]
 
         # Handle Note cases
         config.paper_invitation = None
@@ -402,6 +424,9 @@ class JobConfig(object):
             if excl_inv:
                 config.exclusion_inv = excl_inv.get('exclusion', {}).get('invitation', None)
 
+        # Validate that other paper fields are none if an alternate match group is present
+        if config.alternate_match_group is not None and (config.paper_id is not None or config.paper_invitation is not None):
+            raise openreview.OpenReviewException('Bad request: Cannot provide paper id/invitation and alternate match group')
 
         # Load optional model params from default config
         path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
@@ -473,6 +498,7 @@ class JobConfig(object):
             status = job_config.get('status'),
             description = job_config.get('description'),
             match_group = job_config.get('match_group'),
+            alternate_match_group=job_config.get('alternate_match_group'),
             dataset = job_config.get('dataset'),
             model = job_config.get('model'),
             exclusion_inv = job_config.get('exclusion_inv'),

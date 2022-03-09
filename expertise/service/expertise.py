@@ -277,15 +277,35 @@ class ExpertiseService(object):
             file_dir, metadata_dir = self._get_score_and_metadata_dir(search_dir)
             self.logger.info(f"Retrieving scores from {search_dir}")
             ret_list = []
-            with open(file_dir, 'r') as csv_file:
-                data_reader = reader(csv_file)
-                for row in data_reader:
-                    ret_list.append({
-                        'submission': row[0],
-                        'user': row[1],
-                        'score': float(row[2])
-                    })
-            result['results'] = ret_list
+
+            # Check for output format
+            group_group_matching = config.alternate_match_group is not None
+
+            if not group_group_matching:
+                with open(file_dir, 'r') as csv_file:
+                    data_reader = reader(csv_file)
+                    for row in data_reader:
+                        # For single paper retrieval, filter out scores against the dummy submission
+                        if row[0] == 'dummy':
+                            continue
+
+                        ret_list.append({
+                            'submission': row[0],
+                            'user': row[1],
+                            'score': float(row[2])
+                        })
+                result['results'] = ret_list
+            else:
+                # If submission group, group under different keys
+                with open(file_dir, 'r') as csv_file:
+                    data_reader = reader(csv_file)
+                    for row in data_reader:
+                        ret_list.append({
+                            'match_member': row[0],
+                            'submission_member': row[1],
+                            'score': float(row[2])
+                        })
+                result['results'] = ret_list
 
             # Gather metadata
             with open(metadata_dir, 'r') as metadata:

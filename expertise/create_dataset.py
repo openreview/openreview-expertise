@@ -256,6 +256,7 @@ class OpenReviewExpertise(object):
         use_email_ids = self.config.get('use_email_ids', False)
         group_ids = self.convert_to_list(self.config.get('match_group', []))
         reviewer_ids = self.convert_to_list(self.config.get('reviewer_ids', []))
+
         valid_members, invalid_members = self.get_profile_ids(group_ids=group_ids, reviewer_ids=reviewer_ids)
 
         self.metadata['no_profile'] = invalid_members
@@ -300,44 +301,90 @@ class OpenReviewExpertise(object):
 
         return expertise
 
+    def get_papers_from_group(self, submission_groups):
+        submission_groups = self.convert_to_list(submission_groups)
+        client = self.openreview_client
+
+        # Cast from [(tilde_id, email)] -> [tilde_id]
+        group_a_members, invalid_members = self.get_profile_ids(group_ids=submission_groups)
+        group_a_members = [member_pair[0] for member_pair in group_a_members]
+        self.metadata['no_profile_submission'] = invalid_members 
+
+        pbar = tqdm(total=len(group_a_members), desc='submissions status...')
+        publications_by_profile_id = {}
+        all_papers = []
+
+        def get_status(profile_id):
+            pbar.update(1)
+            profile = openreview.tools.get_profile(client, profile_id)
+            if profile:
+                publications = list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': profile.id}))
+                return { 'profile_id': profile_id, 'papers': publications }
+        futures = []
+        with ThreadPoolExecutor(max_workers=self.config.get('max_workers')) as executor:
+            for profile_id in group_a_members:
+                futures.append(executor.submit(get_status, profile_id))
+        pbar.close()
+
+        for future in futures:
+            result = future.result()
+            # Convert publications to json
+            papers_json_list = []
+            for paper_note in result['papers']:
+                papers_json_list.append(paper_note.to_json())
+            publications_by_profile_id[result['profile_id']] = papers_json_list
+            all_papers = all_papers + result['papers']
+
+        # Dump publications by profile id
+        with open(self.root.joinpath('publications_by_profile_id.json'), 'w') as f:
+            json.dump(publications_by_profile_id, f, indent=2)
+        
+        return all_papers
 
     def get_submissions(self):
         invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
         paper_id = self.config.get('paper_id')
+        submission_groups = self.convert_to_list(self.config.get('alternate_match_group', []))
         submissions = []
 
-        for invitation_id in invitation_ids:
-            # Assume invitation is valid for both APIs, but only 1
-            # will have the associated notes
-            submissions_v1 = list(openreview.tools.iterget_notes(
-                self.openreview_client, invitation=invitation_id))
+        # Fetch papers from alternate match group
+        # If no alternate match group provided, aggregate papers from all other sources
+        if submission_groups:
+            aggregate_papers = self.get_papers_from_group(submission_groups)
+            submissions.extend(aggregate_papers)
+        else:
+            for invitation_id in invitation_ids:
+                # Assume invitation is valid for both APIs, but only 1
+                # will have the associated notes
+                submissions_v1 = list(openreview.tools.iterget_notes(
+                    self.openreview_client, invitation=invitation_id))
 
-            submissions.extend(submissions_v1)
-            submissions.extend(list(openreview.tools.iterget_notes(
-                self.openreview_client_v2, invitation=invitation_id)))
+                submissions.extend(submissions_v1)
+                submissions.extend(list(openreview.tools.iterget_notes(
+                    self.openreview_client_v2, invitation=invitation_id)))
 
-        if paper_id:
-            # If note not found, keep executing and raise an overall exception later
-            # Otherwise if the exception is anything else, raise it again
-            note_v1, note_v2 = None, None
-            try:
-                note_v1 = self.openreview_client.get_note(paper_id)
-                submissions.append(note_v1)
-            except openreview.OpenReviewException as e:
-                err_name = e.args[0].get('name').lower()
-                if err_name != 'notfounderror':
-                    raise e
+            if paper_id:
+                # If note not found, keep executing and raise an overall exception later
+                # Otherwise if the exception is anything else, raise it again
+                note_v1, note_v2 = None, None
+                try:
+                    note_v1 = self.openreview_client.get_note(paper_id)
+                    submissions.append(note_v1)
+                except openreview.OpenReviewException as e:
+                    err_name = e.args[0].get('name').lower()
+                    if err_name != 'notfounderror':
+                        raise e
 
-            try:
-                note_v2 = self.openreview_client_v2.get_note(paper_id)
-                submissions.append(note_v2)
-            except openreview.OpenReviewException as e:
-                err_name = e.args[0].get('name').lower()
-                if err_name != 'notfounderror':
-                    raise e
+                try:
+                    note_v2 = self.openreview_client_v2.get_note(paper_id)
+                    submissions.append(note_v2)
+                except openreview.OpenReviewException as e:
+                    err_name = e.args[0].get('name').lower()
+                    if err_name != 'notfounderror':
+                        raise e
 
-            if not note_v1 and not note_v2:
-                raise openreview.OpenReviewException(f"Note {paper_id} not found")
+                if not note_v1 and not note_v2:
+                    raise openreview.OpenReviewException(f"Note {paper_id} not found")
 
         print('finding records of {} submissions'.format(len(submissions)))
         reduced_submissions = {}
@@ -399,8 +446,11 @@ class OpenReviewExpertise(object):
                     for paper in pubs:
                         f.write(json.dumps(paper) + '\n')
 
+        # Retrieve match groups to detect group-group matching
+        group_group_matching = 'alternate_match_group' in self.config.keys()
+
         # if invitation ID is supplied, collect records for each submission
-        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config:
+        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config or group_group_matching:
             submissions = self.get_submissions()
             with open(self.root.joinpath('submissions.json'), 'w') as f:
                 json.dump(submissions, f, indent=2)
