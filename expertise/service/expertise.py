@@ -23,6 +23,11 @@ class ExpertiseService(object):
         self.specter_dir = config['SPECTER_DIR']
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
         self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
+        self.redis_args = {
+            'host': config['REDIS_ADDR'],
+            'port': config['REDIS_PORT'],
+            'db': config['REDIS_DB']
+        }
 
         # Define expected/required API fields
         self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
@@ -73,7 +78,7 @@ class ExpertiseService(object):
         with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
             json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
         self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
-        config.save()
+        config.save(self.redis_args)
 
         return config, self.client.token
 
@@ -137,13 +142,14 @@ class ExpertiseService(object):
         config.description = descriptions[JobStatus.QUEUED]
 
         # Config has passed validation - add it to the user index
+        self.logger.info('just before submitting')
         run_userpaper.apply_async(
-            (config, token, self.logger),
+            (config, token, self.logger, self.redis_args),
             queue='userpaper',
             task_id=job_id
         )
         self.logger.info(f"\nconf: {config.to_json()}\n")
-        config.save()
+        config.save(self.redis_args)
 
         return job_id
 
@@ -161,7 +167,7 @@ class ExpertiseService(object):
         """
         result = {'results': []}
 
-        for config in JobConfig.load_all_jobs(user_id):
+        for config in JobConfig.load_all_jobs(user_id, self.redis_args):
             status = config.status
             description = config.description
             
@@ -193,7 +199,7 @@ class ExpertiseService(object):
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
-        config = JobConfig.load_job(job_id, user_id)
+        config = JobConfig.load_job(job_id, user_id, self.redis_args)
         status = config.status
         description = config.description
         
@@ -228,7 +234,7 @@ class ExpertiseService(object):
         result = {'results': []}
 
         # Get and validate profile ID
-        config = JobConfig.load_job(job_id, user_id)
+        config = JobConfig.load_job(job_id, user_id, self.redis_args)
 
         # Fetch status
         status = config.status
@@ -282,7 +288,7 @@ class ExpertiseService(object):
         if delete_on_get:
             self.logger.info(f'Deleting {config.job_dir}')
             shutil.rmtree(config.job_dir)
-            JobConfig.remove_job(user_id, job_id)
+            JobConfig.remove_job(user_id, job_id, self.redis_args)
 
         return result
 
@@ -298,7 +304,7 @@ class ExpertiseService(object):
 
         :returns: Filtered config of the job to be deleted
         """
-        config = JobConfig.load_job(job_id, user_id)
+        config = JobConfig.load_job(job_id, user_id, self.redis_args)
         
         # Clear directory and Redis entry
         self.logger.info(f"Deleting {config.job_dir} for {user_id}")
@@ -306,7 +312,7 @@ class ExpertiseService(object):
             shutil.rmtree(config.job_dir)
         else:
             self.logger.info(f"No files found - only removing Redis entry")
-        JobConfig.remove_job(user_id, job_id)
+        JobConfig.remove_job(user_id, job_id, self.redis_args)
 
         # Return filtered config
         self._filter_config(config)

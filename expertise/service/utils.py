@@ -9,9 +9,6 @@ from unittest.mock import MagicMock
 from enum import Enum
 
 import re
-REDIS_ADDR = 'localhost'
-REDIS_PORT = 6379
-REDIS_DB = 10
 SUPERUSER_IDS = ['openreview.net']
 
 # -----------------
@@ -370,18 +367,18 @@ class JobConfig(object):
 
         return body
 
-    def save(self):
+    def save(self, redis_args):
         # Modify Redis keys with matchable prefix
-        db = JobConfig._init_redis()
+        db = JobConfig._init_redis(**redis_args)
         db.set(f"job:{self.job_id}", pickle.dumps(self))
     
-    def load_all_jobs(user_id):
+    def load_all_jobs(user_id, redis_args):
         """
         Searches all keys for configs with matching user id
         If a Redis entry exists but the files do not, remove the entry from Redis and do not return this job
         Returns empty list if no jobs found
         """
-        db = JobConfig._init_redis()
+        db = JobConfig._init_redis(**redis_args)
         configs = []
 
         for job_key in db.scan_iter("job:*"):
@@ -397,11 +394,11 @@ class JobConfig(object):
 
         return configs
 
-    def load_job(job_id, user_id):
+    def load_job(job_id, user_id, redis_args):
         """
         Retrieves a config based on job id
         """
-        db = JobConfig._init_redis()
+        db = JobConfig._init_redis(**redis_args)
         job_key = f"job:{job_id}"
 
         if not db.exists(job_key):
@@ -416,8 +413,8 @@ class JobConfig(object):
 
         return config
     
-    def remove_job(user_id, job_id):
-        db = JobConfig._init_redis()
+    def remove_job(user_id, job_id, redis_args):
+        db = JobConfig._init_redis(**redis_args)
         job_key = f"job:{job_id}"
 
         if not db.exists(job_key):
@@ -429,11 +426,11 @@ class JobConfig(object):
         db.delete(job_key)
         return config
 
-    def _init_redis():
+    def _init_redis(host = None, port = None, db = None):
         db = redis.Redis(
-            host = REDIS_ADDR,
-            port = REDIS_PORT,
-            db = REDIS_DB
+            host = host,
+            port = port,
+            db = db
         )
         return db
 
