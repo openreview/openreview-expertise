@@ -220,17 +220,17 @@ class TestExpertiseV2():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['job_id']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
@@ -254,7 +254,7 @@ class TestExpertiseV2():
     def test_get_journal_results(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for journal results from the given job_id assuming the job has completed
-        response = test_client.get('/expertise/results', query_string={'job_id': f"{openreview_context['job_id']}"})
+        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 1
         response = response.json['results']
@@ -266,7 +266,7 @@ class TestExpertiseV2():
             assert score >= 0 and score <= 1
         
         # Clean up journal request
-        response = test_client.get('/expertise/results', query_string={'job_id': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
+        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
         # Clean up directory
         shutil.rmtree(f"./tests/jobs/")

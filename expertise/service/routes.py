@@ -146,9 +146,9 @@ def jobs():
 
     try:
         # Parse query parameters
-        job_id = flask.request.args.get('job_id', None)
+        job_id = flask.request.args.get('jobId', None)
         if job_id is None or len(job_id) == 0:
-            raise openreview.OpenReviewException('Bad request: job_id is required')
+            raise openreview.OpenReviewException('Bad request: jobId is required')
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
@@ -239,9 +239,9 @@ def delete_job():
 
     try:
         # Parse query parameters
-        job_id = flask.request.args.get('job_id', None)
+        job_id = flask.request.args.get('jobId', None)
         if job_id is None or len(job_id) == 0:
-            raise openreview.OpenReviewException('Bad request: job_id is required')
+            raise openreview.OpenReviewException('Bad request: jobId is required')
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).del_expertise_job(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
@@ -291,9 +291,9 @@ def results():
 
     try:
         # Parse query parameters
-        job_id = flask.request.args.get('job_id', None)
+        job_id = flask.request.args.get('jobId', None)
         if job_id is None or len(job_id) == 0:
-            raise openreview.OpenReviewException('Bad request: job_id is required')
+            raise openreview.OpenReviewException('Bad request: jobId is required')
         delete_on_get = flask.request.args.get('deleteOnGet', 'False').lower() == 'true'
 
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
