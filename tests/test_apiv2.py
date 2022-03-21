@@ -218,10 +218,9 @@ class TestExpertiseV2():
             content_type='application/json'
         )
         assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['job_id']
+        job_id = response.json['id']
         time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
-        assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
@@ -237,7 +236,6 @@ class TestExpertiseV2():
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['status'] == 'Completed'
-        assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         # Check for API request

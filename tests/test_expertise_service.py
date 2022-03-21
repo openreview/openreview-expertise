@@ -299,10 +299,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['job_id']
+        job_id = response.json['id']
         time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
-        assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
         # assert response[0]['description'] == 'Server received config and allocated space'
 
@@ -333,7 +332,6 @@ class TestExpertiseService():
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['status'] == 'Completed'
-        assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         # Check for API request
@@ -405,7 +403,7 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['job_id']
+        job_id = response.json['id']
 
         openreview_context['job_id'] = job_id
 
@@ -427,14 +425,12 @@ class TestExpertiseService():
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
-        assert response['name'] == 'test_run'
         assert response['status'].strip() == 'Error'
         assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
         # Clean up error job by calling the delete endpoint
         response = test_client.get('/expertise/delete', query_string={'jobId': f"{openreview_context['job_id']}"}).json
-        assert response['name'] == 'test_run'
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     
     def test_request_journal(self, openreview_context, celery_session_app, celery_session_worker):
@@ -466,10 +462,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['job_id']
+        job_id = response.json['id']
         time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
-        assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
@@ -485,7 +480,6 @@ class TestExpertiseService():
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['status'] == 'Completed'
-        assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         # Check for API request
@@ -546,11 +540,10 @@ class TestExpertiseService():
                 content_type='application/json'
             )
             assert response.status_code == 200, f'{response.json}'
-            job_id = response.json['job_id']
+            job_id = response.json['id']
             id_list.append(job_id)
             time.sleep(2)
             response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
-            assert response['name'] == 'test_run'
             assert response['status'] != 'Error'
 
         assert id_list is not None
@@ -577,7 +570,6 @@ class TestExpertiseService():
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['status'] == 'Completed'
-        assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         # Now fetch and empty out all previous jobs
@@ -585,7 +577,6 @@ class TestExpertiseService():
             # Assert that they are complete
             response = test_client.get('/expertise/status', query_string={'jobId': f'{id}'}).json
             assert response['status'] == 'Completed'
-            assert response['name'] == 'test_run'
             assert response['description'] == 'Job is complete and the computed scores are ready'
 
             response = test_client.get('/expertise/results', query_string={'jobId': f"{id}", 'deleteOnGet': True})
@@ -629,10 +620,9 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['job_id']
+        job_id = response.json['id']
         time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
-        assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
@@ -648,7 +638,6 @@ class TestExpertiseService():
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['status'] == 'Completed'
-        assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         # Check for API request
