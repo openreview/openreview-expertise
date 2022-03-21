@@ -239,16 +239,14 @@ class TestExpertiseV2():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
-        
-        # Check config fields
-        returned_config = response['config']
-        assert returned_config['name'] == 'test_run'
-        assert returned_config['paper_id'] == 'KHnr1r7h'
-        assert returned_config['model'] == 'specter+mfr'
-        assert 'token' not in returned_config
-        assert 'baseurl' not in returned_config
-        assert 'user_id' not in returned_config
-        assert job_id is not None
+
+        # Check for API request
+        req = response['request']
+        assert req['name'] == 'test_run'
+        assert req['entityA']['type'] == 'Group'
+        assert req['entityA']['memberOf'] == 'ABC.cc'
+        assert req['entityB']['type'] == 'Note'
+        assert req['entityB']['id'] == 'KHnr1r7h'
         openreview_context['job_id'] = job_id
 
     def test_get_journal_results(self, openreview_context, celery_session_app, celery_session_worker):

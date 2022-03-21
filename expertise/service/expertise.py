@@ -179,9 +179,7 @@ class ExpertiseService(object):
                     'name': config.name,
                     'status': status,
                     'description': description,
-                    'cdate': config.cdate,
-                    'mdate': config.mdate,
-                    'config': config.to_json()
+                    'request': config.api_request.to_json()
                 }
             )
         return result
@@ -210,9 +208,7 @@ class ExpertiseService(object):
             'name': config.name,
             'status': status,
             'description': description,
-            'cdate': config.cdate,
-            'mdate': config.mdate,
-            'config': config.to_json()
+            'request': config.api_request.to_json()
         }
 
     def get_expertise_results(self, user_id, job_id, delete_on_get=False):
