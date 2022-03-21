@@ -153,23 +153,37 @@ class ExpertiseService(object):
 
         return job_id
 
-    def get_expertise_all_status(self, user_id):
+    def get_expertise_all_status(self, user_id, query_params):
         """
         Searches the server for all jobs submitted by a user
 
         :param user_id: The ID of the user accessing the data
         :type user_id: str
 
-        :param job_id: Optional ID of the specific job to look up
-        :type job_id: str
+        :param query_params: Contains the query parameters of the GET request
+        :type job_id: dict
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
         result = {'results': []}
 
+        # Retrieve search fields
+        memberOf = query_params.get('memberOf', None)
+        id = query_params.get('id', None)
+        status_query = query_params.get('status', None)
+
         for config in JobConfig.load_all_jobs(user_id, self.redis_args):
             status = config.status
             description = config.description
+
+            # Filter by search fields
+            req = config.api_request
+            if memberOf and (not req.entityA.get('memberOf') == memberOf and not req.entityB.get('memberOf') == memberOf):
+                continue
+            if id and not config.job_id == id:
+                continue
+            if status_query and not status.startswith(status_query):
+                continue
             
             # Append filtered config to the status
             self._filter_config(config)
