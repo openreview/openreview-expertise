@@ -33,7 +33,7 @@ jobs:
             python --version
             mkdir ~/expertise-utils
             cd ~/expertise-utils
-            git clone https://github.com/allenai/specter.git
+            git clone https://github.com/haroldrubio/specter.git
             cd specter
             wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
             tar -xzvf archive.tar.gz
