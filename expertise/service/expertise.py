@@ -182,7 +182,8 @@ class ExpertiseService(object):
                         'status': status,
                         'description': description,
                         'cdate': config.cdate,
-                        'mdate': config.mdate
+                        'mdate': config.mdate,
+                        'config': config.to_json()
                     }
                 )
         return result
