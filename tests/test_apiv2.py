@@ -197,15 +197,21 @@ class TestExpertiseV2():
         response = test_client.post(
             '/expertise',
             data = json.dumps({
-                    'name': 'test_run',
-                    'match_group': ["ABC.cc"],
-                    'paper_id': 'KHnr1r7h',
-                    "model": "specter+mfr",
-                    "model_params": {
-                        "use_title": False,
-                        "use_abstract": True,
-                        "average_score": True,
-                        "max_score": False
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'id': 'KHnr1r7h'
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
                     }
                 }
             ),
@@ -214,17 +220,17 @@ class TestExpertiseV2():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['job_id']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'id': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
@@ -248,20 +254,19 @@ class TestExpertiseV2():
     def test_get_journal_results(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for journal results from the given job_id assuming the job has completed
-        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}"})
+        response = test_client.get('/expertise/results', query_string={'job_id': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
-        assert metadata['submission_count'] == 2
+        assert metadata['submission_count'] == 1
         response = response.json['results']
         for item in response:
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
-            assert submission_id != 'dummy'
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
             assert score >= 0 and score <= 1
         
         # Clean up journal request
-        response = test_client.get('/expertise/results', query_string={'id': f"{openreview_context['job_id']}", 'delete_on_get': True}).json['results']
+        response = test_client.get('/expertise/results', query_string={'job_id': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
         # Clean up directory
         shutil.rmtree(f"./tests/jobs/")

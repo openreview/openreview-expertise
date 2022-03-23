@@ -899,7 +899,7 @@ class MultiFacetRecommender(object):
         num_special_token = 3
         csv_scores = []
         self.preliminary_scores = []
-        dist_arr = np.loadtxt(os.path.join(self.work_dir, "reviewer_submission_dist_arr.txt"))
+        dist_arr = np.loadtxt(os.path.join(self.work_dir, "reviewer_submission_dist_arr.txt"), ndmin=2)
         assert dist_arr.shape[0] == len(self.submission_paper_ids_list)
         assert dist_arr.shape[1] == len(user_idx2word_freq)
         sim_arr = 1. - dist_arr

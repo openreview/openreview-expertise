@@ -1,14 +1,15 @@
 from pathlib import Path
-import openreview
+import openreview, os, json, csv
 from .create_dataset import OpenReviewExpertise
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
+from .utils.utils import aggregate_by_group
 
 # Move run.py functionality to a function that accepts a config dict
 def execute_expertise(config):
 
     config = ModelConfig(config_dict=config)
-    
+
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
     if Path(config['dataset']['directory']).joinpath('submissions').exists():
         submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
@@ -157,6 +158,9 @@ def execute_expertise(config):
             ens_predictor.sparse_scores(
                 scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
+
+    if 'alternate_match_group' in config.keys():
+        aggregate_by_group(config)
 
 def execute_create_dataset(client, client_v2, config=None):
 
