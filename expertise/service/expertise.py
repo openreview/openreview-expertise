@@ -172,21 +172,19 @@ class ExpertiseService(object):
             status = config.status
             description = config.description
 
-            if search_status and not status.lower().startswith(search_status.lower()):
-                continue
-
-            # Append filtered config to the status
-            self._filter_config(config)
-            result['results'].append(
-                {
-                    'job_id': job_dir,
-                    'name': config.name,
-                    'status': status,
-                    'description': description,
-                    'cdate': config.cdate,
-                    'mdate': config.mdate
-                }
-            )
+            if not search_status or status.lower().startswith(search_status.lower()):
+                # Append filtered config to the status
+                self._filter_config(config)
+                result['results'].append(
+                    {
+                        'job_id': job_dir,
+                        'name': config.name,
+                        'status': status,
+                        'description': description,
+                        'cdate': config.cdate,
+                        'mdate': config.mdate
+                    }
+                )
         return result
 
     def get_expertise_status(self, user_id, job_id):
