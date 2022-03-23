@@ -236,7 +236,6 @@ class TestExpertiseService():
             ),
             content_type='application/json'
         )
-
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['job_id']
         time.sleep(2)
