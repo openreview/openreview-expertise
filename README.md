@@ -568,6 +568,15 @@ Some older conferences use a bidding format that differs from the default "Very 
 }
 
 ```
+##Monitoring
+
+You can monitor the celery workers and corresponding tasks using `flower`. The flower dashboard can be started after that using
+```
+celery --app matcher.service.server.celery_app flower --persistent=True --state_save_interval=60000
+```
+For more options you may check the flower documentation [here](https://flower.readthedocs.io/en/latest/config.html).
+
+By default, the flower dashboard will run on `http://localhost:5555`
 
 ## Test
 The testing methodology used for the model tries to check how good the model is. We are aware that this may not be the best strategy, but it has given good results so far. The test consists on using the publications of several reviewers and take one of those publications out from the corpus. We then use that extracted publication to calculate affinity scores against the remaining publications in the corpus. If the model is good then, we expect the authors of the extracted publication to have the highest affinity scores.

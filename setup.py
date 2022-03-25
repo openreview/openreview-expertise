@@ -37,7 +37,9 @@ setup(
         'celery',
         'redis',
         'pytest-celery',
-        'shortuuid'
+        'shortuuid',
+        'flower',
+        'python-dotenv'
     ],
     zip_safe=False
 )
