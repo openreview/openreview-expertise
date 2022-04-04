@@ -3,7 +3,7 @@ import openreview, os, json, csv
 from .create_dataset import OpenReviewExpertise
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
-from .utils.utils import aggregate_by_group
+from .utils.utils import aggregate_by_group, cache_group, from_cache
 
 # Move run.py functionality to a function that accepts a config dict
 def execute_expertise(config):
@@ -140,9 +140,35 @@ def execute_expertise(config):
         )
         ens_predictor.set_archives_dataset(archives_dataset)
         ens_predictor.set_submissions_dataset(submissions_dataset)
-        ens_predictor.embed_publications(
-            specter_publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl'),
-            mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+
+        if not config.get('from_cache', False):
+            ens_predictor.embed_publications(
+                specter_publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl'),
+                mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+        else:
+            loaded_from_cache = from_cache(
+                config['model'],
+                config['match_group'],
+                config['model_params'].get('work_dir', "./"),
+                config['model_params']['publications_path']
+            )
+            if not loaded_from_cache:
+                ens_predictor.embed_publications(
+                    specter_publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl'),
+                    mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+                cache_group(
+                    config['model'],
+                    config['match_group'],
+                    config['model_params'].get('work_dir', "./"),
+                    config['model_params']['publications_path'],
+                    config['dataset']['directory']
+                )
+            else:
+                mfr_pred = ens_predictor.mfr_predictor
+                mfr_pred.user_emb_file = os.path.join(mfr_pred.work_dir, "user_emb" + mfr_pred.target_embedding_suffix + '_always.pt')
+                mfr_pred.tag_emb_file = os.path.join(mfr_pred.work_dir, "tag_emb" + mfr_pred.target_embedding_suffix + '_always.pt')
+                mfr_pred.source_emsize = 200
+
         ens_predictor.embed_submissions(
             specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
             mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))

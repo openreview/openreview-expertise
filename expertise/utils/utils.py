@@ -1,5 +1,6 @@
 from __future__ import print_function, absolute_import, unicode_literals
 import codecs
+import shutil
 import sys
 import itertools
 import string
@@ -509,6 +510,36 @@ def aggregate_by_group(config):
         for submission_member, archive_scores in average_score.items():
             for archive_member, score in archive_scores.items():
                 csvwriter.writerow([archive_member, submission_member, score])
+
+def cache_group(model_name, group_id, work_dir, pub_dir, dataset_dir):
+    if isinstance(group_id, list):
+        assert len(group_id) == 1, f"Cache is only enabled for 1 group, {len(group_id)} found"
+        group_id = group_id[0]
+    group_dir = group_id.replace('/', '_')
+    cache_dir = f"../groups/{model_name}/{group_dir}"
+    if not os.path.isdir(cache_dir):
+        os.makedirs(cache_dir)
+
+    # Copy work files - MFR is stored in the work_dir, SPECTER is stored in pub2vec
+    shutil.copytree(f"{work_dir}/mfr", f"{cache_dir}/work")
+    shutil.copytree(f"{dataset_dir}/archives", f"{cache_dir}/archives")
+    shutil.copy2(f"{pub_dir}/pub2vec.jsonl", f"{cache_dir}")
+
+    # Remove SPECTER data regarding submissions
+    
+def from_cache(model_name, group_id, work_dir, pub_dir):
+    if isinstance(group_id, list):
+        assert len(group_id) == 1, f"Cache is only enabled for 1 group, {len(group_id)} found"
+        group_id = group_id[0]
+    group_dir = group_id.replace('/', '_')
+    cache_dir = f"../groups/{model_name}/{group_dir}"
+    if not os.path.isdir(cache_dir):
+        return False
+
+    shutil.rmtree(f"{work_dir}/mfr")
+    shutil.copytree(f"{cache_dir}/work", f"{work_dir}/mfr")
+    shutil.copy2(f"{cache_dir}/pub2vec.jsonl", pub_dir)
+    return True
 
 '''
 Below are utils from Justin's code
