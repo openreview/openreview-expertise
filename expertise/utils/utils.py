@@ -512,6 +512,7 @@ def aggregate_by_group(config):
                 csvwriter.writerow([archive_member, submission_member, score])
 
 def cache_group(model_name, group_id, work_dir, pub_dir, dataset_dir):
+    # Create a cache directory for the current group's embedding (SPECTER+MFR only)
     if isinstance(group_id, list):
         assert len(group_id) == 1, f"Cache is only enabled for 1 group, {len(group_id)} found"
         group_id = group_id[0]
@@ -527,9 +528,10 @@ def cache_group(model_name, group_id, work_dir, pub_dir, dataset_dir):
     for fname in member_fnames:
         member_id = fname.name[:-6]
         archive_map[member_id] = []
+
+        # Retrieve store publications
         with open(f"{archive_dir}/{fname.name}") as member_file:
             pub_list = list(member_file)
-    
         for pub_string in pub_list:
             pub_dict = json.loads(pub_string)
             archive_map[member_id].append(pub_dict.get('id', ''))
@@ -539,10 +541,10 @@ def cache_group(model_name, group_id, work_dir, pub_dir, dataset_dir):
     # Copy work files - MFR is stored in the work_dir, SPECTER is stored in pub2vec
     shutil.copytree(f"{work_dir}/mfr", f"{cache_dir}/work")
     shutil.copy2(f"{pub_dir}/pub2vec.jsonl", f"{cache_dir}")
-
-    # Remove SPECTER data regarding submissions
     
 def from_cache(model_name, group_id, work_dir, pub_dir, dataset_dir):
+    # Attempt to load group embeddings (SPECTER+MFR only) from the cache 
+    # Return boolean indicating if loading the data was successful
     if isinstance(group_id, list):
         assert len(group_id) == 1, f"Cache is only enabled for 1 group, {len(group_id)} found"
         group_id = group_id[0]
@@ -551,7 +553,9 @@ def from_cache(model_name, group_id, work_dir, pub_dir, dataset_dir):
     if not os.path.isdir(cache_dir):
         return False
 
-    # Check archives files
+    # Check archives files - if there is a difference between
+    # the number of archive files and number of members in the cached mapping
+    # refresh the cache
     with open(f"{cache_dir}/archives.json", 'r') as f:
         archive_map = json.load(f)
     archive_dir = f"{dataset_dir}/archives"
@@ -560,6 +564,7 @@ def from_cache(model_name, group_id, work_dir, pub_dir, dataset_dir):
         shutil.rmtree(cache_dir)
         return False
 
+    # Delete MFR because copytree() requires no previously existing directory
     shutil.rmtree(f"{work_dir}/mfr")
     shutil.copytree(f"{cache_dir}/work", f"{work_dir}/mfr")
     shutil.copy2(f"{cache_dir}/pub2vec.jsonl", pub_dir)
