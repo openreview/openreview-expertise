@@ -520,20 +520,44 @@ def cache_group(model_name, group_id, work_dir, pub_dir, dataset_dir):
     if not os.path.isdir(cache_dir):
         os.makedirs(cache_dir)
 
+    # Build + dump archive mapping
+    archive_map = {}
+    archive_dir = f"{dataset_dir}/archives"
+    member_fnames = os.scandir(archive_dir)
+    for fname in member_fnames:
+        member_id = fname.name[:-6]
+        archive_map[member_id] = []
+        with open(f"{archive_dir}/{fname.name}") as member_file:
+            pub_list = list(member_file)
+    
+        for pub_string in pub_list:
+            pub_dict = json.loads(pub_string)
+            archive_map[member_id].append(pub_dict.get('id', ''))
+    with open(f"{cache_dir}/archives.json", 'w') as f:
+        json.dump(archive_map, f)
+
     # Copy work files - MFR is stored in the work_dir, SPECTER is stored in pub2vec
     shutil.copytree(f"{work_dir}/mfr", f"{cache_dir}/work")
-    shutil.copytree(f"{dataset_dir}/archives", f"{cache_dir}/archives")
     shutil.copy2(f"{pub_dir}/pub2vec.jsonl", f"{cache_dir}")
 
     # Remove SPECTER data regarding submissions
     
-def from_cache(model_name, group_id, work_dir, pub_dir):
+def from_cache(model_name, group_id, work_dir, pub_dir, dataset_dir):
     if isinstance(group_id, list):
         assert len(group_id) == 1, f"Cache is only enabled for 1 group, {len(group_id)} found"
         group_id = group_id[0]
     group_dir = group_id.replace('/', '_')
     cache_dir = f"../groups/{model_name}/{group_dir}"
     if not os.path.isdir(cache_dir):
+        return False
+
+    # Check archives files
+    with open(f"{cache_dir}/archives.json", 'r') as f:
+        archive_map = json.load(f)
+    archive_dir = f"{dataset_dir}/archives"
+    member_fnames = [file.name for file in os.scandir(archive_dir)]
+    if len(member_fnames) != len(archive_map.keys()):
+        shutil.rmtree(cache_dir)
         return False
 
     shutil.rmtree(f"{work_dir}/mfr")

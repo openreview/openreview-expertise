@@ -150,7 +150,8 @@ def execute_expertise(config):
                 config['model'],
                 config['match_group'],
                 config['model_params'].get('work_dir', "./"),
-                config['model_params']['publications_path']
+                config['model_params']['publications_path'],
+                config['dataset']['directory']
             )
             if not loaded_from_cache:
                 ens_predictor.embed_publications(
