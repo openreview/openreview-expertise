@@ -446,7 +446,8 @@ class JobConfig(object):
         config.model_params['average_score'] = model_params.get('average_score', None)
         config.model_params['max_score'] = model_params.get('max_score', None)
         config.model_params['skip_specter'] = model_params.get('skip_specter', None)
-        config.model_params['batch_size'] = model_params.get('batch_size', 1)
+        config.model_params['specter_batch_size'] = model_params.get('specter_batch_size', 16)
+        config.model_params['mfr_batch_size'] = model_params.get('mfr_batch_size', 50)
         config.model_params['use_cuda'] = model_params.get('use_cuda', False)
 
         # Attempt to load any API request model params

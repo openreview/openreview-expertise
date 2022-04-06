@@ -37,7 +37,7 @@ conda install faiss-cpu -c pytorch
 
 If you plan to use SPECTER / SPECTER+MFR, with the conda environment `affinity` active:
 ```
-git clone https://github.com/haroldrubio/specter.git
+git clone https://github.com/allenai/specter.git
 cd specter
 
 wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
