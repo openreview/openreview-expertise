@@ -13,6 +13,9 @@ import os
 import torch
 from tqdm import tqdm
 from typing import Optional
+import redisai
+import redis
+import numpy as np
 
 import logging
 logging.getLogger('allennlp.common.params').disabled = True
@@ -58,10 +61,13 @@ class _PredictManagerCustom(_PredictManager):
                  output_file: Optional[str],
                  batch_size: int,
                  print_to_console: bool,
-                 has_dataset_reader: bool) -> None:
+                 has_dataset_reader: bool,
+                 store_redis: bool = False) -> None:
         super(_PredictManagerCustom, self).__init__(predictor, input_file, output_file, batch_size, print_to_console,
                                                     has_dataset_reader)
         self.total_size = int(sum([1 for _ in open(self._input_file)]) / self._batch_size)
+        self._store_redis = store_redis
+        self._redis_con = redisai.Client(host='localhost', port=6379)
 
     def run(self) -> None:
         has_reader = self._dataset_reader is not None
@@ -81,6 +87,22 @@ class _PredictManagerCustom(_PredictManager):
 
         if self._output_file is not None:
             self._output_file.close()
+        self._redis_con.close()
+
+    def _maybe_print_to_console_and_file(self,
+                                         index: int,
+                                         prediction: str,
+                                         model_input: str = None) -> None:
+        prediction_json = json.loads(prediction)
+        if self._print_to_console:
+            if model_input is not None:
+                print(f"input {index}: ", model_input)
+            print("prediction: ", prediction)
+
+        if self._output_file is not None:
+            self._output_file.write(prediction)
+        if self._store_redis:
+            self._redis_con.tensorset(key=prediction_json['paper_id'], tensor=np.array(prediction_json['embedding']))
 
 
 def predictor_from_archive(archive: Archive, predictor_name: str = None,
@@ -140,6 +162,7 @@ class SpecterPredictor:
         self.sparse_value = sparse_value
         if not os.path.exists(self.work_dir) and not os.path.isdir(self.work_dir):
             os.makedirs(self.work_dir)
+        self.redis = redis.Redis()
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
@@ -154,14 +177,15 @@ class SpecterPredictor:
                 self.pub_author_ids_to_note_id[profile_id].append(publication['id'])
                 self.pub_note_id_to_title[publication['id']] = publication['content'].get('title', "")
                 self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract', "")
-                if publication['id'] in output_dict:
-                    output_dict[publication['id']]["authors"].append(profile_id)
-                else:
-                    paper_ids_list.append(publication['id'])
-                    output_dict[publication['id']] = {"title": self.pub_note_id_to_title[publication['id']],
-                                                      "abstract": self.pub_note_id_to_abstract[publication['id']],
-                                                      "paper_id": publication["id"],
-                                                      "authors": [profile_id]}
+                if not self.redis.exists(publication['id']):
+                    if publication['id'] in output_dict:
+                        output_dict[publication['id']]["authors"].append(profile_id)
+                    else:
+                        paper_ids_list.append(publication['id'])
+                        output_dict[publication['id']] = {"title": self.pub_note_id_to_title[publication['id']],
+                                                          "abstract": self.pub_note_id_to_abstract[publication['id']],
+                                                          "paper_id": publication["id"],
+                                                          "authors": [profile_id]}
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_data.json"), 'w') as f_out:
             json.dump(output_dict, f_out, indent=1)
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt"), 'w') as f_out:
@@ -278,7 +302,8 @@ class SpecterPredictor:
                                         publications_path,
                                         self.batch_size,
                                         False,
-                                        False)
+                                        False,
+                                        store_redis=True)
         manager.run()
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
@@ -304,14 +329,32 @@ class SpecterPredictor:
             print(len(bad_id_set))
             return emb_tensor, id_list, bad_id_set
 
-        with open(publications_path) as f_in:
-            print('Loading cached publications...')
-            paper_emb_train, train_id_list, train_bad_id_set = load_emb_file(f_in)
-            paper_num_train = len(train_id_list)
+        def load_from_redis():
+            paper_emb_size_default = 768
+            id_list = self.pub_note_id_to_title.keys()
+            emb_list = []
+            bad_id_set = set()
+            con = redisai.Client(host='localhost', port=6379)
+            for paper_id in id_list:
+                try:
+                    paper_emb = con.tensorget(key=paper_id, as_numpy_mutable=True)
+                    assert len(paper_emb) == paper_emb_size_default
+                    emb_list.append(paper_emb)
+                except Exception as e:
+                    bad_id_set.add(paper_id)
 
-            paper_id2train_idx = {}
-            for idx, paper_id in enumerate(train_id_list):
-                paper_id2train_idx[paper_id] = idx
+            emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
+            emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
+            print(len(bad_id_set))
+            return emb_tensor, id_list, bad_id_set
+
+        print('Loading cached publications...')
+        paper_emb_train, train_id_list, train_bad_id_set = load_from_redis()
+        paper_num_train = len(train_id_list)
+
+        paper_id2train_idx = {}
+        for idx, paper_id in enumerate(train_id_list):
+            paper_id2train_idx[paper_id] = idx
 
         with open(submissions_path) as f_in:
             print('Loading cached submissions...')
