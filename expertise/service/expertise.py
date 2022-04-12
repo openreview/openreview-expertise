@@ -177,7 +177,7 @@ class ExpertiseService(object):
                 self._filter_config(config)
                 result['results'].append(
                     {
-                        'job_id': job_dir,
+                        'job_id': config.job_dir,
                         'name': config.name,
                         'status': status,
                         'description': description,

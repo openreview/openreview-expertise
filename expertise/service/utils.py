@@ -386,7 +386,7 @@ class JobConfig(object):
 
             if not os.path.isdir(current_config.job_dir):
                 print(f"No files found {job_key} - skipping")
-                JobConfig.remove_job(user_id, current_config.job_id)
+                JobConfig.remove_job(user_id, current_config.job_id, redis_args)
                 continue
 
             if current_config.user_id == user_id or user_id in SUPERUSER_IDS:
