@@ -153,6 +153,11 @@ MFR_CHECKPOINT_DIR = '../expertise-utils/multifacet_recommender/mfr_model_checkp
 
 See `/expertise/service/README.md` for documentation on the API design and endpoints.
 
+When SPECTER is run as a service, it creates ~1GB of extra files get stored in a temporary directory and are not automatically cleaned up. In order to cleanup these files, you can run the following command. **WARNING**: Any currently running jobs have the potential to fail when performing this operation
+```
+./clean_tmp
+```
+
 ### Configuration
 Configuration files are located in `/expertise/service/config`. When started, the server will search for a `.cfg` file in `/expertise/service/config` that matches the environment variable `FLASK_ENV`, and will default to the values in `default.cfg`.
 

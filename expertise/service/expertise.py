@@ -153,37 +153,39 @@ class ExpertiseService(object):
 
         return job_id
 
-    def get_expertise_all_status(self, user_id):
+    def get_expertise_all_status(self, user_id, query_params):
         """
         Searches the server for all jobs submitted by a user
 
         :param user_id: The ID of the user accessing the data
         :type user_id: str
 
-        :param job_id: Optional ID of the specific job to look up
-        :type job_id: str
+        :param query_params: Query parameters of the GET request
+        :type query_params: dict
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
         result = {'results': []}
+        search_status = query_params.get('status')
 
         for config in JobConfig.load_all_jobs(user_id, self.redis_args):
             status = config.status
             description = config.description
-            
-            # Append filtered config to the status
-            self._filter_config(config)
-            result['results'].append(
-                {
-                    'job_id': config.job_id,
-                    'name': config.name,
-                    'status': status,
-                    'description': description,
-                    'cdate': config.cdate,
-                    'mdate': config.mdate,
-                    'config': config.to_json()
-                }
-            )
+
+            if not search_status or status.lower().startswith(search_status.lower()):
+                # Append filtered config to the status
+                self._filter_config(config)
+                result['results'].append(
+                    {
+                        'job_id': job_dir,
+                        'name': config.name,
+                        'status': status,
+                        'description': description,
+                        'cdate': config.cdate,
+                        'mdate': config.mdate,
+                        'config': config.to_json()
+                    }
+                )
         return result
 
     def get_expertise_status(self, user_id, job_id):

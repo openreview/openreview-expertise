@@ -320,6 +320,10 @@ class TestExpertiseService():
         # assert response[0]['status'] == 'Queued'
         # assert response[0]['description'] == 'Server received config and allocated space'
 
+        # Check that the search returns an empty list before the job is completed when searching for completed
+        response = test_client.get('/expertise/status/all', query_string={'status': 'Completed'}).json['results']
+        assert len(response) == 0
+
         # Query until job is complete
         response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
         start_time = time.time()
@@ -346,6 +350,16 @@ class TestExpertiseService():
         assert 'baseurl' not in returned_config
         assert 'user_id' not in returned_config
         assert job_id is not None
+
+        # After completion, check for non-empty completed list
+        response = test_client.get('/expertise/status/all', query_string={'status': 'Completed'}).json['results']
+        assert len(response) == 1
+        assert response[0]['status'] == 'Completed'
+        assert response[0]['name'] == 'test_run'
+
+        response = test_client.get('/expertise/status/all', query_string={'status': 'Running'}).json['results']
+        assert len(response) == 0
+
         openreview_context['job_id'] = job_id
 
     def test_get_results_by_job_id(self, openreview_context, celery_session_app, celery_session_worker):
