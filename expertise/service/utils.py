@@ -405,7 +405,7 @@ class JobConfig(object):
             raise openreview.OpenReviewException('Job not found')        
         config = pickle.loads(db.get(job_key))
         if not os.path.isdir(config.job_dir):
-            JobConfig.remove_job(user_id, job_id)
+            JobConfig.remove_job(user_id, job_id, redis_args)
             raise openreview.OpenReviewException('Job not found')
 
         if config.user_id != user_id and user_id not in SUPERUSER_IDS:

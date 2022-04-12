@@ -1,0 +1,54 @@
+{
+    "name": "test_run",
+    "user_id": "test_user1@mail.com",
+    "job_id": "BaxDa",
+    "baseurl": "http://localhost:3000",
+    "baseurl_v2": "http://localhost:3000",
+    "job_dir": "./tests/jobs/BaxDa",
+    "cdate": 1649767324961,
+    "mdate": 1649767324961,
+    "match_group": [
+        "ABC.cc"
+    ],
+    "dataset": {
+        "directory": "./tests/jobs/BaxDa"
+    },
+    "model": "specter+mfr",
+    "paper_id": "KHnr1r7h",
+    "model_params": {
+        "use_title": false,
+        "use_abstract": true,
+        "average_score": true,
+        "max_score": false,
+        "skip_specter": false,
+        "specter_batch_size": 16,
+        "mfr_batch_size": 50,
+        "use_cuda": false,
+        "name": "specter+mfr",
+        "work_dir": "./tests/jobs/BaxDa",
+        "scores_path": "./tests/jobs/BaxDa",
+        "publications_path": "./tests/jobs/BaxDa",
+        "submissions_path": "./tests/jobs/BaxDa",
+        "specter_dir": "../expertise-utils/specter/",
+        "mfr_feature_vocab_file": "../expertise-utils/multifacet_recommender/feature_vocab_file",
+        "mfr_checkpoint_dir": "../expertise-utils/multifacet_recommender/mfr_model_checkpoint/"
+    },
+    "api_request": {
+        "name": "test_run",
+        "entityA": {
+            "type": "Group",
+            "memberOf": "ABC.cc"
+        },
+        "entityB": {
+            "type": "Note",
+            "id": "KHnr1r7h"
+        },
+        "model": {
+            "name": "specter+mfr",
+            "useTitle": false,
+            "useAbstract": true,
+            "skipSpecter": false,
+            "scoreComputation": "avg"
+        }
+    }
+}
