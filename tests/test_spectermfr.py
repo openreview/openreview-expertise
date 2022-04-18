@@ -53,15 +53,15 @@ def test_smfr_scores(tmp_path, create_smfr):
     publications_path.mkdir()
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
-    smfrModel.embed_publications(publications_path.joinpath('pub2vec.jsonl'),
-            mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+    smfrModel.embed_publications(mfr_publications_path=None,
+                                 skip_specter=config['model_params'].get('skip_specter', False))
     smfrModel.embed_submissions(submissions_path.joinpath('sub2vec.jsonl'),
             mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()
     all_scores = smfrModel.all_scores(
-        specter_publications_path=publications_path.joinpath('pub2vec.jsonl'),
+        specter_publications_path=None,
         mfr_publications_path=None,
         specter_submissions_path=submissions_path.joinpath('sub2vec.jsonl'),
         mfr_submissions_path=None,
@@ -88,15 +88,15 @@ def test_sparse_scores(tmp_path, create_smfr):
     publications_path.mkdir()
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
-    smfrModel.embed_publications(publications_path.joinpath('pub2vec.jsonl'),
-            mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+    smfrModel.embed_publications(mfr_publications_path=None,
+                                 skip_specter=config['model_params'].get('skip_specter', False))
     smfrModel.embed_submissions(submissions_path.joinpath('sub2vec.jsonl'),
             mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()
     all_scores = smfrModel.all_scores(
-        specter_publications_path=publications_path.joinpath('pub2vec.jsonl'),
+        specter_publications_path=None,
         mfr_publications_path=None,
         specter_submissions_path=submissions_path.joinpath('sub2vec.jsonl'),
         mfr_submissions_path=None,

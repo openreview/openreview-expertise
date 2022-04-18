@@ -67,7 +67,7 @@ class _PredictManagerCustom(_PredictManager):
                                                     has_dataset_reader)
         self.total_size = int(sum([1 for _ in open(self._input_file)]) / self._batch_size)
         self._store_redis = store_redis
-        self._redis_con = redisai.Client(host='localhost', port=6379)
+        self._redis_con = redisai.Client(host='localhost', port=6379, db=5)
 
     def run(self) -> None:
         has_reader = self._dataset_reader is not None
@@ -162,7 +162,7 @@ class SpecterPredictor:
         self.sparse_value = sparse_value
         if not os.path.exists(self.work_dir) and not os.path.isdir(self.work_dir):
             os.makedirs(self.work_dir)
-        self.redis = redis.Redis()
+        self.redis = redis.Redis(db=5)
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
@@ -334,7 +334,7 @@ class SpecterPredictor:
             id_list = self.pub_note_id_to_title.keys()
             emb_list = []
             bad_id_set = set()
-            con = redisai.Client(host='localhost', port=6379)
+            con = redisai.Client(host='localhost', port=6379, db=5)
             for paper_id in id_list:
                 try:
                     paper_emb = con.tensorget(key=paper_id, as_numpy_mutable=True)
@@ -345,7 +345,9 @@ class SpecterPredictor:
 
             emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
             emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
-            print(len(bad_id_set))
+            if bad_id_set:
+                print(f"No Embedding found for {len(bad_id_set)} Papers: ")
+                print(bad_id_set)
             return emb_tensor, id_list, bad_id_set
 
         print('Loading cached publications...')
