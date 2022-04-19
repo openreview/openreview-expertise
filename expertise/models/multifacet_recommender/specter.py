@@ -14,7 +14,6 @@ import torch
 from tqdm import tqdm
 from typing import Optional
 import redisai
-import redis
 import numpy as np
 
 import logging
@@ -62,12 +61,15 @@ class _PredictManagerCustom(_PredictManager):
                  batch_size: int,
                  print_to_console: bool,
                  has_dataset_reader: bool,
-                 store_redis: bool = False) -> None:
+                 store_redis: bool = False,
+                 redis_con=None) -> None:
         super(_PredictManagerCustom, self).__init__(predictor, input_file, output_file, batch_size, print_to_console,
                                                     has_dataset_reader)
         self.total_size = int(sum([1 for _ in open(self._input_file)]) / self._batch_size)
         self._store_redis = store_redis
-        self._redis_con = redisai.Client(host='localhost', port=6379, db=5)
+        if store_redis:
+            assert redis_con is not None, "Can't store in Redis, No redis connection provided"
+        self._redis_con = redis_con
 
     def run(self) -> None:
         has_reader = self._dataset_reader is not None
@@ -87,7 +89,6 @@ class _PredictManagerCustom(_PredictManager):
 
         if self._output_file is not None:
             self._output_file.close()
-        self._redis_con.close()
 
     def _maybe_print_to_console_and_file(self,
                                          index: int,
@@ -162,7 +163,7 @@ class SpecterPredictor:
         self.sparse_value = sparse_value
         if not os.path.exists(self.work_dir) and not os.path.isdir(self.work_dir):
             os.makedirs(self.work_dir)
-        self.redis = redis.Redis(db=5)
+        self.redis = redisai.Client(host='localhost', port=6379, db=5)
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
@@ -303,7 +304,8 @@ class SpecterPredictor:
                                         self.batch_size,
                                         False,
                                         False,
-                                        store_redis=True)
+                                        store_redis=True,
+                                        redis_con=self.redis.client())
         manager.run()
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):

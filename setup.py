@@ -38,7 +38,6 @@ setup(
         'redis',
         'pytest-celery',
         'shortuuid',
-        'redis',
         'redisai'
     ],
     zip_safe=False
