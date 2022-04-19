@@ -3,7 +3,7 @@ import openreview, os, json, csv
 from .create_dataset import OpenReviewExpertise
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
-from .utils.utils import aggregate_by_group, cache_group, from_cache
+from .utils.utils import aggregate_by_group
 
 # Move run.py functionality to a function that accepts a config dict
 def execute_expertise(config):
