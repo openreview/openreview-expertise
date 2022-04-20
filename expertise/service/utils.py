@@ -292,6 +292,73 @@ class APIRequest(object):
 
         return body
 
+class RedisDatabase(object):
+    """
+    Communicates with the local Redis instance to store and load jobs
+    """
+    def __init__(self,
+        host=None,
+        port=None,
+        db=None) -> None:
+        self.db = redis.Redis(
+            host = host,
+            port = port,
+            db = db
+        )
+    def save_job(self, job_config):
+        self.db.set(f"job:{job_config.job_id}", pickle.dumps(job_config))
+    
+    def load_all_jobs(self, user_id):
+        """
+        Searches all keys for configs with matching user id
+        If a Redis entry exists but the files do not, remove the entry from Redis and do not return this job
+        Returns empty list if no jobs found
+        """
+        configs = []
+
+        for job_key in self.db.scan_iter("job:*"):
+            current_config = pickle.loads(self.db.get(job_key))
+
+            if not os.path.isdir(current_config.job_dir):
+                print(f"No files found {job_key} - skipping")
+                self.remove_job(user_id, current_config.job_id)
+                continue
+
+            if current_config.user_id == user_id or user_id in SUPERUSER_IDS:
+                configs.append(current_config)
+
+        return configs
+
+    def load_job(self, job_id, user_id):
+        """
+        Retrieves a config based on job id
+        """
+        job_key = f"job:{job_id}"
+
+        if not self.db.exists(job_key):
+            raise openreview.OpenReviewException('Job not found')        
+        config = pickle.loads(self.db.get(job_key))
+        if not os.path.isdir(config.job_dir):
+            JobConfig.remove_job(user_id, job_id)
+            raise openreview.OpenReviewException('Job not found')
+
+        if config.user_id != user_id and user_id not in SUPERUSER_IDS:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
+
+        return config
+    
+    def remove_job(self, user_id, job_id):
+        job_key = f"job:{job_id}"
+
+        if not self.db.exists(job_key):
+            raise openreview.OpenReviewException('Job not found')
+        config = pickle.loads(self.db.get(job_key))
+        if config.user_id != user_id and user_id not in SUPERUSER_IDS:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to modify job')
+
+        self.db.delete(job_key)
+        return config
+
 class JobConfig(object):
     """
     Helps translate fields from API requests to fields usable by the expertise system

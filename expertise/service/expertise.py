@@ -9,7 +9,7 @@ from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
 
-from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS
+from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase
 
 user_index_file_lock = Lock()
 class ExpertiseService(object):
@@ -23,6 +23,11 @@ class ExpertiseService(object):
         self.specter_dir = config['SPECTER_DIR']
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
         self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
+        self.redis = RedisDatabase(
+            host = config['REDIS_ADDR'],
+            port = config['REDIS_PORT'],
+            db = config['REDIS_DB']
+        )
         self.redis_args = {
             'host': config['REDIS_ADDR'],
             'port': config['REDIS_PORT'],
@@ -149,7 +154,7 @@ class ExpertiseService(object):
             task_id=job_id
         )
         self.logger.info(f"\nconf: {config.to_json()}\n")
-        config.save(self.redis_args)
+        self.redis.save_job(config)
 
         return job_id
 
@@ -168,7 +173,7 @@ class ExpertiseService(object):
         result = {'results': []}
         search_status = query_params.get('status')
 
-        for config in JobConfig.load_all_jobs(user_id, self.redis_args):
+        for config in self.redis.load_all_jobs(user_id):
             status = config.status
             description = config.description
 
@@ -201,7 +206,7 @@ class ExpertiseService(object):
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
-        config = JobConfig.load_job(job_id, user_id, self.redis_args)
+        config = self.redis.load_job(job_id, user_id)
         status = config.status
         description = config.description
         
@@ -236,7 +241,7 @@ class ExpertiseService(object):
         result = {'results': []}
 
         # Get and validate profile ID
-        config = JobConfig.load_job(job_id, user_id, self.redis_args)
+        config = self.redis.load_job(job_id, user_id)
 
         # Fetch status
         status = config.status
@@ -306,7 +311,7 @@ class ExpertiseService(object):
 
         :returns: Filtered config of the job to be deleted
         """
-        config = JobConfig.load_job(job_id, user_id, self.redis_args)
+        config = self.redis.load_job(job_id, user_id)
         
         # Clear directory and Redis entry
         self.logger.info(f"Deleting {config.job_dir} for {user_id}")
