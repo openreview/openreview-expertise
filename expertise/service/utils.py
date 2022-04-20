@@ -299,12 +299,16 @@ class RedisDatabase(object):
     def __init__(self,
         host=None,
         port=None,
-        db=None) -> None:
-        self.db = redis.Redis(
-            host = host,
-            port = port,
-            db = db
-        )
+        db=None,
+        connection_pool=None) -> None:
+        if not connection_pool:
+            self.db = redis.Redis(
+                host = host,
+                port = port,
+                db = db
+            )
+        else:
+            self.db = redis.Redis(connection_pool=connection_pool)
     def save_job(self, job_config):
         self.db.set(f"job:{job_config.job_id}", pickle.dumps(job_config))
     
