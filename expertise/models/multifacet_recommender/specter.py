@@ -16,6 +16,8 @@ from typing import Optional
 import redisai
 import numpy as np
 
+from expertise.service.server import redis_conn_pool
+
 import logging
 logging.getLogger('allennlp.common.params').disabled = True
 logging.getLogger('allennlp.common.from_params').disabled = True
@@ -163,7 +165,7 @@ class SpecterPredictor:
         self.sparse_value = sparse_value
         if not os.path.exists(self.work_dir) and not os.path.isdir(self.work_dir):
             os.makedirs(self.work_dir)
-        self.redis = redisai.Client(host='localhost', port=6379, db=5)
+        self.redis = redisai.Client(connection_pool=redis_conn_pool)
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
@@ -336,10 +338,9 @@ class SpecterPredictor:
             id_list = self.pub_note_id_to_title.keys()
             emb_list = []
             bad_id_set = set()
-            con = redisai.Client(host='localhost', port=6379, db=5)
             for paper_id in id_list:
                 try:
-                    paper_emb = con.tensorget(key=paper_id, as_numpy_mutable=True)
+                    paper_emb = self.redis.tensorget(key=paper_id, as_numpy_mutable=True)
                     assert len(paper_emb) == paper_emb_size_default
                     emb_list.append(paper_emb)
                 except Exception as e:

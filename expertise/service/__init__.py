@@ -2,6 +2,8 @@ import os
 import flask
 import logging, logging.handlers
 from celery import Celery
+import redis
+
 
 def configure_logger(app):
     '''
@@ -33,6 +35,7 @@ def configure_logger(app):
 
     return app.logger
 
+
 def create_app(config=None):
     '''
     Implements the "app factory" pattern, recommended by Flask documentation.
@@ -61,6 +64,7 @@ def create_app(config=None):
 
     return app
 
+
 def create_celery(app):
     """
     Initializes a celery application using Flask App
@@ -73,3 +77,11 @@ def create_celery(app):
     )
 
     return celery
+
+
+def create_redis(app):
+    """
+    Initializes a redis connection pool
+    """
+    pool = redis.ConnectionPool(host='localhost', port=6379, db=5)
+    return pool
