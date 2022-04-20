@@ -1,11 +1,14 @@
 from unittest.mock import patch, MagicMock
 from pathlib import Path
+
+import numpy
 import openreview
 import json
 import pytest
 import numpy as np
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import multifacet_recommender
+import redisai
 
 @pytest.fixture
 def create_smfr():
@@ -33,7 +36,29 @@ def create_smfr():
         return ens_predictor
     return simple_smfr
 
-def test_smfr_scores(tmp_path, create_smfr):
+@pytest.fixture
+def create_specter():
+    def simple_specter(config):
+        archives_dataset = ArchivesDataset(archives_path=Path('tests/data/archives'))
+        submissions_dataset = SubmissionsDataset(submissions_path=Path('tests/data/submissions'))
+
+        spcter_predictor = multifacet_recommender.SpecterPredictor(
+            specter_dir=config['model_params'].get('specter_dir', "../expertise-utils/specter/"),
+            work_dir=config['model_params'].get('work_dir', "./"),
+            average_score=config['model_params'].get('average_score', False),
+            max_score=config['model_params'].get('max_score', True),
+            batch_size=config['model_params'].get('specter_batch_size', 16),
+            use_cuda=config['model_params'].get('use_cuda', False),
+            sparse_value=config['model_params'].get('sparse_value')
+        )
+
+        spcter_predictor.set_archives_dataset(archives_dataset)
+        spcter_predictor.set_submissions_dataset(submissions_dataset)
+        return spcter_predictor
+    return simple_specter
+
+
+def test_smfr_scores(tmp_path, create_smfr, create_specter):
     config = {
         'name': 'test_spectermfr',
         'model_params': {
@@ -47,6 +72,9 @@ def test_smfr_scores(tmp_path, create_smfr):
         }
     }
 
+    redis_con = redisai.Client(host='localhost', port=6379, db=5)
+    redis_con.flushdb()
+    specterModel = create_specter(config)
     smfrModel = create_smfr(config)
 
     publications_path = tmp_path / 'publications'
@@ -67,6 +95,15 @@ def test_smfr_scores(tmp_path, create_smfr):
         mfr_submissions_path=None,
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
+
+    specterModel.embed_publications(publications_path.joinpath('pub2vec.jsonl'), store_redis=False)
+    with open(publications_path.joinpath('pub2vec.jsonl')) as f_in:
+        for line in f_in:
+            paper_data = json.loads(line.rstrip())
+            paper_id = paper_data['paper_id']
+            paper_embedding = numpy.array(paper_data['embedding'])
+            paper_emb_redis = redis_con.tensorget(paper_id, as_numpy_mutable=True)
+            assert numpy.all(paper_emb_redis == paper_embedding)
 
 def test_sparse_scores(tmp_path, create_smfr):
     config = {

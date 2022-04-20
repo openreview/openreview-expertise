@@ -261,7 +261,7 @@ class SpecterPredictor:
                                         False)
         manager.run()
 
-    def embed_publications(self, publications_path=None):
+    def embed_publications(self, publications_path=None, store_redis=True):
         print('Embedding publications...')
         metadata_file = os.path.join(self.work_dir, "specter_reviewer_paper_data.json")
         ids_file = os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt")
@@ -306,7 +306,7 @@ class SpecterPredictor:
                                         self.batch_size,
                                         False,
                                         False,
-                                        store_redis=True,
+                                        store_redis=store_redis,
                                         redis_con=self.redis.client())
         manager.run()
 
