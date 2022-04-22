@@ -83,7 +83,7 @@ class ExpertiseService(object):
         with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
             json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
         self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
-        config.save(self.redis_args)
+        self.redis.save_job(config)
 
         return config, self.client.token
 
@@ -295,7 +295,7 @@ class ExpertiseService(object):
         if delete_on_get:
             self.logger.info(f'Deleting {config.job_dir}')
             shutil.rmtree(config.job_dir)
-            JobConfig.remove_job(user_id, job_id, self.redis_args)
+            self.redis.remove_job(user_id, job_id)
 
         return result
 
@@ -319,7 +319,7 @@ class ExpertiseService(object):
             shutil.rmtree(config.job_dir)
         else:
             self.logger.info(f"No files found - only removing Redis entry")
-        JobConfig.remove_job(user_id, job_id, self.redis_args)
+        self.redis.remove_job(user_id, job_id)
 
         # Return filtered config
         self._filter_config(config)

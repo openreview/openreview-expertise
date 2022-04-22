@@ -12,7 +12,7 @@ import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import elmo
-from expertise.service.utils import JobConfig
+from expertise.service.utils import JobConfig, RedisDatabase
 
 
 class TestExpertiseService():
@@ -79,25 +79,25 @@ class TestExpertiseService():
 
     def test_on_redis_not_disk(self):
         # Load an example config and store it in Redis with no files
-        redis_args = {
-            'host': 'localhost',
-            'port': 6379,
-            'db': 10
-        }
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10
+        )
 
         # Find job using all jobs
         with open('./tests/data/example_config.json') as f:
             test_config = JobConfig.from_json(json.load(f))
-        test_config.save(redis_args)
-        returned_configs = JobConfig.load_all_jobs('test_user1@mail.com', redis_args)
+        redis.save_job(test_config)
+        returned_configs = redis.load_all_jobs('test_user1@mail.com')
         assert returned_configs == []
 
          # Find job using job id
         with open('./tests/data/example_config.json') as f:
             test_config = JobConfig.from_json(json.load(f))
-        test_config.save(redis_args)
+        redis.save_job(test_config)
         try:
-            returned_configs = JobConfig.load_job(test_config.job_id, 'test_user1@mail.com', redis_args)
+            returned_configs = redis.load_job(test_config.job_id, 'test_user1@mail.com')
         except openreview.OpenReviewException as e:
             assert str(e) == 'Job not found'
 
