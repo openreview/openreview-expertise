@@ -2,6 +2,10 @@
 
 A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
 
+## Prerequisites
+
+This repository requires [RedisAI](https://oss.redis.com/redisai/) to be installed. We recommend to use Docker image `redislabs/redisai`, however you can install it directly from the source code as explained [here](https://oss.redis.com/redisai/quickstart/).
+
 ## Installation
 
 This repository only supports Python 3.6 and above.

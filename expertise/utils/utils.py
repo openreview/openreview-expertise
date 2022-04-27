@@ -1,6 +1,5 @@
 from __future__ import print_function, absolute_import, unicode_literals
 import codecs
-import shutil
 import sys
 import itertools
 import string
