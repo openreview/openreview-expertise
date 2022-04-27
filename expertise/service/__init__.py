@@ -1,9 +1,9 @@
 import os
 import flask
 import logging, logging.handlers
-from celery import Celery
 import redis
 
+from celery import Celery
 
 def configure_logger(app):
     '''
@@ -78,10 +78,13 @@ def create_celery(app):
 
     return celery
 
-
 def create_redis(app):
     """
     Initializes a redis connection pool
     """
-    pool = redis.ConnectionPool(host='localhost', port=6379, db=5)
+    pool = redis.ConnectionPool(
+        host=app.config['REDIS_ADDR'],
+        port=app.config['REDIS_PORT'],
+        db=app.config['REDIS_DB']
+    )
     return pool

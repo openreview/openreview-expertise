@@ -4,10 +4,13 @@ import os
 import time
 import json
 import re
+import redis, pickle
 from unittest.mock import MagicMock
 from enum import Enum
 
 import re
+SUPERUSER_IDS = ['openreview.net']
+
 # -----------------
 # -- Mock Client --
 # -----------------
@@ -277,7 +280,88 @@ class APIRequest(object):
         # Check for extra entity fields
         if len(source_entity.keys()) > 0:
             raise openreview.OpenReviewException(f"Bad request: unexpected fields in {entity_id}: {list(source_entity.keys())}")
+        
+    def to_json(self):
+        body = {
+            'name': self.name,
+            'entityA': self.entityA,
+            'entityB': self.entityB,
+        }
+        if len(self.model.keys()) > 0:
+            body['model'] = self.model
 
+        return body
+
+class RedisDatabase(object):
+    """
+    Communicates with the local Redis instance to store and load jobs
+    """
+    def __init__(self,
+        host=None,
+        port=None,
+        db=None,
+        connection_pool=None) -> None:
+        if not connection_pool:
+            self.db = redis.Redis(
+                host = host,
+                port = port,
+                db = db
+            )
+        else:
+            self.db = redis.Redis(connection_pool=connection_pool)
+    def save_job(self, job_config):
+        self.db.set(f"job:{job_config.job_id}", pickle.dumps(job_config))
+    
+    def load_all_jobs(self, user_id):
+        """
+        Searches all keys for configs with matching user id
+        If a Redis entry exists but the files do not, remove the entry from Redis and do not return this job
+        Returns empty list if no jobs found
+        """
+        configs = []
+
+        for job_key in self.db.scan_iter("job:*"):
+            current_config = pickle.loads(self.db.get(job_key))
+
+            if not os.path.isdir(current_config.job_dir):
+                print(f"No files found {job_key} - skipping")
+                self.remove_job(user_id, current_config.job_id)
+                continue
+
+            if current_config.user_id == user_id or user_id in SUPERUSER_IDS:
+                configs.append(current_config)
+
+        return configs
+
+    def load_job(self, job_id, user_id):
+        """
+        Retrieves a config based on job id
+        """
+        job_key = f"job:{job_id}"
+
+        if not self.db.exists(job_key):
+            raise openreview.OpenReviewException('Job not found')        
+        config = pickle.loads(self.db.get(job_key))
+        if not os.path.isdir(config.job_dir):
+            self.remove_job(user_id, job_id)
+            raise openreview.OpenReviewException('Job not found')
+
+        if config.user_id != user_id and user_id not in SUPERUSER_IDS:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
+
+        return config
+    
+    def remove_job(self, user_id, job_id):
+        job_key = f"job:{job_id}"
+
+        if not self.db.exists(job_key):
+            raise openreview.OpenReviewException('Job not found')
+        config = pickle.loads(self.db.get(job_key))
+        if config.user_id != user_id and user_id not in SUPERUSER_IDS:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to modify job')
+
+        self.db.delete(job_key)
+        return config
 
 class JobConfig(object):
     """
@@ -322,6 +406,8 @@ class JobConfig(object):
         self.paper_id = paper_id
         self.model_params = model_params
 
+        self.api_request = None
+
     def to_json(self):
         pre_body = {
             'name': self.name,
@@ -332,8 +418,6 @@ class JobConfig(object):
             'job_dir': self.job_dir,
             'cdate': self.cdate,
             'mdate': self.mdate,
-            'status': self.status,
-            'description': self.description,
             'match_group': self.match_group,
             'alternate_match_group': self.alternate_match_group,
             'dataset': self.dataset,
@@ -353,10 +437,6 @@ class JobConfig(object):
                 body[key] = val
 
         return body
-
-    def save(self):
-        with open(os.path.join(self.job_dir, 'config.json'), 'w+') as f:
-            json.dump(self.to_json(), f, ensure_ascii=False, indent=4)
 
     def from_request(api_request: APIRequest,
         starting_config = {},
@@ -379,6 +459,7 @@ class JobConfig(object):
         config.job_id = shortuuid.ShortUUID().random(length=5)
         config.baseurl = server_config['OPENREVIEW_BASEURL']
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
+        config.api_request = api_request    
 
         root_dir = os.path.join(working_dir, config.job_id)
         config.dataset = starting_config.get('dataset', {})

@@ -12,6 +12,7 @@ import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import elmo
+from expertise.service.utils import JobConfig, RedisDatabase
 
 
 class TestExpertiseService():
@@ -75,6 +76,53 @@ class TestExpertiseService():
                 "test_client": app.test_client(),
                 "config": config
             }
+
+    def test_on_redis_not_disk(self):
+        # Load an example config and store it in Redis with no files
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10
+        )
+
+        # Find job using all jobs
+        test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com')
+        redis.save_job(test_config)
+        returned_configs = redis.load_all_jobs('test_user1@mail.com')
+        assert returned_configs == []
+
+        # Find job using job id
+        test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com')
+        redis.save_job(test_config)
+        try:
+            returned_configs = redis.load_job(test_config.job_id, 'test_user1@mail.com')
+        except openreview.OpenReviewException as e:
+            assert str(e) == 'Job not found'
+
+    def test_on_redis_on_disk(self):
+        # Load an example config and store it in Redis with no files
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10
+        )
+
+        # Find job using all jobs
+        #with open('./tests/data/example_config.json') as f:
+        test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com')
+        redis.save_job(test_config)
+        os.makedirs('./tests/jobs/abcde')
+        returned_configs = redis.load_all_jobs('test_user1@mail.com')
+        assert len(returned_configs) == 1
+        assert returned_configs[0].user_id == 'test_user1@mail.com'
+        assert returned_configs[0].job_id == 'abcde'
+
+        # Find job using job id
+        returned_config = redis.load_job(test_config.job_id, 'test_user1@mail.com')
+        assert returned_config.user_id == 'test_user1@mail.com'
+        assert returned_config.job_id == 'abcde'
+
+        shutil.rmtree(f"./tests/jobs/")
 
     def test_request_expertise_with_no_config(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
@@ -452,8 +500,6 @@ class TestExpertiseService():
         # Clean up error job by calling the delete endpoint
         response = test_client.get('/expertise/delete', query_string={'job_id': f"{openreview_context['job_id']}"}).json
         assert response['name'] == 'test_run'
-        assert response['status'].strip() == 'Error'
-        assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
         assert response['cdate'] <= response['mdate']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     
