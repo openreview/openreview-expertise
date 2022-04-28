@@ -266,7 +266,8 @@ class SpecterPredictor:
         manager.run()
 
     def embed_publications(self, publications_path=None):
-        assert publications_path or self.redis, "Either publications_path must be given or use_redis must be set to true"
+        if not self.use_redis:
+            assert publications_path, "Either publications_path must be given or use_redis must be set to true"
         print('Embedding publications...')
         metadata_file = os.path.join(self.work_dir, "specter_reviewer_paper_data.json")
         ids_file = os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt")

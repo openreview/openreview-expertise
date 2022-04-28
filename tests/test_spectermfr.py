@@ -84,7 +84,6 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
     smfrModel.embed_publications(mfr_publications_path=None,
-                                 specter_publications_path=publications_path.joinpath('pub2vec.jsonl'),
                                  skip_specter=config['model_params'].get('skip_specter', False))
     smfrModel.embed_submissions(submissions_path.joinpath('sub2vec.jsonl'),
             mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
@@ -119,7 +118,8 @@ def test_sparse_scores(tmp_path, create_smfr):
             'average_score': True,
             'max_score': False,
             'work_dir': tmp_path,
-            'sparse_value': 1
+            'sparse_value': 1,
+            'use_redis': True
         }
     }
     smfrModel = create_smfr(config)
