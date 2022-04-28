@@ -28,7 +28,8 @@ def create_smfr():
             mfr_batch_size=config['model_params'].get('mfr_batch_size', 50),
             merge_alpha=config['model_params'].get('merge_alpha', 0.8),
             use_cuda=config['model_params'].get('use_cuda', False),
-            sparse_value=config['model_params'].get('sparse_value')
+            sparse_value=config['model_params'].get('sparse_value'),
+            use_redis=config['model_params'].get('use_redis', False)
         )
 
         ens_predictor.set_archives_dataset(archives_dataset)
@@ -49,7 +50,8 @@ def create_specter():
             max_score=config['model_params'].get('max_score', True),
             batch_size=config['model_params'].get('specter_batch_size', 16),
             use_cuda=config['model_params'].get('use_cuda', False),
-            sparse_value=config['model_params'].get('sparse_value')
+            sparse_value=config['model_params'].get('sparse_value'),
+            use_redis=config['model_params'].get('use_redis', False)
         )
 
         spcter_predictor.set_archives_dataset(archives_dataset)
@@ -73,8 +75,8 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
     }
 
     redis_con = redisai.Client(host='localhost', port=6379, db=10)
-    redis_con.flushdb()
     specterModel = create_specter(config)
+    config['model_params']['use_redis'] = True
     smfrModel = create_smfr(config)
 
     publications_path = tmp_path / 'publications'
@@ -82,6 +84,7 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
     smfrModel.embed_publications(mfr_publications_path=None,
+                                 specter_publications_path=publications_path.joinpath('pub2vec.jsonl'),
                                  skip_specter=config['model_params'].get('skip_specter', False))
     smfrModel.embed_submissions(submissions_path.joinpath('sub2vec.jsonl'),
             mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
@@ -96,7 +99,7 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
 
-    specterModel.embed_publications(publications_path.joinpath('pub2vec.jsonl'), store_redis=False)
+    specterModel.embed_publications(publications_path.joinpath('pub2vec.jsonl'))
     with open(publications_path.joinpath('pub2vec.jsonl')) as f_in:
         for line in f_in:
             paper_data = json.loads(line.rstrip())

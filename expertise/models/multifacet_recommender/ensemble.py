@@ -53,10 +53,10 @@ class EnsembleModel:
         print("MFR:")
         self.mfr_predictor.embed_submissions(mfr_submissions_path)
 
-    def embed_publications(self, specter_publications_path=None, mfr_publications_path=None, skip_specter=False, store_redis=False):
+    def embed_publications(self, specter_publications_path=None, mfr_publications_path=None, skip_specter=False):
         if not skip_specter:
             print("SPECTER:")
-            self.specter_predictor.embed_publications(specter_publications_path, store_redis)
+            self.specter_predictor.embed_publications(specter_publications_path)
         print("MFR:")
         self.mfr_predictor.embed_publications(mfr_publications_path)
 
