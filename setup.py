@@ -38,7 +38,8 @@ setup(
         'redis',
         'pytest-celery',
         'shortuuid',
-        'redisai'
+        'redisai',
+        'python-dotenv'
     ],
     zip_safe=False
 )

@@ -147,7 +147,7 @@ def predictor_from_archive(archive: Archive, predictor_name: str = None,
 
 class SpecterPredictor:
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None):
+                 sparse_value=None, use_redis=False):
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
@@ -165,7 +165,11 @@ class SpecterPredictor:
         self.sparse_value = sparse_value
         if not os.path.exists(self.work_dir) and not os.path.isdir(self.work_dir):
             os.makedirs(self.work_dir)
-        self.redis = redisai.Client(connection_pool=redis_conn_pool)
+        self.use_redis = use_redis
+        if use_redis:
+            self.redis = redisai.Client(connection_pool=redis_conn_pool)
+        else:
+            self.redis = None
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
@@ -180,7 +184,7 @@ class SpecterPredictor:
                 self.pub_author_ids_to_note_id[profile_id].append(publication['id'])
                 self.pub_note_id_to_title[publication['id']] = publication['content'].get('title', "")
                 self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract', "")
-                if not self.redis.exists(publication['id']):
+                if self.redis is None or not self.redis.exists(publication['id']):
                     if publication['id'] in output_dict:
                         output_dict[publication['id']]["authors"].append(profile_id)
                     else:
@@ -261,7 +265,8 @@ class SpecterPredictor:
                                         False)
         manager.run()
 
-    def embed_publications(self, publications_path=None, store_redis=True):
+    def embed_publications(self, publications_path=None):
+        assert publications_path or self.redis, "Either publications_path must be given or use_redis must be set to true"
         print('Embedding publications...')
         metadata_file = os.path.join(self.work_dir, "specter_reviewer_paper_data.json")
         ids_file = os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt")
@@ -299,15 +304,15 @@ class SpecterPredictor:
                                cuda_device=self.cuda_device,
                                overrides=overrides)
         predictor = predictor_from_archive(archive, self.predictor_name, metadata_file)
-
+        redis_client = self.redis.client() if self.use_redis else None
         manager = _PredictManagerCustom(predictor,
                                         ids_file,
                                         publications_path,
                                         self.batch_size,
                                         False,
                                         False,
-                                        store_redis=store_redis,
-                                        redis_con=self.redis.client())
+                                        store_redis=self.use_redis,
+                                        redis_con=redis_client)
         manager.run()
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
@@ -354,7 +359,11 @@ class SpecterPredictor:
             return emb_tensor, id_list, bad_id_set
 
         print('Loading cached publications...')
-        paper_emb_train, train_id_list, train_bad_id_set = load_from_redis()
+        if self.use_redis:
+            paper_emb_train, train_id_list, train_bad_id_set = load_from_redis()
+        else:
+            with open(publications_path) as f_in:
+                paper_emb_train, train_id_list, train_bad_id_set = load_emb_file(f_in)
         paper_num_train = len(train_id_list)
 
         paper_id2train_idx = {}

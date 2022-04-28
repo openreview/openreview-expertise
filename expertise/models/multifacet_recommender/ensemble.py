@@ -8,7 +8,7 @@ from tqdm import tqdm
 class EnsembleModel:
     def __init__(self, specter_dir, mfr_feature_vocab_file, mfr_checkpoint_dir, mfr_epochs, work_dir,
                  average_score=False, max_score=True, specter_batch_size=16, mfr_batch_size=50, merge_alpha=0.8,
-                 use_cuda=True, sparse_value=None):
+                 use_cuda=True, sparse_value=None, use_redis=False):
         self.specter_predictor = SpecterPredictor(
             specter_dir=specter_dir,
             work_dir=os.path.join(work_dir, "specter"),
@@ -16,7 +16,8 @@ class EnsembleModel:
             max_score=max_score,
             batch_size=specter_batch_size,
             use_cuda=use_cuda,
-            sparse_value=sparse_value
+            sparse_value=sparse_value,
+            use_redis=use_redis
         )
 
         self.mfr_predictor = MultiFacetRecommender(
@@ -52,10 +53,10 @@ class EnsembleModel:
         print("MFR:")
         self.mfr_predictor.embed_submissions(mfr_submissions_path)
 
-    def embed_publications(self, specter_publications_path=None, mfr_publications_path=None, skip_specter=False):
+    def embed_publications(self, specter_publications_path=None, mfr_publications_path=None, skip_specter=False, store_redis=False):
         if not skip_specter:
             print("SPECTER:")
-            self.specter_predictor.embed_publications(specter_publications_path)
+            self.specter_predictor.embed_publications(specter_publications_path, store_redis)
         print("MFR:")
         self.mfr_predictor.embed_publications(mfr_publications_path)
 
