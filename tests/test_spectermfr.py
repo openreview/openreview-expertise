@@ -74,7 +74,7 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
         }
     }
 
-    redis_con = redisai.Client(host='localhost', port=6379, db=10)
+    redis_con = redisai.Client(host='localhost', port=6379, db=11)
     specterModel = create_specter(config)
     config['model_params']['use_redis'] = True
     smfrModel = create_smfr(config)
