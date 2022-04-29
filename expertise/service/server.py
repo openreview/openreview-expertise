@@ -6,5 +6,5 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = create_app()
-redis_conn_pool = create_redis(app)
+redis_config_pool, redis_embeddings_pool = create_redis(app)
 celery_app = create_celery(app)

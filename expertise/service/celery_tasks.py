@@ -5,7 +5,7 @@ import redis
 from .utils import mock_client, JobStatus, JobDescription, JobConfig, RedisDatabase
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from expertise.service.server import celery_app as celery_server
-from expertise.service.server import redis_conn_pool
+from expertise.service.server import redis_config_pool
 import openreview, celery
 
 def update_status(config, new_status, desc=None):
@@ -26,7 +26,7 @@ def update_status(config, new_status, desc=None):
     else:
         config.description = desc
     config.mdate = int(time.time() * 1000)
-    redis_db = RedisDatabase(connection_pool=redis_conn_pool)
+    redis_db = RedisDatabase(connection_pool=redis_config_pool)
     redis_db.save_job(config)
 
 def on_failure_userpaper(self, exc, task_id, args, kwargs, einfo):
@@ -59,7 +59,7 @@ def after_expertise_return(self, status, retval, task_id, args, kwargs, einfo):
     bind=True,
     time_limit=3600 * 24
 )
-def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger, redis_args):
+def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger):
     if token:
         openreview_client = openreview.Client(
             token=token,
@@ -75,7 +75,7 @@ def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger, r
     logger.info('CREATING DATASET')
     execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
     run_expertise.apply_async(
-            (config, logger, redis_args),
+            (config, logger),
             queue='expertise',
     )
     logger.info('FINISHED USERPAPER')
@@ -88,6 +88,6 @@ def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger, r
     bind=True,
     time_limit=3600 * 24
 )
-def run_expertise(self, config: dict, logger: logging.Logger, redis_args):
+def run_expertise(self, config: dict, logger: logging.Logger):
     execute_expertise(config=config.to_json())
 

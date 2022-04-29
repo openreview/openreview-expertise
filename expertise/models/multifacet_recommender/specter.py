@@ -16,7 +16,7 @@ from typing import Optional
 import redisai
 import numpy as np
 
-from expertise.service.server import redis_conn_pool
+from expertise.service.server import redis_embeddings_pool
 
 import logging
 logging.getLogger('allennlp.common.params').disabled = True
@@ -167,7 +167,7 @@ class SpecterPredictor:
             os.makedirs(self.work_dir)
         self.use_redis = use_redis
         if use_redis:
-            self.redis = redisai.Client(connection_pool=redis_conn_pool)
+            self.redis = redisai.Client(connection_pool=redis_embeddings_pool)
         else:
             self.redis = None
 

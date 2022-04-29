@@ -82,9 +82,15 @@ def create_redis(app):
     """
     Initializes a redis connection pool
     """
-    pool = redis.ConnectionPool(
+    config_pool = redis.ConnectionPool(
         host=app.config['REDIS_ADDR'],
         port=app.config['REDIS_PORT'],
-        db=app.config['REDIS_DB']
+        db=app.config['REDIS_CONFIG_DB']
     )
-    return pool
+
+    embedding_pool = redis.ConnectionPool(
+        host=app.config['REDIS_ADDR'],
+        port=app.config['REDIS_PORT'],
+        db=app.config['REDIS_EMBEDDINGS_DB']
+    )
+    return config_pool, embedding_pool
