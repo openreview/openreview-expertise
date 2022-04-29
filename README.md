@@ -2,9 +2,9 @@
 
 A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
 
-## Prerequisites
+## Prerequisites (Optional)
 
-This repository requires [RedisAI](https://oss.redis.com/redisai/) to be installed. We recommend to use Docker image `redislabs/redisai`, however you can install it directly from the source code as explained [here](https://oss.redis.com/redisai/quickstart/).
+If you plan to use expertise regularly, please consider installing [RedisAI](https://oss.redis.com/redisai/) to make the runs more efficient. We recommend to use Docker image `redislabs/redisai`, however you can install it directly from the source code as explained [here](https://oss.redis.com/redisai/quickstart/).
 
 ## Installation
 
@@ -354,6 +354,7 @@ Here is an example:
 - `model_params.average_score` (boolean, defaults to `false`): This parameter specifies that the reviewer is assigned based on the average similarity of the submission to the authored publication embeddings. Exactly one of `model_params.average_score` and `model_params.max_score` must be `true`.
 - `model_params.max_score` (boolean, defaults to `true`): This parameter specifies that the reviewer is assigned based on the max similarity of the submission to the authored publication embeddings. Exactly one of `model_params.average_score` and `model_params.max_score` must be `true`.
 - `model_params.skip_specter`: Since running SPECTER can take a significant amount of time, the vectors are saved in `model_params.submissions_path` and `model_params.publications_path`. The jsonl files will be loaded with all the vectors.
+- `model_params.use_redis` (boolean, defaults to `false`): Needs RedisAI to be installed, set to true to cache embeddings in Redis for recurrent use
 
 Here is an example:
 ```
@@ -372,7 +373,8 @@ Here is an example:
         "batch_size": 16,
         "publications_path": "./",
         "submissions_path": "./",
-        "scores_path": "./"
+        "scores_path": "./",
+        "use_redis": false
     }
 }
 ```
@@ -420,6 +422,7 @@ Here is an example:
 - `model_params.merge_alpha`: Weight for the SPECTER score when linearly mixing with Multifacet-Recommender scores. Defaults to 0.8 (recommended)
 - `model_params.work_dir`: Directory where the intermediate files are stored.
 - `model_params.use_cuda`: Boolean to indicate whether to use GPU (`true`) or CPU (`false`) when running SPECTER and Multifacet-Recommender. Currently, only 1 GPU is supported, but there does not seem to be necessary to have more.
+- `model_params.use_redis` (boolean, defaults to `false`): Needs RedisAI to be installed, set to true to cache embeddings in Redis for recurrent use
 
 Here is an example:
 ```
@@ -443,7 +446,8 @@ Here is an example:
         "merge_alpha": 0.8,
         "work_dir": "./",
         "use_cuda": true,
-        "scores_path": "./"
+        "scores_path": "./",
+        "use_redis": false
     }
 }
 ```
