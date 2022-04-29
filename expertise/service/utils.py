@@ -530,6 +530,7 @@ class JobConfig(object):
         config.model_params['specter_batch_size'] = model_params.get('specter_batch_size', 16)
         config.model_params['mfr_batch_size'] = model_params.get('mfr_batch_size', 50)
         config.model_params['use_cuda'] = model_params.get('use_cuda', False)
+        config.model_params['use_redis'] = model_params.get('use_redis', False)
 
         # Attempt to load any API request model params
         api_model = api_request.model
