@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='openreview-expertise',
-    version='0.1',
+    version='1.0',
     description='OpenReview paper-reviewer affinity modeling',
     url='https://github.com/iesl/openreview-evidence',
     author='Michael Spector, Carlos Mondragon',
@@ -37,7 +37,9 @@ setup(
         'celery',
         'redis',
         'pytest-celery',
-        'shortuuid'
+        'shortuuid',
+        'redisai',
+        'python-dotenv'
     ],
     zip_safe=False
 )

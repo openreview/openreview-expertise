@@ -510,9 +510,11 @@ def aggregate_by_group(config):
             for archive_member, score in archive_scores.items():
                 csvwriter.writerow([archive_member, submission_member, score])
 
+
 '''
 Below are utils from Justin's code
 '''
+
 
 def file_lines(filename):
     with open(filename) as f:

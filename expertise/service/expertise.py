@@ -9,9 +9,8 @@ from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
 
-from .utils import JobConfig, APIRequest, JobDescription, JobStatus
+from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase
 
-SUPERUSER_IDS = ['openreview.net']
 user_index_file_lock = Lock()
 class ExpertiseService(object):
 
@@ -24,6 +23,11 @@ class ExpertiseService(object):
         self.specter_dir = config['SPECTER_DIR']
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
         self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
+        self.redis = RedisDatabase(
+            host = config['REDIS_ADDR'],
+            port = config['REDIS_PORT'],
+            db = config['REDIS_CONFIG_DB']
+        )
 
         # Define expected/required API fields
         self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
@@ -43,6 +47,7 @@ class ExpertiseService(object):
         """
 
         running_config.baseurl = None
+        running_config.baseurl_v2 = None
         running_config.user_id = None
 
     def _prepare_config(self, request) -> dict:
@@ -70,7 +75,10 @@ class ExpertiseService(object):
         # Create directory and config file
         if not os.path.isdir(config.dataset['directory']):
             os.makedirs(config.dataset['directory'])
-        config.save()
+        with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
+            json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
+        self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
+        self.redis.save_job(config)
 
         return config, self.client.token
 
@@ -134,13 +142,14 @@ class ExpertiseService(object):
         config.description = descriptions[JobStatus.QUEUED]
 
         # Config has passed validation - add it to the user index
+        self.logger.info('just before submitting')
         run_userpaper.apply_async(
             (config, token, self.logger),
             queue='userpaper',
             task_id=job_id
         )
         self.logger.info(f"\nconf: {config.to_json()}\n")
-        config.save()
+        self.redis.save_job(config)
 
         return job_id
 
@@ -159,16 +168,7 @@ class ExpertiseService(object):
         result = {'results': []}
         search_status = query_params.get('status')
 
-        job_subdirs = self._get_subdirs(user_id)
-        self.logger.info(f"Searching {job_subdirs} for user {user_id}")
-
-        for job_dir in job_subdirs:
-            search_dir = os.path.join(self.working_dir, job_dir)
-
-            # Load the config file to fetch the job name and status
-            self.logger.info(f"Attempting to load {search_dir}/config.json")
-            with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-                config = JobConfig.from_json(json.load(f))
+        for config in self.redis.load_all_jobs(user_id):
             status = config.status
             description = config.description
 
@@ -177,7 +177,7 @@ class ExpertiseService(object):
                 self._filter_config(config)
                 result['results'].append(
                     {
-                        'job_id': job_dir,
+                        'job_id': config.job_dir,
                         'name': config.name,
                         'status': status,
                         'description': description,
@@ -201,32 +201,14 @@ class ExpertiseService(object):
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
-
-        job_subdirs = self._get_subdirs(user_id)
-        self.logger.info(f"Searching {job_subdirs} for user {user_id}")
-        # If given an ID, only get the status of the single job
-        job_subdirs = [name for name in job_subdirs if name == job_id]
-
-        # Assert that there should only be 1 matching job
-        if len(job_subdirs) > 1:
-            raise OpenReviewException('Single job not found: multiple matching jobs returned')
-        elif len(job_subdirs) == 0:
-            raise OpenReviewException('Job not found')
-
-        job_dir = job_subdirs[0]
-        search_dir = os.path.join(self.working_dir, job_dir)
-
-        # Load the config file to fetch the job name and status
-        self.logger.info(f"Attempting to load {search_dir}/config.json")
-        with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            config = JobConfig.from_json(json.load(f))
+        config = self.redis.load_job(job_id, user_id)
         status = config.status
         description = config.description
         
         # Append filtered config to the status
         self._filter_config(config)
         return {
-            'job_id': job_dir,
+            'job_id': config.job_dir,
             'name': config.name,
             'status': status,
             'description': description,
@@ -253,37 +235,28 @@ class ExpertiseService(object):
         """
         result = {'results': []}
 
-        search_dir = os.path.join(self.working_dir, job_id)
-        self.logger.info(f"Checking if {job_id} belongs to {user_id}")
-        # Check for directory existence
-        if not os.path.isdir(search_dir):
-            raise openreview.OpenReviewException('Job not found')
-
-        # Validate profile ID
-        with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            config = JobConfig.from_json(json.load(f))
-        if user_id != config.user_id and user_id.lower() not in SUPERUSER_IDS:
-            raise OpenReviewException("Forbidden: Insufficient permissions to access job")
+        # Get and validate profile ID
+        config = self.redis.load_job(job_id, user_id)
 
         # Fetch status
         status = config.status
         description = config.description
 
-        self.logger.info(f"Able to access job at {job_id} - checking if scores are found")
+        self.logger.info(f"{user_id} able to access job at {job_id} - checking if scores are found")
         # Assemble scores
         if status != JobStatus.COMPLETED:
-            ## TODO: change it to Job not found
             raise openreview.OpenReviewException(f"Scores not found - status: {status} | description: {description}")
         else:
             # Search for scores files (only non-sparse scores)
-            file_dir, metadata_dir = self._get_score_and_metadata_dir(search_dir)
-            self.logger.info(f"Retrieving scores from {search_dir}")
+            file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
+            self.logger.info(f"Retrieving scores from {config.job_dir}")
             ret_list = []
 
             # Check for output format
             group_group_matching = config.alternate_match_group is not None
 
             if not group_group_matching:
+                # If reviewer-paper matching, use standard 'user' and 'score' keys
                 with open(file_dir, 'r') as csv_file:
                     data_reader = reader(csv_file)
                     for row in data_reader:
@@ -298,7 +271,7 @@ class ExpertiseService(object):
                         })
                 result['results'] = ret_list
             else:
-                # If submission group, group under different keys
+                # If group-group matching, report results using "*_member" keys
                 with open(file_dir, 'r') as csv_file:
                     data_reader = reader(csv_file)
                     for row in data_reader:
@@ -315,8 +288,9 @@ class ExpertiseService(object):
 
         # Clear directory
         if delete_on_get:
-            self.logger.info(f'Deleting {search_dir}')
-            shutil.rmtree(search_dir)
+            self.logger.info(f'Deleting {config.job_dir}')
+            shutil.rmtree(config.job_dir)
+            self.redis.remove_job(user_id, job_id)
 
         return result
 
@@ -332,29 +306,15 @@ class ExpertiseService(object):
 
         :returns: Filtered config of the job to be deleted
         """
-
-        job_subdirs = self._get_subdirs(user_id)
-        self.logger.info(f"Searching {job_subdirs} for user {user_id}")
-        # If given an ID, only get the status of the single job
-        job_subdirs = [name for name in job_subdirs if name == job_id]
-
-        # Assert that there should only be 1 matching job
-        if len(job_subdirs) > 1:
-            raise OpenReviewException('Single job not found: multiple matching jobs returned')
-        elif len(job_subdirs) == 0:
-            raise OpenReviewException('Job not found')
-
-        job_dir = job_subdirs[0]
-        search_dir = os.path.join(self.working_dir, job_dir)
-
-        # Load the config file
-        self.logger.info(f"Attempting to load {search_dir}/config.json")
-        with open(os.path.join(search_dir, 'config.json'), 'r') as f:
-            config = JobConfig.from_json(json.load(f))
+        config = self.redis.load_job(job_id, user_id)
         
-        # Clear directory
-        self.logger.info(f'Deleting {search_dir}')
-        shutil.rmtree(search_dir)
+        # Clear directory and Redis entry
+        self.logger.info(f"Deleting {config.job_dir} for {user_id}")
+        if os.path.isdir(config.job_dir):
+            shutil.rmtree(config.job_dir)
+        else:
+            self.logger.info(f"No files found - only removing Redis entry")
+        self.redis.remove_job(user_id, job_id)
 
         # Return filtered config
         self._filter_config(config)

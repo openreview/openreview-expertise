@@ -78,15 +78,19 @@ def execute_expertise(config):
             max_score=config['model_params'].get('max_score', True),
             batch_size=config['model_params'].get('batch_size', 16),
             use_cuda=config['model_params'].get('use_cuda', False),
-            sparse_value=config['model_params'].get('sparse_value')
+            sparse_value=config['model_params'].get('sparse_value'),
+            use_redis=config['model_params'].get('use_redis', False)
         )
         specter_predictor.set_archives_dataset(archives_dataset)
         specter_predictor.set_submissions_dataset(submissions_dataset)
         if not config['model_params'].get('skip_specter', False):
-            specter_predictor.embed_publications(publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl'))
+            publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+            if config['model_params'].get('use_redis', False):
+                publication_path = None
+            specter_predictor.embed_publications(publications_path=publication_path)
             specter_predictor.embed_submissions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'))
         specter_predictor.all_scores(
-            publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl'),
+            publications_path=publication_path,
             submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
         )
@@ -136,18 +140,23 @@ def execute_expertise(config):
             mfr_batch_size=config['model_params'].get('mfr_batch_size', 50),
             merge_alpha=config['model_params'].get('merge_alpha', 0.8),
             use_cuda=config['model_params'].get('use_cuda', False),
-            sparse_value=config['model_params'].get('sparse_value')
+            sparse_value=config['model_params'].get('sparse_value'),
+            use_redis=config['model_params'].get('use_redis', False)
         )
         ens_predictor.set_archives_dataset(archives_dataset)
         ens_predictor.set_submissions_dataset(submissions_dataset)
+        specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+        if config['model_params'].get('use_redis', False):
+            specter_publication_path = None
         ens_predictor.embed_publications(
-            specter_publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl'),
-            mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+            specter_publications_path=specter_publication_path,
+            mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False)
+        )
         ens_predictor.embed_submissions(
             specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
             mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
         ens_predictor.all_scores(
-            specter_publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl'),
+            specter_publications_path=specter_publication_path,
             mfr_publications_path=None,
             specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
             mfr_submissions_path=None,
