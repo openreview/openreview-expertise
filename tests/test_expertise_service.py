@@ -454,6 +454,47 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         openreview_context['job_id2'] = job_id
 
+    def test_status_all_query_params(self, openreview_context, celery_session_app, celery_session_worker):
+        test_client = openreview_context['test_client']
+        # Test for status query
+        response = test_client.get('/expertise/status/all', query_string={'status': 'Completed'}).json['results']
+        assert len(response) == 2
+        assert response[0]['status'] == 'Completed'
+        assert response[0]['name'] == 'test_run'
+
+        response = test_client.get('/expertise/status/all', query_string={'status': 'Running'}).json['results']
+        assert len(response) == 0
+
+        # Test for member query
+        response = test_client.get('/expertise/status/all', query_string={'memberOf': 'ABC'}).json['results']
+        assert len(response) == 2
+        assert response[0]['status'] == 'Completed'
+        assert response[0]['name'] == 'test_run'
+
+        response = test_client.get('/expertise/status/all', query_string={'memberOf': 'CBA'}).json['results']
+        assert len(response) == 0
+
+        # Test for invitation query
+        response = test_client.get('/expertise/status/all', query_string={'paperInvitation': 'ABC.cc'}).json['results']
+        assert len(response) == 2
+        assert response[0]['status'] == 'Completed'
+        assert response[0]['name'] == 'test_run'
+
+        response = test_client.get('/expertise/status/all', query_string={'paperInvitation': 'CBA'}).json['results']
+        assert len(response) == 0
+
+        # Test for combination
+        response = test_client.get('/expertise/status/all', query_string={'status': 'Completed', 'memberOf': 'ABC'}).json['results']
+        assert len(response) == 2
+        assert response[0]['status'] == 'Completed'
+        assert response[0]['name'] == 'test_run'
+
+        response = test_client.get('/expertise/status/all', query_string={'status': 'Running', 'memberOf': 'ABC'}).json['results']
+        assert len(response) == 0
+
+        response = test_client.get('/expertise/status/all', query_string={'status': 'Running', 'memberOf': 'CBA'}).json['results']
+        assert len(response) == 0
+
     def test_get_results_by_job_id(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for results from the given job_id assuming the job has completed
