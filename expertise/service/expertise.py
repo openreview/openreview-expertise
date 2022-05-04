@@ -177,13 +177,13 @@ class ExpertiseService(object):
                 self._filter_config(config)
                 result['results'].append(
                     {
-                        'job_id': config.job_dir,
                         'name': config.name,
+                        'jobId': config.job_id,
                         'status': status,
                         'description': description,
                         'cdate': config.cdate,
                         'mdate': config.mdate,
-                        'config': config.to_json()
+                        'request': config.api_request.to_json()
                     }
                 )
         return result
@@ -208,7 +208,8 @@ class ExpertiseService(object):
         # Append filtered config to the status
         self._filter_config(config)
         return {
-            'id': config.job_dir,
+            'name': config.name,
+            'jobId': config.job_id,
             'status': status,
             'description': description,
             'cdate': config.cdate,
