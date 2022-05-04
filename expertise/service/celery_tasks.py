@@ -8,7 +8,7 @@ from expertise.service.server import celery_app as celery_server
 from expertise.service.server import redis_config_pool
 import openreview, celery
 
-def update_status(config, new_status, redis_args, desc=None):
+def update_status(config, new_status, desc=None):
     """
     Updates the config of a given job to the new status
     Optionally allows manual setting of the description

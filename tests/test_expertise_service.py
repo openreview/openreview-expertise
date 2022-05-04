@@ -354,7 +354,7 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['id']
+        job_id = response.json['jobId']
         time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
         assert response['status'] != 'Error'
@@ -401,16 +401,6 @@ class TestExpertiseService():
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
-        
-        # Check config fields
-        returned_config = response['config']
-        assert returned_config['name'] == 'test_run'
-        assert returned_config['paper_invitation'] == 'ABC.cc/-/Submission'
-        assert returned_config['model'] == 'specter+mfr'
-        assert 'token' not in returned_config
-        assert 'baseurl' not in returned_config
-        assert 'user_id' not in returned_config
-        assert job_id is not None
 
         # After completion, check for non-empty completed list
         response = test_client.get('/expertise/status/all', query_string={'status': 'Completed'}).json['results']
@@ -447,15 +437,15 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['job_id']
+        job_id = response.json['jobId']
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
@@ -481,12 +471,12 @@ class TestExpertiseService():
     def test_compare_results_for_identical_jobs(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for results from the given job_id assuming the job has completed
-        response = test_client.get('/expertise/results', query_string={'job_id': f"{openreview_context['job_id']}"})
+        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 2
         results_a = response.json['results']
 
-        response = test_client.get('/expertise/results', query_string={'job_id': f"{openreview_context['job_id2']}"})
+        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id2']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 2
         results_b = response.json['results']
@@ -540,7 +530,7 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['id']
+        job_id = response.json['jobId']
 
         openreview_context['job_id'] = job_id
 
@@ -599,7 +589,7 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['id']
+        job_id = response.json['jobId']
         time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
         assert response['status'] != 'Error'
@@ -677,7 +667,7 @@ class TestExpertiseService():
                 content_type='application/json'
             )
             assert response.status_code == 200, f'{response.json}'
-            job_id = response.json['id']
+            job_id = response.json['jobId']
             id_list.append(job_id)
             time.sleep(2)
             response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
@@ -757,7 +747,7 @@ class TestExpertiseService():
             content_type='application/json'
         )
         assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['id']
+        job_id = response.json['jobId']
         time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
         assert response['status'] != 'Error'

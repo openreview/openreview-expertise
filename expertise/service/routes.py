@@ -98,7 +98,7 @@ def expertise():
 
         job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).start_expertise(user_request)
 
-        result = {'id': job_id }
+        result = {'jobId': job_id }
         flask.current_app.logger.info('Returning from request')
 
         flask.current_app.logger.debug('POST returns ' + str(result))

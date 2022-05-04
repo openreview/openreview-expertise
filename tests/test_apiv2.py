@@ -218,7 +218,7 @@ class TestExpertiseV2():
             content_type='application/json'
         )
         assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['id']
+        job_id = response.json['jobId']
         time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
         assert response['status'] != 'Error'
