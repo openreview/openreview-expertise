@@ -12,6 +12,7 @@ import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import elmo
+from expertise.service.utils import JobConfig, RedisDatabase
 
 
 class TestExpertiseService():
@@ -63,7 +64,14 @@ class TestExpertiseService():
             "WORKING_DIR": './tests/jobs',
             "CHECK_EVERY": 3600,
             "DELETE_AFTER": 3600,
-            "IN_TEST": True
+            "IN_TEST": True,
+            "REDIS_ADDR": 'localhost',
+            "REDIS_PORT": 6379,
+            "REDIS_CONFIG_DB": 10,
+            "REDIS_EMBEDDINGS_DB": 11,
+            "model_params": {
+                "use_redis": True
+            }
         }
         app = expertise.service.create_app(
             config=config
@@ -75,6 +83,53 @@ class TestExpertiseService():
                 "test_client": app.test_client(),
                 "config": config
             }
+
+    def test_on_redis_not_disk(self):
+        # Load an example config and store it in Redis with no files
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10
+        )
+
+        # Find job using all jobs
+        test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com')
+        redis.save_job(test_config)
+        returned_configs = redis.load_all_jobs('test_user1@mail.com')
+        assert returned_configs == []
+
+        # Find job using job id
+        test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com')
+        redis.save_job(test_config)
+        try:
+            returned_configs = redis.load_job(test_config.job_id, 'test_user1@mail.com')
+        except openreview.OpenReviewException as e:
+            assert str(e) == 'Job not found'
+
+    def test_on_redis_on_disk(self):
+        # Load an example config and store it in Redis with no files
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10
+        )
+
+        # Find job using all jobs
+        #with open('./tests/data/example_config.json') as f:
+        test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com')
+        redis.save_job(test_config)
+        os.makedirs('./tests/jobs/abcde')
+        returned_configs = redis.load_all_jobs('test_user1@mail.com')
+        assert len(returned_configs) == 1
+        assert returned_configs[0].user_id == 'test_user1@mail.com'
+        assert returned_configs[0].job_id == 'abcde'
+
+        # Find job using job id
+        returned_config = redis.load_job(test_config.job_id, 'test_user1@mail.com')
+        assert returned_config.user_id == 'test_user1@mail.com'
+        assert returned_config.job_id == 'abcde'
+
+        shutil.rmtree(f"./tests/jobs/")
 
     def test_request_expertise_with_no_config(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
@@ -319,6 +374,10 @@ class TestExpertiseService():
         # assert response[0]['status'] == 'Queued'
         # assert response[0]['description'] == 'Server received config and allocated space'
 
+        # Check that the search returns an empty list before the job is completed when searching for completed
+        response = test_client.get('/expertise/status/all', query_string={'status': 'Completed'}).json['results']
+        assert len(response) == 0
+
         # Query until job is complete
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -341,8 +400,69 @@ class TestExpertiseService():
         assert req['entityA']['memberOf'] == 'ABC.cc'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
+        assert response['cdate'] <= response['mdate']
+        
+        # Check config fields
+        returned_config = response['config']
+        assert returned_config['name'] == 'test_run'
+        assert returned_config['paper_invitation'] == 'ABC.cc/-/Submission'
+        assert returned_config['model'] == 'specter+mfr'
+        assert 'token' not in returned_config
+        assert 'baseurl' not in returned_config
+        assert 'user_id' not in returned_config
+        assert job_id is not None
+
+        # After completion, check for non-empty completed list
+        response = test_client.get('/expertise/status/all', query_string={'status': 'Completed'}).json['results']
+        assert len(response) == 1
+        assert response[0]['status'] == 'Completed'
+        assert response[0]['name'] == 'test_run'
+
+        response = test_client.get('/expertise/status/all', query_string={'status': 'Running'}).json['results']
+        assert len(response) == 0
 
         openreview_context['job_id'] = job_id
+
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                "name": "test_run2",
+                "entityA": {
+                    'type': "Group",
+                    'memberOf': "ABC.cc",
+                },
+                "entityB": {
+                    'type': "Note",
+                    'invitation': "ABC.cc/-/Submission"
+                },
+                "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False,
+                    'useAbstract': True,
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+                }
+            }
+            ),
+            content_type='application/json'
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['job_id']
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', query_string={'job_id': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        openreview_context['job_id2'] = job_id
 
     def test_get_results_by_job_id(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
@@ -358,11 +478,28 @@ class TestExpertiseService():
             assert profile_id.startswith('~')
             assert score >= 0 and score <= 1
 
+    def test_compare_results_for_identical_jobs(self, openreview_context, celery_session_app, celery_session_worker):
+        test_client = openreview_context['test_client']
+        # Searches for results from the given job_id assuming the job has completed
+        response = test_client.get('/expertise/results', query_string={'job_id': f"{openreview_context['job_id']}"})
+        metadata = response.json['metadata']
+        assert metadata['submission_count'] == 2
+        results_a = response.json['results']
+
+        response = test_client.get('/expertise/results', query_string={'job_id': f"{openreview_context['job_id2']}"})
+        metadata = response.json['metadata']
+        assert metadata['submission_count'] == 2
+        results_b = response.json['results']
+
+        assert len(results_a) == len(results_b)
+        for i in range(len(results_a)):
+            assert results_a[i] == results_b[i]
+
     def test_get_results_for_all_jobs(self, openreview_context, celery_session_app, celery_session_worker):
         # Assert that there are two completed jobs belonging to this user
         test_client = openreview_context['test_client']
         response = test_client.get('/expertise/status/all', query_string={}).json['results']
-        assert len(response) == 1
+        assert len(response) == 2
         for job_dict in response:
             assert job_dict['status'] == 'Completed'
 

@@ -9,7 +9,7 @@ from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
 
-from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS
+from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase
 
 user_index_file_lock = Lock()
 class ExpertiseService(object):
@@ -23,11 +23,11 @@ class ExpertiseService(object):
         self.specter_dir = config['SPECTER_DIR']
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
         self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
-        self.redis_args = {
-            'host': config['REDIS_ADDR'],
-            'port': config['REDIS_PORT'],
-            'db': config['REDIS_DB']
-        }
+        self.redis = RedisDatabase(
+            host = config['REDIS_ADDR'],
+            port = config['REDIS_PORT'],
+            db = config['REDIS_CONFIG_DB']
+        )
 
         # Define expected/required API fields
         self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
@@ -78,7 +78,7 @@ class ExpertiseService(object):
         with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
             json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
         self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
-        config.save(self.redis_args)
+        self.redis.save_job(config)
 
         return config, self.client.token
 
@@ -149,7 +149,7 @@ class ExpertiseService(object):
             task_id=job_id
         )
         self.logger.info(f"\nconf: {config.to_json()}\n")
-        config.save(self.redis_args)
+        self.redis.save_job(config)
 
         return job_id
 
@@ -160,43 +160,32 @@ class ExpertiseService(object):
         :param user_id: The ID of the user accessing the data
         :type user_id: str
 
-        :param query_params: Contains the query parameters of the GET request
-        :type job_id: dict
+        :param query_params: Query parameters of the GET request
+        :type query_params: dict
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
         result = {'results': []}
+        search_status = query_params.get('status')
 
-        # Retrieve search fields
-        memberOf = query_params.get('memberOf', None)
-        id = query_params.get('id', None)
-        status_query = query_params.get('status', None)
-
-        for config in JobConfig.load_all_jobs(user_id, self.redis_args):
+        for config in self.redis.load_all_jobs(user_id):
             status = config.status
             description = config.description
 
-            # Filter by search fields
-            req = config.api_request
-            if memberOf and (not req.entityA.get('memberOf') == memberOf and not req.entityB.get('memberOf') == memberOf):
-                continue
-            if id and not config.job_id == id:
-                continue
-            if status_query and not status.startswith(status_query):
-                continue
-            
-            # Append filtered config to the status
-            self._filter_config(config)
-            result['results'].append(
-                {
-                    'id': config.job_id,
-                    'status': status,
-                    'description': description,
-                    'cdate': config.cdate,
-                    'mdate': config.mdate,
-                    'request': config.api_request.to_json()
-                }
-            )
+            if not search_status or status.lower().startswith(search_status.lower()):
+                # Append filtered config to the status
+                self._filter_config(config)
+                result['results'].append(
+                    {
+                        'job_id': config.job_dir,
+                        'name': config.name,
+                        'status': status,
+                        'description': description,
+                        'cdate': config.cdate,
+                        'mdate': config.mdate,
+                        'config': config.to_json()
+                    }
+                )
         return result
 
     def get_expertise_status(self, user_id, job_id):
@@ -212,7 +201,7 @@ class ExpertiseService(object):
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
-        config = JobConfig.load_job(job_id, user_id, self.redis_args)
+        config = self.redis.load_job(job_id, user_id)
         status = config.status
         description = config.description
         
@@ -246,7 +235,7 @@ class ExpertiseService(object):
         result = {'results': []}
 
         # Get and validate profile ID
-        config = JobConfig.load_job(job_id, user_id, self.redis_args)
+        config = self.redis.load_job(job_id, user_id)
 
         # Fetch status
         status = config.status
@@ -300,7 +289,7 @@ class ExpertiseService(object):
         if delete_on_get:
             self.logger.info(f'Deleting {config.job_dir}')
             shutil.rmtree(config.job_dir)
-            JobConfig.remove_job(user_id, job_id, self.redis_args)
+            self.redis.remove_job(user_id, job_id)
 
         return result
 
@@ -316,7 +305,7 @@ class ExpertiseService(object):
 
         :returns: Filtered config of the job to be deleted
         """
-        config = JobConfig.load_job(job_id, user_id, self.redis_args)
+        config = self.redis.load_job(job_id, user_id)
         
         # Clear directory and Redis entry
         self.logger.info(f"Deleting {config.job_dir} for {user_id}")
@@ -324,7 +313,7 @@ class ExpertiseService(object):
             shutil.rmtree(config.job_dir)
         else:
             self.logger.info(f"No files found - only removing Redis entry")
-        JobConfig.remove_job(user_id, job_id, self.redis_args)
+        self.redis.remove_job(user_id, job_id)
 
         # Return filtered config
         self._filter_config(config)
