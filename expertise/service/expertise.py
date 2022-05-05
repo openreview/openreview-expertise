@@ -182,12 +182,12 @@ class ExpertiseService(object):
             return not search_paper_id or paper_id.lower().startswith(search_paper_id.lower())
 
         def check_result():
-            return not (False in [
+            return False not in [
                 check_status(),
                 check_member(),
                 check_invitation(),
                 check_paper_id()
-            ])
+            ]
 
         result = {'results': []}
         search_status = query_params.get('status')
@@ -205,6 +205,7 @@ class ExpertiseService(object):
                 result['results'].append(
                     {
                         'name': config.name,
+                        'tauthor': config.user_id,
                         'jobId': config.job_id,
                         'status': status,
                         'description': description,
@@ -236,6 +237,7 @@ class ExpertiseService(object):
         self._filter_config(config)
         return {
             'name': config.name,
+            'tauthor': config.user_id,
             'jobId': config.job_id,
             'status': status,
             'description': description,
