@@ -603,6 +603,8 @@ class TestExpertiseService():
 
         # Clean up error job by calling the delete endpoint
         response = test_client.get('/expertise/delete', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+        assert response['name'] == 'test_run'
+        assert response['cdate'] <= response['mdate']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     
     def test_request_journal(self, openreview_context, celery_session_app, celery_session_worker):
@@ -637,6 +639,7 @@ class TestExpertiseService():
         job_id = response.json['jobId']
         time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
@@ -750,6 +753,7 @@ class TestExpertiseService():
             # Assert that they are complete
             response = test_client.get('/expertise/status', query_string={'jobId': f'{id}'}).json
             assert response['status'] == 'Completed'
+            assert response['name'] == 'test_run'
             assert response['description'] == 'Job is complete and the computed scores are ready'
 
             response = test_client.get('/expertise/results', query_string={'jobId': f"{id}", 'deleteOnGet': True})
@@ -796,6 +800,7 @@ class TestExpertiseService():
         job_id = response.json['jobId']
         time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
