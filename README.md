@@ -90,6 +90,8 @@ python -m expertise.create_dataset config.json \
 	--password <your_password> \
 	--username <your_username> \
 ```
+If you wish to create your own dataset without using the OpenReview API to obtain the data, please follow the formatting provided below:
+![dataset_format](https://user-images.githubusercontent.com/43583679/166930738-6e4a8ac9-f2a8-499a-8eb0-98b1f26a9a12.png)
 
 For ELMo, SPECTER, Multifacet-Recommender and BM25 run the following command
 ```
