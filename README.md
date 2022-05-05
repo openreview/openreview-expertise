@@ -86,6 +86,7 @@ Create a dataset by running the following command:
 ```
 python -m expertise.create_dataset config.json \
 	--baseurl <usually https://api.openreview.net> \
+	--baseurl_v2 <usually https://api2.openreview.net> \
 	--password <your_password> \
 	--username <your_username> \
 ```
