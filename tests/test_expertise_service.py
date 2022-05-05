@@ -460,7 +460,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/status/all', query_string={'status': 'Completed'}).json['results']
         assert len(response) == 2
         assert response[0]['status'] == 'Completed'
-        assert response[0]['name'] == 'test_run'
+        assert response[1]['status'] == 'Completed'
 
         response = test_client.get('/expertise/status/all', query_string={'status': 'Running'}).json['results']
         assert len(response) == 0
@@ -468,8 +468,8 @@ class TestExpertiseService():
         # Test for member query
         response = test_client.get('/expertise/status/all', query_string={'memberOf': 'ABC'}).json['results']
         assert len(response) == 2
-        assert response[0]['status'] == 'Completed'
-        assert response[0]['name'] == 'test_run'
+        assert response[0]['request']['entityA']['memberOf'] == 'ABC.cc'
+        assert response[1]['request']['entityA']['memberOf'] == 'ABC.cc'
 
         response = test_client.get('/expertise/status/all', query_string={'memberOf': 'CBA'}).json['results']
         assert len(response) == 0
@@ -477,8 +477,8 @@ class TestExpertiseService():
         # Test for invitation query
         response = test_client.get('/expertise/status/all', query_string={'paperInvitation': 'ABC.cc'}).json['results']
         assert len(response) == 2
-        assert response[0]['status'] == 'Completed'
-        assert response[0]['name'] == 'test_run'
+        assert response[0]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
+        assert response[1]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
 
         response = test_client.get('/expertise/status/all', query_string={'paperInvitation': 'CBA'}).json['results']
         assert len(response) == 0
@@ -487,7 +487,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/status/all', query_string={'status': 'Completed', 'memberOf': 'ABC'}).json['results']
         assert len(response) == 2
         assert response[0]['status'] == 'Completed'
-        assert response[0]['name'] == 'test_run'
+        assert response[1]['status'] == 'Completed'
 
         response = test_client.get('/expertise/status/all', query_string={'status': 'Running', 'memberOf': 'ABC'}).json['results']
         assert len(response) == 0
