@@ -357,6 +357,7 @@ class TestExpertiseService():
         job_id = response.json['jobId']
         time.sleep(2)
         response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
         # assert response[0]['description'] == 'Server received config and allocated space'
 
@@ -391,6 +392,7 @@ class TestExpertiseService():
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         # Check for API request
@@ -593,8 +595,10 @@ class TestExpertiseService():
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['name'] == 'test_run'
         assert response['status'].strip() == 'Error'
         assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
+        assert response['cdate'] <= response['mdate']
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
         # Clean up error job by calling the delete endpoint
@@ -712,6 +716,7 @@ class TestExpertiseService():
             id_list.append(job_id)
             time.sleep(2)
             response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            assert response['name'] == 'test_run'
             assert response['status'] != 'Error'
 
         assert id_list is not None
@@ -806,6 +811,7 @@ class TestExpertiseService():
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         # Check for API request
