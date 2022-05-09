@@ -165,25 +165,53 @@ class ExpertiseService(object):
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
+
+        def check_status():
+            return not search_status or status.lower().startswith(search_status.lower())
+        
+        def check_member():
+            memberOf = config.api_request.entityA.get('memberOf') or config.api_request.entityB.get('memberOf')
+            return not search_member or memberOf.lower().startswith(search_member.lower())
+        
+        def check_invitation():
+            inv = config.api_request.entityA.get('invitation') or config.api_request.entityB.get('invitation')
+            return not search_invitation or inv.lower().startswith(search_invitation.lower())
+
+        def check_paper_id():
+            paper_id = config.api_request.entityA.get('id') or config.api_request.entityB.get('id')
+            return not search_paper_id or paper_id.lower().startswith(search_paper_id.lower())
+
+        def check_result():
+            return False not in [
+                check_status(),
+                check_member(),
+                check_invitation(),
+                check_paper_id()
+            ]
+
         result = {'results': []}
         search_status = query_params.get('status')
+        search_member = query_params.get('memberOf')
+        search_invitation = query_params.get('paperInvitation')
+        search_paper_id = query_params.get('paperId')
 
         for config in self.redis.load_all_jobs(user_id):
             status = config.status
             description = config.description
 
-            if not search_status or status.lower().startswith(search_status.lower()):
+            if check_result():
                 # Append filtered config to the status
                 self._filter_config(config)
                 result['results'].append(
                     {
-                        'job_id': config.job_dir,
                         'name': config.name,
+                        'tauthor': config.user_id,
+                        'jobId': config.job_id,
                         'status': status,
                         'description': description,
                         'cdate': config.cdate,
                         'mdate': config.mdate,
-                        'config': config.to_json()
+                        'request': config.api_request.to_json()
                     }
                 )
         return result
@@ -208,13 +236,14 @@ class ExpertiseService(object):
         # Append filtered config to the status
         self._filter_config(config)
         return {
-            'job_id': config.job_dir,
             'name': config.name,
+            'tauthor': config.user_id,
+            'jobId': config.job_id,
             'status': status,
             'description': description,
             'cdate': config.cdate,
             'mdate': config.mdate,
-            'config': config.to_json()
+            'request': config.api_request.to_json()
         }
 
     def get_expertise_results(self, user_id, job_id, delete_on_get=False):
