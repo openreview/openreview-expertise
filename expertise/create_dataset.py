@@ -54,13 +54,32 @@ class OpenReviewExpertise(object):
         notes_v2 = list(openreview.tools.iterget_notes(self.openreview_client_v2, content={'authorids': author_id}))
         return notes_v1 + notes_v2
 
+    def deduplicate_publications(self, publications):
+        deduplicated = []
+
+        # Build index of publication IDs
+        pub_ids = [pub.id for pub in publications]
+
+        for pub in publications:
+            original = getattr(pub, 'original', None)
+            # If blind note, but the original already exists, skip this
+            if original is not None and original in pub_ids:
+                continue
+
+            # Otherwise, keep this note
+            deduplicated.append(pub)
+        
+        return deduplicated
+
     def get_publications(self, author_id):
 
         dataset_params = self.config.get('dataset', {})
         minimum_pub_date = dataset_params.get('minimum_pub_date') or dataset_params.get('or', {}).get('minimum_pub_date', 0)
         top_recent_pubs = dataset_params.get('top_recent_pubs') or dataset_params.get('or', {}).get('top_recent_pubs', False)
 
-        publications = self.get_paper_notes(author_id, dataset_params)
+        publications = self.deduplicate_publications(
+            self.get_paper_notes(author_id, dataset_params)
+        )
 
         # Get all publications and assign tcdate to cdate in case cdate is None. If tcdate is also None
         # assign cdate := 0
