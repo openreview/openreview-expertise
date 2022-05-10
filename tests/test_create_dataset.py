@@ -291,7 +291,10 @@ def test_retrieve_expertise(get_paperhash):
     profiles = data['profiles']
     for profile in profiles:
         if len(profile['publications']) > 0:
-            assert len(expertise[profile['id']]) == len(profile['publications'])
+            if profile.id == '~Perry_Volkman3':
+                assert len(expertise[profile['id']]) > len(profile['publications'])
+            else:
+                assert len(expertise[profile['id']]) == len(profile['publications'])
 
 def test_get_submissions_from_invitation():
     openreview_client = mock_client()
