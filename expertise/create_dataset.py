@@ -61,13 +61,9 @@ class OpenReviewExpertise(object):
         original_ids = [pub.original for pub in publications]
 
         for pub in publications:
-            note_id, original_id = pub.id, pub.original
-            # If original note, but blind already exists, skip the original note
-            if original_id is None and note_id in original_ids:
-                continue
-
-            # Otherwise, keep this note
-            deduplicated.append(pub)
+            # Keep all blind notes, and keep originals that do not have a corresponding blind
+            if pub.id not in original_ids:
+                deduplicated.append(pub)
         
         return deduplicated
 
