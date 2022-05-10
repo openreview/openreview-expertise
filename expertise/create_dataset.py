@@ -334,7 +334,9 @@ class OpenReviewExpertise(object):
             pbar.update(1)
             profile = openreview.tools.get_profile(client, profile_id)
             if profile:
-                publications = list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': profile.id}))
+                publications = self.deduplicate_publications(
+                    list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': profile.id}))
+                )
                 return { 'profile_id': profile_id, 'papers': publications }
         futures = []
         with ThreadPoolExecutor(max_workers=self.config.get('max_workers')) as executor:

@@ -291,8 +291,8 @@ def test_retrieve_expertise(get_paperhash):
     profiles = data['profiles']
     for profile in profiles:
         if len(profile['publications']) > 0:
-            if profile.id == '~Perry_Volkman3':
-                assert len(expertise[profile['id']]) > len(profile['publications'])
+            if profile['id'] == '~Perry_Volkman3':
+                assert len(expertise[profile['id']]) < len(profile['publications'])
             else:
                 assert len(expertise[profile['id']]) == len(profile['publications'])
 
