@@ -57,13 +57,13 @@ class OpenReviewExpertise(object):
     def deduplicate_publications(self, publications):
         deduplicated = []
 
-        # Build index of publication IDs
-        pub_ids = [pub.id for pub in publications]
+        # Build index of pub.original
+        original_ids = [getattr(pub, 'original', None) for pub in publications]
 
         for pub in publications:
-            original = getattr(pub, 'original', None)
-            # If blind note, but the original already exists, skip this
-            if original is not None and original in pub_ids:
+            note_id, original_id = pub.id, getattr(pub, 'original', None)
+            # If original note, but blind already exists, skip the original note
+            if original_id is None and note_id in original_ids:
                 continue
 
             # Otherwise, keep this note
