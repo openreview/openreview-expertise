@@ -104,7 +104,7 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
             paper_data = json.loads(line.rstrip())
             paper_id = paper_data['paper_id']
             paper_embedding = numpy.array(paper_data['embedding'])
-            paper_emb_redis = redis_con.tensorget(paper_id, as_numpy_mutable=True)
+            paper_emb_redis = redis_con.tensorget(paper_id + "_1234567890", as_numpy_mutable=True)
             assert numpy.all(paper_emb_redis == paper_embedding)
 
 def test_sparse_scores(tmp_path, create_smfr):

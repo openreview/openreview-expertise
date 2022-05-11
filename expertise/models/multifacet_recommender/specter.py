@@ -1,3 +1,5 @@
+import time
+
 from allennlp.commands.predict import _PredictManager
 from allennlp.common import Params
 from allennlp.common.checks import ConfigurationError
@@ -59,6 +61,7 @@ class _PredictManagerCustom(_PredictManager):
     def __init__(self,
                  predictor: Predictor,
                  input_file: str,
+                 metadate_file: str,
                  output_file: Optional[str],
                  batch_size: int,
                  print_to_console: bool,
@@ -68,9 +71,14 @@ class _PredictManagerCustom(_PredictManager):
         super(_PredictManagerCustom, self).__init__(predictor, input_file, output_file, batch_size, print_to_console,
                                                     has_dataset_reader)
         self.total_size = int(sum([1 for _ in open(self._input_file)]) / self._batch_size)
+        self._metadata = {}
+        if metadate_file:
+            with open(metadate_file) as f:
+                self._metadata = json.load(f)
         self._store_redis = store_redis
         if store_redis:
             assert redis_con is not None, "Can't store in Redis, No redis connection provided"
+            assert metadate_file
         self._redis_con = redis_con
 
     def run(self) -> None:
@@ -105,7 +113,9 @@ class _PredictManagerCustom(_PredictManager):
         if self._output_file is not None:
             self._output_file.write(prediction)
         if self._store_redis:
-            self._redis_con.tensorset(key=prediction_json['paper_id'], tensor=np.array(prediction_json['embedding']))
+            paper_id = prediction_json['paper_id']
+            cache_key = paper_id + "_" + str(self._metadata[paper_id]['mdate'])
+            self._redis_con.tensorset(key=cache_key, tensor=np.array(prediction_json['embedding']))
 
 
 def predictor_from_archive(archive: Archive, predictor_name: str = None,
@@ -176,6 +186,7 @@ class SpecterPredictor:
         self.pub_author_ids_to_note_id = defaultdict(list)
         self.pub_note_id_to_abstract = {}
         self.pub_note_id_to_title = {}
+        self.pub_note_id_to_cache_key = {}
         output_dict = {}
         paper_ids_list = []
         for profile_id, publications in archives_dataset.items():
@@ -184,15 +195,22 @@ class SpecterPredictor:
                 self.pub_author_ids_to_note_id[profile_id].append(publication['id'])
                 self.pub_note_id_to_title[publication['id']] = publication['content'].get('title', "")
                 self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract', "")
-                if self.redis is None or not self.redis.exists(publication['id']):
+                pub_mdate = publication.get('mdate', int(time.time()))
+                pub_cache_key = publication['id'] + "_" + str(pub_mdate)
+                self.pub_note_id_to_cache_key[publication['id']] = pub_cache_key
+                if self.redis is None or not self.redis.exists(pub_cache_key):
                     if publication['id'] in output_dict:
                         output_dict[publication['id']]["authors"].append(profile_id)
                     else:
                         paper_ids_list.append(publication['id'])
-                        output_dict[publication['id']] = {"title": self.pub_note_id_to_title[publication['id']],
-                                                          "abstract": self.pub_note_id_to_abstract[publication['id']],
-                                                          "paper_id": publication["id"],
-                                                          "authors": [profile_id]}
+                        output_dict[publication['id']] = {
+                            "title": self.pub_note_id_to_title[publication['id']],
+                            "abstract": self.pub_note_id_to_abstract[publication['id']],
+                            "paper_id": publication["id"],
+                            "authors": [profile_id],
+                            "mdate": pub_mdate
+                        }
+                    self._remove_keys_from_cache(publication["id"])
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_data.json"), 'w') as f_out:
             json.dump(output_dict, f_out, indent=1)
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt"), 'w') as f_out:
@@ -259,6 +277,7 @@ class SpecterPredictor:
 
         manager = _PredictManagerCustom(predictor,
                                         ids_file,
+                                        "",
                                         submissions_path,
                                         self.batch_size,
                                         False,
@@ -308,6 +327,7 @@ class SpecterPredictor:
         redis_client = self.redis.client() if self.use_redis else None
         manager = _PredictManagerCustom(predictor,
                                         ids_file,
+                                        metadata_file,
                                         publications_path,
                                         self.batch_size,
                                         False,
@@ -346,7 +366,7 @@ class SpecterPredictor:
             bad_id_set = set()
             for paper_id in id_list:
                 try:
-                    paper_emb = self.redis.tensorget(key=paper_id, as_numpy_mutable=True)
+                    paper_emb = self.redis.tensorget(key=self.pub_note_id_to_cache_key[paper_id], as_numpy_mutable=True)
                     assert len(paper_emb) == paper_emb_size_default
                     emb_list.append(paper_emb)
                 except Exception as e:
@@ -453,3 +473,8 @@ class SpecterPredictor:
 
         print('Sparse score computation complete')
         return all_scores
+
+    def _remove_keys_from_cache(self, key):
+        if self.redis:
+            for key in self.redis.scan_iter(match=key+"*"):
+                self.redis.delete(key)

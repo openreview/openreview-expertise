@@ -76,8 +76,11 @@ class OpenReviewExpertise(object):
             # Exclude blind Notes
             if getattr(publication, 'original', None) is not None:
                 continue
+
             if getattr(publication, 'cdate') is None:
                 publication.cdate = getattr(publication, 'tcdate', 0)
+            if getattr(publication, 'mdate') is None:
+                publication.mdate = getattr(publication, 'tmdate', 0)
 
             # Get title + abstract depending on API version
             pub_title = publication.content.get('title')
@@ -91,6 +94,7 @@ class OpenReviewExpertise(object):
             reduced_publication = {
                 'id': publication.id,
                 'cdate': publication.cdate,
+                'mdate': publication.mdate,
                 'content': {
                     'title': pub_title,
                     'abstract': pub_abstr
