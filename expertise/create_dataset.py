@@ -5,6 +5,8 @@ Assumes that the necessary evidence-collecting steps have been done,
 and that papers have been submitted.
 
 '''
+import time
+
 from .config import ModelConfig
 
 import json, argparse, csv
@@ -79,8 +81,8 @@ class OpenReviewExpertise(object):
 
             if getattr(publication, 'cdate') is None:
                 publication.cdate = getattr(publication, 'tcdate', 0)
-            if getattr(publication, 'mdate') is None:
-                publication.mdate = getattr(publication, 'tmdate', 0)
+            if getattr(publication, 'tmdate') is None:
+                publication.mdate = getattr(publication, 'tmdate', int(time.time()))
 
             # Get title + abstract depending on API version
             pub_title = publication.content.get('title')
