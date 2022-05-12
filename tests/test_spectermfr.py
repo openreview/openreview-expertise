@@ -39,8 +39,8 @@ def create_smfr():
 
 @pytest.fixture
 def create_specter():
-    def simple_specter(config):
-        archives_dataset = ArchivesDataset(archives_path=Path('tests/data/archives'))
+    def simple_specter(config, archives_path=None):
+        archives_dataset = ArchivesDataset(archives_path=Path(archives_path) if archives_path else Path('tests/data/archives'))
         submissions_dataset = SubmissionsDataset(submissions_path=Path('tests/data/submissions'))
 
         spcter_predictor = multifacet_recommender.SpecterPredictor(
@@ -107,6 +107,7 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
             paper_emb_redis = redis_con.tensorget(paper_id + "_1234567890", as_numpy_mutable=True)
             assert numpy.all(paper_emb_redis == paper_embedding)
 
+
 def test_sparse_scores(tmp_path, create_smfr):
     config = {
         'name': 'test_spectermfr',
@@ -149,3 +150,33 @@ def test_sparse_scores(tmp_path, create_smfr):
         )
 
     assert len(all_scores) == 8
+
+
+def test_specter_scores_updated_mdate(tmp_path, create_specter):
+    config = {
+        'name': 'test_specter_mdate',
+        'model_params': {
+            'use_title': False,
+            'use_abstract': True,
+            'use_cuda': False,
+            'batch_size': 1,
+            'average_score': True,
+            'max_score': False,
+            'work_dir': tmp_path,
+            'use_redis': True
+        }
+    }
+
+    redis_con = redisai.Client(host='localhost', port=6379, db=11)
+    specterModel = create_specter(config, archives_path='tests/data/archives_updated')
+    publications_path = tmp_path / 'publications'
+    publications_path.mkdir()
+    specterModel.embed_publications(publications_path.joinpath('pub2vec.jsonl'))
+    with open(publications_path.joinpath('pub2vec.jsonl')) as f_in:
+        for line in f_in:
+            paper_data = json.loads(line.rstrip())
+            paper_id = paper_data['paper_id']
+            paper_embedding = numpy.array(paper_data['embedding'])
+            assert not redis_con.exists(paper_id + "_1234567890")
+            paper_emb_redis = redis_con.tensorget(paper_id + "_2345678901", as_numpy_mutable=True)
+            assert numpy.all(paper_emb_redis == paper_embedding)
