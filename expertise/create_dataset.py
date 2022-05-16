@@ -58,7 +58,7 @@ class OpenReviewExpertise(object):
         deduplicated = []
 
         # Build index of pub.original
-        original_ids = [pub.original for pub in publications]
+        original_ids = {pub.original for pub in publications if pub.original is not None}
 
         for pub in publications:
             # Keep all blind notes, and keep originals that do not have a corresponding blind
