@@ -77,8 +77,8 @@ class OpenReviewExpertise(object):
                     continue
             if getattr(publication, 'cdate') is None:
                 publication.cdate = getattr(publication, 'tcdate', 0)
-            if getattr(publication, 'tmdate') is None:
-                publication.mdate = getattr(publication, 'tmdate', int(time.time()))
+
+            publication.mdate = getattr(publication, 'tmdate', int(time.time()))
 
             # Get title + abstract depending on API version
             pub_title = publication.content.get('title')
