@@ -56,13 +56,28 @@ class OpenReviewExpertise(object):
         notes_v2 = list(openreview.tools.iterget_notes(self.openreview_client_v2, content={'authorids': author_id}))
         return notes_v1 + notes_v2
 
+    def deduplicate_publications(self, publications):
+        deduplicated = []
+
+        # Build index of pub.original
+        original_ids = {pub.original for pub in publications if pub.original is not None}
+
+        for pub in publications:
+            # Keep all blind notes, and keep originals that do not have a corresponding blind
+            if pub.id not in original_ids:
+                deduplicated.append(pub)
+
+        return deduplicated
+
     def get_publications(self, author_id):
 
         dataset_params = self.config.get('dataset', {})
         minimum_pub_date = dataset_params.get('minimum_pub_date') or dataset_params.get('or', {}).get('minimum_pub_date', 0)
         top_recent_pubs = dataset_params.get('top_recent_pubs') or dataset_params.get('or', {}).get('top_recent_pubs', False)
 
-        publications = self.get_paper_notes(author_id, dataset_params)
+        publications = self.deduplicate_publications(
+            self.get_paper_notes(author_id, dataset_params)
+        )
 
         # Get all publications and assign tcdate to cdate in case cdate is None. If tcdate is also None
         # assign cdate := 0
@@ -320,7 +335,9 @@ class OpenReviewExpertise(object):
             pbar.update(1)
             profile = openreview.tools.get_profile(client, profile_id)
             if profile:
-                publications = list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': profile.id}))
+                publications = self.deduplicate_publications(
+                    list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': profile.id}))
+                )
                 return { 'profile_id': profile_id, 'papers': publications }
         futures = []
         with ThreadPoolExecutor(max_workers=self.config.get('max_workers')) as executor:
