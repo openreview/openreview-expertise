@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 from enum import Enum
 
 import re
-SUPERUSER_IDS = ['openreview.net']
+SUPERUSER_IDS = ['openreview.net', 'OpenReview.net', '~Super_User1']
 
 # -----------------
 # -- Mock Client --
