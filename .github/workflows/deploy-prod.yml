@@ -21,4 +21,4 @@ jobs:
         run: gcloud config set compute/zone us-central1-c
       - name: Run deploy script
         run: |
-          gcloud compute ssh openreview@instance-matching-server --command '/bin/expertise_build.sh' --quiet
+          gcloud compute ssh openreview@instance-matching-server-gpu --command '/bin/expertise_build.sh' --quiet
