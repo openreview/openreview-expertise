@@ -207,8 +207,8 @@ class SpecterPredictor:
         output_dict = {}
         paper_ids_list = []
         for note_id, submission in submissions_dataset.items():
-            self.sub_note_id_to_title[submission['id']] = submission['content'].get('title', ".")
-            self.sub_note_id_to_abstract[submission['id']] = submission['content'].get('abstract', ".")
+            self.sub_note_id_to_title[submission['id']] = submission['content'].get('title', "")
+            self.sub_note_id_to_abstract[submission['id']] = submission['content'].get('abstract', "")
             paper_ids_list.append(submission['id'])
             output_dict[submission['id']] = {"title": self.sub_note_id_to_title[submission['id']],
                                              "abstract": self.sub_note_id_to_abstract[submission['id']],
