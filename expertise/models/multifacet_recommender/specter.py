@@ -180,19 +180,22 @@ class SpecterPredictor:
         paper_ids_list = []
         for profile_id, publications in archives_dataset.items():
             for publication in publications:
-                self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
-                self.pub_author_ids_to_note_id[profile_id].append(publication['id'])
-                self.pub_note_id_to_title[publication['id']] = publication['content'].get('title', "")
-                self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract', "")
-                if self.redis is None or not self.redis.exists(publication['id']):
-                    if publication['id'] in output_dict:
-                        output_dict[publication['id']]["authors"].append(profile_id)
-                    else:
-                        paper_ids_list.append(publication['id'])
-                        output_dict[publication['id']] = {"title": self.pub_note_id_to_title[publication['id']],
-                                                          "abstract": self.pub_note_id_to_abstract[publication['id']],
-                                                          "paper_id": publication["id"],
-                                                          "authors": [profile_id]}
+                if publication['content'].get('title') or publication['content'].get('abstract'):
+                    self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
+                    self.pub_author_ids_to_note_id[profile_id].append(publication['id'])
+                    self.pub_note_id_to_title[publication['id']] = publication['content'].get('title') if publication['content'].get('title') else "."
+                    self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract') if publication['content'].get('abstract') else "."
+                    if self.redis is None or not self.redis.exists(publication['id']):
+                        if publication['id'] in output_dict:
+                            output_dict[publication['id']]["authors"].append(profile_id)
+                        else:
+                            paper_ids_list.append(publication['id'])
+                            output_dict[publication['id']] = {"title": self.pub_note_id_to_title[publication['id']],
+                                                              "abstract": self.pub_note_id_to_abstract[publication['id']],
+                                                              "paper_id": publication["id"],
+                                                              "authors": [profile_id]}
+                else:
+                    print(f"Skipping publication {publication['id']}. Either title or abstract must be provided ")
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_data.json"), 'w') as f_out:
             json.dump(output_dict, f_out, indent=1)
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt"), 'w') as f_out:
@@ -204,8 +207,8 @@ class SpecterPredictor:
         output_dict = {}
         paper_ids_list = []
         for note_id, submission in submissions_dataset.items():
-            self.sub_note_id_to_title[submission['id']] = submission['content'].get('title', "")
-            self.sub_note_id_to_abstract[submission['id']] = submission['content'].get('abstract', "")
+            self.sub_note_id_to_title[submission['id']] = submission['content'].get('title', ".")
+            self.sub_note_id_to_abstract[submission['id']] = submission['content'].get('abstract', ".")
             paper_ids_list.append(submission['id'])
             output_dict[submission['id']] = {"title": self.sub_note_id_to_title[submission['id']],
                                              "abstract": self.sub_note_id_to_abstract[submission['id']],
