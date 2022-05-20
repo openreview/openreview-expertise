@@ -7,7 +7,7 @@ import json
 def test_archives_dataset():
     archives_dataset = ArchivesDataset(archives_path=Path('tests/data/archives'))
     assert len(archives_dataset) == 3
-    assert len(archives_dataset['~Jackson_Upton9']) == 2
+    assert len(archives_dataset['~Jackson_Upton9']) == 3
     assert len(archives_dataset['~Jerald_Hackett2']) == 3
     assert len(archives_dataset['~Loreta_Tremblay3']) == 4
 
