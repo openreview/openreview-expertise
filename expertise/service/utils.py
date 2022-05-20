@@ -40,7 +40,10 @@ def mock_client(version=1):
         for invitation in data['notes'].keys():
             for note in data['notes'][invitation]:
                 if note['id'] == id:
-                    return openreview.Note.from_json(note)
+                    if version == 1:
+                        return openreview.Note.from_json(note)
+                    elif version == 2:
+                        return openreview.api.Note.from_json(note)
         raise openreview.OpenReviewException({'name': 'NotFoundError', 'message': f"The Note {id} was not found", 'status': 404, 'details': {'path': 'id', 'value': id}})
 
     def get_profile(email_or_id = None):
@@ -103,14 +106,20 @@ def mock_client(version=1):
 
         if invitation:
             notes=data['notes'][invitation]
-            return [openreview.Note.from_json(note) for note in notes]
+            if version == 1:
+                return [openreview.Note.from_json(note) for note in notes]
+            elif version == 2:
+                return [openreview.api.Note.from_json(note) for note in notes]
 
         if 'authorids' in content:
             authorid = content['authorids']
             profiles = data['profiles']
             for profile in profiles:
                 if authorid == profile['id']:
-                    return [openreview.Note.from_json(note) for note in profile['publications']]
+                    if version == 1:
+                        return [openreview.Note.from_json(note) for note in profile['publications']]
+                    elif version == 2:
+                        return [openreview.api.Note.from_json(note) for note in profile['publications']]
 
         return []
 

@@ -191,26 +191,29 @@ class SpecterPredictor:
         paper_ids_list = []
         for profile_id, publications in archives_dataset.items():
             for publication in publications:
-                self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
-                self.pub_author_ids_to_note_id[profile_id].append(publication['id'])
-                self.pub_note_id_to_title[publication['id']] = publication['content'].get('title', "")
-                self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract', "")
-                pub_mdate = publication.get('mdate', int(time.time()))
-                pub_cache_key = publication['id'] + "_" + str(pub_mdate)
-                self.pub_note_id_to_cache_key[publication['id']] = pub_cache_key
-                if self.redis is None or not self.redis.exists(pub_cache_key):
-                    if publication['id'] in output_dict:
-                        output_dict[publication['id']]["authors"].append(profile_id)
-                    else:
-                        paper_ids_list.append(publication['id'])
-                        output_dict[publication['id']] = {
-                            "title": self.pub_note_id_to_title[publication['id']],
-                            "abstract": self.pub_note_id_to_abstract[publication['id']],
-                            "paper_id": publication["id"],
-                            "authors": [profile_id],
-                            "mdate": pub_mdate
-                        }
-                    self._remove_keys_from_cache(publication["id"])
+                if publication['content'].get('title') or publication['content'].get('abstract'):
+                    self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
+                    self.pub_author_ids_to_note_id[profile_id].append(publication['id'])
+                    self.pub_note_id_to_title[publication['id']] = publication['content'].get('title', "")
+                    self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract', "")
+                    pub_mdate = publication.get('mdate', int(time.time()))
+                    pub_cache_key = publication['id'] + "_" + str(pub_mdate)
+                    self.pub_note_id_to_cache_key[publication['id']] = pub_cache_key
+                    if self.redis is None or not self.redis.exists(pub_cache_key):
+                        if publication['id'] in output_dict:
+                            output_dict[publication['id']]["authors"].append(profile_id)
+                        else:
+                            paper_ids_list.append(publication['id'])
+                            output_dict[publication['id']] = {
+                                "title": self.pub_note_id_to_title[publication['id']],
+                                "abstract": self.pub_note_id_to_abstract[publication['id']],
+                                "paper_id": publication["id"],
+                                "authors": [profile_id],
+                                "mdate": pub_mdate
+                            }
+                        self._remove_keys_from_cache(publication["id"])
+                else:
+                    print(f"Skipping publication {publication['id']}. Either title or abstract must be provided ")
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_data.json"), 'w') as f_out:
             json.dump(output_dict, f_out, indent=1)
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt"), 'w') as f_out:
