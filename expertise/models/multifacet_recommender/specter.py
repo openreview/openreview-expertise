@@ -194,8 +194,8 @@ class SpecterPredictor:
                 if publication['content'].get('title') or publication['content'].get('abstract'):
                     self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
                     self.pub_author_ids_to_note_id[profile_id].append(publication['id'])
-                    self.pub_note_id_to_title[publication['id']] = publication['content'].get('title', "")
-                    self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract', "")
+                    self.pub_note_id_to_title[publication['id']] = publication['content'].get('title') if publication['content'].get('title') else "."
+                    self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract') if publication['content'].get('abstract') else "."
                     pub_mdate = publication.get('mdate', int(time.time()))
                     pub_cache_key = publication['id'] + "_" + str(pub_mdate)
                     self.pub_note_id_to_cache_key[publication['id']] = pub_cache_key
