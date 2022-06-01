@@ -37,12 +37,8 @@ class TestConference():
         def post_profiles(data):
             for profile_json in data['profiles']:
                 if not client.search_profiles(ids=[profile_json['id']]):
-                    print(f"{profile_json['id']} | {profile_json['content']['preferredEmail']}")
                     new_id = profile_json['id']
-                    if profile_json.get('content').get('preferredEmail') or len(profile_json.get('content').get('emails')) > 0:
-                        email = profile_json.get('content').get('preferredEmail') or profile_json.get('content').get('emails')[0]
-                    else:
-                        email = 'temp@abc.cc'
+                    email = profile_json.get('content').get('preferredEmail') or profile_json.get('content').get('emails')[0]
                     first_name = profile_json['id'][1:-1].split('_')[0]
                     last_name = profile_json['id'][1:-1].split('_')[-1]
                     helpers.create_user(email, first_name, last_name)
@@ -61,11 +57,7 @@ class TestConference():
                                         'middle': '',
                                         'last': last_name,
                                         'username': new_id }],
-                                    'weights': [1] },
-                                'emails': { 
-                                    'values': ['lilian.edwards@newcastle.ac.uk'], 
-                                    'weights': [-1] 
-                                }
+                                    'weights': [1] }
                             }))
                         client.post_group(
                             openreview.Group(
@@ -197,8 +189,64 @@ class TestConference():
         #openreview_client.post_invitation(invitation)
         #assert openreview_client.get_invitation('openreview.net/-/paper')
 
-    def test_post_notes(self, client, openreview_client):
+    def test_post_submissions(self, client, openreview_client):
+
+        def post_notes(data, data_invitation, api_invitation):
+            for note_json in data['notes'][data_invitation]:
+                content = note_json['content']
+                cdate = note_json.get('cdate')
+
+                note = openreview.Note(
+                    invitation = api_invitation,
+                    readers = ['everyone'],
+                    writers = ['openreview.net'],
+                    signatures = ['openreview.net'],
+                    content = content,
+                    cdate = cdate
+                )
+                note = client.post_note(note)
+
         with open('tests/data/expertiseServiceData.json') as json_file:
             data = json.load(json_file)
-        for note in data['notes']['ABC.cc/-/Submission']:
-                client.post_note(openreview.Note.from_json(note))
+        post_notes(data, 'ABC.cc/-/Submission', 'ABC.cc/-/Submission')
+
+        with open('tests/data/fakeData.json') as json_file:
+            data = json.load(json_file)
+        post_notes(data, 'ABC.cc/-/Submission', 'DEF.cc/-/Submission')
+
+    def test_post_publications(self, client, openreview_client):
+
+        def post_notes(data, api_invitation):
+            for profile_json in data['profiles']:
+                authorid = profile_json['id']
+                for pub_json in profile_json['publications']:
+                    content = pub_json['content']
+                    content['authorids'] = [authorid]
+                    cdate = pub_json.get('cdate')
+
+                    existing_pubs = list(openreview.tools.iterget_notes(client, content={'authorids': authorid}))
+                    existing_titles = [pub.content.get('title') for pub in existing_pubs]
+
+                    if content.get('title') not in existing_titles:
+                        note = openreview.Note(
+                            invitation = api_invitation,
+                            readers = ['everyone'],
+                            writers = ['openreview.net'],
+                            signatures = ['openreview.net'],
+                            content = content,
+                            cdate = cdate
+                        )
+                        note = client.post_note(note)
+        
+        with open('tests/data/expertiseServiceData.json') as json_file:
+            data = json.load(json_file)
+        post_notes(data, 'openreview.net/-/paper')
+
+        with open('tests/data/fakeData.json') as json_file:
+            data = json.load(json_file)
+        post_notes(data, 'openreview.net/-/paper')
+
+        
+
+
+

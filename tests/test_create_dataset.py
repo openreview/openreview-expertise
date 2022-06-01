@@ -119,31 +119,25 @@ def mock_client():
 
     return client
 
-def test_convert_to_list():
-    openreview_client = mock_client()
-    openreview_client_v2 = mock_v2(version=2)
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, {})
+def test_convert_to_list(client, openreview_client):
+    or_expertise = OpenReviewExpertise(client, openreview_client, {})
     groupList = or_expertise.convert_to_list('group.cc')
     assert groupList == ['group.cc']
 
     groupList = or_expertise.convert_to_list(['group.cc', 'group.aa'])
     assert groupList == ['group.cc', 'group.aa']
 
-def test_get_papers_from_group():
-    openreview_client = mock_client()
-    openreview_client_v2 = mock_v2(version=2)
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, {})
-    all_papers = or_expertise.get_papers_from_group('ABC.cc')
-    assert len(all_papers) == 148
+def test_get_papers_from_group(client, openreview_client):
+    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    all_papers = or_expertise.get_papers_from_group('DEF.cc')
+    assert len(all_papers) == 145
     if os.path.isfile('publications_by_profile_id.json'):
         os.remove('publications_by_profile_id.json')
 
-def test_get_profile_ids():
-    openreview_client = mock_client()
-    openreview_client_v2 = mock_v2(version=2)
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, {})
-    ids, _ = or_expertise.get_profile_ids(group_ids=['ABC.cc'])
-    assert len(ids) == 100
+def test_get_profile_ids(client, openreview_client):
+    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc'])
+    assert len(ids) == 99
     for tilde_id, email_id in ids:
         assert '~' in tilde_id
         assert '@' in email_id
@@ -152,8 +146,8 @@ def test_get_profile_ids():
     assert len(ids) == 3
     assert sorted(ids) == sorted([('~Romeo_Mraz2', 'hkinder2b@army.mil'), ('~Stacee_Powlowski9', 'mdagg5@1und1.de'), ('~Stanley_Bogisich4', 'cchippendale26@smugmug.com')])
 
-    ids, _ = or_expertise.get_profile_ids(group_ids=['ABC.cc'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
-    assert len(ids) == 100
+    ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
+    assert len(ids) == 99
 
     ids, inv_ids = or_expertise.get_profile_ids(reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de', 'mondragon@email.com'])
     assert len(ids) == 3
@@ -162,10 +156,8 @@ def test_get_profile_ids():
     assert inv_ids[0] == 'mondragon@email.com'
 
 
-def test_get_publications():
-    openreview_client = mock_client()
-    openreview_client_v2 = mock_v2(version=2)
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, {})
+def test_get_publications(client, openreview_client):
+    or_expertise = OpenReviewExpertise(client, openreview_client, {})
     publications = or_expertise.get_publications('~Carlos_Mondragon1')
     assert publications == []
 
@@ -178,7 +170,7 @@ def test_get_publications():
             'minimum_pub_date': minimum_pub_date
         }
     }
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
     publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
@@ -190,7 +182,7 @@ def test_get_publications():
             'top_recent_pubs': top_recent_pubs
         }
     }
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
     publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
@@ -203,7 +195,7 @@ def test_get_publications():
             'minimum_pub_date': minimum_pub_date
         }
     }
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
     publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 1
     assert publications[0]['cdate'] > minimum_pub_date
@@ -217,7 +209,7 @@ def test_get_publications():
             }
         }
     }
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
     publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
@@ -232,22 +224,20 @@ def test_get_publications():
             }
         }
     }
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
     publications = or_expertise.get_publications('~Perry_Volkman3')
     assert len(publications) == 2
     for publication in publications:
         assert publication['cdate'] > minimum_pub_date
 
-def test_get_submissions():
-    openreview_client = mock_client()
-    openreview_client_v2 = mock_v2(version=2)
+def test_get_submissions(client, openreview_client):
     config = {
         'dataset': {
             'directory': 'tests/data/'
         },
         'csv_submissions': 'csv_submissions.csv'
     }
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
     submissions = or_expertise.get_submissions()
     print(submissions)
     assert json.dumps(submissions) == json.dumps({
@@ -271,14 +261,12 @@ def get_paperhash(prefix, title):
     return prefix + title
 
 @patch('openreview.tools.get_paperhash', side_effect=get_paperhash)
-def test_retrieve_expertise(get_paperhash):
-    openreview_client = mock_client()
-    openreview_client_v2 = mock_v2(version=2)
+def test_retrieve_expertise(get_paperhash, client, openreview_client):
     config = {
         'use_email_ids': False,
-        'match_group': 'ABC.cc'
+        'match_group': 'DEF.cc'
     }
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
 
     with open('tests/data/fakeData.json') as json_file:
@@ -291,52 +279,35 @@ def test_retrieve_expertise(get_paperhash):
             else:
                 assert len(expertise[profile['id']]) == len(profile['publications'])
 
-def test_get_submissions_from_invitation():
-    openreview_client = mock_client()
-    openreview_client_v2 = mock_v2(version=2)
+def test_get_submissions_from_invitation(client, openreview_client):
     config = {
         'use_email_ids': False,
-        'match_group': 'ABC.cc',
-        'paper_invitation': 'ABC.cc/-/Submission'
+        'match_group': 'DEF.cc',
+        'paper_invitation': 'DEF.cc/-/Submission'
     }
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
     submissions = or_expertise.get_submissions()
+    retrieved_titles = [sub['content']['title'] for sub in submissions.values()]
+    assert len(retrieved_titles) == 2
+    assert retrieved_titles[0] != retrieved_titles[1]
+    assert "Repair Right Metatarsal, Percutaneous Endoscopic Approach" in retrieved_titles
+    assert "Bypass L Com Iliac Art to B Com Ilia, Perc Endo Approach" in retrieved_titles
     print(submissions)
-    assert json.dumps(submissions) == json.dumps({
-        'KHnr1r7H': {
-            "id": "KHnr1r7H",
-            "content": {
-                "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
-                "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
-            }
-        },
-        'YQtWeE8P': {
-            "id": "YQtWeE8P",
-            "content": {
-                "title": "Bypass L Com Iliac Art to B Com Ilia, Perc Endo Approach",
-                "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
-            }
-        }
-    })
 
-def test_get_by_submissions_from_paper_id():
-    openreview_client = mock_client()
-    openreview_client_v2 = mock_v2(version=2)
+def test_get_by_submissions_from_paper_id(client, openreview_client):
+    # Get a paper ID
+    target_paper = list(openreview.tools.iterget_notes(client, invitation='DEF.cc/-/Submission'))[0]
     config = {
-        'paper_id': 'KHnr1r7H'
+        'paper_id': f"{target_paper.id}"
     }
-    or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
     submissions = or_expertise.get_submissions()
     print(submissions)
-    assert json.dumps(submissions) == json.dumps({
-        'KHnr1r7H': {
-            "id": "KHnr1r7H",
-            "content": {
-                "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
-                "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
-            }
-        }
-    })
+    assert target_paper.id in submissions.keys()
+    retrieved_paper = submissions[target_paper.id]
+    assert retrieved_paper['content']['title'] == target_paper.content['title']
+    assert retrieved_paper['content']['abstract'] == target_paper.content['abstract']
+    assert retrieved_paper['id'] == target_paper.id
 
 def test_get_profile():
     openreview_client = mock_client()
