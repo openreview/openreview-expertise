@@ -95,8 +95,9 @@ jobs:
             conda activate expertise
             pip install --force-reinstall -e ~/openreview-py
             ls ~/openreview-py
-            ls ~/openreview-py/journal
-            ls ~/openreview-py/journal/process
+            ls ~/openreview-py/openreview
+            ls ~/openreview-py/openreview/journal
+            ls ~/openreview-py/openreview/journal/process
       - run:
           name: install api
           command: |
