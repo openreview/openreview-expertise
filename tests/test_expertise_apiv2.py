@@ -78,19 +78,17 @@ class TestExpertiseV2():
                 "config": config
             }
 
-    def test_get_publications(self):
-        openreview_client = mock_client(version=1)
-        openreview_client_v2 = mock_client(version=2)
+    def test_get_publications(self, client, openreview_client):
         config = {
             'dataset': {
                 'top_recent_pubs': 3,
             }
         }
-        or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+        or_expertise = OpenReviewExpertise(client, openreview_client, config)
         publications = or_expertise.get_publications('~Carlos_Mondragon1')
         assert publications == []
 
-        or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+        or_expertise = OpenReviewExpertise(client, openreview_client, config)
         publications = or_expertise.get_publications('~Harold_Rice8')
         assert len(publications) == 3
         for pub in publications:
@@ -98,101 +96,51 @@ class TestExpertiseV2():
             assert isinstance(content['title'], str)
             assert isinstance(content['abstract'], str)
 
-
-    def test_get_submissions_from_invitation_v1(self):
-        # Returns the V1 submissions
-        openreview_client = mock_client(version=1)
-        openreview_client_v2 = mock_client(version=2)
-
+    def test_get_submissions_from_invitation_v2(self, client, openreview_client):
+        # Returns the V2 submissions
         config = {
             'use_email_ids': False,
             'match_group': 'ABC.cc',
-            'paper_invitation': 'ABC.cc/-/Submission',
+            'paper_invitation': 'TMLR/-/Submission',
         }
-        or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
-        submissions = or_expertise.get_submissions()
-        print(submissions)
-        assert not isinstance(submissions['KHnr1r7H']['content']['title'], dict)
-        assert isinstance(submissions['KHnr1r7H']['content']['title'], str)
-        assert not isinstance(submissions['KHnr1r7H']['content']['abstract'], dict)
-        assert isinstance(submissions['KHnr1r7H']['content']['abstract'], str)
-        assert json.dumps(submissions) == json.dumps({
-            'KHnr1r7H': {
-                "id": "KHnr1r7H",
-                "content": {
-                    "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
-                    "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
-                }
-            },
-            'YQtWeE8P': {
-                "id": "YQtWeE8P",
-                "content": {
-                    "title": "Bypass L Com Iliac Art to B Com Ilia, Perc Endo Approach",
-                    "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
-                }
-            }
-        })
+        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        retrieved_submissions = or_expertise.get_submissions()
+        print(retrieved_submissions)
+        retrieved_titles = [pub.get('content').get('title') for pub in retrieved_submissions.values()]
+        assert len(retrieved_submissions) == 8
+        for submission in retrieved_submissions.values():
+            assert isinstance(submission['content']['title'], str)
 
-    def test_get_submissions_from_invitation_v2(self):
-        # Returns the V1 submissions
-        openreview_client = mock_client(version=1)
-        openreview_client_v2 = mock_client(version=2)
+        assert "Right Metatarsal, Endoscopic Approach" in retrieved_titles
+        assert "Iliac Art to B Com Ilia, Perc Endo Approach" in retrieved_titles
+
+    def test_get_by_submissions_from_paper_id(self, client, openreview_client):
+        journal_papers = openreview_client.get_notes(invitation='TMLR/-/Submission')
+        for paper in journal_papers:
+            if paper.content['authorids']['value'][0] == '~SomeFirstName_User1':
+                target_paper = paper
+                break
 
         config = {
-            'use_email_ids': False,
-            'match_group': 'ABC.cc',
-            'paper_invitation': 'ABC.cc/-/Blind_Submission',
+            'paper_id': target_paper.id,
         }
-        or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
+        or_expertise = OpenReviewExpertise(client, openreview_client, config)
         submissions = or_expertise.get_submissions()
         print(submissions)
-        assert not isinstance(submissions['KHnr1r7h']['content']['title'], dict)
-        assert isinstance(submissions['KHnr1r7h']['content']['title'], str)
-        assert not isinstance(submissions['KHnr1r7h']['content']['abstract'], dict)
-        assert isinstance(submissions['KHnr1r7h']['content']['abstract'], str)
-        assert json.dumps(submissions) == json.dumps({
-            'KHnr1r7h': {
-                "id": "KHnr1r7h",
-                "content": {
-                    "title": "Right Metatarsal, Endoscopic Approach",
-                    "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel."
-                }
-            },
-            'YQtWeE8p': {
-                "id": "YQtWeE8p",
-                "content": {
-                    "title": "Iliac Art to B Com Ilia, Perc Endo Approach",
-                    "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam."
-                }
-            }
-        })
+        assert not isinstance(submissions[target_paper.id]['content']['title'], dict)
+        assert not isinstance(submissions[target_paper.id]['content']['abstract'], dict)
 
-    def test_get_by_submissions_from_paper_id(self):
-        openreview_client = mock_client(version=1)
-        openreview_client_v2 = mock_client(version=2)
-
-        config = {
-            'paper_id': 'KHnr1r7h',
-        }
-        or_expertise = OpenReviewExpertise(openreview_client, openreview_client_v2, config)
-        submissions = or_expertise.get_submissions()
-        print(submissions)
-        assert not isinstance(submissions['KHnr1r7h']['content']['title'], dict)
-        assert not isinstance(submissions['KHnr1r7h']['content']['abstract'], dict)
-        assert json.dumps(submissions) == json.dumps({
-            'KHnr1r7h': {
-                "id": "KHnr1r7h",
-                "content": {
-                    "title": "Right Metatarsal, Endoscopic Approach",
-                    "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel."
-                }
-            }
-        })
-
-    def test_journal_request_v2(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_journal_request_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
+
+        # Fetch a paper ID
+        journal_papers = openreview_client.get_notes(invitation='TMLR/-/Submission')
+        for paper in journal_papers:
+            if paper.content['authorids']['value'][0] == '~SomeFirstName_User1':
+                target_id = paper.id
+
         # Make a request
         response = test_client.post(
             '/expertise',
@@ -204,7 +152,7 @@ class TestExpertiseV2():
                     },
                     "entityB": { 
                         'type': "Note",
-                        'id': 'KHnr1r7h'
+                        'id': target_id
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -215,7 +163,8 @@ class TestExpertiseV2():
                     }
                 }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
@@ -246,7 +195,7 @@ class TestExpertiseV2():
         assert req['entityA']['type'] == 'Group'
         assert req['entityA']['memberOf'] == 'ABC.cc'
         assert req['entityB']['type'] == 'Note'
-        assert req['entityB']['id'] == 'KHnr1r7h'
+        assert req['entityB']['id'] == target_id
         openreview_context['job_id'] = job_id
 
     def test_get_journal_results(self, openreview_context, celery_session_app, celery_session_worker):

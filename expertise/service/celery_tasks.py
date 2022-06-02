@@ -60,18 +60,14 @@ def after_expertise_return(self, status, retval, task_id, args, kwargs, einfo):
     time_limit=3600 * 24
 )
 def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger):
-    if token:
-        openreview_client = openreview.Client(
-            token=token,
-            baseurl=config.baseurl
-        )
-        openreview_client_v2 = openreview.api.OpenReviewClient(
-            token=token,
-            baseurl=config.baseurl_v2
-        )
-    else:
-        openreview_client = mock_client(version=1)
-        openreview_client_v2 = mock_client(version=2)
+    openreview_client = openreview.Client(
+        token=token,
+        baseurl=config.baseurl
+    )
+    openreview_client_v2 = openreview.api.OpenReviewClient(
+        token=token,
+        baseurl=config.baseurl_v2
+    )
     logger.info('CREATING DATASET')
     execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
     run_expertise.apply_async(

@@ -19,11 +19,6 @@ CORS(BLUEPRINT, supports_credentials=True)
 
 def get_client():
     token = flask.request.headers.get('Authorization')
-    in_test_mode = 'IN_TEST' in flask.current_app.config.keys()
-
-    if in_test_mode:
-        return mock_client()
-
     return openreview.Client(
         token=token,
         baseurl=flask.current_app.config['OPENREVIEW_BASEURL']

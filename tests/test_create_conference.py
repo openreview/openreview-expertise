@@ -186,9 +186,6 @@ class TestConference():
         client.post_invitation(invitation)
         assert client.get_invitation('DEF.cc/-/Submission')
 
-        #openreview_client.post_invitation(invitation)
-        #assert openreview_client.get_invitation('openreview.net/-/paper')
-
     def test_post_submissions(self, client, openreview_client):
 
         def post_notes(data, data_invitation, api_invitation):
