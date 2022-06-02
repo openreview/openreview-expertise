@@ -25,6 +25,7 @@ jobs:
             apt update
             apt install -y wget
             apt install -y make gcc
+            apt install -y curl
             apt install -y build-essential
             apt install -y git
             apt install -y sudo
