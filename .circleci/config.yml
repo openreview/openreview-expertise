@@ -6,6 +6,13 @@ jobs:
     docker:
       - image: ubuntu:18.04
       - image: redislabs/redisai
+      - image: cimg/python:3.7-node
+      - image: circleci/mongo:4.4.5
+        command: [--replSet,rs0]
+      - image: docker.elastic.co/elasticsearch/elasticsearch:7.7.0
+        environment:
+          xpack.security.enabled: false
+          transport.host: localhost
     environment:
       PYTHON_VERSION: 3.7
     steps:
@@ -49,6 +56,71 @@ jobs:
             pip install -e .
             conda install -y intel-openmp==2019.4
             conda install -y faiss-cpu -c pytorch
+      - run:
+          name: Initialize Replica Set
+          command: |
+            wget -qO - https://www.mongodb.org/static/pgp/server-4.4.asc | sudo apt-key add -
+            sudo touch /etc/apt/sources.list.d/mongodb-org-4.4.list
+            echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/4.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-4.4.list
+            sudo apt-get update
+            sudo apt-get install -y mongodb-org=4.4.5 mongodb-org-server=4.4.5 mongodb-org-shell=4.4.5 mongodb-org-mongos=4.4.5 mongodb-org-tools=4.4.5
+            mongo mongodb://localhost:27017 --eval "rs.initiate()"
+      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api-v1.git ~/openreview
+      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api.git ~/openreview-v2
+      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
+      - run:
+          name: Install openreview-py
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            pip install ~/openreview-py
+      - run: mkdir ~/openreview/logs
+      - run: mkdir ~/openreview/files
+      - run: mkdir ~/openreview/files/attachments
+      - run: mkdir ~/openreview/files/pdfs
+      - run: mkdir ~/openreview/files/temp
+      - run: mkdir ~/openreview-v2/logs
+      - run: mkdir ~/openreview-v2/files
+      - run: mkdir ~/openreview-v2/files/attachments
+      - run: mkdir ~/openreview-v2/files/pdfs
+      - run: mkdir ~/openreview-v2/files/temp
+      - run: mkdir ~/openreview-py/coverage
+      - run:
+          name: install api
+          command: |
+            cd ~/openreview
+            npm install
+      - run:
+          name: run api
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview
+            NODE_ENV=circleci node scripts/clean_start_app.js
+          background: true
+      - run:
+          shell: /bin/sh
+          command: |
+            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3000
+            :
+      - run:
+          name: install api-v2
+          command: |
+            cd ~/openreview-v2
+            npm install
+      - run:
+          name: run api-v2
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview-v2
+            NODE_ENV=circleci node scripts/setup_app.js
+          background: true
+      - run:
+          shell: /bin/sh
+          command: |
+            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3001
+            :
       - run:
           name: Run tests
           command: |
