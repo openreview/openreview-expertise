@@ -77,12 +77,6 @@ jobs:
       - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api-v1.git ~/openreview
       - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api.git ~/openreview-v2
       - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
-      - run:
-          name: Install openreview-py
-          command: |
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            pip install -e ~/openreview-py
       - run: mkdir ~/openreview/logs
       - run: mkdir ~/openreview/files
       - run: mkdir ~/openreview/files/attachments
@@ -94,6 +88,12 @@ jobs:
       - run: mkdir ~/openreview-v2/files/pdfs
       - run: mkdir ~/openreview-v2/files/temp
       - run: mkdir ~/openreview-py/coverage
+      - run:
+          name: Install openreview-py
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            pip install -Ie ~/openreview-py
       - run:
           name: install api
           command: |
