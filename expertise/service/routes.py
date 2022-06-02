@@ -4,7 +4,6 @@ Implements the Flask API endpoints.
 from expertise.service.expertise import ExpertiseService
 import openreview
 from openreview.openreview import OpenReviewException
-from .utils import mock_client
 from .utils import get_user_id
 import flask
 from copy import deepcopy

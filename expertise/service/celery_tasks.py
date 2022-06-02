@@ -2,7 +2,7 @@ from functools import update_wrapper
 import logging, json, os, shutil, time
 
 import redis
-from .utils import mock_client, JobStatus, JobDescription, JobConfig, RedisDatabase
+from .utils import JobStatus, JobDescription, JobConfig, RedisDatabase
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from expertise.service.server import celery_app as celery_server
 from expertise.service.server import redis_config_pool
