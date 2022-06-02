@@ -82,7 +82,7 @@ jobs:
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            pip install ~/openreview-py
+            pip install -e ~/openreview-py
       - run: mkdir ~/openreview/logs
       - run: mkdir ~/openreview/files
       - run: mkdir ~/openreview/files/attachments
