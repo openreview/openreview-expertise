@@ -131,20 +131,21 @@ class TestExpertiseService():
 
         shutil.rmtree(f"./tests/jobs/")
 
-    def test_request_expertise_with_no_config(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_no_config(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Submitting an empty config with no required fields
         response = test_client.post(
             '/expertise',
             data = json.dumps({}),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == 'Bad request: required field missing in request: name'
 
-    def test_request_expertise_with_no_second_entity(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_no_second_entity(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field (only group entity)
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -164,14 +165,15 @@ class TestExpertiseService():
                     }
                 }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == 'Bad request: required field missing in request: entityB'
 
-    def test_request_expertise_with_empty_entity(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_empty_entity(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working config with an extra field that is not allowed
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -192,14 +194,15 @@ class TestExpertiseService():
                     }
                 }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == 'Bad request: required field missing in entityA: type'
 
-    def test_request_expertise_with_missing_required_field_in_entity(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_missing_required_field_in_entity(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -222,14 +225,15 @@ class TestExpertiseService():
                     }
                 }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == 'Bad request: no valid Group properties in entityA'
 
-    def test_request_expertise_with_unexpected_entity(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_unexpected_entity(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field (only group entity)
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -254,14 +258,15 @@ class TestExpertiseService():
                     }
                 }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: unexpected fields in request: ['entityC']"
 
-    def test_request_expertise_with_unexpected_field_in_entity(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_unexpected_field_in_entity(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field (only group entity)
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -286,14 +291,15 @@ class TestExpertiseService():
                     }
                 }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: unexpected fields in entityA: ['unexpected_field']"
 
-    def test_request_expertise_with_unexpected_model_param(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_unexpected_model_param(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submitting a partially filled out config without a required field (only group entity)
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -318,14 +324,15 @@ class TestExpertiseService():
                     }
                 }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 400, f'{response.json}'
         assert 'Error' in response.json['name']
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: unexpected fields in model: ['unexpected_field']"
 
-    def test_request_expertise_with_valid_parameters(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_valid_parameters(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -351,7 +358,8 @@ class TestExpertiseService():
                     }
                 }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
@@ -436,7 +444,8 @@ class TestExpertiseService():
                 }
             }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
@@ -545,7 +554,7 @@ class TestExpertiseService():
 
         ## Assert the next expertise results should return empty result
 
-    def test_request_expertise_with_model_errors(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_model_errors(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a config with an error in the model field and return the job_id
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -570,7 +579,8 @@ class TestExpertiseService():
                     }
                 }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
@@ -607,10 +617,17 @@ class TestExpertiseService():
         assert response['cdate'] <= response['mdate']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     
-    def test_request_journal(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_journal(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
+
+        # Fetch a paper ID
+        journal_papers = openreview_client.get_notes(invitation='TMLR/-/Submission')
+        for paper in journal_papers:
+            if paper.content['authorids']['value'][0] == '~SomeFirstName_User1':
+                target_id = paper.id
+
         # Make a request
         response = test_client.post(
             '/expertise',
@@ -622,7 +639,7 @@ class TestExpertiseService():
                     },
                     "entityB": { 
                         'type': "Note",
-                        'id': 'KHnr1r7H'
+                        'id': target_id
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -633,7 +650,8 @@ class TestExpertiseService():
                     }
                 }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
@@ -663,7 +681,7 @@ class TestExpertiseService():
         assert req['entityA']['type'] == 'Group'
         assert req['entityA']['memberOf'] == 'ABC.cc'
         assert req['entityB']['type'] == 'Note'
-        assert req['entityB']['id'] == 'KHnr1r7H'
+        assert req['entityB']['id'] == target_id
         openreview_context['job_id'] = job_id
     
     def test_get_journal_results(self, openreview_context, celery_session_app, celery_session_worker):
@@ -684,11 +702,18 @@ class TestExpertiseService():
         response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
-    def test_high_load(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_high_load(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         test_client = openreview_context['test_client']
         num_requests = 3
         id_list = []
+
+        # Fetch a paper ID
+        journal_papers = openreview_client.get_notes(invitation='TMLR/-/Submission')
+        for paper in journal_papers:
+            if paper.content['authorids']['value'][0] == '~SomeFirstName_User1':
+                target_id = paper.id
+
         # Make n requests
         for _ in range(num_requests):
             response = test_client.post(
@@ -701,7 +726,7 @@ class TestExpertiseService():
                         },
                         "entityB": { 
                             'type': "Note",
-                            'id': 'KHnr1r7H'
+                            'id': target_id
                         },
                         "model": {
                                 "name": "specter+mfr",
@@ -712,7 +737,8 @@ class TestExpertiseService():
                         }
                     }
                 ),
-                content_type='application/json'
+                content_type='application/json',
+                headers=openreview_client.headers
             )
             assert response.status_code == 200, f'{response.json}'
             job_id = response.json['jobId']
@@ -768,7 +794,7 @@ class TestExpertiseService():
                 assert score >= 0 and score <= 1
             assert not os.path.isdir(f"./tests/jobs/{id}")
 
-    def test_request_group_group(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_group_group(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -794,7 +820,8 @@ class TestExpertiseService():
                     }
                 }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
