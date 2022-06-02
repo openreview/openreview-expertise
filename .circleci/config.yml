@@ -49,6 +49,7 @@ jobs:
             pip install -e .
             conda install -y intel-openmp==2019.4
             conda install -y faiss-cpu -c pytorch
+            pip install -I protobuf==3.20.1
       - run:
           name: Run tests
           command: |
