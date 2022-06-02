@@ -93,7 +93,7 @@ jobs:
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            pip install -Ie ~/openreview-py
+            pip install --force-reinstall ~/openreview-py
       - run:
           name: install api
           command: |
