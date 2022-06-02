@@ -1,10 +1,12 @@
 version: 2.1
 
+orbs: 
+  node: circleci/node@5.0.2
 jobs:
   build:
     working_directory: ~/openreview-expertise
     docker:
-      - image: cimg/python:3.7-node
+      - image: ubuntu:18.04
       - image: redislabs/redisai
       - image: circleci/mongo:4.4.5
         command: [--replSet,rs0]
@@ -20,16 +22,20 @@ jobs:
       - run:
           name: Setup Miniconda
           command: |
-            sudo apt update
-            sudo apt install -y wget
-            sudo apt install -y make gcc
-            sudo apt install -y build-essential
-            sudo apt install -y git
-            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC sudo apt install -y tzdata
+            apt update
+            apt install -y wget
+            apt install -y make gcc
+            apt install -y build-essential
+            apt install -y git
+            apt install -y sudo
+            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
             cd $HOME
             wget "https://repo.anaconda.com/miniconda/Miniconda3-4.7.10-Linux-x86_64.sh" -O miniconda.sh
             printf '%s' "8a324adcc9eaf1c09e22a992bb6234d91a94146840ee6b11c114ecadafc68121  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
+      - node/install:
+          install-yarn: true
+          node-version: '16.13'
       - run:
           name: Setup environment
           command: |
