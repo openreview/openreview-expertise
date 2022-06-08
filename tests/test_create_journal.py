@@ -30,8 +30,7 @@ class TestJournal():
         helpers.create_user('fabian@mail.com', 'Fabian', 'Pedregosa')
 
         ## Editors in Chief
-        helpers.create_user('raia@mail.com', 'Raia', 'Hadsell')
-        helpers.create_user('kyunghyun@mail.com', 'Kyunghyun', 'Cho')
+        # See api2Data.json
 
         journal=Journal(openreview_client, venue_id, '1234', contact_info='tmlr@jmlr.org', full_name='Transactions on Machine Learning Research', short_name='TMLR', submission_name='Submission')
         journal.setup(support_role='fabian@mail.com', editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
@@ -66,6 +65,7 @@ class TestJournal():
         with open('tests/data/api2Data.json') as json_file:
             data = json.load(json_file)
         post_notes(data, 'ABC.cc/-/Blind_Submission')
+        post_notes(data, 'HIJ.cc/-/Blind_Submission')
 
     def test_post_publications_to_journal(self, openreview_client):
 

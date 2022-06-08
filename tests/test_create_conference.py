@@ -109,6 +109,22 @@ class TestConference():
         )
         client.post_group(group)
 
+        # Post a small number of reviewers to the HIJ.cc group used for testing correctness
+        with open('tests/data/api2Data.json') as json_file:
+            data = json.load(json_file)
+        post_profiles(data)
+        members = data['groups']['HIJ.cc']['members']
+
+        group = openreview.Group(
+            id = 'HIJ.cc',
+            readers = ['everyone'],
+            writers = ['openreview.net'],
+            signatories = ['openreview.net'],
+            signatures = ['openreview.net'],
+            members = members
+        )
+        client.post_group(group)
+
     def test_create_invitations(self, client, openreview_client):
         reply = {
             "forum": None,

@@ -106,7 +106,7 @@ class TestExpertiseV2():
         retrieved_submissions = or_expertise.get_submissions()
         print(retrieved_submissions)
         retrieved_titles = [pub.get('content').get('title') for pub in retrieved_submissions.values()]
-        assert len(retrieved_submissions) == 8
+        assert len(retrieved_submissions) == 5
         for submission in retrieved_submissions.values():
             assert isinstance(submission['content']['title'], str)
 
@@ -137,7 +137,7 @@ class TestExpertiseV2():
         # Fetch a paper ID
         journal_papers = openreview_client.get_notes(invitation='TMLR/-/Submission')
         for paper in journal_papers:
-            if paper.content['authorids']['value'][0] == '~SomeFirstName_User1':
+            if 'liver tumor' in paper.content['title']['value']:
                 target_id = paper.id
 
         # Make a request
@@ -147,7 +147,7 @@ class TestExpertiseV2():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "ABC.cc",
+                        'memberOf': "HIJ.cc",
                     },
                     "entityB": { 
                         'type': "Note",
@@ -192,7 +192,7 @@ class TestExpertiseV2():
         req = response['request']
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
-        assert req['entityA']['memberOf'] == 'ABC.cc'
+        assert req['entityA']['memberOf'] == 'HIJ.cc'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['id'] == target_id
         openreview_context['job_id'] = job_id
@@ -204,12 +204,24 @@ class TestExpertiseV2():
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 1
         response = response.json['results']
+        medical_score, translation_score = 0, 0
         for item in response:
+            print(item)
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
             assert score >= 0 and score <= 1
+            if profile_id == '~Raia_Hadsell1':
+                medical_score = score
+            if profile_id == '~Kyunghyun_Cho1':
+                translation_score = score
+
+        # Check for correctness
+        assert medical_score > 0
+        assert translation_score > 0
+        assert medical_score > 0.5
+        assert translation_score < 0.5
         
         # Clean up journal request
         response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
