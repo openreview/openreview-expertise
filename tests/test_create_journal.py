@@ -23,7 +23,6 @@ class TestJournal():
         return journal
 
     def test_setup(self, openreview_client, helpers):
-
         venue_id = 'TMLR'
 
         ## Support Role
@@ -36,13 +35,14 @@ class TestJournal():
         journal.setup(support_role='fabian@mail.com', editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
     
     def test_post_submissions(self, client, openreview_client, helpers):
+        # Post submission with a test author id
 
         def post_notes(data, data_invitation):
             for note_json in data['notes'][data_invitation]:
                 content = note_json['content']
                 cdate = note_json.get('cdate')
 
-                ## Post the submission
+                # Post note edit to journal submission invitation
                 # TODO: Add in cdate to API2 notes
                 submission_note = openreview_client.post_note_edit(
                     invitation = 'TMLR/-/Submission',
@@ -68,6 +68,7 @@ class TestJournal():
         post_notes(data, 'HIJ.cc/-/Blind_Submission')
 
     def test_post_publications_to_journal(self, openreview_client):
+        # Use the journal submission invitation to post publications in API2        
 
         def post_notes(data):
             for profile_json in data['profiles']:

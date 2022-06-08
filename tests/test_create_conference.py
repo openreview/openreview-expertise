@@ -19,6 +19,7 @@ class TestConference():
         return conference
 
     def test_create_client(self, client, openreview_client):
+        # Test connectivity to the API
 
         client = openreview.Client()
         assert client
@@ -33,10 +34,12 @@ class TestConference():
         assert '~Super_User1' == openreview_client.profile.id
 
     def test_create_groups(self, client, helpers):
+        # Post test data groups to the API
 
         def post_profiles(data):
             for profile_json in data['profiles']:
                 if not client.search_profiles(ids=[profile_json['id']]):
+                    # If the profile hasn't already been posted get the data and create the user
                     new_id = profile_json['id']
                     email = profile_json.get('content').get('preferredEmail') or profile_json.get('content').get('emails')[0]
                     first_name = profile_json['id'][1:-1].split('_')[0]
@@ -126,6 +129,8 @@ class TestConference():
         client.post_group(group)
 
     def test_create_invitations(self, client, openreview_client):
+        # Post invitations for submissions and publications
+
         reply = {
             "forum": None,
             "replyto": None,
@@ -176,6 +181,8 @@ class TestConference():
 
         # Post an invitation for publications, submissions to be tested with the expertise model and
         # submissions to be tested with create dataset
+
+        # Archival/publication invitation
         invitation = openreview.Invitation(
             id = 'openreview.net/-/paper',
             writers = ['openreview.net'],
@@ -187,6 +194,7 @@ class TestConference():
         client.post_invitation(invitation)
         assert client.get_invitation('openreview.net/-/paper')
 
+        # Expertise model submission invitation
         invitation = openreview.Invitation(
             id = 'ABC.cc/-/Submission',
             writers = ['openreview.net'],
@@ -198,6 +206,7 @@ class TestConference():
         client.post_invitation(invitation)
         assert client.get_invitation('ABC.cc/-/Submission')
 
+        # create_dataset submission invitation
         invitation = openreview.Invitation(
             id = 'DEF.cc/-/Submission',
             writers = ['openreview.net'],
@@ -209,6 +218,7 @@ class TestConference():
         client.post_invitation(invitation)
         assert client.get_invitation('DEF.cc/-/Submission')
 
+        # create_dataset submission invitation to test deduplication
         invitation = openreview.Invitation(
                 id = 'DEF.cc/-/Blind_Submission',
                 writers = ['openreview.net'],
@@ -220,6 +230,7 @@ class TestConference():
         client.post_invitation(invitation)
         assert client.get_invitation('DEF.cc/-/Blind_Submission')
 
+        # create_dataset edge invitation to test exclusion
         invitation = openreview.Invitation(
                 id = 'DEF.cc/-/Expertise_Selection',
                 writers = ['openreview.net'],
@@ -266,7 +277,7 @@ class TestConference():
         assert client.get_invitation('DEF.cc/-/Expertise_Selection')
 
     def test_post_submissions(self, client, openreview_client):
-
+        
         def post_notes(data, data_invitation, api_invitation):
             for note_json in data['notes'][data_invitation]:
                 content = note_json['content']
