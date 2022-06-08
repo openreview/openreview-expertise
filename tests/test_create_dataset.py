@@ -193,3 +193,24 @@ def test_get_by_submissions_from_paper_id(client, openreview_client):
     assert retrieved_paper['content']['title'] == target_paper.content['title']
     assert retrieved_paper['content']['abstract'] == target_paper.content['abstract']
     assert retrieved_paper['id'] == target_paper.id
+
+def test_deduplication(client, openreview_client):
+    author_id = '~Harold_Rice8'
+    original_note = list(openreview.tools.iterget_notes(client, content={'authorids': author_id}))[0]
+    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+
+    publications = or_expertise.get_publications('~Harold_Rice8')
+    assert len(publications) == 3
+
+    note = openreview.Note(
+        invitation = 'DEF.cc/-/Blind_Submission',
+        readers = ['everyone'],
+        writers = ['openreview.net'],
+        signatures = ['openreview.net'],
+        content = original_note.content,
+        original = original_note.id
+    )
+    note = client.post_note(note)
+
+    publications = or_expertise.get_publications('~Harold_Rice8')
+    assert len(publications) == 3

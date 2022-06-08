@@ -43,7 +43,9 @@ class TestConference():
                     last_name = profile_json['id'][1:-1].split('_')[-1]
                     helpers.create_user(email, first_name, last_name)
                     
-                    curr_id = client.get_profile(email).id                    
+                    # A pre-generated user may not have 1 at the end
+                    # In this case, add the same name to their profile, create a group for this new ID and rename the profile
+                    curr_id = client.get_profile(email).id                   
                     if new_id != curr_id:
                         client.post_profile(openreview.Profile(
                             referent = curr_id, 
@@ -74,6 +76,8 @@ class TestConference():
                     assert client.get_profile(new_id)
                     assert client.get_profile(new_id).id == new_id
         
+        # Post a small number of reviewers to the ABC.cc group used for testing the expertise model
+        # to reduce test time
         with open('tests/data/expertiseServiceData.json') as json_file:
             data = json.load(json_file)
         post_profiles(data)
@@ -89,6 +93,7 @@ class TestConference():
         )
         client.post_group(group)
 
+        # Post a large number of reviewers to the DEF.cc group used for testing the create_dataset functions
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         post_profiles(data)
@@ -153,6 +158,8 @@ class TestConference():
                 }
             }
 
+        # Post an invitation for publications, submissions to be tested with the expertise model and
+        # submissions to be tested with create dataset
         invitation = openreview.Invitation(
             id = 'openreview.net/-/paper',
             writers = ['openreview.net'],
@@ -185,6 +192,17 @@ class TestConference():
         )
         client.post_invitation(invitation)
         assert client.get_invitation('DEF.cc/-/Submission')
+
+        invitation = openreview.Invitation(
+                id = 'DEF.cc/-/Blind_Submission',
+                writers = ['openreview.net'],
+                signatures = ['openreview.net'],
+                readers = ['everyone'],
+                invitees = ['everyone'],
+                reply=reply
+            )
+        client.post_invitation(invitation)
+        assert client.get_invitation('DEF.cc/-/Blind_Submission')
 
     def test_post_submissions(self, client, openreview_client):
 
