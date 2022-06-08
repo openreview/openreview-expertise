@@ -214,3 +214,49 @@ def test_deduplication(client, openreview_client):
 
     publications = or_expertise.get_publications('~Harold_Rice8')
     assert len(publications) == 3
+
+def test_expertise_selection(client, openreview_client):
+    config = {
+        'use_email_ids': False,
+        'exclusion_inv': 'DEF.cc/-/Expertise_Selection',
+        'match_group': 'DEF.cc'
+    }
+    author_id = '~Harold_Rice8'
+    original_note = list(openreview.tools.iterget_notes(client, content={'authorids': author_id}))[0]
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+
+    expertise = or_expertise.retrieve_expertise()
+    assert len(expertise['~Harold_Rice8']) == 3
+
+    note = openreview.Note(
+        invitation = 'openreview.net/-/paper',
+        readers = ['everyone'],
+        writers = ['openreview.net'],
+        signatures = ['openreview.net'],
+        content = {
+            "title": "test_title",
+            "abstract": original_note.content['abstract'],
+            "authorids": original_note.content['authorids']
+        },
+        cdate = 1554819115
+    )
+    note = client.post_note(note)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    expertise = or_expertise.retrieve_expertise()
+    assert len(expertise['~Harold_Rice8']) == 4
+    
+    edge = openreview.Edge(
+                        invitation='DEF.cc/-/Expertise_Selection',
+                        head=note.id,
+                        tail='~Harold_Rice8',
+                        label='Exclude',
+                        readers=['everyone'],
+                        writers=['openreview.net'],
+                        signatures=['openreview.net']
+                    )
+    edge = client.post_edge(edge)
+
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise.excluded_ids_by_user = or_expertise.exclude()
+    expertise = or_expertise.retrieve_expertise()
+    assert len(expertise['~Harold_Rice8']) == 3

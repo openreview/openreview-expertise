@@ -204,6 +204,51 @@ class TestConference():
         client.post_invitation(invitation)
         assert client.get_invitation('DEF.cc/-/Blind_Submission')
 
+        invitation = openreview.Invitation(
+                id = 'DEF.cc/-/Expertise_Selection',
+                writers = ['openreview.net'],
+                signatures = ['openreview.net'],
+                readers = ['everyone'],
+                invitees = ['everyone'],
+                reply={
+                    "forum": None,
+                    "replyto": None,
+                        "writers": {
+                            "values": [
+                                "openreview.net"
+                            ]
+                        },
+                        "signatures": {
+                            "description": "How your identity will be displayed with the above content.",
+                            "values": [
+                                "openreview.net"
+                            ]
+                        },
+                        "readers": {
+                            "description": "The users who will be allowed to read the above content.",
+                            "values": [
+                                "everyone"
+                            ]
+                        },
+                        "content": {
+                            "head": {
+                                "type": "Note"
+                            },
+                            "tail": {
+                                "type": "Profile"
+                            },
+                            "label": {
+                                "value-radio": [
+                                    "Exclude"
+                                ],
+                                "required": False
+                            }
+                        }
+                }
+            )
+        client.post_invitation(invitation)
+        assert client.get_invitation('DEF.cc/-/Expertise_Selection')
+
     def test_post_submissions(self, client, openreview_client):
 
         def post_notes(data, data_invitation, api_invitation):
