@@ -344,10 +344,16 @@ class OpenReviewExpertise(object):
             result = future.result()
             # Convert publications to json
             papers_json_list = []
+            filtered_papers = []
+            seen_keys = set()
             for paper_note in result['papers']:
-                papers_json_list.append(paper_note.to_json())
+                paper_hash = openreview.tools.get_paperhash('', paper_note.content['title'])
+                if paper_hash and paper_note.id not in self.excluded_ids_by_user[result['profile_id']] and paper_hash not in seen_keys:
+                    filtered_papers.append(paper_note)
+                    papers_json_list.append(paper_note.to_json())
+                seen_keys.add(paper_hash)
             publications_by_profile_id[result['profile_id']] = papers_json_list
-            all_papers = all_papers + result['papers']
+            all_papers = all_papers + filtered_papers
 
         # Dump publications by profile id
         with open(self.root.joinpath('publications_by_profile_id.json'), 'w') as f:
