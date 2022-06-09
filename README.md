@@ -579,6 +579,42 @@ Some older conferences use a bidding format that differs from the default "Very 
 }
 
 ```
+Test Setup
+----------
+
+Running the openreview-expertise test suite requires some initial setup. First, the OpenReview API and OpenReview API2 backend must be installed locally and configured to run on ports 3000 and 3001. For more information on how to install and configure those services see the README for each project:
+
+- [OpenReview API](https://github.com/openreview/openreview-api)
+- [OpenReview API2](https://github.com/openreview/openreview-api-v1)
+
+Run Tests
+---------
+
+Once the test setup above is complete you should be ready to run the test suite. To do so, start the OpenReview API backend running on localhost:
+
+```bash
+NODE_ENV=circleci node scripts/clean_start_app.js
+```
+
+and in a new shell start the OpenReview API2 backend:
+
+```bash
+ NODE_ENV=circleci node scripts/setup_app.js
+```
+
+Once both are running, start the tests:
+
+```bash
+pytest tests
+```
+
+> Note: If you have previously set environment variables with your OpenReview credentials, make sure to clear them before running the tests: `unset OPENREVIEW_USERNAME && unset OPENREVIEW_PASSWORD`
+
+To run a single set of tests from a file, you can include the file name as an argument. For example:
+
+```bash
+pytest tests/test_double_blind_conference.py
+```
 
 ## Test
 The testing methodology used for the model tries to check how good the model is. We are aware that this may not be the best strategy, but it has given good results so far. The test consists on using the publications of several reviewers and take one of those publications out from the corpus. We then use that extracted publication to calculate affinity scores against the remaining publications in the corpus. If the model is good then, we expect the authors of the extracted publication to have the highest affinity scores.
