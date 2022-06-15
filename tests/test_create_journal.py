@@ -31,21 +31,28 @@ class TestJournal():
         ## Editors in Chief
         # See api2Data.json
 
+        # TMLR is used to test functionality of create_dataset
         journal=Journal(openreview_client, venue_id, '1234', contact_info='tmlr@jmlr.org', full_name='Transactions on Machine Learning Research', short_name='TMLR', submission_name='Submission')
         journal.setup(support_role='fabian@mail.com', editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
+
+        # JMLR is used to test the expertise model and its correctness
+        journal=Journal(openreview_client, venue_id, '1234', contact_info='jmlr@jmlr.org', full_name='Journal on Machine Learning Research', short_name='JMLR', submission_name='Submission')
+        journal.setup(support_role='fabian@mail.com', editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
+
+        openreview_client.add_members_to_group('JMLR/Action_Editors', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
     
     def test_post_submissions(self, client, openreview_client, helpers):
         # Post submission with a test author id
 
-        def post_notes(data, data_invitation):
-            for note_json in data['notes'][data_invitation]:
+        def post_notes(data, invitation):
+            for note_json in data['notes'][invitation]:
                 content = note_json['content']
                 cdate = note_json.get('cdate')
 
                 # Post note edit to journal submission invitation
                 # TODO: Add in cdate to API2 notes
                 submission_note = openreview_client.post_note_edit(
-                    invitation = 'TMLR/-/Submission',
+                    invitation = invitation,
                     signatures = ['~Super_User1'],
                     note = Note(
                         #cdate = cdate,
@@ -64,14 +71,16 @@ class TestJournal():
 
         with open('tests/data/api2Data.json') as json_file:
             data = json.load(json_file)
-        post_notes(data, 'ABC.cc/-/Blind_Submission')
-        post_notes(data, 'HIJ.cc/-/Blind_Submission')
+        post_notes(data, 'TMLR/-/Submission')
+        post_notes(data, 'JMLR/-/Submission')
 
     def test_post_publications_to_journal(self, openreview_client):
         # Use the journal submission invitation to post publications in API2        
+        editors = ['~Raia_Hadsell1', '~Kyunghyun_Cho1']
 
         def post_notes(data):
-            for profile_json in data['profiles']:
+            for editor in editors:
+                profile_json = data['profiles'][editor]
                 authorid = profile_json['id']
                 name = ' '.join(authorid[1:-1].split('_'))
                 for pub_json in profile_json['publications']:
