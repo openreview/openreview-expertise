@@ -14,14 +14,14 @@ def test_convert_to_list(client, openreview_client):
 
 def test_get_papers_from_group(client, openreview_client):
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
-    all_papers = or_expertise.get_papers_from_group('DEF.cc')
+    all_papers = or_expertise.get_papers_from_group('DEF.cc/Reviewers')
     assert len(all_papers) == 145
     if os.path.isfile('publications_by_profile_id.json'):
         os.remove('publications_by_profile_id.json')
 
 def test_get_profile_ids(client, openreview_client):
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
-    ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc'])
+    ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc/Reviewers'])
     assert len(ids) == 99
     for tilde_id, email_id in ids:
         assert '~' in tilde_id
@@ -31,7 +31,7 @@ def test_get_profile_ids(client, openreview_client):
     assert len(ids) == 3
     assert sorted(ids) == sorted([('~Romeo_Mraz2', 'hkinder2b@army.mil'), ('~Stacee_Powlowski9', 'mdagg5@1und1.de'), ('~Stanley_Bogisich4', 'cchippendale26@smugmug.com')])
 
-    ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
+    ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc/Reviewers'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
     assert len(ids) == 99
 
     ids, inv_ids = or_expertise.get_profile_ids(reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de', 'mondragon@email.com'])
@@ -149,7 +149,7 @@ def get_paperhash(prefix, title):
 def test_retrieve_expertise(get_paperhash, client, openreview_client):
     config = {
         'use_email_ids': False,
-        'match_group': 'DEF.cc'
+        'match_group': 'DEF.cc/Reviewers'
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
@@ -167,7 +167,7 @@ def test_retrieve_expertise(get_paperhash, client, openreview_client):
 def test_get_submissions_from_invitation(client, openreview_client):
     config = {
         'use_email_ids': False,
-        'match_group': 'DEF.cc',
+        'match_group': 'DEF.cc/Reviewers',
         'paper_invitation': 'DEF.cc/-/Submission'
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
@@ -219,7 +219,7 @@ def test_expertise_selection(client, openreview_client):
     config = {
         'use_email_ids': False,
         'exclusion_inv': 'DEF.cc/-/Expertise_Selection',
-        'match_group': 'DEF.cc'
+        'match_group': 'DEF.cc/Reviewers'
     }
     author_id = '~Harold_Rice8'
     original_note = list(openreview.tools.iterget_notes(client, content={'authorids': author_id}))[0]
