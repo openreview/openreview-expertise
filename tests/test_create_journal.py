@@ -31,12 +31,8 @@ class TestJournal():
         ## Editors in Chief
         # See api2Data.json
 
-        # TMLR is used to test functionality of create_dataset
+        # TMLR is used to test functionality of create_dataset and the expertise model for API2
         journal=Journal(openreview_client, venue_id, '1234', contact_info='tmlr@jmlr.org', full_name='Transactions on Machine Learning Research', short_name='TMLR', submission_name='Submission')
-        journal.setup(support_role='fabian@mail.com', editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
-
-        # JMLR is used to test the expertise model and its correctness
-        journal=Journal(openreview_client, venue_id, '1234', contact_info='jmlr@jmlr.org', full_name='Journal on Machine Learning Research', short_name='JMLR', submission_name='Submission')
         journal.setup(support_role='fabian@mail.com', editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
 
         openreview_client.add_members_to_group('TMLR/Action_Editors', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])

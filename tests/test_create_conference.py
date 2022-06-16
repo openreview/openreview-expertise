@@ -340,15 +340,15 @@ class TestConference():
         def post_notes(data, invitation):
             for note_json in data['notes'][invitation]:
                 content = note_json['content']
-                content['authors'] = ['Test User']
-                content['authorids'] = ['~SomeFirstName_User1']
+                content['authors'] = ['Super User']
+                content['authorids'] = ['~Super_User1']
                 cdate = note_json.get('cdate')
 
                 note = openreview.Note(
                     invitation = invitation,
-                    readers = ['everyone'],
-                    writers = ['openreview.net'],
-                    signatures = ['openreview.net'],
+                    readers = [invitation.split('/')[0], '~Super_User1'],
+                    writers = ['~Super_User1'],
+                    signatures = ['~Super_User1'],
                     content = content,
                     cdate = cdate
                 )
