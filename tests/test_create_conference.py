@@ -196,7 +196,7 @@ class TestConference():
         
         # Post a small number of reviewers to the ABC.cc group used for testing the expertise model
         # to reduce test time
-        with open('tests/data/expertiseServiceData.json') as json_file:
+        with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         post_profiles(data)
         members = data['groups']['ABC.cc/Reviewers']['members']
@@ -340,6 +340,8 @@ class TestConference():
         def post_notes(data, invitation):
             for note_json in data['notes'][invitation]:
                 content = note_json['content']
+                content['authors'] = ['Test User']
+                content['authorids'] = ['~SomeFirstName_User1']
                 cdate = note_json.get('cdate')
 
                 note = openreview.Note(
@@ -352,7 +354,7 @@ class TestConference():
                 )
                 note = client.post_note(note)
 
-        with open('tests/data/expertiseServiceData.json') as json_file:
+        with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         post_notes(data, 'ABC.cc/-/Submission')
 

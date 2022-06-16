@@ -39,7 +39,7 @@ class TestJournal():
         journal=Journal(openreview_client, venue_id, '1234', contact_info='jmlr@jmlr.org', full_name='Journal on Machine Learning Research', short_name='JMLR', submission_name='Submission')
         journal.setup(support_role='fabian@mail.com', editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
 
-        openreview_client.add_members_to_group('JMLR/Action_Editors', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
+        openreview_client.add_members_to_group('TMLR/Action_Editors', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
     
     def test_post_submissions(self, client, openreview_client, helpers):
         # Post submission with a test author id
@@ -69,47 +69,46 @@ class TestJournal():
                         }
                     ))
 
-        with open('tests/data/api2Data.json') as json_file:
+        with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         post_notes(data, 'TMLR/-/Submission')
-        post_notes(data, 'JMLR/-/Submission')
 
     def test_post_publications_to_journal(self, openreview_client):
         # Use the journal submission invitation to post publications in API2        
         editors = ['~Raia_Hadsell1', '~Kyunghyun_Cho1']
 
         def post_notes(data):
-            for editor in editors:
-                profile_json = data['profiles'][editor]
-                authorid = profile_json['id']
-                name = ' '.join(authorid[1:-1].split('_'))
-                for pub_json in profile_json['publications']:
-                    content = pub_json['content']
-                    cdate = pub_json.get('cdate')
+            for profile_json in data['profiles']:
+                if profile_json['id'] in editors:
+                    authorid = profile_json['id']
+                    name = ' '.join(authorid[1:-1].split('_'))
+                    for pub_json in profile_json['publications']:
+                        content = pub_json['content']
+                        cdate = pub_json.get('cdate')
 
-                    existing_pubs = list(openreview.tools.iterget_notes(openreview_client, content={'authorids': authorid}))
-                    existing_titles = [pub.content.get('title') for pub in existing_pubs]
+                        existing_pubs = list(openreview.tools.iterget_notes(openreview_client, content={'authorids': authorid}))
+                        existing_titles = [pub.content.get('title') for pub in existing_pubs]
 
-                    if content.get('title') not in existing_titles:
-                        publication_note = openreview_client.post_note_edit(
-                            invitation = 'TMLR/-/Submission',
-                            signatures = ['~Super_User1'],
-                            note = Note(
-                                #cdate = cdate,
-                                content = {
-                                    'title': { 'value': content.get('title').get('value') },
-                                    'abstract': { 'value': content.get('abstract').get('value') },
-                                    'authors': { 'value': [name]},
-                                    'authorids': { 'value': [authorid]},
-                                    'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
-                                    'supplementary_material': { 'value': '/attachment/' + 's' * 40 +'.zip'},
-                                    'competing_interests': { 'value': 'None beyond the authors normal conflict of interests'},
-                                    'human_subjects_reporting': { 'value': 'Not applicable'},
-                                    'submission_length': { 'value': 'Regular submission (no more than 12 pages of main content)'}
-                                }
-                            ))
-        
-        with open('tests/data/api2Data.json') as json_file:
+                        if content.get('title') not in existing_titles:
+                            publication_note = openreview_client.post_note_edit(
+                                invitation = 'TMLR/-/Submission',
+                                signatures = ['~Super_User1'],
+                                note = Note(
+                                    #cdate = cdate,
+                                    content = {
+                                        'title': { 'value': content.get('title').get('value') },
+                                        'abstract': { 'value': content.get('abstract').get('value') },
+                                        'authors': { 'value': [name]},
+                                        'authorids': { 'value': [authorid]},
+                                        'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
+                                        'supplementary_material': { 'value': '/attachment/' + 's' * 40 +'.zip'},
+                                        'competing_interests': { 'value': 'None beyond the authors normal conflict of interests'},
+                                        'human_subjects_reporting': { 'value': 'Not applicable'},
+                                        'submission_length': { 'value': 'Regular submission (no more than 12 pages of main content)'}
+                                    }
+                                ))
+            
+        with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         post_notes(data)
 
