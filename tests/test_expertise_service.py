@@ -343,7 +343,7 @@ class TestExpertiseService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "ABC.cc",
+                        'memberOf': "ABC.cc/Reviewers",
                     },
                     "entityB": { 
                         'type': "Note",
@@ -407,7 +407,7 @@ class TestExpertiseService():
         req = response['request']
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
-        assert req['entityA']['memberOf'] == 'ABC.cc'
+        assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
@@ -429,7 +429,7 @@ class TestExpertiseService():
                 "name": "test_run2",
                 "entityA": {
                     'type': "Group",
-                    'memberOf': "ABC.cc",
+                    'memberOf': "ABC.cc/Reviewers",
                 },
                 "entityB": {
                     'type': "Note",
@@ -479,8 +479,8 @@ class TestExpertiseService():
         # Test for member query
         response = test_client.get('/expertise/status/all', query_string={'memberOf': 'ABC'}).json['results']
         assert len(response) == 2
-        assert response[0]['request']['entityA']['memberOf'] == 'ABC.cc'
-        assert response[1]['request']['entityA']['memberOf'] == 'ABC.cc'
+        assert response[0]['request']['entityA']['memberOf'] == 'ABC.cc/Reviewers'
+        assert response[1]['request']['entityA']['memberOf'] == 'ABC.cc/Reviewers'
 
         response = test_client.get('/expertise/status/all', query_string={'memberOf': 'CBA'}).json['results']
         assert len(response) == 0
@@ -563,7 +563,7 @@ class TestExpertiseService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "ABC.cc",
+                        'memberOf': "ABC.cc/Reviewers",
                     },
                     "entityB": { 
                         'type': "Note",
@@ -635,7 +635,7 @@ class TestExpertiseService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "ABC.cc",
+                        'memberOf': "ABC.cc/Reviewers",
                     },
                     "entityB": { 
                         'type': "Note",
@@ -679,7 +679,7 @@ class TestExpertiseService():
         req = response['request']
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
-        assert req['entityA']['memberOf'] == 'ABC.cc'
+        assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['id'] == target_id
         openreview_context['job_id'] = job_id
@@ -722,7 +722,7 @@ class TestExpertiseService():
                         "name": "test_run",
                         "entityA": {
                             'type': "Group",
-                            'memberOf': "ABC.cc",
+                            'memberOf': "ABC.cc/Reviewers",
                         },
                         "entityB": { 
                             'type': "Note",
@@ -805,11 +805,11 @@ class TestExpertiseService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "ABC.cc",
+                        'memberOf': "ABC.cc/Reviewers",
                     },
                     "entityB": { 
                         'type': "Group",
-                        'memberOf': "ABC.cc",
+                        'memberOf': "ABC.cc/Reviewers",
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -850,9 +850,9 @@ class TestExpertiseService():
         req = response['request']
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
-        assert req['entityA']['memberOf'] == 'ABC.cc'
+        assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
         assert req['entityB']['type'] == 'Group'
-        assert req['entityB']['memberOf'] == 'ABC.cc'
+        assert req['entityB']['memberOf'] == 'ABC.cc/Reviewers'
         openreview_context['job_id'] = job_id
     
     def test_get_group_results(self, openreview_context, celery_session_app, celery_session_worker):

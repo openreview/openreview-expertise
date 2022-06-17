@@ -147,7 +147,7 @@ class TestExpertiseV2():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "HIJ.cc",
+                        'memberOf': "TMLR/Action_Editors",
                     },
                     "entityB": { 
                         'type': "Note",
@@ -192,7 +192,7 @@ class TestExpertiseV2():
         req = response['request']
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
-        assert req['entityA']['memberOf'] == 'HIJ.cc'
+        assert req['entityA']['memberOf'] == 'TMLR/Action_Editors'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['id'] == target_id
         openreview_context['job_id'] = job_id

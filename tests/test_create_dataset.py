@@ -153,6 +153,8 @@ def test_retrieve_expertise(get_paperhash, client, openreview_client):
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
+    # Exclude users whose expertise will be posted in API2
+    exclude_ids = ['~Kyunghyun_Cho1', '~Raia_Hadsell1']
 
     with open('tests/data/fakeData.json') as json_file:
         data = json.load(json_file)
@@ -161,6 +163,8 @@ def test_retrieve_expertise(get_paperhash, client, openreview_client):
         if len(profile['publications']) > 0:
             if profile['id'] == '~Perry_Volkman3':
                 assert len(expertise[profile['id']]) < len(profile['publications'])
+            elif profile['id'] in exclude_ids:
+                assert len(expertise[profile['id']]) == 0
             else:
                 assert len(expertise[profile['id']]) == len(profile['publications'])
 
@@ -203,14 +207,15 @@ def test_deduplication(client, openreview_client):
     assert len(publications) == 3
 
     note = openreview.Note(
-        invitation = 'DEF.cc/-/Blind_Submission',
+        invitation = 'DEF.cc/-/Duplicated_Submission',
         readers = ['everyone'],
-        writers = ['openreview.net'],
-        signatures = ['openreview.net'],
+        writers = ['~SomeTest_User1'],
+        signatures = ['~SomeTest_User1'],
         content = original_note.content,
         original = original_note.id
     )
-    note = client.post_note(note)
+    test_user_client = openreview.Client(username='test@google.com', password='1234')
+    note = test_user_client.post_note(note)
 
     publications = or_expertise.get_publications('~Harold_Rice8')
     assert len(publications) == 3
@@ -231,8 +236,8 @@ def test_expertise_selection(client, openreview_client):
     note = openreview.Note(
         invitation = 'openreview.net/-/paper',
         readers = ['everyone'],
-        writers = ['openreview.net'],
-        signatures = ['openreview.net'],
+        writers = ['~SomeTest_User1'],
+        signatures = ['~SomeTest_User1'],
         content = {
             "title": "test_title",
             "abstract": original_note.content['abstract'],
@@ -240,21 +245,24 @@ def test_expertise_selection(client, openreview_client):
         },
         cdate = 1554819115
     )
-    note = client.post_note(note)
+
+    test_user_client = openreview.Client(username='test@google.com', password='1234')
+    note = test_user_client.post_note(note)
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Harold_Rice8']) == 4
     
+    user_client = openreview.Client(username='strevino0@ox.ac.uk', password='1234')
     edge = openreview.Edge(
                         invitation='DEF.cc/-/Expertise_Selection',
                         head=note.id,
                         tail='~Harold_Rice8',
                         label='Exclude',
-                        readers=['everyone'],
-                        writers=['openreview.net'],
-                        signatures=['openreview.net']
+                        readers=['DEF.cc', '~Harold_Rice8'],
+                        writers=['~Harold_Rice8'],
+                        signatures=['~Harold_Rice8']
                     )
-    edge = client.post_edge(edge)
+    edge = user_client.post_edge(edge)
 
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     or_expertise.excluded_ids_by_user = or_expertise.exclude()
