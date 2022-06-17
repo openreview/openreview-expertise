@@ -1,6 +1,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 import os
 import datetime
+from flask import request
 import openreview
 import pytest
 import time
@@ -18,6 +19,7 @@ class TestConference():
         first_date = now + datetime.timedelta(days=1)
 
         # Post the request form note
+        helpers.create_user('test@google.com', 'SomeTest', 'User')
         pc_client=helpers.create_user('pc@abc.cc', 'Program', 'ABCChair')
 
         request_form_note = pc_client.post_note(openreview.Note(
@@ -217,13 +219,13 @@ class TestConference():
             "replyto": None,
                 "writers": {
                     "values": [
-                        "openreview.net"
+                        "~SomeTest_User1"
                     ]
                 },
                 "signatures": {
                     "description": "How your identity will be displayed with the above content.",
                     "values": [
-                        "openreview.net"
+                        "~SomeTest_User1"
                     ]
                 },
                 "readers": {
@@ -335,32 +337,71 @@ class TestConference():
         assert client.get_invitation('DEF.cc/-/Expertise_Selection')
         '''
 
-    def test_post_submissions(self, client, openreview_client):
+    def test_post_submissions(self, client, openreview_client, helpers):
         
         def post_notes(data, invitation):
+            test_user_client = openreview.Client(username='test@google.com', password='1234')
             for note_json in data['notes'][invitation]:
                 content = note_json['content']
-                content['authors'] = ['Super User']
-                content['authorids'] = ['~Super_User1']
+                content['authors'] = ['SomeTest User']
+                content['authorids'] = ['~SomeTest_User1']
                 cdate = note_json.get('cdate')
 
                 note = openreview.Note(
                     invitation = invitation,
-                    readers = [invitation.split('/')[0], '~Super_User1'],
-                    writers = ['~Super_User1'],
-                    signatures = ['~Super_User1'],
+                    readers = [invitation.split('/')[0], '~SomeTest_User1'],
+                    writers = [invitation.split('/')[0], '~SomeTest_User1'],
+                    signatures = ['~SomeTest_User1'],
                     content = content,
                     cdate = cdate
                 )
-                note = client.post_note(note)
+                note = test_user_client.post_note(note)
 
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         post_notes(data, 'ABC.cc/-/Submission')
 
+        pc_client=openreview.Client(username='pc@abc.cc', password='1234')
+        request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[1]
+        print(request_form)
+        post_submission_note=pc_client.post_note(openreview.Note(
+            content= {
+                'force': 'Yes',
+                'hide_fields': ['keywords'],
+                'submission_readers': 'All program committee (all reviewers, all area chairs, all senior area chairs if applicable)'
+            },
+            forum= request_form.id,
+            invitation= f'openreview.net/Support/-/Request1/Post_Submission',
+            readers= ['ABC.cc/Program_Chairs', 'openreview.net/Support'],
+            referent= request_form.id,
+            replyto= request_form.id,
+            signatures= ['~Program_ABCChair1'],
+            writers= [],
+        ))
+        helpers.await_queue()
+
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         post_notes(data, 'DEF.cc/-/Submission')
+
+        pc_client=openreview.Client(username='pc@def.cc', password='1234')
+        request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[0]
+        print(request_form)
+        post_submission_note=pc_client.post_note(openreview.Note(
+            content= {
+                'force': 'Yes',
+                'hide_fields': ['keywords'],
+                'submission_readers': 'All program committee (all reviewers, all area chairs, all senior area chairs if applicable)'
+            },
+            forum= request_form.id,
+            invitation= f'openreview.net/Support/-/Request2/Post_Submission',
+            readers= ['DEF.cc/Program_Chairs', 'openreview.net/Support'],
+            referent= request_form.id,
+            replyto= request_form.id,
+            signatures= ['~Program_DEFChair1'],
+            writers= [],
+        ))
+        helpers.await_queue()
 
     def test_post_publications(self, client, openreview_client):
 
@@ -379,8 +420,8 @@ class TestConference():
                         note = openreview.Note(
                             invitation = api_invitation,
                             readers = ['everyone'],
-                            writers = ['openreview.net'],
-                            signatures = ['openreview.net'],
+                            writers = ['~SomeTest_User1'],
+                            signatures = ['~SomeTest_User1'],
                             content = content,
                             cdate = cdate
                         )
