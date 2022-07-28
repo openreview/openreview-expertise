@@ -277,18 +277,6 @@ class TestConference():
         client.post_invitation(invitation)
         assert client.get_invitation('openreview.net/-/paper')
 
-        # create_dataset submission invitation to test deduplication
-        invitation = openreview.Invitation(
-                id = 'DEF.cc/-/Duplicated_Submission',
-                writers = ['openreview.net'],
-                signatures = ['openreview.net'],
-                readers = ['everyone'],
-                invitees = ['everyone'],
-                reply=reply
-            )
-        client.post_invitation(invitation)
-        assert client.get_invitation('DEF.cc/-/Duplicated_Submission')
-
     def test_post_submissions(self, client, openreview_client, helpers):
         
         def post_notes(data, invitation):

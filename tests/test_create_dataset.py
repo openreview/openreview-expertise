@@ -207,7 +207,7 @@ def test_deduplication(client, openreview_client):
     assert len(publications) == 3
 
     note = openreview.Note(
-        invitation = 'DEF.cc/-/Duplicated_Submission',
+        invitation = 'openreview.net/-/paper',
         readers = ['everyone'],
         writers = ['~SomeTest_User1'],
         signatures = ['~SomeTest_User1'],
