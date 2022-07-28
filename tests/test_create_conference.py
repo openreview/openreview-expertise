@@ -162,36 +162,6 @@ class TestConference():
                     first_name = profile_json['id'][1:-1].split('_')[0]
                     last_name = profile_json['id'][1:-1].split('_')[-1]
                     helpers.create_user(email, first_name, last_name)
-                    
-                    # A pre-generated user may not have 1 at the end
-                    # In this case, add the same name to their profile, create a group for this new ID and rename the profile
-                    curr_id = client.get_profile(email).id                   
-                    if new_id != curr_id:
-                        client.post_profile(openreview.Profile(
-                            referent = curr_id, 
-                            invitation = '~/-/invitation',
-                            signatures = ['openreview.net'],
-                            content = {},
-                            metaContent = {
-                                'names': { 
-                                    'values': [{ 
-                                        'first': first_name,
-                                        'middle': '',
-                                        'last': last_name,
-                                        'username': new_id }],
-                                    'weights': [1] }
-                            }))
-                        client.post_group(
-                            openreview.Group(
-                                id = new_id,
-                                readers = [new_id],
-                                writers = ['openreview.net'],
-                                signatories = [new_id],
-                                signatures = ['openreview.net']
-                            )
-                        )
-
-                        client.rename_profile(curr_id, new_id)
 
                     assert client.get_profile(new_id)
                     assert client.get_profile(new_id).id == new_id

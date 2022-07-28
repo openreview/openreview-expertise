@@ -88,7 +88,7 @@ class TestExpertiseV2():
         assert publications == []
 
         or_expertise = OpenReviewExpertise(client, openreview_client, config)
-        publications = or_expertise.get_publications('~Harold_Rice8')
+        publications = or_expertise.get_publications('~Harold_Rice1')
         assert len(publications) == 3
         for pub in publications:
             content = pub['content']
