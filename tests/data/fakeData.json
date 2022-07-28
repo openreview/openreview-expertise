@@ -17,11 +17,70 @@
           "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
         }
       }
+    ],
+    "DEF.cc/-/Submission": [
+      {
+        "id": "KHnr1r7H",
+        "cdate": 1583404916,
+        "content": {
+          "title": "Repair Right Metatarsal, Percutaneous Endoscopic Approach",
+          "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
+        }
+      },
+      {
+        "id": "YQtWeE8P",
+        "cdate": 1585679551,
+        "content": {
+          "title": "Bypass L Com Iliac Art to B Com Ilia, Perc Endo Approach",
+          "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
+        }
+      }
+    ],
+    "TMLR/-/Submission": [
+      {
+        "id": "KHnr1r7h",
+        "cdate": 1583404916,
+        "content": {
+          "title": { "value": "Right Metatarsal, Endoscopic Approach"},
+          "abstract": { "value": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel."}
+        }
+      },
+      {
+        "id": "YQtWeE8p",
+        "cdate": 1585679551,
+        "content": {
+          "title": { "value": "Iliac Art to B Com Ilia, Perc Endo Approach"},
+          "abstract": { "value": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam."}
+        }
+      },
+      {
+        "id": "YQt12345",
+        "cdate": 1585679551,
+        "content": {
+          "title": { "value": "Automatic planning of liver tumor thermal ablation using deep reinforcement learning"},
+          "abstract": { "value": "Thermal ablation is a promising minimally invasive intervention to treat liver tumors. It requires a meticulous planning phase where the electrode trajectory from the skin surface to the tumor inside the liver as well as the ablation protocol are defined to reach a complete tumor ablation while considering multiple clinical constraints such as avoiding too much damage to healthy tissue. The planning is usually done manually based on 2D views of pre-operative CT images and can be extremely challenging for large or irregularly shaped tumors. Conventional optimization methods have been proposed to automate this complex task, but they suffer from high computation time.  To alleviate this drawback, we propose to leverage a deep reinforcement learning (DRL) approach to find the optimal electrode trajectory that satisfies all the clinical constraints and does not require any labels in training. Here, we define a custom environment as the 3D mask with tumor, surrounding organs, skin labels along with an electrode line and ablation zone. An agent, represented by a neural network, interacts with the custom environment by displacing the electrode and therefore can learn an optimal policy. The reward assignment is done based on the clinical constraints. To explore discrete and continuous action-based approaches with double deep Q networks and proximal policy optimization (PPO), respectively. We perform an evaluation on the publicly available liver tumor segmentation (LITs) challenge dataset. We obtain solutions that satisfy all clinical constraints comparable to the conventional method. The DRL method does not need any post-processing steps, allowing a mean inference time of 13.3 seconds per subject compared to the conventional optimization method's mean time of 135 seconds. Moreover, the best DRL method (PPO) yields a valid solution irrespective of the tumor location within the liver that demonstrates its robustness."}
+        }
+      }
     ]
   },
   "groups": {
-    "ABC.cc": {
-      "id": "ABC.cc",
+    "ABC.cc/Reviewers": {
+      "id": "ABC.cc/Reviewers",
+      "members": [
+        "~Harold_Rice1",
+        "~Zonia_Willms1",
+        "~Royal_Toy1"
+      ]
+    },
+    "HIJ.cc": {
+      "id": "HIJ.cc",
+      "members": [
+        "~Raia_Hadsell1",
+        "~Kyunghyun_Cho1"
+      ]
+    },
+    "DEF.cc/Reviewers": {
+      "id": "DEF.cc/Reviewers",
       "members": [
         "strevino0@ox.ac.uk",
         "wreolfi1@squidoo.com",
@@ -76,58 +135,57 @@
         "gbercher1e@bigcartel.com",
         "mdrillingcourt1f@chronoengine.com",
         "hbryning1g@mapy.cz",
-        "~Eleanora_Kerluke6",
-        "~Dino_Grady7",
-        "~Fairy_Hudson7",
-        "~Gavin_Becker8",
-        "~Farrah_Hegmann4",
+        "~Eleanora_Kerluke1",
+        "~Dino_Grady1",
+        "~Fairy_Hudson1",
+        "~Gavin_Becker1",
+        "~Farrah_Hegmann1",
         "~Gene_Romaguera1",
-        "~Justin_West4",
-        "~Linnea_Bernhard0",
-        "~Chanda_Reilly4",
-        "~Carita_Dicki4",
-        "~Aide_Schaefer4",
+        "~Justin_West1",
+        "~Linnea_Bernhard1",
+        "~Chanda_Reilly1",
+        "~Carita_Dicki1",
+        "~Aide_Schaefer1",
         "~Sigrid_Bernier1",
-        "~Will_Ledner7",
-        "~Roscoe_Haley7",
-        "~Jamison_Nader5",
-        "~Stephen_Douglas7",
-        "~Carmelina_Spencer5",
-        "~Fermin_Cronin7",
-        "~Arianna_Daugherty3",
-        "~Lera_Kuphal8",
-        "~Hilton_Bogisich3",
-        "~Mirian_Koepp7",
-        "~Elbert_Sanford7",
-        "~Devin_Bechtelar6",
-        "~Juanita_Greenholt7",
-        "~Stanley_Bogisich4",
-        "~Coletta_Hirthe0",
-        "~Young_Mohr2",
-        "~Marlin_Lind5",
-        "~Barton_Kling7",
-        "~Romeo_Mraz2",
-        "~Perry_Volkman3",
-        "~Abe_Roberts5",
-        "~Dotty_Heaney4",
-        "~Yong_Anderson0",
-        "~Cristobal_Howell9",
-        "~Kiesha_Gusikowski5",
-        "~Starr_Emmerich3",
-        "~Domingo_Willms2",
-        "~Sammie_Denesik6",
-        "~Seymour_Hermann5",
-        "~Milan_Metz4",
-        "~Marylyn_Cormier8",
-        "~Emanuel_Bergstrom5",
-        "~Juliana_Huel7",
-        "~Cedrick_Boyle2",
-        "~Porfirio_Rogahn5"
+        "~Will_Ledner1",
+        "~Roscoe_Haley1",
+        "~Jamison_Nader1",
+        "~Stephen_Douglas1",
+        "~Carmelina_Spencer1",
+        "~Fermin_Cronin1",
+        "~Lera_Kuphal1",
+        "~Hilton_Bogisich1",
+        "~Mirian_Koepp1",
+        "~Elbert_Sanford1",
+        "~Devin_Bechtelar1",
+        "~Juanita_Greenholt1",
+        "~Stanley_Bogisich1",
+        "~Coletta_Hirthe1",
+        "~Young_Mohr1",
+        "~Marlin_Lind1",
+        "~Barton_Kling1",
+        "~Romeo_Mraz1",
+        "~Perry_Volkman1",
+        "~Abe_Roberts1",
+        "~Dotty_Heaney1",
+        "~Yong_Anderson1",
+        "~Cristobal_Howell1",
+        "~Kiesha_Gusikowski1",
+        "~Starr_Emmerich1",
+        "~Domingo_Willms1",
+        "~Sammie_Denesik1",
+        "~Seymour_Hermann1",
+        "~Milan_Metz1",
+        "~Marylyn_Cormier1",
+        "~Emanuel_Bergstrom1",
+        "~Juliana_Huel1",
+        "~Cedrick_Boyle1",
+        "~Porfirio_Rogahn1"
       ]
     }
   },
   "profiles": [{
-    "id": "~Harold_Rice8",
+    "id": "~Harold_Rice1",
     "content": {
       "preferredEmail": "strevino0@ox.ac.uk",
       "emails": [
@@ -171,7 +229,7 @@
       }
     ]
   }, {
-    "id": "~Zonia_Willms0",
+    "id": "~Zonia_Willms1",
     "content": {
       "preferredEmail": "wreolfi1@squidoo.com",
       "emails": [
@@ -262,7 +320,7 @@
       }
     ]
   }, {
-    "id": "~Flavia_Waelchi2",
+    "id": "~Flavia_Waelchi1",
     "content": {
       "preferredEmail": "cgrigore4@multiply.com",
       "emails": [
@@ -289,7 +347,7 @@
       }
     ]
   }, {
-    "id": "~Stacee_Powlowski9",
+    "id": "~Stacee_Powlowski1",
     "content": {
       "preferredEmail": "mdagg5@1und1.de",
       "emails": [
@@ -308,7 +366,7 @@
     ],
     "publications": []
   }, {
-    "id": "~Rico_Walker6",
+    "id": "~Rico_Walker1",
     "content": {
       "preferredEmail": "wmuglestone6@wp.com",
       "emails": [
@@ -336,7 +394,7 @@
       }
     ]
   }, {
-    "id": "~Alex_Heaney8",
+    "id": "~Alex_Heaney1",
     "content": {
       "preferredEmail": "emongenot7@mozilla.org",
       "emails": [
@@ -355,7 +413,7 @@
       }
     ]
   }, {
-    "id": "~Bernard_Kautzer2",
+    "id": "~Bernard_Kautzer1",
     "content": {
       "preferredEmail": "aingledew8@archive.org",
       "emails": [
@@ -365,7 +423,7 @@
     "submissions": [],
     "publications": []
   }, {
-    "id": "~Eleanore_Cummings2",
+    "id": "~Eleanore_Cummings1",
     "content": {
       "preferredEmail": "aodger9@fema.gov",
       "emails": [
@@ -384,7 +442,7 @@
       }
     ]
   }, {
-    "id": "~Dorthy_Reinger9",
+    "id": "~Dorthy_Reinger1",
     "content": {
       "preferredEmail": "mkidstona@goodreads.com",
       "emails": [
@@ -403,7 +461,7 @@
       }
     ]
   }, {
-    "id": "~Amado_Feil7",
+    "id": "~Amado_Feil1",
     "content": {
       "preferredEmail": "hrobbertb@mashable.com",
       "emails": [
@@ -430,7 +488,7 @@
       }
     ]
   }, {
-    "id": "~Emmanuel_Jenkins5",
+    "id": "~Emmanuel_Jenkins1",
     "content": {
       "preferredEmail": "mhoblec@salon.com",
       "emails": [
@@ -474,7 +532,7 @@
       }
     ]
   }, {
-    "id": "~Marquis_Cummings8",
+    "id": "~Marquis_Cummings1",
     "content": {
       "preferredEmail": "labelovd@toplist.cz",
       "emails": [
@@ -501,7 +559,7 @@
       }
     ]
   }, {
-    "id": "~Andrew_Stark7",
+    "id": "~Andrew_Stark1",
     "content": {
       "preferredEmail": "rbuckbye@nps.gov",
       "emails": [
@@ -520,7 +578,7 @@
       }
     ]
   }, {
-    "id": "~Jefferson_Hermann6",
+    "id": "~Jefferson_Hermann1",
     "content": {
       "preferredEmail": "darangyf@issuu.com",
       "emails": [
@@ -539,7 +597,7 @@
       }
     ]
   }, {
-    "id": "~Margherita_Hilpert9",
+    "id": "~Margherita_Hilpert1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -575,7 +633,7 @@
       }
     ]
   }, {
-    "id": "~Nicky_Purdy8",
+    "id": "~Nicky_Purdy1",
     "content": {
       "preferredEmail": "agadsdenh@ted.com",
       "emails": [
@@ -603,7 +661,7 @@
       }
     ]
   }, {
-    "id": "~Clarinda_Ferry9",
+    "id": "~Clarinda_Ferry1",
     "content": {
       "preferredEmail": "skembryi@imdb.com",
       "emails": [
@@ -647,7 +705,7 @@
       }
     ]
   }, {
-    "id": "~Wallace_Mayert7",
+    "id": "~Wallace_Mayert1",
     "content": {
       "preferredEmail": "ndudingj@squarespace.com",
       "emails": [
@@ -666,7 +724,7 @@
       }
     ]
   }, {
-    "id": "~Macie_Mills2",
+    "id": "~Macie_Mills1",
     "content": {
       "preferredEmail": "dcouvertk@artisteer.com",
       "emails": [
@@ -676,7 +734,7 @@
     "submissions": [],
     "publications": []
   }, {
-    "id": "~Foster_Turcotte4",
+    "id": "~Foster_Turcotte1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -720,7 +778,7 @@
       }
     ]
   }, {
-    "id": "~Broderick_Rodriguez7",
+    "id": "~Broderick_Rodriguez1",
     "content": {
       "preferredEmail": "jfrapem@arstechnica.com",
       "emails": [
@@ -739,7 +797,7 @@
     ],
     "publications": []
   }, {
-    "id": "~Kurtis_Muller9",
+    "id": "~Kurtis_Muller1",
     "content": {
       "preferredEmail": "jcrumbn@github.com",
       "emails": [
@@ -766,7 +824,7 @@
       }
     ]
   }, {
-    "id": "~Felix_Cummings4",
+    "id": "~Felix_Cummings1",
     "content": {
       "preferredEmail": "hcleavelando@sitemeter.com",
       "emails": [
@@ -810,7 +868,7 @@
       }
     ]
   }, {
-    "id": "~Leonel_Collins2",
+    "id": "~Leonel_Collins1",
     "content": {
       "preferredEmail": "dmcpeakep@people.com.cn",
       "emails": [
@@ -829,7 +887,7 @@
     ],
     "publications": []
   }, {
-    "id": "~Rudolph_Zboncak2",
+    "id": "~Rudolph_Zboncak1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -865,7 +923,7 @@
       }
     ]
   }, {
-    "id": "~Min_Bailey3",
+    "id": "~Min_Bailey1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -875,7 +933,7 @@
     "submissions": [],
     "publications": []
   }, {
-    "id": "~Ja_Blanda0",
+    "id": "~Ja_Blanda1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -911,7 +969,7 @@
       }
     ]
   }, {
-    "id": "~Jayna_Wisoky9",
+    "id": "~Jayna_Wisoky1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -930,7 +988,7 @@
     ],
     "publications": []
   }, {
-    "id": "~Homer_Gutkowski9",
+    "id": "~Homer_Gutkowski1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -940,7 +998,7 @@
     "submissions": [],
     "publications": []
   }, {
-    "id": "~Melodee_Ondricka0",
+    "id": "~Melodee_Ondricka1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -975,7 +1033,7 @@
       }
     ]
   }, {
-    "id": "~Delphine_Runolfsdottir4",
+    "id": "~Delphine_Runolfsdottir1",
     "content": {
       "preferredEmail": "kroughtw@elpais.com",
       "emails": [
@@ -994,7 +1052,7 @@
       }
     ]
   }, {
-    "id": "~Mariano_Beier5",
+    "id": "~Mariano_Beier1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -1021,7 +1079,7 @@
       }
     ]
   }, {
-    "id": "~Jarrod_Marquardt7",
+    "id": "~Jarrod_Marquardt1",
     "content": {
       "preferredEmail": "crodgersy@reuters.com",
       "emails": [
@@ -1056,7 +1114,7 @@
       }
     ]
   }, {
-    "id": "~Wesley_Gaylord3",
+    "id": "~Wesley_Gaylord1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -1091,7 +1149,7 @@
       }
     ]
   }, {
-    "id": "~Dewey_Jones3",
+    "id": "~Dewey_Jones1",
     "content": {
       "preferredEmail": "iyurivtsev10@timesonline.co.uk",
       "emails": [
@@ -1110,7 +1168,7 @@
     ],
     "publications": []
   }, {
-    "id": "~Karla_Koch3",
+    "id": "~Karla_Koch1",
     "content": {
       "preferredEmail": "rclilverd11@jugem.jp",
       "emails": [
@@ -1154,7 +1212,7 @@
       }
     ]
   }, {
-    "id": "~Viva_Paucek9",
+    "id": "~Viva_Paucek1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -1182,7 +1240,7 @@
       }
     ]
   }, {
-    "id": "~Brandee_Jenkins4",
+    "id": "~Brandee_Jenkins1",
     "content": {
       "preferredEmail": "gsigge13@google.ru",
       "emails": [
@@ -1210,7 +1268,7 @@
       }
     ]
   }, {
-    "id": "~Dylan_Waelchi2",
+    "id": "~Dylan_Waelchi1",
     "content": {
       "preferredEmail": "glemm14@discuz.net",
       "emails": [
@@ -1245,7 +1303,7 @@
       }
     ]
   }, {
-    "id": "~Nella_Predovic6",
+    "id": "~Nella_Predovic1",
     "content": {
       "preferredEmail": "challford15@hao123.com",
       "emails": [
@@ -1281,7 +1339,7 @@
       }
     ]
   }, {
-    "id": "~Wanita_DuBuque0",
+    "id": "~Wanita_DuBuque1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -1300,7 +1358,7 @@
     ],
     "publications": []
   }, {
-    "id": "~Rolland_Bode4",
+    "id": "~Rolland_Bode1",
     "content": {
       "preferredEmail": "bcuvley17@mozilla.com",
       "emails": [
@@ -1344,7 +1402,7 @@
       }
     ]
   }, {
-    "id": "~Roger_Bradtke4",
+    "id": "~Roger_Bradtke1",
     "content": {
       "preferredEmail": "jpietri18@amazon.co.jp",
       "emails": [
@@ -1372,7 +1430,7 @@
       }
     ]
   }, {
-    "id": "~Tommy_Price5",
+    "id": "~Tommy_Price1",
     "content": {
       "preferredEmail": "gbernardoux19@yahoo.co.jp",
       "emails": [
@@ -1400,7 +1458,7 @@
       }
     ]
   }, {
-    "id": "~Velia_Bradtke9",
+    "id": "~Velia_Bradtke1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -1438,7 +1496,7 @@
     "submissions": [],
     "publications": []
   }, {
-    "id": "~Elbert_Bode7",
+    "id": "~Elbert_Bode1",
     "content": {
       "preferredEmail": "ahayhoe1c@histats.com",
       "emails": [
@@ -1482,7 +1540,7 @@
       }
     ]
   }, {
-    "id": "~Charmain_Botsford7",
+    "id": "~Charmain_Botsford1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -1526,7 +1584,7 @@
       }
     ]
   }, {
-    "id": "~Quintin_Thiel3",
+    "id": "~Quintin_Thiel1",
     "content": {
       "preferredEmail": "gbercher1e@bigcartel.com",
       "emails": [
@@ -1545,7 +1603,7 @@
       }
     ]
   }, {
-    "id": "~Tom_Hammes9",
+    "id": "~Tom_Hammes1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -1572,7 +1630,7 @@
       }
     ]
   }, {
-    "id": "~Mohammad_Corwin7",
+    "id": "~Mohammad_Corwin1",
     "content": {
       "preferredEmail": "hbryning1g@mapy.cz",
       "emails": [
@@ -1582,7 +1640,7 @@
     "submissions": [],
     "publications": []
   }, {
-    "id": "~Eleanora_Kerluke6",
+    "id": "~Eleanora_Kerluke1",
     "content": {
       "preferredEmail": "vhehl1h@geocities.jp",
       "emails": [
@@ -1609,7 +1667,7 @@
       }
     ]
   }, {
-    "id": "~Dino_Grady7",
+    "id": "~Dino_Grady1",
     "content": {
       "preferredEmail": "jmulchrone1i@fotki.com",
       "emails": [
@@ -1619,7 +1677,7 @@
     "submissions": [],
     "publications": []
   }, {
-    "id": "~Fairy_Hudson7",
+    "id": "~Fairy_Hudson1",
     "content": {
       "preferredEmail": "gsissons1j@sitemeter.com",
       "emails": [
@@ -1655,7 +1713,7 @@
       }
     ]
   }, {
-    "id": "~Gavin_Becker8",
+    "id": "~Gavin_Becker1",
     "content": {
       "preferredEmail": "rcapaldo1k@ocn.ne.jp",
       "emails": [
@@ -1682,7 +1740,7 @@
       }
     ]
   }, {
-    "id": "~Farrah_Hegmann4",
+    "id": "~Farrah_Hegmann1",
     "content": {
       "preferredEmail": "kantonacci1l@discuz.net",
       "emails": [
@@ -1728,7 +1786,7 @@
       }
     ]
   }, {
-    "id": "~Justin_West4",
+    "id": "~Justin_West1",
     "content": {
       "preferredEmail": "maries1n@friendfeed.com",
       "emails": [
@@ -1763,7 +1821,7 @@
       }
     ]
   }, {
-    "id": "~Linnea_Bernhard0",
+    "id": "~Linnea_Bernhard1",
     "content": {
       "preferredEmail": "kcapun1o@house.gov",
       "emails": [
@@ -1791,7 +1849,7 @@
       }
     ]
   }, {
-    "id": "~Chanda_Reilly4",
+    "id": "~Chanda_Reilly1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -1810,7 +1868,7 @@
       }
     ]
   }, {
-    "id": "~Carita_Dicki4",
+    "id": "~Carita_Dicki1",
     "content": {
       "preferredEmail": "acarnow1q@joomla.org",
       "emails": [
@@ -1829,7 +1887,7 @@
       }
     ]
   }, {
-    "id": "~Aide_Schaefer4",
+    "id": "~Aide_Schaefer1",
     "content": {
       "preferredEmail": "lstango1r@storify.com",
       "emails": [
@@ -1875,7 +1933,7 @@
     "submissions": [],
     "publications": []
   }, {
-    "id": "~Will_Ledner7",
+    "id": "~Will_Ledner1",
     "content": {
       "preferredEmail": "akunat1t@harvard.edu",
       "emails": [
@@ -1894,7 +1952,7 @@
     ],
     "publications": []
   }, {
-    "id": "~Roscoe_Haley7",
+    "id": "~Roscoe_Haley1",
     "content": {
       "preferredEmail": "ghaselwood1u@gnu.org",
       "emails": [
@@ -1913,7 +1971,7 @@
     ],
     "publications": []
   }, {
-    "id": "~Jamison_Nader5",
+    "id": "~Jamison_Nader1",
     "content": {
       "preferredEmail": "gmaw1v@youtu.be",
       "emails": [
@@ -1923,7 +1981,7 @@
     "submissions": [],
     "publications": []
   }, {
-    "id": "~Stephen_Douglas7",
+    "id": "~Stephen_Douglas1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -1959,7 +2017,7 @@
       }
     ]
   }, {
-    "id": "~Carmelina_Spencer5",
+    "id": "~Carmelina_Spencer1",
     "content": {
       "preferredEmail": "fsanchez1x@gnu.org",
       "emails": [
@@ -1978,7 +2036,7 @@
       }
     ]
   }, {
-    "id": "~Fermin_Cronin7",
+    "id": "~Fermin_Cronin1",
     "content": {
       "preferredEmail": "oluesley1y@mac.com",
       "emails": [
@@ -1997,40 +2055,7 @@
     ],
     "publications": []
   }, {
-    "id": "~Arianna_Daugherty3",
-    "content": {
-      "preferredEmail": null,
-      "emails": []
-    },
-    "submissions": [],
-    "publications": [
-      {
-        "id": "TUPe9aFZ",
-        "cdate": 1570582923,
-        "content": {
-          "title": "Replacement of Left Rib with Nonaut Sub, Perc Endo Approach",
-          "abstract": "Morbi porttitor lorem id ligula. Suspendisse ornare consequat lectus. In est risus, auctor sed, tristique in, tempus sit amet, sem.\n\nFusce consequat. Nulla nisl. Nunc nisl.\n\nDuis bibendum, felis sed interdum venenatis, turpis enim blandit mi, in porttitor pede justo eu massa. Donec dapibus. Duis at velit eu est congue elementum."
-        }
-      },
-      {
-        "id": "6WzctHge",
-        "cdate": 1581911575,
-        "content": {
-          "title": "HDR Brachytherapy of Head & Neck using Oth Isotope",
-          "abstract": "Quisque porta volutpat erat. Quisque erat eros, viverra eget, congue eget, semper rutrum, nulla. Nunc purus.\n\nPhasellus in felis. Donec semper sapien a libero. Nam dui."
-        }
-      },
-      {
-        "id": "qHOi89hC",
-        "cdate": 1552652618,
-        "content": {
-          "title": "Excision of Bladder Neck, Endo, Diagn",
-          "abstract": "Suspendisse potenti. In eleifend quam a odio. In hac habitasse platea dictumst.\n\nMaecenas ut massa quis augue luctus tincidunt. Nulla mollis molestie lorem. Quisque ut erat.\n\nCurabitur gravida nisi at nibh. In hac habitasse platea dictumst. Aliquam augue quam, sollicitudin vitae, consectetuer eget, rutrum at, lorem."
-        }
-      }
-    ]
-  }, {
-    "id": "~Lera_Kuphal8",
+    "id": "~Lera_Kuphal1",
     "content": {
       "preferredEmail": "mtroctor20@lycos.com",
       "emails": [
@@ -2058,7 +2083,7 @@
       }
     ]
   }, {
-    "id": "~Hilton_Bogisich3",
+    "id": "~Hilton_Bogisich1",
     "content": {
       "preferredEmail": "craistrick21@toplist.cz",
       "emails": [
@@ -2093,7 +2118,7 @@
       }
     ]
   }, {
-    "id": "~Mirian_Koepp7",
+    "id": "~Mirian_Koepp1",
     "content": {
       "preferredEmail": "iidill22@oaic.gov.au",
       "emails": [
@@ -2128,7 +2153,7 @@
       }
     ]
   }, {
-    "id": "~Elbert_Sanford7",
+    "id": "~Elbert_Sanford1",
     "content": {
       "preferredEmail": "tcampany23@paginegialle.it",
       "emails": [
@@ -2147,7 +2172,7 @@
       }
     ]
   }, {
-    "id": "~Devin_Bechtelar6",
+    "id": "~Devin_Bechtelar1",
     "content": {
       "preferredEmail": "nebdin24@weibo.com",
       "emails": [
@@ -2174,7 +2199,7 @@
       }
     ]
   }, {
-    "id": "~Juanita_Greenholt7",
+    "id": "~Juanita_Greenholt1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -2210,7 +2235,7 @@
       }
     ]
   }, {
-    "id": "~Stanley_Bogisich4",
+    "id": "~Stanley_Bogisich1",
     "content": {
       "preferredEmail": "cchippendale26@smugmug.com",
       "emails": [
@@ -2238,7 +2263,7 @@
       }
     ]
   }, {
-    "id": "~Coletta_Hirthe0",
+    "id": "~Coletta_Hirthe1",
     "content": {
       "preferredEmail": "mhaffard27@macromedia.com",
       "emails": [
@@ -2257,7 +2282,7 @@
     ],
     "publications": []
   }, {
-    "id": "~Young_Mohr2",
+    "id": "~Young_Mohr1",
     "content": {
       "preferredEmail": "khazeley28@unblog.fr",
       "emails": [
@@ -2276,7 +2301,7 @@
     ],
     "publications": []
   }, {
-    "id": "~Marlin_Lind5",
+    "id": "~Marlin_Lind1",
     "content": {
       "preferredEmail": "ppool29@soundcloud.com",
       "emails": [
@@ -2286,7 +2311,7 @@
     "submissions": [],
     "publications": []
   }, {
-    "id": "~Barton_Kling7",
+    "id": "~Barton_Kling1",
     "content": {
       "preferredEmail": "wdunmuir2a@unc.edu",
       "emails": [
@@ -2322,7 +2347,7 @@
       }
     ]
   }, {
-    "id": "~Romeo_Mraz2",
+    "id": "~Romeo_Mraz1",
     "content": {
       "preferredEmail": "hkinder2b@army.mil",
       "emails": [
@@ -2357,7 +2382,7 @@
       }
     ]
   }, {
-    "id": "~Perry_Volkman3",
+    "id": "~Perry_Volkman1",
     "content": {
       "preferredEmail": "btuffley2c@yahoo.com",
       "emails": [
@@ -2410,7 +2435,7 @@
       }
     ]
   }, {
-    "id": "~Abe_Roberts5",
+    "id": "~Abe_Roberts1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -2438,7 +2463,7 @@
       }
     ]
   }, {
-    "id": "~Dotty_Heaney4",
+    "id": "~Dotty_Heaney1",
     "content": {
       "preferredEmail": "sboydle2e@geocities.com",
       "emails": [
@@ -2457,7 +2482,7 @@
       }
     ]
   }, {
-    "id": "~Yong_Anderson0",
+    "id": "~Yong_Anderson1",
     "content": {
       "preferredEmail": "fdermott2f@wikispaces.com",
       "emails": [
@@ -2492,7 +2517,7 @@
       }
     ]
   }, {
-    "id": "~Cristobal_Howell9",
+    "id": "~Cristobal_Howell1",
     "content": {
       "preferredEmail": "rdaughtry2g@mayoclinic.com",
       "emails": [
@@ -2536,7 +2561,7 @@
       }
     ]
   }, {
-    "id": "~Kiesha_Gusikowski5",
+    "id": "~Kiesha_Gusikowski1",
     "content": {
       "preferredEmail": "lmacgiany2h@seattletimes.com",
       "emails": [
@@ -2571,7 +2596,7 @@
       }
     ]
   }, {
-    "id": "~Starr_Emmerich3",
+    "id": "~Starr_Emmerich1",
     "content": {
       "preferredEmail": "pgrubey2i@tuttocitta.it",
       "emails": [
@@ -2606,7 +2631,7 @@
       }
     ]
   }, {
-    "id": "~Domingo_Willms2",
+    "id": "~Domingo_Willms1",
     "content": {
       "preferredEmail": "nverman2j@ask.com",
       "emails": [
@@ -2634,7 +2659,7 @@
       }
     ]
   }, {
-    "id": "~Sammie_Denesik6",
+    "id": "~Sammie_Denesik1",
     "content": {
       "preferredEmail": "swhitwham2k@craigslist.org",
       "emails": [
@@ -2669,7 +2694,7 @@
       }
     ]
   }, {
-    "id": "~Seymour_Hermann5",
+    "id": "~Seymour_Hermann1",
     "content": {
       "preferredEmail": "alecointe2l@smh.com.au",
       "emails": [
@@ -2697,7 +2722,7 @@
       }
     ]
   }, {
-    "id": "~Milan_Metz4",
+    "id": "~Milan_Metz1",
     "content": {
       "preferredEmail": "emelchior2m@webmd.com",
       "emails": [
@@ -2725,7 +2750,7 @@
       }
     ]
   }, {
-    "id": "~Marylyn_Cormier8",
+    "id": "~Marylyn_Cormier1",
     "content": {
       "preferredEmail": "aledford2n@state.tx.us",
       "emails": [
@@ -2753,7 +2778,7 @@
       }
     ]
   }, {
-    "id": "~Emanuel_Bergstrom5",
+    "id": "~Emanuel_Bergstrom1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -2780,7 +2805,7 @@
       }
     ]
   }, {
-    "id": "~Juliana_Huel7",
+    "id": "~Juliana_Huel1",
     "content": {
       "preferredEmail": null,
       "emails": [
@@ -2808,7 +2833,7 @@
       }
     ]
   }, {
-    "id": "~Cedrick_Boyle2",
+    "id": "~Cedrick_Boyle1",
     "content": {
       "preferredEmail": "lomonahan2q@ask.com",
       "emails": [
@@ -2836,7 +2861,7 @@
       }
     ]
   }, {
-    "id": "~Porfirio_Rogahn5",
+    "id": "~Porfirio_Rogahn1",
     "content": {
       "preferredEmail": "boutlaw2r@odnoklassniki.ru",
       "emails": [
@@ -2851,6 +2876,62 @@
         "content": {
           "title": "Resection of Stomach, Pylorus, Perc Endo Approach",
           "abstract": "Aliquam quis turpis eget elit sodales scelerisque. Mauris sit amet eros. Suspendisse accumsan tortor quis turpis.\n\nSed ante. Vivamus tortor. Duis mattis egestas metus."
+        }
+      }
+    ]
+  }, {
+    "id": "~Raia_Hadsell1",
+    "content": {
+      "preferredEmail": "raia@deepmind.com",
+      "emails": [
+        "raia@deepmind.com"
+      ]
+    },
+    "submissions": [
+      {
+        "id": "KH0z30CJ",
+        "cdate": 1568797539,
+        "content": {
+          "title": { "value": "MRI of R Ovary using Oth Contrast, Unenh, Enhance"},
+          "abstract": { "value": "Quisque porta volutpat erat. Quisque erat eros, viverra eget, congue eget, semper rutrum, nulla. Nunc purus."}
+        }
+      }
+    ],
+    "publications": [
+      {
+        "id": "jPWcSSFH",
+        "cdate": 1584038279,
+        "content": {
+          "title": { "value": "Unsupervised Domain Adaptation through Shape Modeling for Medical Image Segmentation"},
+          "abstract": { "value": "Shape information is a strong and valuable prior in segmenting organs in medical images. However, most current deep learning based segmentation algorithms have not taken shape information into consideration, which can lead to bias towards texture. We aim at modeling shape explicitly and using it to help medical image segmentation. Previous methods proposed Variational Autoencoder (VAE) based models to learn the distribution of shape for a particular organ and used it to automatically evaluate the quality of a segmentation prediction by fitting it into the learned shape distribution. Based on which we aim at incorporating VAE into current segmentation pipelines. Specifically, we propose a new unsupervised domain adaptation pipeline based on a pseudo loss and a VAE reconstruction loss under a teacher-student learning paradigm. Both losses are optimized simultaneously and, in return, boost the segmentation task performance. Extensive experiments on three public Pancreas segmentation datasets as well as two in-house Pancreas segmentation datasets show consistent improvements with at least 2.8 points gain in the Dice score, demonstrating the effectiveness of our method in challenging unsupervised domain adaptation scenarios for medical image segmentation. We hope this work will advance shape analysis and geometric learning in medical imaging."}
+        }
+      }
+    ]
+  }, {
+    "id": "~Kyunghyun_Cho1",
+    "content": {
+      "preferredEmail": "cho@nyu.edu",
+      "emails": [
+        "cho@nyu.edu"
+      ]
+    },
+    "submissions": [
+      {
+        "id": "KHnr1r7H",
+        "cdate": 1583404916,
+        "content": {
+          "title": { "value": "Repair Right Metatarsal, Percutaneous Endoscopic Approach"},
+          "abstract": { "value": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."}
+        }
+      }
+    ],
+    "publications": [
+      {
+        "id": "YQtWeE8P",
+        "cdate": 1585679551,
+        "content": {
+          "title": { "value": "Machine Translation For African Languages: Community Creation Of Datasets And Models In Uganda"},
+          "abstract": { "value": "Reliable machine translation systems are only available for a small proportion of the world’s languages, the key limitation being a shortage of training and evaluation data. We provide a case study in the creation of such resources by NLP teams who are local to the communities in which these languages are spoken. A parallel text corpus, SALT, was created for five Ugandan languages (Luganda, Runyankole, Acholi, Lugbara and Ateso) and various methods were explored to train and evaluate translation models. The resulting models were found to be effective for practical translation applications, even for those languages with no previous NLP data available, achieving mean BLEU score of 26.2 for translations to English, and 19.9 from English."}
         }
       }
     ]

@@ -17,7 +17,6 @@ import openreview
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
-from expertise.service.utils import mock_client
 
 class OpenReviewExpertise(object):
     def __init__(self, openreview_client, openreview_client_v2, config):

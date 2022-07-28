@@ -4,7 +4,6 @@ Implements the Flask API endpoints.
 from expertise.service.expertise import ExpertiseService
 import openreview
 from openreview.openreview import OpenReviewException
-from .utils import mock_client
 from .utils import get_user_id
 import flask
 from copy import deepcopy
@@ -19,11 +18,6 @@ CORS(BLUEPRINT, supports_credentials=True)
 
 def get_client():
     token = flask.request.headers.get('Authorization')
-    in_test_mode = 'IN_TEST' in flask.current_app.config.keys()
-
-    if in_test_mode:
-        return mock_client()
-
     return openreview.Client(
         token=token,
         baseurl=flask.current_app.config['OPENREVIEW_BASEURL']

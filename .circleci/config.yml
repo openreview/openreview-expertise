@@ -1,11 +1,20 @@
 version: 2.1
 
+orbs: 
+  node: circleci/node@5.0.2
 jobs:
   build:
     working_directory: ~/openreview-expertise
     docker:
       - image: ubuntu:18.04
       - image: redislabs/redisai
+      - image: circleci/mongo:5.0.6
+        command: [--replSet,rs0]
+      - image: docker.elastic.co/elasticsearch/elasticsearch:7.7.0
+        environment:
+          xpack.security.enabled: false
+          transport.host: localhost
+          TZ: "Etc/UTC"
     environment:
       PYTHON_VERSION: 3.7
     steps:
@@ -16,12 +25,18 @@ jobs:
             apt update
             apt install -y wget
             apt install -y make gcc
+            apt install -y curl
             apt install -y build-essential
             apt install -y git
+            apt install -y sudo
+            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
             cd $HOME
             wget "https://repo.anaconda.com/miniconda/Miniconda3-4.7.10-Linux-x86_64.sh" -O miniconda.sh
             printf '%s' "8a324adcc9eaf1c09e22a992bb6234d91a94146840ee6b11c114ecadafc68121  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
+      - node/install:
+          install-yarn: true
+          node-version: '16.13'
       - run:
           name: Setup environment
           command: |
@@ -50,6 +65,75 @@ jobs:
             conda install -y intel-openmp==2019.4
             conda install -y faiss-cpu -c pytorch
             pip install -I protobuf==3.20.1
+      - run:
+          name: Initialize Replica Set
+          command: |
+            wget -qO - https://www.mongodb.org/static/pgp/server-5.0.asc | sudo apt-key add -
+            sudo touch /etc/apt/sources.list.d/mongodb-org-5.0.list
+            echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/5.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-5.0.list
+            sudo apt-get update
+            sudo apt-get install -y mongodb-org=5.0.6 mongodb-org-server=5.0.6 mongodb-org-shell=5.0.6 mongodb-org-mongos=5.0.6 mongodb-org-tools=5.0.6
+            mongo mongodb://localhost:27017 --eval "rs.initiate()"
+      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api-v1.git ~/openreview
+      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api.git ~/openreview-v2
+      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
+      - run: mkdir ~/openreview/logs
+      - run: mkdir ~/openreview/files
+      - run: mkdir ~/openreview/files/attachments
+      - run: mkdir ~/openreview/files/pdfs
+      - run: mkdir ~/openreview/files/temp
+      - run: mkdir ~/openreview-v2/logs
+      - run: mkdir ~/openreview-v2/files
+      - run: mkdir ~/openreview-v2/files/attachments
+      - run: mkdir ~/openreview-v2/files/pdfs
+      - run: mkdir ~/openreview-v2/files/temp
+      - run: mkdir ~/openreview-py/coverage
+      - run:
+          name: Install openreview-py
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            pip install --force-reinstall -e ~/openreview-py
+            ls ~/openreview-py
+            ls ~/openreview-py/openreview
+            ls ~/openreview-py/openreview/journal
+            ls ~/openreview-py/openreview/journal/process
+      - run:
+          name: install api
+          command: |
+            cd ~/openreview
+            npm install
+      - run:
+          name: run api
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview
+            NODE_ENV=circleci node scripts/clean_start_app.js
+          background: true
+      - run:
+          shell: /bin/sh
+          command: |
+            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3000
+            :
+      - run:
+          name: install api-v2
+          command: |
+            cd ~/openreview-v2
+            npm install
+      - run:
+          name: run api-v2
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview-v2
+            NODE_ENV=circleci node scripts/setup_app.js
+          background: true
+      - run:
+          shell: /bin/sh
+          command: |
+            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3001
+            :
       - run:
           name: Run tests
           command: |
