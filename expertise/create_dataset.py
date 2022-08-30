@@ -253,7 +253,7 @@ class OpenReviewExpertise(object):
         return excluded_ids_by_user
     
     def include(self):
-        exclusion_invitations = self.convert_to_list(self.config['included_inv'])
+        exclusion_invitations = self.convert_to_list(self.config['inclusion_inv'])
         excluded_ids_by_user = defaultdict(list)
         for invitation in exclusion_invitations:
             user_grouped_edges = openreview.tools.iterget_grouped_edges(
@@ -277,10 +277,12 @@ class OpenReviewExpertise(object):
         filtered_papers = []
         for n in member_papers:
             paper_title = openreview.tools.get_paperhash('', n['content']['title'])
-            if 'exclusion_inv' in self.config and (paper_title and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys):
-                filtered_papers.append(n)
-            elif 'inclusion_inv' in self.config and (paper_title and n['id'] in self.included_ids_by_user[member] and paper_title not in seen_keys):
-                filtered_papers.append(n)
+            if 'inclusion_inv' in self.config:
+                if paper_title and n['id'] in self.included_ids_by_user[member] and paper_title not in seen_keys:
+                    filtered_papers.append(n)
+            else:
+                if paper_title and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys:
+                    filtered_papers.append(n)
             seen_keys.add(paper_title)
 
         return member, email, filtered_papers
