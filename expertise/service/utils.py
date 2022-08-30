@@ -324,24 +324,25 @@ class JobConfig(object):
 
         if api_request.entityA['type'] == 'Note':
             inv, id = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None)
-            excl_inv = api_request.entityA.get('expertise', None)
+            edge_inv = api_request.entityA.get('expertise', None)
 
             if inv:
                 config.paper_invitation = inv
             if id:
                 config.paper_id = id
-            if excl_inv:
-                config.exclusion_inv = excl_inv.get('exclusion', {}).get('invitation', None)
+            if edge_inv:
+                config.exclusion_inv = edge_inv.get('invitation', None)
+
         elif api_request.entityB['type'] == 'Note':
             inv, id = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None)
-            excl_inv = api_request.entityB.get('expertise', None)
+            edge_inv = api_request.entityB.get('expertise', None)
 
             if inv:
                 config.paper_invitation = inv
             if id:
                 config.paper_id = id
-            if excl_inv:
-                config.exclusion_inv = excl_inv.get('exclusion', {}).get('invitation', None)
+            if edge_inv:
+                config.exclusion_inv = edge_inv.get('invitation', None)
 
         # Validate that other paper fields are none if an alternate match group is present
         if config.alternate_match_group is not None and (config.paper_id is not None or config.paper_invitation is not None):
