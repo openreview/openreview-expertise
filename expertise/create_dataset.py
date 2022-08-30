@@ -253,9 +253,9 @@ class OpenReviewExpertise(object):
         return excluded_ids_by_user
     
     def include(self):
-        exclusion_invitations = self.convert_to_list(self.config['inclusion_inv'])
-        excluded_ids_by_user = defaultdict(list)
-        for invitation in exclusion_invitations:
+        inclusion_invitations = self.convert_to_list(self.config['inclusion_inv'])
+        included_ids_by_user = defaultdict(list)
+        for invitation in inclusion_invitations:
             user_grouped_edges = openreview.tools.iterget_grouped_edges(
                 self.openreview_client,
                 invitation=invitation,
@@ -265,9 +265,9 @@ class OpenReviewExpertise(object):
 
             for edges in user_grouped_edges:
                 for edge in edges:
-                    excluded_ids_by_user[edge.tail].append(edge.head)
+                    included_ids_by_user[edge.tail].append(edge.head)
 
-        return excluded_ids_by_user
+        return included_ids_by_user
 
     def retrieve_expertise_helper(self, member, email):
         self.pbar.update(1)
