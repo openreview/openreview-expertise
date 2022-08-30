@@ -323,6 +323,7 @@ class JobConfig(object):
         # Handle Note cases
         config.paper_invitation = None
         config.paper_id = None
+        config.inclusion_inv = None
         config.exclusion_inv = None
 
         if api_request.entityA['type'] == 'Note':
@@ -335,6 +336,9 @@ class JobConfig(object):
                 config.paper_id = id
             if edge_inv:
                 edge_inv_id = edge_inv.get('invitation', None)
+                if edge_inv_id is None:
+                    raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
+
                 if 'Inclusion' in edge_inv_id:
                     config.inclusion_inv = edge_inv_id
                 elif 'Exclusion' in edge_inv_id:
@@ -350,6 +354,9 @@ class JobConfig(object):
                 config.paper_id = id
             if edge_inv:
                 edge_inv_id = edge_inv.get('invitation', None)
+                if edge_inv_id is None:
+                    raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
+
                 if 'Inclusion' in edge_inv_id:
                     config.inclusion_inv = edge_inv_id
                 elif 'Exclusion' in edge_inv_id:
