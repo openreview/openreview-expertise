@@ -221,6 +221,7 @@ class JobConfig(object):
         dataset=None,
         model=None,
         exclusion_inv=None,
+        inclusion_inv=None,
         paper_invitation=None,
         paper_id=None,
         model_params=None):
@@ -240,6 +241,7 @@ class JobConfig(object):
         self.dataset = dataset
         self.model = model
         self.exclusion_inv = exclusion_inv
+        self.inclusion_inv = inclusion_inv
         self.paper_invitation = paper_invitation
         self.paper_id = paper_id
         self.model_params = model_params
@@ -261,6 +263,7 @@ class JobConfig(object):
             'dataset': self.dataset,
             'model': self.model,
             'exclusion_inv': self.exclusion_inv,
+            'inclusion_inv': self.inclusion_inv,
             'paper_invitation': self.paper_invitation,
             'paper_id': self.paper_id,
             'model_params': self.model_params
@@ -331,7 +334,11 @@ class JobConfig(object):
             if id:
                 config.paper_id = id
             if edge_inv:
-                config.exclusion_inv = edge_inv.get('invitation', None)
+                edge_inv_id = edge_inv.get('invitation', None)
+                if 'Inclusion' in edge_inv_id:
+                    config.inclusion_inv = edge_inv_id
+                elif 'Exclusion' in edge_inv_id:
+                    config.exclusion_inv = edge_inv_id
 
         elif api_request.entityB['type'] == 'Note':
             inv, id = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None)
@@ -342,7 +349,11 @@ class JobConfig(object):
             if id:
                 config.paper_id = id
             if edge_inv:
-                config.exclusion_inv = edge_inv.get('invitation', None)
+                edge_inv_id = edge_inv.get('invitation', None)
+                if 'Inclusion' in edge_inv_id:
+                    config.inclusion_inv = edge_inv_id
+                elif 'Exclusion' in edge_inv_id:
+                    config.exclusion_inv = edge_inv_id
 
         # Validate that other paper fields are none if an alternate match group is present
         if config.alternate_match_group is not None and (config.paper_id is not None or config.paper_invitation is not None):
