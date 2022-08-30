@@ -239,7 +239,7 @@ def test_expertise_selection(client, openreview_client):
         writers = ['~SomeTest_User1'],
         signatures = ['~SomeTest_User1'],
         content = {
-            "title": "test_title",
+            "title": "test_exclude",
             "abstract": original_note.content['abstract'],
             "authorids": original_note.content['authorids']
         },
@@ -288,7 +288,7 @@ def test_expertise_inclusion(client, openreview_client):
         writers = ['~SomeTest_User1'],
         signatures = ['~SomeTest_User1'],
         content = {
-            "title": "test_title",
+            "title": "test_include",
             "abstract": original_note.content['abstract'],
             "authorids": original_note.content['authorids']
         },
@@ -312,8 +312,9 @@ def test_expertise_inclusion(client, openreview_client):
                         signatures=['~Harold_Rice1']
                     )
     edge = user_client.post_edge(edge)
-
+    print(user_client.get_edges(invitation='DEF.cc/-/Expertise_Selection'))
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     or_expertise.included_ids_by_user = or_expertise.include()
+    assert len(or_expertise.included_ids_by_user['~Harold_Rice1']) == 2
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~Harold_Rice1']) == 1
+    assert len(expertise['~Harold_Rice1']) == 2

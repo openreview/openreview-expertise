@@ -341,7 +341,7 @@ class JobConfig(object):
 
                 if 'Inclusion' in edge_inv_id:
                     config.inclusion_inv = edge_inv_id
-                elif 'Exclusion' in edge_inv_id:
+                else:
                     config.exclusion_inv = edge_inv_id
 
         elif api_request.entityB['type'] == 'Note':
@@ -359,7 +359,7 @@ class JobConfig(object):
 
                 if 'Inclusion' in edge_inv_id:
                     config.inclusion_inv = edge_inv_id
-                elif 'Exclusion' in edge_inv_id:
+                else:
                     config.exclusion_inv = edge_inv_id
 
         # Validate that other paper fields are none if an alternate match group is present
