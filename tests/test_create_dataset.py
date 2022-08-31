@@ -303,18 +303,17 @@ def test_expertise_inclusion(client, openreview_client):
     
     user_client = openreview.Client(username='strevino0@ox.ac.uk', password='1234')
     edge = openreview.Edge(
-                        invitation='DEF.cc/-/Expertise_Selection',
+                        invitation='DEF.cc/-/Expertise_Inclusion',
                         head=note.id,
                         tail='~Harold_Rice1',
-                        label='Exclude',
+                        label='Include',
                         readers=['DEF.cc', '~Harold_Rice1'],
                         writers=['~Harold_Rice1'],
                         signatures=['~Harold_Rice1']
                     )
     edge = user_client.post_edge(edge)
-    print(user_client.get_edges(invitation='DEF.cc/-/Expertise_Selection'))
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     or_expertise.included_ids_by_user = or_expertise.include()
-    assert len(or_expertise.included_ids_by_user['~Harold_Rice1']) == 2
+    assert len(or_expertise.included_ids_by_user['~Harold_Rice1']) == 1
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~Harold_Rice1']) == 2
+    assert len(expertise['~Harold_Rice1']) == 1

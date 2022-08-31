@@ -314,53 +314,54 @@ class JobConfig(object):
         # Handle Group cases
         config.match_group = starting_config.get('match_group', None)
         config.alternate_match_group = starting_config.get('alternate_match_group', None)
+        config.inclusion_inv = None
+        config.exclusion_inv = None
 
         if api_request.entityA['type'] == 'Group':
             config.match_group = [api_request.entityA['memberOf']]
+            edge_inv = api_request.entityA.get('expertise', None)
+
+            if edge_inv:
+                edge_inv_id = edge_inv.get('invitation', None)
+                if edge_inv_id is None or len(edge_inv_id) <= 0:
+                    raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
+                if 'Inclusion' in edge_inv_id:
+                    config.inclusion_inv = edge_inv_id
+                else:
+                    config.exclusion_inv = edge_inv_id
+
         if api_request.entityB['type'] == 'Group':
             config.alternate_match_group = [api_request.entityB['memberOf']]
+            edge_inv = api_request.entityB.get('expertise', None)
+
+            if edge_inv:
+                edge_inv_id = edge_inv.get('invitation', None)
+                if edge_inv_id is None:
+                    raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
+                if 'Inclusion' in edge_inv_id:
+                    config.inclusion_inv = edge_inv_id
+                else:
+                    config.exclusion_inv = edge_inv_id
 
         # Handle Note cases
         config.paper_invitation = None
         config.paper_id = None
-        config.inclusion_inv = None
-        config.exclusion_inv = None
 
         if api_request.entityA['type'] == 'Note':
             inv, id = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None)
-            edge_inv = api_request.entityA.get('expertise', None)
 
             if inv:
                 config.paper_invitation = inv
             if id:
                 config.paper_id = id
-            if edge_inv:
-                edge_inv_id = edge_inv.get('invitation', None)
-                if edge_inv_id is None:
-                    raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
-
-                if 'Inclusion' in edge_inv_id:
-                    config.inclusion_inv = edge_inv_id
-                else:
-                    config.exclusion_inv = edge_inv_id
 
         elif api_request.entityB['type'] == 'Note':
             inv, id = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None)
-            edge_inv = api_request.entityB.get('expertise', None)
 
             if inv:
                 config.paper_invitation = inv
             if id:
                 config.paper_id = id
-            if edge_inv:
-                edge_inv_id = edge_inv.get('invitation', None)
-                if edge_inv_id is None:
-                    raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
-
-                if 'Inclusion' in edge_inv_id:
-                    config.inclusion_inv = edge_inv_id
-                else:
-                    config.exclusion_inv = edge_inv_id
 
         # Validate that other paper fields are none if an alternate match group is present
         if config.alternate_match_group is not None and (config.paper_id is not None or config.paper_invitation is not None):
@@ -442,6 +443,7 @@ class JobConfig(object):
             dataset = job_config.get('dataset'),
             model = job_config.get('model'),
             exclusion_inv = job_config.get('exclusion_inv'),
+            inclusion_inv = job_config.get('inclusion_inv'),
             paper_invitation = job_config.get('paper_invitation'),
             paper_id = job_config.get('paper_id'),
             model_params = job_config.get('model_params')
