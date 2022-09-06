@@ -248,61 +248,6 @@ class TestConference():
         client.post_invitation(invitation)
         assert client.get_invitation('openreview.net/-/paper')
 
-        # Test inclusion invitation
-        edge_reply = {
-            "readers": {
-                "values-copied": [
-                    "DEF.cc",
-                    "{signatures}"
-                ]
-            },
-            "writers": {
-                "values-copied": [
-                    "NeurIPS.cc/2022/Conference",
-                    "{signatures}"
-                ]
-            },
-            "signatures": {
-                "values-regex": "~.*"
-            },
-            "content": {
-                "head": {
-                    "type": "Note"
-                },
-                "tail": {
-                    "type": "Profile"
-                },
-                "label": {
-                    "value-radio": [
-                        "Include"
-                    ],
-                    "required": True
-                }
-            }
-        }
-
-        invitation = openreview.Invitation(
-            id = 'DEF.cc/-/Expertise_Inclusion',
-            writers = ['DEF.cc'],
-            signatures = ['DEF.cc'],
-            readers = ['DEF.cc', 'DEF.cc/Program_Chairs', 'DEF.cc/Reviewers', 'DEF.cc/Area_Chairs', 'DEF.cc/Senior_Area_Chairs'],
-            invitees = ['everyone'],
-            reply=edge_reply
-        )
-        client.post_invitation(invitation)
-        assert client.get_invitation('DEF.cc/-/Expertise_Inclusion')
-
-        invitation = openreview.Invitation(
-            id = 'ABC.cc/-/Expertise_Inclusion',
-            writers = ['ABC.cc'],
-            signatures = ['ABC.cc'],
-            readers = ['ABC.cc', 'ABC.cc/Program_Chairs', 'ABC.cc/Reviewers', 'ABC.cc/Area_Chairs', 'ABC.cc/Senior_Area_Chairs'],
-            invitees = ['everyone'],
-            reply=edge_reply
-        )
-        client.post_invitation(invitation)
-        assert client.get_invitation('ABC.cc/-/Expertise_Inclusion')
-
     def test_post_submissions(self, client, openreview_client, helpers):
         
         def post_notes(data, invitation):

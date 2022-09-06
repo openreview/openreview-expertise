@@ -375,7 +375,7 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'ABC.cc/-/Expertise_Inclusion' }
+                        'expertise': { 'invitation': 'ABC.cc/-/Expertise_Selection' }
                     },
                     "entityB": { 
                         'type': "Note",
