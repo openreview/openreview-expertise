@@ -19,6 +19,7 @@ class TestConference():
         first_date = now + datetime.timedelta(days=1)
 
         # Post the request form note
+        # ABC is to be used for running the expertise model and has an inclusion invitation
         helpers.create_user('test@google.com', 'SomeTest', 'User')
         pc_client=helpers.create_user('pc@abc.cc', 'Program', 'ABCChair')
 
@@ -87,6 +88,7 @@ class TestConference():
 
 
         # Post the request form note
+        # DEF is to be used for unit testing create_dataset and has an exclusion invitation
         pc_client=helpers.create_user('pc@def.cc', 'Program', 'DEFChair')
 
         request_form_note = pc_client.post_note(openreview.Note(
@@ -150,6 +152,73 @@ class TestConference():
         assert 'DEF.cc/Area_Chairs' in reviewers.readers
 
         assert client.get_group('DEF.cc/Authors')
+
+        # Post the request form note
+        # HIJ is to be used for a single test for the inclusion invitation with the expertise API
+        pc_client=helpers.create_user('pc@hij.cc', 'Program', 'HIJChair')
+
+        request_form_note = pc_client.post_note(openreview.Note(
+            invitation='openreview.net/Support/-/Request_Form',
+            signatures=['~Program_HIJChair1'],
+            readers=[
+                'openreview.net/Support',
+                '~Program_HIJChair1'
+            ],
+            writers=[],
+            content={
+                'title': 'Conference on Neural Information Processing Systems',
+                'Official Venue Name': 'Conference on Neural Information Processing Systems',
+                'Abbreviated Venue Name': 'HIJ 2021',
+                'Official Website URL': 'https://neurips.cc',
+                'program_chair_emails': ['pc@hij.cc'],
+                'contact_email': 'pc@hij.cc',
+                'Area Chairs (Metareviewers)': 'Yes, our venue has Area Chairs',
+                'senior_area_chairs': 'Yes, our venue has Senior Area Chairs',
+                'Venue Start Date': '2021/12/01',
+                'Submission Deadline': due_date.strftime('%Y/%m/%d'),
+                'abstract_registration_deadline': first_date.strftime('%Y/%m/%d'),
+                'Location': 'Virtual',
+                'Paper Matching': [
+                    'Reviewer Bid Scores',
+                    'OpenReview Affinity'],
+                'Author and Reviewer Anonymity': 'Double-blind',
+                'reviewer_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
+                'area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
+                'senior_area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
+                'Open Reviewing Policy': 'Submissions and reviews should both be private.',
+                'submission_readers': 'Program chairs and paper authors only',
+                'How did you hear about us?': 'ML conferences',
+                'Expected Submissions': '100',
+                'include_expertise_selection': 'Yes'
+            }))
+
+        helpers.await_queue()
+
+        # Post a deploy note
+        client.post_note(openreview.Note(
+            content={'venue_id': 'HIJ.cc'},
+            forum=request_form_note.forum,
+            invitation='openreview.net/Support/-/Request{}/Deploy'.format(request_form_note.number),
+            readers=['openreview.net/Support'],
+            referent=request_form_note.forum,
+            replyto=request_form_note.forum,
+            signatures=['openreview.net/Support'],
+            writers=['openreview.net/Support']
+        ))
+
+        helpers.await_queue()
+
+        assert client.get_group('HIJ.cc')
+        assert client.get_group('HIJ.cc/Senior_Area_Chairs')
+        acs=client.get_group('HIJ.cc/Area_Chairs')
+        assert acs
+        assert 'HIJ.cc/Senior_Area_Chairs' in acs.readers
+        reviewers=client.get_group('HIJ.cc/Reviewers')
+        assert reviewers
+        assert 'HIJ.cc/Senior_Area_Chairs' in reviewers.readers
+        assert 'HIJ.cc/Area_Chairs' in reviewers.readers
+
+        assert client.get_group('HIJ.cc/Authors')
 
     def test_create_groups(self, client, helpers):
         # Post test data groups to the API
@@ -273,7 +342,7 @@ class TestConference():
         post_notes(data, 'ABC.cc/-/Submission')
 
         pc_client=openreview.Client(username='pc@abc.cc', password='1234')
-        request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[1]
+        request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[2]
         print(request_form)
         post_submission_note=pc_client.post_note(openreview.Note(
             content= {
@@ -296,7 +365,7 @@ class TestConference():
         post_notes(data, 'DEF.cc/-/Submission')
 
         pc_client=openreview.Client(username='pc@def.cc', password='1234')
-        request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[0]
+        request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[1]
         print(request_form)
         post_submission_note=pc_client.post_note(openreview.Note(
             content= {

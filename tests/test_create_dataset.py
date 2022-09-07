@@ -301,8 +301,17 @@ def test_expertise_inclusion(client, openreview_client):
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Harold_Rice1']) == 0
     
-    #user_client = openreview.Client(username='pc@abc.cc', password='1234')
-    #user_client.impersonate('ABC.cc')
+    # Post this edge to both ABC and HIJ, ABC will be deleted, HIJ will be used for the API tests
+    edge = openreview.Edge(
+                        invitation='HIJ.cc/-/Expertise_Selection',
+                        head=note.id,
+                        tail='~Harold_Rice1',
+                        label='Include',
+                        readers=['HIJ.cc', '~Harold_Rice1'],
+                        writers=['~Harold_Rice1'],
+                        signatures=['~Harold_Rice1']
+                    )
+    edge = client.post_edge(edge)
     edge = openreview.Edge(
                         invitation='ABC.cc/-/Expertise_Selection',
                         head=note.id,
@@ -319,5 +328,5 @@ def test_expertise_inclusion(client, openreview_client):
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Harold_Rice1']) == 1
 
-    # Clear the inclusion edge
+    # Clear the inclusion edges for ABC
     client.delete_edges(invitation='ABC.cc/-/Expertise_Selection')
