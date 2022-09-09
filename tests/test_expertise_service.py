@@ -418,7 +418,7 @@ class TestExpertiseService():
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['name'] == 'test_run'
         assert response['status'].strip() == 'Error'
-        assert response['description'] == "num_samples should be a positive integer value, but got num_samples=0"
+        assert response['description'] == "num_samples should be a positive integer value, but got num_samples=0. Please check that there is at least 1 member of the match group with at least 1 publication on OpenReview."
         assert response['cdate'] <= response['mdate']
 
         # Clean up error job by calling the delete endpoint
@@ -834,6 +834,69 @@ class TestExpertiseService():
         assert response['name'] == 'test_run'
         assert response['status'].strip() == 'Error'
         assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
+        assert response['cdate'] <= response['mdate']
+        ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
+
+        # Clean up error job by calling the delete endpoint
+        response = test_client.get('/expertise/delete', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+        assert response['name'] == 'test_run'
+        assert response['cdate'] <= response['mdate']
+        assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
+
+    def test_request_expertise_with_no_submission_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a config with an error in the model field and return the job_id
+        test_client = openreview_context['test_client']
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "HIJ.cc/Reviewers",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "HIJ.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'sparseValue': 'notAnInt',
+                            'useTitle': None, 
+                            'useAbstract': None, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+
+        openreview_context['job_id'] = job_id
+
+    def test_get_results_and_get_no_submission_error(self, openreview_context, celery_session_app, celery_session_worker):
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        assert openreview_context['job_id'] is not None
+        test_client = openreview_context['test_client']
+        # Query until job is err
+        time.sleep(5)
+        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}"})
+        assert response.status_code == 404
+
+        response = test_client.get('/expertise/status', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['name'] == 'test_run'
+        assert response['status'].strip() == 'Error'
+        assert response['description'] == "Dimension out of range (expected to be in range of [-1, 0], but got 1). Please check that you have at least 1 submission submitted and that you have run the Post Submission stage."
         assert response['cdate'] <= response['mdate']
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 

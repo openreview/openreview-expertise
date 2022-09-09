@@ -251,6 +251,13 @@ class TestConference():
         members = data['groups']['DEF.cc/Reviewers']['members']
         client.add_members_to_group('DEF.cc/Reviewers', members)
 
+        # Post a small number of reviewers to the HIJ.cc group used only for testing the error message for no submissions
+        with open('tests/data/fakeData.json') as json_file:
+            data = json.load(json_file)
+        post_profiles(data)
+        members = data['groups']['ABC.cc/Reviewers']['members']
+        client.add_members_to_group('HIJ.cc/Reviewers', members)
+
     def test_create_invitations(self, client, openreview_client):
         # Post invitations for submissions and publications
 
