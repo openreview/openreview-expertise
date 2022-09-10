@@ -342,7 +342,7 @@ class JobConfig(object):
                     raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
                 label = openreview_client.get_invitation(edge_inv_id).reply['content']['label']['value-radio'][0]
                 print(f"FETCHED LABEL")
-                if 'exclude' not in label.lower():
+                if 'include' in label.lower():
                     config.inclusion_inv = edge_inv_id
                 else:
                     config.exclusion_inv = edge_inv_id
