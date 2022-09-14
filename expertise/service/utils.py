@@ -325,8 +325,7 @@ class JobConfig(object):
                 edge_inv_id = edge_inv.get('invitation', None)
                 if edge_inv_id is None or len(edge_inv_id) <= 0:
                     raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
-                label = openreview_client.get_invitation(edge_inv_id).reply['content']['label']['value-radio'][0]
-                print(f"FETCHED LABEL")
+                label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
                 if 'exclude' not in label.lower():
                     config.inclusion_inv = edge_inv_id
                 else:
@@ -340,8 +339,7 @@ class JobConfig(object):
                 edge_inv_id = edge_inv.get('invitation', None)
                 if edge_inv_id is None:
                     raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
-                label = openreview_client.get_invitation(edge_inv_id).reply['content']['label']['value-radio'][0]
-                print(f"FETCHED LABEL")
+                label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
                 if 'include' in label.lower():
                     config.inclusion_inv = edge_inv_id
                 else:
