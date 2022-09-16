@@ -391,33 +391,30 @@ class TestConference():
         helpers.await_queue()
 
     def test_post_publications(self, client, openreview_client):
+        tmlr_editors = ['~Raia_Hadsell1', '~Kyunghyun_Cho1']
 
         def post_notes(data, api_invitation):
             for profile_json in data['profiles']:
                 authorid = profile_json['id']
-                for pub_json in profile_json['publications']:
-                    content = pub_json['content']
-                    content['authorids'] = [authorid]
-                    cdate = pub_json.get('cdate')
+                if authorid not in tmlr_editors:
+                    for pub_json in profile_json['publications']:
+                        content = pub_json['content']
+                        content['authorids'] = [authorid]
+                        cdate = pub_json.get('cdate')
 
-                    # Adjust title/abs values for publications if API2 to post to API1
-                    if isinstance(content.get('title'), dict):
-                        content['title'] = content['title']['value']
-                        content['abstract'] = content['abstract']['value']
+                        existing_pubs = list(openreview.tools.iterget_notes(client, content={'authorids': authorid}))
+                        existing_titles = [pub.content.get('title') for pub in existing_pubs]
 
-                    existing_pubs = list(openreview.tools.iterget_notes(client, content={'authorids': authorid}))
-                    existing_titles = [pub.content.get('title') for pub in existing_pubs]
-
-                    if content.get('title') not in existing_titles:
-                        note = openreview.Note(
-                            invitation = api_invitation,
-                            readers = ['everyone'],
-                            writers = ['~SomeTest_User1'],
-                            signatures = ['~SomeTest_User1'],
-                            content = content,
-                            cdate = cdate
-                        )
-                        note = client.post_note(note)
+                        if content.get('title') not in existing_titles:
+                            note = openreview.Note(
+                                invitation = api_invitation,
+                                readers = ['everyone'],
+                                writers = ['~SomeTest_User1'],
+                                signatures = ['~SomeTest_User1'],
+                                content = content,
+                                cdate = cdate
+                            )
+                            note = client.post_note(note)
 
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
