@@ -298,13 +298,13 @@ class TestConference():
                         "required": False,
                         "order": 3,
                         "description": "Comma separated list of author names, as they appear in the paper.",
-                        "value-regex": "[^,\\n]*(,[^,\\n]+)*"
+                        "values-regex": "[^,\\n]*(,[^,\\n]+)*"
                     },
                     "authorids": {
                         "required": False,
                         "order": 4,
                         "description": "Comma separated list of author email addresses, in the same order as above.",
-                        "value-regex": "[^,\\n]*(,[^,\\n]+)*"
+                        "values-regex": "[^,\\n]*(,[^,\\n]+)*"
                     }
                 }
             }
@@ -399,6 +399,11 @@ class TestConference():
                     content = pub_json['content']
                     content['authorids'] = [authorid]
                     cdate = pub_json.get('cdate')
+
+                    # Adjust title/abs values for publications if API2 to post to API1
+                    if isinstance(content.get('title'), dict):
+                        content['title'] = content['title']['value']
+                        content['abstract'] = content['abstract']['value']
 
                     existing_pubs = list(openreview.tools.iterget_notes(client, content={'authorids': authorid}))
                     existing_titles = [pub.content.get('title') for pub in existing_pubs]
