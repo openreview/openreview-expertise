@@ -26,6 +26,8 @@ class OpenReviewExpertise(object):
         self.root = Path(config.get('dataset', {}).get('directory', './'))
         self.excluded_ids_by_user = defaultdict(list)
         self.included_ids_by_user = defaultdict(list)
+        self.alternate_excluded_ids_by_user = defaultdict(list)
+        self.alternate_included_ids_by_user = defaultdict(list)
 
         self.metadata = {
             'submission_count': 0,
@@ -252,8 +254,42 @@ class OpenReviewExpertise(object):
 
         return excluded_ids_by_user
     
+    def alternate_exclude(self):
+        exclusion_invitations = self.convert_to_list(self.config['alternate_exclusion_inv'])
+        excluded_ids_by_user = defaultdict(list)
+        for invitation in exclusion_invitations:
+            user_grouped_edges = openreview.tools.iterget_grouped_edges(
+                self.openreview_client,
+                invitation=invitation,
+                groupby='tail',
+                select='id,head,label,weight'
+            )
+
+            for edges in user_grouped_edges:
+                for edge in edges:
+                    excluded_ids_by_user[edge.tail].append(edge.head)
+
+        return excluded_ids_by_user
+    
     def include(self):
         inclusion_invitations = self.convert_to_list(self.config['inclusion_inv'])
+        included_ids_by_user = defaultdict(list)
+        for invitation in inclusion_invitations:
+            user_grouped_edges = openreview.tools.iterget_grouped_edges(
+                self.openreview_client,
+                invitation=invitation,
+                groupby='tail',
+                select='id,head,label,weight'
+            )
+
+            for edges in user_grouped_edges:
+                for edge in edges:
+                    included_ids_by_user[edge.tail].append(edge.head)
+
+        return included_ids_by_user
+    
+    def alternate_include(self):
+        inclusion_invitations = self.convert_to_list(self.config['alternate_inclusion_inv'])
         included_ids_by_user = defaultdict(list)
         for invitation in inclusion_invitations:
             user_grouped_edges = openreview.tools.iterget_grouped_edges(
@@ -374,12 +410,12 @@ class OpenReviewExpertise(object):
             seen_keys = set()
             for paper_note in result['papers']:
                 paper_hash = openreview.tools.get_paperhash('', paper_note.content['title'])
-                if 'inclusion_inv' in self.config:
-                    if paper_hash and paper_note.id in self.included_ids_by_user[result['profile_id']] and paper_hash not in seen_keys:
+                if 'alternate_inclusion_inv' in self.config:
+                    if paper_hash and paper_note.id in self.alternate_included_ids_by_user[result['profile_id']] and paper_hash not in seen_keys:
                         filtered_papers.append(paper_note)
                         papers_json_list.append(paper_note.to_json())
                 else:
-                    if paper_hash and paper_note.id not in self.excluded_ids_by_user[result['profile_id']] and paper_hash not in seen_keys:
+                    if paper_hash and paper_note.id not in self.alternate_excluded_ids_by_user[result['profile_id']] and paper_hash not in seen_keys:
                         filtered_papers.append(paper_note)
                         papers_json_list.append(paper_note.to_json())
                 seen_keys.add(paper_hash)
@@ -489,6 +525,13 @@ class OpenReviewExpertise(object):
 
         if 'inclusion_inv' in self.config:
             self.included_ids_by_user = self.include()
+
+        if 'alternate_exclusion_inv' in self.config:
+            self.alternate_excluded_ids_by_user = self.alternate_exclude()
+
+        if 'alternate_inclusion_inv' in self.config:
+            self.alternate_included_ids_by_user = self.alternate_include()
+
 
         if 'match_group' in self.config or 'reviewer_ids' in self.config:
             self.archive_dir = self.dataset_dir.joinpath('archives')

@@ -1134,6 +1134,7 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
+        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) > 1
 
         # Check for API request
         req = response['request']
@@ -1210,6 +1211,7 @@ class TestExpertiseService():
         no_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['job_id']}/archives") if d.is_file())
         with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
         assert with_exclusion < no_exclusion
+        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) > 1
 
         # Assert size of submissions file is less than previous
         no_exclusion = os.path.getsize(f"./tests/jobs/{openreview_context['job_id']}/submissions.json")
@@ -1283,7 +1285,7 @@ class TestExpertiseService():
         no_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['job_id']}/archives") if d.is_file())
         with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
         assert with_exclusion < no_exclusion
-        assert sum(1 for _ in os.walk(f"./tests/jobs/{job_id}/archives")) > 1
+        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) > 1
 
         # Assert size of submissions file is less than previous
         no_inclusion = os.path.getsize(f"./tests/jobs/{openreview_context['job_id']}/submissions.json")
@@ -1358,7 +1360,7 @@ class TestExpertiseService():
         no_inclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['job_id']}/archives") if d.is_file())
         with_inclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
         with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['exclusion_id']}/archives") if d.is_file())
-        assert sum(1 for _ in os.walk(f"./tests/jobs/{job_id}/archives")) == 1
+        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) == 1
         assert with_inclusion < no_inclusion
         assert with_inclusion < with_exclusion
 
