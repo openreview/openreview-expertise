@@ -1144,6 +1144,231 @@ class TestExpertiseService():
         assert req['entityB']['memberOf'] == 'ABC.cc/Reviewers'
         openreview_context['job_id'] = job_id
     
+    def test_request_group_exclusion_exclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+        # Make a request
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                        'expertise': { 'invitation': 'DEF.cc/-/Expertise_Selection' }
+                    },
+                    "entityB": { 
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                        'expertise': { 'invitation': 'DEF.cc/-/Expertise_Selection' }
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response[0]['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        # Check for API request
+        req = response['request']
+        assert req['name'] == 'test_run'
+        assert req['entityA']['type'] == 'Group'
+        assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
+        assert req['entityB']['type'] == 'Group'
+        assert req['entityB']['memberOf'] == 'ABC.cc/Reviewers'
+
+        # Assert size of archives folder is less than previous
+        no_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['job_id']}/archives") if d.is_file())
+        with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
+        assert with_exclusion < no_exclusion
+
+        # Assert size of submissions file is less than previous
+        no_exclusion = os.path.getsize(f"./tests/jobs/{openreview_context['job_id']}/submissions.json")
+        with_exclusion = os.path.getsize(f"./tests/jobs/{job_id}/submissions.json")
+        assert with_exclusion < no_exclusion
+        openreview_context['exclusion_id'] = job_id
+
+    def test_request_group_inclusion_exclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+        # Make a request
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                        'expertise': { 'invitation': 'DEF.cc/-/Expertise_Selection' }
+                    },
+                    "entityB": { 
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                        'expertise': { 'invitation': 'HIJ.cc/-/Expertise_Selection' }
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response[0]['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        # Check for API request
+        req = response['request']
+        assert req['name'] == 'test_run'
+        assert req['entityA']['type'] == 'Group'
+        assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
+        assert req['entityB']['type'] == 'Group'
+        assert req['entityB']['memberOf'] == 'ABC.cc/Reviewers'
+
+        # Assert size of archives folder is less than previous
+        no_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['job_id']}/archives") if d.is_file())
+        with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
+        assert with_exclusion < no_exclusion
+        assert sum(1 for _ in os.walk(f"./tests/jobs/{job_id}/archives")) > 1
+
+        # Assert size of submissions file is less than previous
+        no_inclusion = os.path.getsize(f"./tests/jobs/{openreview_context['job_id']}/submissions.json")
+        with_inclusion = os.path.getsize(f"./tests/jobs/{job_id}/submissions.json")
+        with_exclusion = os.path.getsize(f"./tests/jobs/{openreview_context['exclusion_id']}/submissions.json")
+        assert with_inclusion < no_inclusion
+        assert with_inclusion < with_exclusion
+
+    def test_request_group_inclusion_inclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+        # Make a request
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                        'expertise': { 'invitation': 'HIJ.cc/-/Expertise_Selection' }
+                    },
+                    "entityB": { 
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                        'expertise': { 'invitation': 'HIJ.cc/-/Expertise_Selection' }
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response[0]['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        # Check for API request
+        req = response['request']
+        assert req['name'] == 'test_run'
+        assert req['entityA']['type'] == 'Group'
+        assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
+        assert req['entityB']['type'] == 'Group'
+        assert req['entityB']['memberOf'] == 'ABC.cc/Reviewers'
+
+        # Assert size of archives folder is less than previous
+        no_inclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['job_id']}/archives") if d.is_file())
+        with_inclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
+        with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['exclusion_id']}/archives") if d.is_file())
+        assert sum(1 for _ in os.walk(f"./tests/jobs/{job_id}/archives")) == 1
+        assert with_inclusion < no_inclusion
+        assert with_inclusion < with_exclusion
+
+        # Assert size of submissions file is less than previous
+        no_inclusion = os.path.getsize(f"./tests/jobs/{openreview_context['job_id']}/submissions.json")
+        with_inclusion = os.path.getsize(f"./tests/jobs/{job_id}/submissions.json")
+        with_exclusion = os.path.getsize(f"./tests/jobs/{openreview_context['exclusion_id']}/submissions.json")
+        assert with_inclusion < no_inclusion
+        assert with_inclusion < with_exclusion
+
     def test_get_group_results(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for journal results from the given job_id assuming the job has completed
@@ -1169,71 +1394,3 @@ class TestExpertiseService():
             os.remove('pytest.log')
         if os.path.isfile('default.log'):
             os.remove('default.log')
-
-# def test_elmo_queue(openreview_context, celery_session_app, celery_session_worker):
-#     test_client = openreview_context['test_client']
-#     server_config = openreview_context['config']
-#     test_profile = '~Test_User1'
-
-
-#     working_dir = openreview_context['config']['WORKING_DIR']
-#     if os.path.isdir(working_dir):
-#         shutil.rmtree(working_dir)
-
-#     # Gather config
-#     config = {
-#         'name': 'test_run',
-#         'match_group': ["ABC.cc"],
-#         "model": "elmo",
-#         "model_params": {
-#             "use_title": False,
-#             "use_abstract": True,
-#             "average_score": True,
-#             "max_score": False
-#         }
-#     }
-#     # Test empty config
-#     run_empty_config(test_client)
-
-#     # Test missing required field
-#     run_missing_required(test_client)
-
-#     # Test unexpected field
-#     run_unexpected_field(test_client)
-
-#     # Test unexpected model param
-#     run_unexpected_model_param(test_client)
-
-#     # Submit correct config
-#     job_id = run_correct_job_submit(test_client)
-
-#     # Submit a second job
-#     job_id_two = run_correct_job_submit(test_client)
-
-#     # Check for queued status
-#     run_check_queued_status(test_client, job_id_two)
-
-#     # Query until job is complete
-#     run_query_until_complete(test_client, job_id)
-
-#     # Check for results
-#     run_check_results(test_client, server_config, job_id)
-
-#     # Query until second job is complete
-#     run_query_until_complete(test_client, job_id_two)
-#     run_check_two_completed_jobs(test_client)
-
-#     # Clean up directories
-#     run_clean_up_jobs(test_client, server_config, job_id)
-#     run_clean_up_jobs(test_client, server_config, job_id_two)
-
-#     # Gather second config with an error in the model field
-#     job_id = run_submit_err_job(test_client)
-
-#     # Query until job is complete
-#     run_query_until_err(test_client, server_config, job_id)
-
-#     # Clean up test
-#     shutil.rmtree(f"{server_config['WORKING_DIR']}/")
-#     os.remove('pytest.log')
-#     os.remove('default.log')

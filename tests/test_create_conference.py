@@ -154,7 +154,7 @@ class TestConference():
         assert client.get_group('DEF.cc/Authors')
 
         # Post the request form note
-        # HIJ is to be used for a single test for the inclusion invitation with the expertise API
+        # HIJ is to be used for testing for the inclusion invitation with the expertise API
         pc_client=helpers.create_user('pc@hij.cc', 'Program', 'HIJChair')
 
         request_form_note = pc_client.post_note(openreview.Note(

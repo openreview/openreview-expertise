@@ -317,6 +317,8 @@ class JobConfig(object):
         config.inclusion_inv = None
         config.exclusion_inv = None
 
+        # TODO: Need new keyword
+
         if api_request.entityA['type'] == 'Group':
             config.match_group = [api_request.entityA['memberOf']]
             edge_inv = api_request.entityA.get('expertise', None)
