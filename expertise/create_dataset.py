@@ -25,6 +25,7 @@ class OpenReviewExpertise(object):
         self.config = config
         self.root = Path(config.get('dataset', {}).get('directory', './'))
         self.excluded_ids_by_user = defaultdict(list)
+        self.included_ids_by_user = defaultdict(list)
 
         self.metadata = {
             'submission_count': 0,
@@ -250,6 +251,23 @@ class OpenReviewExpertise(object):
                     excluded_ids_by_user[edge.tail].append(edge.head)
 
         return excluded_ids_by_user
+    
+    def include(self):
+        inclusion_invitations = self.convert_to_list(self.config['inclusion_inv'])
+        included_ids_by_user = defaultdict(list)
+        for invitation in inclusion_invitations:
+            user_grouped_edges = openreview.tools.iterget_grouped_edges(
+                self.openreview_client,
+                invitation=invitation,
+                groupby='tail',
+                select='id,head,label,weight'
+            )
+
+            for edges in user_grouped_edges:
+                for edge in edges:
+                    included_ids_by_user[edge.tail].append(edge.head)
+
+        return included_ids_by_user
 
     def retrieve_expertise_helper(self, member, email):
         self.pbar.update(1)
@@ -259,8 +277,12 @@ class OpenReviewExpertise(object):
         filtered_papers = []
         for n in member_papers:
             paper_title = openreview.tools.get_paperhash('', n['content']['title'])
-            if paper_title and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys:
-                filtered_papers.append(n)
+            if 'inclusion_inv' in self.config:
+                if paper_title and n['id'] in self.included_ids_by_user[member] and paper_title not in seen_keys:
+                    filtered_papers.append(n)
+            else:
+                if paper_title and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys:
+                    filtered_papers.append(n)
             seen_keys.add(paper_title)
 
         return member, email, filtered_papers
@@ -459,6 +481,9 @@ class OpenReviewExpertise(object):
 
         if 'exclusion_inv' in self.config:
             self.excluded_ids_by_user = self.exclude()
+
+        if 'inclusion_inv' in self.config:
+            self.included_ids_by_user = self.include()
 
         if 'match_group' in self.config or 'reviewer_ids' in self.config:
             self.archive_dir = self.dataset_dir.joinpath('archives')
