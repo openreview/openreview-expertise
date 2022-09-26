@@ -280,7 +280,7 @@ def test_expertise_inclusion(client, openreview_client):
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
 
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~Harold_Rice1']) == 0
+    assert len(expertise['~Harold_Rice1']) == 4
 
     note = openreview.Note(
         invitation = 'openreview.net/-/paper',
@@ -299,7 +299,7 @@ def test_expertise_inclusion(client, openreview_client):
     note = test_user_client.post_note(note)
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~Harold_Rice1']) == 0
+    assert len(expertise['~Harold_Rice1']) == 5
     
     # Post this edge to both ABC and HIJ, ABC will be deleted, HIJ will be used for the API tests
     edge = openreview.Edge(

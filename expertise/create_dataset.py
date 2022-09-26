@@ -314,7 +314,8 @@ class OpenReviewExpertise(object):
         for n in member_papers:
             paper_title = openreview.tools.get_paperhash('', n['content']['title'])
             if 'inclusion_inv' in self.config:
-                if paper_title and n['id'] in self.included_ids_by_user[member] and paper_title not in seen_keys:
+                # The paper must be included or the user has included no papers
+                if paper_title and ( n['id'] in self.included_ids_by_user[member] or len(self.included_ids_by_user[member]) == 0) and paper_title not in seen_keys:
                     filtered_papers.append(n)
             else:
                 if paper_title and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys:

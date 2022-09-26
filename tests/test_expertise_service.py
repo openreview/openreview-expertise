@@ -365,68 +365,6 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: Expertise invitation indicated but ID not provided"
 
-    def test_request_expertise_with_inclusion_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a config with an empty inclusion invitation should return no archive submissions
-        test_client = openreview_context['test_client']
-        response = test_client.post(
-            '/expertise',
-            data = json.dumps({
-                    "name": "test_run",
-                    "entityA": {
-                        'type': "Group",
-                        'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'ABC.cc/-/Expertise_Selection' }
-                    },
-                    "entityB": { 
-                        'type': "Note",
-                        'invitation': "ABC.cc/-/Submission" 
-                    },
-                    "model": {
-                            "name": "specter+mfr",
-                            'useTitle': None, 
-                            'useAbstract': None, 
-                            'skipSpecter': False,
-                            'scoreComputation': 'avg'
-                    }
-                }
-            ),
-            content_type='application/json',
-            headers=openreview_client.headers
-        )
-        assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['jobId']
-
-        openreview_context['job_id'] = job_id
-
-    def test_get_results_and_get_inclusion_error(self, openreview_context, celery_session_app, celery_session_worker):
-        MAX_TIMEOUT = 600 # Timeout after 10 minutes
-        assert openreview_context['job_id'] is not None
-        test_client = openreview_context['test_client']
-        # Query until job is err
-        time.sleep(5)
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}"})
-        assert response.status_code == 404
-
-        response = test_client.get('/expertise/status', query_string={'jobId': f"{openreview_context['job_id']}"}).json
-        start_time = time.time()
-        try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
-            time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f"{openreview_context['job_id']}"}).json
-            try_time = time.time() - start_time
-
-        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
-        assert response['name'] == 'test_run'
-        assert response['status'].strip() == 'Error'
-        assert response['description'] == "num_samples should be a positive integer value, but got num_samples=0. Please check that there is at least 1 member of the match group with at least 1 publication on OpenReview."
-        assert response['cdate'] <= response['mdate']
-
-        # Clean up error job by calling the delete endpoint
-        response = test_client.get('/expertise/delete', query_string={'jobId': f"{openreview_context['job_id']}"}).json
-        assert response['name'] == 'test_run'
-        assert response['cdate'] <= response['mdate']
-        assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
-
     def test_request_expertise_with_valid_parameters(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -695,6 +633,69 @@ class TestExpertiseService():
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
 
+    def test_inclusion_invitation_default(self, client, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID, ABC has no edges posted to it
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+        # Make a request
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                        'expertise': { 'invitation': 'ABC.cc/-/Expertise_Selection' }
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        # Check for API request
+        req = response['request']
+        assert req['name'] == 'test_run'
+        assert req['entityA']['type'] == 'Group'
+        assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
+        assert req['entityA']['expertise']['invitation'] == 'ABC.cc/-/Expertise_Selection'
+        assert req['entityB']['type'] == 'Note'
+        assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
+        assert response['cdate'] <= response['mdate']
+
     def test_exclusion_invitation(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -767,7 +768,7 @@ class TestExpertiseService():
         # Assert that there are two completed jobs belonging to this user
         test_client = openreview_context['test_client']
         response = test_client.get('/expertise/status/all', query_string={}).json['results']
-        assert len(response) == 4
+        assert len(response) == 5
         for job_dict in response:
             assert job_dict['status'] == 'Completed'
 
