@@ -845,7 +845,7 @@ class TestExpertiseService():
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
     def test_request_expertise_with_no_submission_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a config with an error in the model field and return the job_id
+        # Submit a config with no submissions
         test_client = openreview_context['test_client']
         response = test_client.post(
             '/expertise',
@@ -861,7 +861,7 @@ class TestExpertiseService():
                     },
                     "model": {
                             "name": "specter+mfr",
-                            'sparseValue': 'notAnInt',
+                            'sparseValue': 300,
                             'useTitle': None, 
                             'useAbstract': None, 
                             'skipSpecter': False,
