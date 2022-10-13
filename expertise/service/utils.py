@@ -57,6 +57,7 @@ class APIRequest(object):
         self.entityA = {}
         self.entityB = {}
         self.model = {}
+        self.dataset = {}
         root_key = 'request'
 
         def _get_field_from_request(field):
@@ -80,6 +81,9 @@ class APIRequest(object):
 
         # Optionally check for model object
         self.model = request.pop('model', {})
+
+        # Optionally check for dataset object
+        self.dataset = request.pop('dataset', {})
 
         # Check for empty request
         if len(request.keys()) > 0:
@@ -125,8 +129,11 @@ class APIRequest(object):
             'entityA': self.entityA,
             'entityB': self.entityB,
         }
+
         if len(self.model.keys()) > 0:
             body['model'] = self.model
+        if len(self.dataset.keys()) > 0:
+            body['dataset'] = self.dataset
 
         return body
 
@@ -300,8 +307,6 @@ class JobConfig(object):
         config.api_request = api_request    
 
         root_dir = os.path.join(working_dir, config.job_id)
-        config.dataset = starting_config.get('dataset', {})
-        config.dataset['directory'] = root_dir
         config.job_dir = root_dir
         config.cdate = int(time.time() * 1000)
         config.mdate = config.cdate
@@ -347,6 +352,25 @@ class JobConfig(object):
         if config.alternate_match_group is not None and (config.paper_id is not None or config.paper_invitation is not None):
             raise openreview.OpenReviewException('Bad request: Cannot provide paper id/invitation and alternate match group')
 
+        # Load optional dataset params from default config
+        allowed_dataset_params = [
+            'minimumPubDate',
+            'topRecentPubs'
+        ]
+        config.dataset = starting_config.get('dataset', {})
+        config.dataset['directory'] = root_dir
+
+        # Attempt to load any API request dataset params
+        dataset_params = api_request.dataset
+        if dataset_params:
+            for param in dataset_params.keys():
+                # Handle general case
+                if param not in allowed_dataset_params:
+                    raise openreview.OpenReviewException(f"Bad request: unexpected fields in model: {[param]}")
+
+                snake_param = _camel_to_snake(param)
+                config.dataset[snake_param] = dataset_params[param]
+
         # Load optional model params from default config
         path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
         allowed_model_params = [
@@ -367,6 +391,7 @@ class JobConfig(object):
         config.model_params['skip_specter'] = model_params.get('skip_specter', None)
         config.model_params['specter_batch_size'] = model_params.get('specter_batch_size', 16)
         config.model_params['mfr_batch_size'] = model_params.get('mfr_batch_size', 50)
+        config.model_params['sparse_value'] = model_params.get('sparse_value', 300)
         config.model_params['use_cuda'] = model_params.get('use_cuda', False)
         config.model_params['use_redis'] = model_params.get('use_redis', False)
 

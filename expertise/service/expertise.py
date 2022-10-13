@@ -102,17 +102,20 @@ class ExpertiseService(object):
 
         return filtered_dirs
 
-    def _get_score_and_metadata_dir(self, search_dir):
+    def _get_score_and_metadata_dir(self, search_dir, group_scoring=False):
         """
         Searches the given directory for a possible score file and the metadata file
 
         :param search_dir: The root directory to search in
         :type search_dir: str
 
+        :param group_scoring: Indicate if scoring between groups, if so skip sparse scores
+        :type group_scoring: bool
+
         :returns file_dir: The directory of the score file, if it exists, starting from the given directory
         :returns metadata_dir: The directory of the metadata file, if it exists, starting from the given directory
         """
-        # Search for scores files (only non-sparse scores)
+        # Search for scores files (if sparse scores exist, retrieve by default)
         file_dir, metadata_dir = None, None
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
             config = JobConfig.from_json(json.load(f))
@@ -120,6 +123,11 @@ class ExpertiseService(object):
         # Look for files
         if os.path.isfile(os.path.join(search_dir, f"{config.name}.csv")):
             file_dir = os.path.join(search_dir, f"{config.name}.csv")
+            if not group_scoring:
+                if 'sparse_value' in config.model_params.keys() and os.path.isfile(os.path.join(search_dir, f"{config.name}_sparse.csv")):
+                    file_dir = os.path.join(search_dir, f"{config.name}_sparse.csv")
+                else:
+                    raise OpenReviewException("Sparse score file not found for job {job_id}".format(job_id=config.job_id))    
         else:
             raise OpenReviewException("Score file not found for job {job_id}".format(job_id=config.job_id))
 
@@ -276,16 +284,16 @@ class ExpertiseService(object):
         if status != JobStatus.COMPLETED:
             raise openreview.OpenReviewException(f"Scores not found - status: {status} | description: {description}")
         else:
-            # Search for scores files (only non-sparse scores)
-            file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
-            self.logger.info(f"Retrieving scores from {config.job_dir}")
+            # Search for scores files (if sparse scores exist, retrieve by default)
             ret_list = []
 
             # Check for output format
             group_group_matching = config.alternate_match_group is not None
 
+            self.logger.info(f"Retrieving scores from {config.job_dir}")
             if not group_group_matching:
                 # If reviewer-paper matching, use standard 'user' and 'score' keys
+                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
                 with open(file_dir, 'r') as csv_file:
                     data_reader = reader(csv_file)
                     for row in data_reader:
@@ -301,6 +309,7 @@ class ExpertiseService(object):
                 result['results'] = ret_list
             else:
                 # If group-group matching, report results using "*_member" keys
+                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir, group_scoring=True)
                 with open(file_dir, 'r') as csv_file:
                     data_reader = reader(csv_file)
                     for row in data_reader:

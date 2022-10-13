@@ -221,13 +221,13 @@ class TestConference():
                         "required": False,
                         "order": 3,
                         "description": "Comma separated list of author names, as they appear in the paper.",
-                        "value-regex": "[^,\\n]*(,[^,\\n]+)*"
+                        "values-regex": "[^,\\n]*(,[^,\\n]+)*"
                     },
                     "authorids": {
                         "required": False,
                         "order": 4,
                         "description": "Comma separated list of author email addresses, in the same order as above.",
-                        "value-regex": "[^,\\n]*(,[^,\\n]+)*"
+                        "values-regex": "[^,\\n]*(,[^,\\n]+)*"
                     }
                 }
             }
@@ -248,7 +248,7 @@ class TestConference():
         assert client.get_invitation('openreview.net/-/paper')
 
     def test_post_submissions(self, client, openreview_client, helpers):
-        
+
         def post_notes(data, invitation):
             test_user_client = openreview.Client(username='test@google.com', password='1234')
             for note_json in data['notes'][invitation]:
@@ -314,28 +314,30 @@ class TestConference():
         helpers.await_queue()
 
     def test_post_publications(self, client, openreview_client):
+        tmlr_editors = ['~Raia_Hadsell1', '~Kyunghyun_Cho1']
 
         def post_notes(data, api_invitation):
             for profile_json in data['profiles']:
                 authorid = profile_json['id']
-                for pub_json in profile_json['publications']:
-                    content = pub_json['content']
-                    content['authorids'] = [authorid]
-                    cdate = pub_json.get('cdate')
+                if authorid not in tmlr_editors:
+                    for pub_json in profile_json['publications']:
+                        content = pub_json['content']
+                        content['authorids'] = [authorid]
+                        cdate = pub_json.get('cdate')
 
-                    existing_pubs = list(openreview.tools.iterget_notes(client, content={'authorids': authorid}))
-                    existing_titles = [pub.content.get('title') for pub in existing_pubs]
+                        existing_pubs = list(openreview.tools.iterget_notes(client, content={'authorids': authorid}))
+                        existing_titles = [pub.content.get('title') for pub in existing_pubs]
 
-                    if content.get('title') not in existing_titles:
-                        note = openreview.Note(
-                            invitation = api_invitation,
-                            readers = ['everyone'],
-                            writers = ['~SomeTest_User1'],
-                            signatures = ['~SomeTest_User1'],
-                            content = content,
-                            cdate = cdate
-                        )
-                        note = client.post_note(note)
+                        if content.get('title') not in existing_titles:
+                            note = openreview.Note(
+                                invitation = api_invitation,
+                                readers = ['everyone'],
+                                writers = ['~SomeTest_User1'],
+                                signatures = ['~SomeTest_User1'],
+                                content = content,
+                                cdate = cdate
+                            )
+                            note = client.post_note(note)
 
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)

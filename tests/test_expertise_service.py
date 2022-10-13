@@ -355,6 +355,9 @@ class TestExpertiseService():
                             'useAbstract': True, 
                             'skipSpecter': False,
                             'scoreComputation': 'avg'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
                     }
                 }
             ),
@@ -402,6 +405,7 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
+        assert os.path.getsize(f"./tests/jobs/{job_id}/test_run.csv") == os.path.getsize(f"./tests/jobs/{job_id}/test_run_sparse.csv")
 
         # Check for API request
         req = response['request']
@@ -410,6 +414,9 @@ class TestExpertiseService():
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
+        assert 'model' in req.keys()
+        assert 'dataset' in req.keys()
+        assert req['dataset']['minimumPubDate'] == 0
         assert response['cdate'] <= response['mdate']
 
         # After completion, check for non-empty completed list
