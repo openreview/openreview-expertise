@@ -39,7 +39,8 @@ setup(
         'pytest-celery',
         'shortuuid',
         'redisai',
-        'python-dotenv'
+        'python-dotenv',
+        'importlib-metadata==4.13.0'
     ],
     zip_safe=False
 )
