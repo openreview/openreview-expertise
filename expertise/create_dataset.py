@@ -315,7 +315,7 @@ class OpenReviewExpertise(object):
             paper_title = openreview.tools.get_paperhash('', n['content']['title'])
             if 'inclusion_inv' in self.config:
                 # The paper must be included or the user has included no papers
-                if paper_title and ( n['id'] in self.included_ids_by_user[member] or len(self.included_ids_by_user[member]) == 0) and paper_title not in seen_keys:
+                if paper_title and (n['id'] in self.included_ids_by_user[member] or len(self.included_ids_by_user[member]) == 0):
                     filtered_papers.append(n)
             else:
                 if paper_title and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys:
@@ -412,7 +412,7 @@ class OpenReviewExpertise(object):
             for paper_note in result['papers']:
                 paper_hash = openreview.tools.get_paperhash('', paper_note.content['title'])
                 if 'alternate_inclusion_inv' in self.config:
-                    if paper_hash and paper_note.id in self.alternate_included_ids_by_user[result['profile_id']] and paper_hash not in seen_keys:
+                    if paper_hash and (paper_note.id in self.alternate_included_ids_by_user[result['profile_id']] or len(self.alternate_included_ids_by_user[result['profile_id']]) == 0):
                         filtered_papers.append(paper_note)
                         papers_json_list.append(paper_note.to_json())
                 else:
