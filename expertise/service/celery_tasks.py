@@ -24,6 +24,11 @@ def update_status(config, new_status, desc=None):
     if desc is None:
         config.description = descriptions[new_status]
     else:
+        # Add user friendly translation
+        if 'num_samples=0' in desc:
+            desc += '. Please check that there is at least 1 member of the match group with at least 1 publication on OpenReview.'
+        if 'Dimension out of range' in desc:
+            desc += '. Please check that you have at least 1 submission submitted and that you have run the Post Submission stage.'
         config.description = desc
     config.mdate = int(time.time() * 1000)
     redis_db = RedisDatabase(connection_pool=redis_config_pool)

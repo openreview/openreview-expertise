@@ -221,6 +221,9 @@ class JobConfig(object):
         dataset=None,
         model=None,
         exclusion_inv=None,
+        inclusion_inv=None,
+        alternate_exclusion_inv=None,
+        alternate_inclusion_inv=None,
         paper_invitation=None,
         paper_id=None,
         model_params=None):
@@ -240,6 +243,9 @@ class JobConfig(object):
         self.dataset = dataset
         self.model = model
         self.exclusion_inv = exclusion_inv
+        self.inclusion_inv = inclusion_inv
+        self.alternate_exclusion_inv = alternate_exclusion_inv
+        self.alternate_inclusion_inv = alternate_inclusion_inv
         self.paper_invitation = paper_invitation
         self.paper_id = paper_id
         self.model_params = model_params
@@ -261,6 +267,9 @@ class JobConfig(object):
             'dataset': self.dataset,
             'model': self.model,
             'exclusion_inv': self.exclusion_inv,
+            'inclusion_inv': self.inclusion_inv,
+            'alternate_exclusion_inv': self.alternate_exclusion_inv,
+            'alternate_inclusion_inv': self.alternate_inclusion_inv,
             'paper_invitation': self.paper_invitation,
             'paper_id': self.paper_id,
             'model_params': self.model_params
@@ -311,37 +320,60 @@ class JobConfig(object):
         # Handle Group cases
         config.match_group = starting_config.get('match_group', None)
         config.alternate_match_group = starting_config.get('alternate_match_group', None)
+        config.inclusion_inv = None
+        config.exclusion_inv = None
+        config.alternate_inclusion_inv = None
+        config.alternate_exclusion_inv = None
+
+        # TODO: Need new keyword
 
         if api_request.entityA['type'] == 'Group':
             config.match_group = [api_request.entityA['memberOf']]
+            edge_inv = api_request.entityA.get('expertise', None)
+
+            if edge_inv:
+                edge_inv_id = edge_inv.get('invitation', None)
+                if edge_inv_id is None or len(edge_inv_id) <= 0:
+                    raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
+                label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
+                if 'exclude' not in label.lower():
+                    config.inclusion_inv = edge_inv_id
+                else:
+                    config.exclusion_inv = edge_inv_id
+
         if api_request.entityB['type'] == 'Group':
             config.alternate_match_group = [api_request.entityB['memberOf']]
+            edge_inv = api_request.entityB.get('expertise', None)
+
+            if edge_inv:
+                edge_inv_id = edge_inv.get('invitation', None)
+                if edge_inv_id is None:
+                    raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
+                label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
+                if 'include' in label.lower():
+                    config.alternate_inclusion_inv = edge_inv_id
+                else:
+                    config.alternate_exclusion_inv = edge_inv_id
 
         # Handle Note cases
         config.paper_invitation = None
         config.paper_id = None
-        config.exclusion_inv = None
 
         if api_request.entityA['type'] == 'Note':
             inv, id = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None)
-            excl_inv = api_request.entityA.get('expertise', None)
 
             if inv:
                 config.paper_invitation = inv
             if id:
                 config.paper_id = id
-            if excl_inv:
-                config.exclusion_inv = excl_inv.get('exclusion', {}).get('invitation', None)
+
         elif api_request.entityB['type'] == 'Note':
             inv, id = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None)
-            excl_inv = api_request.entityB.get('expertise', None)
 
             if inv:
                 config.paper_invitation = inv
             if id:
                 config.paper_id = id
-            if excl_inv:
-                config.exclusion_inv = excl_inv.get('exclusion', {}).get('invitation', None)
 
         # Validate that other paper fields are none if an alternate match group is present
         if config.alternate_match_group is not None and (config.paper_id is not None or config.paper_invitation is not None):
@@ -423,6 +455,9 @@ class JobConfig(object):
             dataset = job_config.get('dataset'),
             model = job_config.get('model'),
             exclusion_inv = job_config.get('exclusion_inv'),
+            inclusion_inv = job_config.get('inclusion_inv'),
+            alternate_exclusion_inv = job_config.get('alternate_exclusion_inv'),
+            alternate_inclusion_inv = job_config.get('alternate_inclusion_inv'),
             paper_invitation = job_config.get('paper_invitation'),
             paper_id = job_config.get('paper_id'),
             model_params = job_config.get('model_params')
