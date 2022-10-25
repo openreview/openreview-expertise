@@ -634,7 +634,7 @@ class TestExpertiseService():
         assert response['cdate'] <= response['mdate']
 
     def test_inclusion_invitation_default(self, client, openreview_client, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a working job and return the job ID, ABC has no edges posted to it
+        # Submit a working job and return the job ID, ABC is an inclusion invitation has no edges posted to it
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
         # Make a request
@@ -697,7 +697,7 @@ class TestExpertiseService():
         assert response['cdate'] <= response['mdate']
 
     def test_exclusion_invitation(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a working job and return the job ID
+        # Submit a working job and return the job ID, DEF has a single exclude edge
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
         # Make a request
@@ -1085,7 +1085,7 @@ class TestExpertiseService():
             assert not os.path.isdir(f"./tests/jobs/{id}")
 
     def test_request_group_group(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a working job and return the job ID
+        # Test group-group without any expertise selection
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
         # Make a request
@@ -1144,10 +1144,10 @@ class TestExpertiseService():
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
         assert req['entityB']['type'] == 'Group'
         assert req['entityB']['memberOf'] == 'ABC.cc/Reviewers'
-        openreview_context['job_id'] = job_id
+        openreview_context['job_id'] = job_id ## Store no expertise selection job ID
     
     def test_request_group_exclusion_exclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a working job and return the job ID
+        # Test expertise exclusion - both the archives and submissions should be smaller than the previous test's
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
         # Make a request
@@ -1218,10 +1218,10 @@ class TestExpertiseService():
         no_exclusion = os.path.getsize(f"./tests/jobs/{openreview_context['job_id']}/submissions.json")
         with_exclusion = os.path.getsize(f"./tests/jobs/{job_id}/submissions.json")
         assert with_exclusion < no_exclusion
-        openreview_context['exclusion_id'] = job_id
+        openreview_context['exclusion_id'] = job_id ## Store the job ID of a job with exclusion-exclusion selections
 
     def test_request_group_inclusion_exclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a working job and return the job ID
+        # Switch alternate match group to inclusion, do same checks on archives but submissions should be smaller than both previous cases (1 submission)
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
         # Make a request
@@ -1296,7 +1296,7 @@ class TestExpertiseService():
         assert with_inclusion < with_exclusion
 
     def test_request_group_inclusion_inclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a working job and return the job ID
+        # With 2 inclusions, the match group should have fully populated archives for 2 users (default), and one of them should only have 1 submission
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
         # Make a request
