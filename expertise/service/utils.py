@@ -332,7 +332,9 @@ class JobConfig(object):
             edge_inv = api_request.entityA.get('expertise', None)
 
             if edge_inv:
-                edge_inv_id = edge_inv.get('invitation', None)
+                edge_inv_id = edge_inv.get('exclusion', {}).get('invitation', None)
+                if edge_inv_id is None:
+                    edge_inv_id = edge_inv.get('invitation', None)
                 if edge_inv_id is None or len(edge_inv_id) <= 0:
                     raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
                 label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
@@ -346,7 +348,9 @@ class JobConfig(object):
             edge_inv = api_request.entityB.get('expertise', None)
 
             if edge_inv:
-                edge_inv_id = edge_inv.get('invitation', None)
+                edge_inv_id = edge_inv.get('exclusion', {}).get('invitation', None)
+                if edge_inv_id is None:
+                    edge_inv_id = edge_inv.get('invitation', None)
                 if edge_inv_id is None:
                     raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
                 label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]

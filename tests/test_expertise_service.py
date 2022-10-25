@@ -582,7 +582,7 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'HIJ.cc/-/Expertise_Selection' }
+                        'expertise': { 'exclusion': {'invitation': 'HIJ.cc/-/Expertise_Selection' } }
                     },
                     "entityB": { 
                         'type': "Note",
@@ -628,7 +628,7 @@ class TestExpertiseService():
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
-        assert req['entityA']['expertise']['invitation'] == 'HIJ.cc/-/Expertise_Selection'
+        assert req['entityA']['expertise']['exclusion']['invitation'] == 'HIJ.cc/-/Expertise_Selection'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
@@ -708,7 +708,7 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'DEF.cc/-/Expertise_Selection' }
+                        'expertise': { 'exclusion': { 'invitation': 'DEF.cc/-/Expertise_Selection' } }
                     },
                     "entityB": { 
                         'type': "Note",
@@ -754,7 +754,7 @@ class TestExpertiseService():
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
-        assert req['entityA']['expertise']['invitation'] == 'DEF.cc/-/Expertise_Selection'
+        assert req['entityA']['expertise']['exclusion']['invitation'] == 'DEF.cc/-/Expertise_Selection'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
