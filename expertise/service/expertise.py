@@ -62,6 +62,7 @@ class ExpertiseService(object):
                         when it is not expected
         """
         # Validate fields
+        self.logger.info(f"Incoming request - {request}")
         validated_request = APIRequest(request)
         config = JobConfig.from_request(
             api_request = validated_request,
