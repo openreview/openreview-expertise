@@ -388,6 +388,9 @@ class TestExpertiseService():
                             'useAbstract': True, 
                             'skipSpecter': False,
                             'scoreComputation': 'avg'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
                     }
                 }
             ),
@@ -435,6 +438,7 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
+        assert os.path.getsize(f"./tests/jobs/{job_id}/test_run.csv") == os.path.getsize(f"./tests/jobs/{job_id}/test_run_sparse.csv")
 
         # Check for API request
         req = response['request']
@@ -443,6 +447,9 @@ class TestExpertiseService():
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
+        assert 'model' in req.keys()
+        assert 'dataset' in req.keys()
+        assert req['dataset']['minimumPubDate'] == 0
         assert response['cdate'] <= response['mdate']
 
         # After completion, check for non-empty completed list
@@ -546,12 +553,22 @@ class TestExpertiseService():
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 2
         response = response.json['results']
+
+        all_users = set()
         for item in response:
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            all_users.add(profile_id)
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
             assert score >= 0 and score <= 1
+
+        # Check members
+        assert "~Harold_Rice1" in all_users
+        assert "~Zonia_Willms1" in all_users
+        assert "~Royal_Toy1" in all_users
+        assert "~C.V._Lastname1" in all_users
+
 
     def test_compare_results_for_identical_jobs(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
@@ -1145,6 +1162,32 @@ class TestExpertiseService():
         assert req['entityB']['type'] == 'Group'
         assert req['entityB']['memberOf'] == 'ABC.cc/Reviewers'
         openreview_context['job_id'] = job_id ## Store no expertise selection job ID
+
+        response = test_client.get('/expertise/results', query_string={'jobId': f"{job_id}"})
+        response = response.json['results']
+
+        submission_users, match_users = set(), set()
+        for item in response:
+            match_id, submission_id, score = item['match_member'], item['submission_member'], float(item['score'])
+            submission_users.add(submission_id)
+            match_users.add(match_id)
+            assert len(submission_id) >= 1
+            assert len(match_id) >= 1
+            assert match_id.startswith('~') and submission_id.startswith('~')
+            assert score >= 0 and score <= 1
+
+        # Check members
+        assert "~Harold_Rice1" in submission_users
+        assert "~Harold_Rice1" in match_users
+
+        assert "~Zonia_Willms1" in submission_users
+        assert "~Zonia_Willms1" in match_users
+
+        assert "~Royal_Toy1" in submission_users
+        assert "~Royal_Toy1" in match_users
+
+        assert "~C.V._Lastname1" in submission_users
+        assert "~C.V._Lastname1" in match_users
     
     def test_request_group_exclusion_exclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Test expertise exclusion - both the archives and submissions should be smaller than the previous test's
@@ -1361,7 +1404,7 @@ class TestExpertiseService():
         no_inclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['job_id']}/archives") if d.is_file())
         with_inclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
         with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['exclusion_id']}/archives") if d.is_file())
-        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) == 3
+        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) == 4
         assert os.path.getsize(f"./tests/jobs/{job_id}/archives/~Harold_Rice1.jsonl") < os.path.getsize(f"./tests/jobs/{openreview_context['job_id']}/archives/~Harold_Rice1.jsonl")
         assert with_inclusion < no_inclusion
         assert with_inclusion < with_exclusion
@@ -1378,7 +1421,7 @@ class TestExpertiseService():
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
-        assert metadata['submission_count'] == 8
+        assert metadata['submission_count'] == 9
         response = response.json['results']
         for item in response:
             match_id, submitter_id, score = item['match_member'], item['submission_member'], float(item['score'])

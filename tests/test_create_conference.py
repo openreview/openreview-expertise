@@ -325,7 +325,7 @@ class TestConference():
         assert client.get_invitation('openreview.net/-/paper')
 
     def test_post_submissions(self, client, openreview_client, helpers):
-        
+
         def post_notes(data, invitation):
             test_user_client = openreview.Client(username='test@google.com', password='1234')
             for note_json in data['notes'][invitation]:
