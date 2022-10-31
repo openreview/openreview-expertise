@@ -69,7 +69,8 @@
       "members": [
         "~Harold_Rice1",
         "~Zonia_Willms1",
-        "~Royal_Toy1"
+        "~Royal_Toy1",
+        "~Test._WithDots1"
       ]
     },
     "HIJ.cc": {
@@ -82,6 +83,7 @@
     "DEF.cc/Reviewers": {
       "id": "DEF.cc/Reviewers",
       "members": [
+      	"testdots@google.com",
         "strevino0@ox.ac.uk",
         "wreolfi1@squidoo.com",
         "chankin2@booking.com",
@@ -225,6 +227,34 @@
         "content": {
           "title": "Alteration of L Wrist with Nonaut Sub, Perc Approach",
           "abstract": "Fusce posuere felis sed lacus. Morbi sem mauris, laoreet ut, rhoncus aliquet, pulvinar sed, nisl. Nunc rhoncus dui vel sem.\n\nSed sagittis. Nam congue, risus semper porta volutpat, quam pede lobortis ligula, sit amet eleifend pede libero quis orci. Nullam molestie nibh in lectus."
+        }
+      }
+    ]
+  }, {
+    "id": "~Test._WithDots1",
+    "content": {
+      "preferredEmail": "testdots@google.com",
+      "emails": [
+        "testdots@google.com"
+      ]
+    },
+    "submissions": [
+      {
+        "id": "khOZ3oCJ",
+        "cdate": 1568797539,
+        "content": {
+          "title": "MRI of R Ovary convallis enim vel, pretium dui. Cras.",
+          "abstract": "Orci varius natoque penatibus et magnis dis parturient montes, nascetur."
+        }
+      }
+    ],
+    "publications": [
+      {
+        "id": "PR1xMCjb",
+        "cdate": 1564597200,
+        "content": {
+          "title": "Insertion of Radioact Elem into Vivamus dignissim dolor nisi, ac ullamcorper velit malesuada ac.",
+          "abstract": "Mauris nec facilisis velit, vel aliquam elit. Cras vel ipsum pellentesque, efficitur turpis ut, pretium est. Morbi accumsan magna dignissim, tristique neque ac, finibus nisi. In hac habitasse platea dictumst. Proin vitae pellentesque odio. Ut feugiat diam orci, at tincidunt orci malesuada at. Vestibulum iaculis id est in posuere. Nulla ornare nibh ut tincidunt sagittis. Nunc sit amet ante enim. Phasellus quis sem fermentum, sagittis libero eget, auctor odio. Nunc aliquam mi odio, ut imperdiet tortor efficitur non. Maecenas et dictum magna, eu rhoncus metus."
         }
       }
     ]

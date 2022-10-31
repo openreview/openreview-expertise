@@ -15,14 +15,14 @@ def test_convert_to_list(client, openreview_client):
 def test_get_papers_from_group(client, openreview_client):
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
     all_papers = or_expertise.get_papers_from_group('DEF.cc/Reviewers')
-    assert len(all_papers) == 145
+    assert len(all_papers) == 146
     if os.path.isfile('publications_by_profile_id.json'):
         os.remove('publications_by_profile_id.json')
 
 def test_get_profile_ids(client, openreview_client):
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
     ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc/Reviewers'])
-    assert len(ids) == 99
+    assert len(ids) == 100
     for tilde_id, email_id in ids:
         assert '~' in tilde_id
         assert '@' in email_id
@@ -32,7 +32,7 @@ def test_get_profile_ids(client, openreview_client):
     assert sorted(ids) == sorted([('~Romeo_Mraz1', 'hkinder2b@army.mil'), ('~Stacee_Powlowski1', 'mdagg5@1und1.de'), ('~Stanley_Bogisich1', 'cchippendale26@smugmug.com')])
 
     ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc/Reviewers'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
-    assert len(ids) == 99
+    assert len(ids) == 100
 
     ids, inv_ids = or_expertise.get_profile_ids(reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de', 'mondragon@email.com'])
     assert len(ids) == 3
