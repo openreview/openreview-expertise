@@ -70,7 +70,7 @@
         "~Harold_Rice1",
         "~Zonia_Willms1",
         "~Royal_Toy1",
-        "~Test._WithDots1"
+        "~C.V._Lastname1"
       ]
     },
     "HIJ.cc": {
@@ -231,7 +231,7 @@
       }
     ]
   }, {
-    "id": "~Test._WithDots1",
+    "id": "~C.V._Lastname1",
     "content": {
       "preferredEmail": "testdots@google.com",
       "emails": [

@@ -553,12 +553,22 @@ class TestExpertiseService():
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 2
         response = response.json['results']
+
+        all_users = set()
         for item in response:
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            all_users.add(profile_id)
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
             assert score >= 0 and score <= 1
+
+        # Check members
+        assert "~Harold_Rice1" in all_users
+        assert "~Zonia_Willms1" in all_users
+        assert "~Royal_Toy1" in all_users
+        assert "~C.V._Lastname1" in all_users
+
 
     def test_compare_results_for_identical_jobs(self, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
