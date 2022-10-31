@@ -476,11 +476,12 @@ def aggregate_by_group(config):
             scores[paper_id][ac_id] = score
 
     dataset_root = Path(config.get('dataset', {}).get('directory', './'))
+
     # Fetch archive members
     archive_members = []
     archive_files = os.listdir(dataset_root.joinpath('archives'))
     for author_file in archive_files:
-        archive_members.append(author_file.split('.')[0])
+        archive_members.append(author_file[:-6])
 
     # Fetch submission members
     with open(dataset_root.joinpath('publications_by_profile_id.json'), 'r') as f:

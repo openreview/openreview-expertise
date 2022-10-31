@@ -1162,6 +1162,32 @@ class TestExpertiseService():
         assert req['entityB']['type'] == 'Group'
         assert req['entityB']['memberOf'] == 'ABC.cc/Reviewers'
         openreview_context['job_id'] = job_id ## Store no expertise selection job ID
+
+        response = test_client.get('/expertise/results', query_string={'jobId': f"{job_id}"})
+        response = response.json['results']
+
+        submission_users, match_users = set(), set()
+        for item in response:
+            match_id, submission_id, score = item['match_member'], item['submission_member'], float(item['score'])
+            submission_users.add(submission_id)
+            match_users.add(match_id)
+            assert len(submission_id) >= 1
+            assert len(match_id) >= 1
+            assert match_id.startswith('~') and submission_id.startswith('~')
+            assert score >= 0 and score <= 1
+
+        # Check members
+        assert "~Harold_Rice1" in submission_users
+        assert "~Harold_Rice1" in match_users
+
+        assert "~Zonia_Willms1" in submission_users
+        assert "~Zonia_Willms1" in match_users
+
+        assert "~Royal_Toy1" in submission_users
+        assert "~Royal_Toy1" in match_users
+
+        assert "~C.V._Lastname1" in submission_users
+        assert "~C.V._Lastname1" in match_users
     
     def test_request_group_exclusion_exclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Test expertise exclusion - both the archives and submissions should be smaller than the previous test's
