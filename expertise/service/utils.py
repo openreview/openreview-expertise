@@ -132,8 +132,9 @@ class APIRequest(object):
 
         if len(self.model.keys()) > 0:
             body['model'] = self.model
-        if len(self.dataset.keys()) > 0:
-            body['dataset'] = self.dataset
+        if hasattr(self, 'dataset'):
+            if len(self.dataset.keys()) > 0:
+                body['dataset'] = self.dataset
 
         return body
 
