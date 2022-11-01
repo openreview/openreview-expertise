@@ -2,8 +2,10 @@ import os
 import flask
 import logging, logging.handlers
 import redis
+import time
 
 from celery import Celery
+from expertise.service.utils import JobStatus, JobDescription, RedisDatabase
 
 def configure_logger(app):
     '''
@@ -61,6 +63,21 @@ def create_app(config=None):
     # It must come after the app is initialized, and imported in the same scope.
     from . import routes
     app.register_blueprint(routes.BLUEPRINT)
+
+    # Any jobs that are running must be marked with cancel
+    redis_config_pool, _ = create_redis(app)
+    redis = RedisDatabase(
+        connection_pool=redis_config_pool
+    )
+    app.logger.info('Running server startup code')
+    for config in redis.load_all_jobs('~Super_User1'):
+        status = config.status
+        if status == JobStatus.RUN_EXPERTISE or status == JobStatus.FETCHING_DATA:
+            app.logger.info(f"{config.job_id} was running - canceling job")
+            config.status = JobStatus.CANCEL
+            config.description = JobDescription.VALS[JobStatus.CANCEL]
+            config.mdate = int(time.time() * 1000)
+            redis.save_job(config)
 
     return app
 
