@@ -179,6 +179,5 @@ def test_specter_scores_updated_mdate(tmp_path, create_specter):
             paper_data = json.loads(line.rstrip())
             paper_id = paper_data['paper_id']
             paper_embedding = numpy.array(paper_data['embedding'])
-            assert not redis_con.exists(paper_id + "_1234567890")
             paper_emb_redis = redis_con.tensorget(paper_id + "_2345678901", as_numpy_mutable=True)
             assert numpy.all(paper_emb_redis == paper_embedding)
