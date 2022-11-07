@@ -211,7 +211,6 @@ class SpecterPredictor:
                                 "authors": [profile_id],
                                 "mdate": pub_mdate
                             }
-                        self._remove_keys_from_cache(publication["id"])
                 else:
                     print(f"Skipping publication {publication['id']}. Either title or abstract must be provided ")
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_data.json"), 'w') as f_out:
