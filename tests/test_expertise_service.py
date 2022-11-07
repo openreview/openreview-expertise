@@ -1,5 +1,6 @@
 from unittest.mock import patch, MagicMock
 import random
+import logging
 from pathlib import Path
 import openreview
 import sys
@@ -13,7 +14,7 @@ import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import elmo
 from expertise.service.utils import JobStatus, JobConfig, RedisDatabase
-
+from expertise.service.celery_tasks import run_userpaper
 
 class TestExpertiseService():
 
@@ -134,8 +135,8 @@ class TestExpertiseService():
         test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com', status=JobStatus.RUN_EXPERTISE)
         redis.save_job(test_config)
 
-    def test_request_expertise_with_no_config(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
-        # First check that existing redis jobs are marked as canceled
+    def test_redis_canceled(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Check that existing redis jobs are marked as canceled
         redis = RedisDatabase(
             host='localhost',
             port=6379,
@@ -146,9 +147,11 @@ class TestExpertiseService():
         assert len(returned_configs) == 1
         assert returned_configs[0].user_id == 'test_user1@mail.com'
         assert returned_configs[0].job_id == 'abcde'
-        assert returned_configs[0].status == JobStatus.CANCEL
-        shutil.rmtree(f"./tests/jobs/")
+        assert returned_configs[0].status == JobStatus.ERROR
+        assert returned_configs[0].description == 'Server restarted while job was running'
+        shutil.rmtree('./tests/jobs')
 
+    def test_request_expertise_with_no_config(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Submitting an empty config with no required fields
         response = test_client.post(
