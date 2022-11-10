@@ -347,13 +347,14 @@ class JobConfig(object):
                 try:
                     inv = openreview_client.get_invitation(edge_inv_id)
                 except:
-                    raise openreview.OpenReviewException(f"Not found: Expertise invitation {edge_inv_id} does not exist")
-
-                label = inv.reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
-                if 'exclude' not in label.lower():
-                    config.inclusion_inv = edge_inv_id
-                else:
-                    config.exclusion_inv = edge_inv_id
+                    inv = None
+                
+                if inv:
+                    label = inv.reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
+                    if 'exclude' not in label.lower():
+                        config.inclusion_inv = edge_inv_id
+                    else:
+                        config.exclusion_inv = edge_inv_id
 
         if api_request.entityB['type'] == 'Group':
             config.alternate_match_group = [api_request.entityB['memberOf']]
@@ -369,13 +370,14 @@ class JobConfig(object):
                 try:
                     inv = openreview_client.get_invitation(edge_inv_id)
                 except:
-                    raise openreview.OpenReviewException(f"Not found: Expertise invitation {edge_inv_id} does not exist")
-
-                label = inv.reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
-                if 'include' in label.lower():
-                    config.alternate_inclusion_inv = edge_inv_id
-                else:
-                    config.alternate_exclusion_inv = edge_inv_id
+                    inv = None
+                
+                if inv:
+                    label = inv.reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
+                    if 'include' in label.lower():
+                        config.alternate_inclusion_inv = edge_inv_id
+                    else:
+                        config.alternate_exclusion_inv = edge_inv_id
 
         # Handle Note cases
         config.paper_invitation = None
