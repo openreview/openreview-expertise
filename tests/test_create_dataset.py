@@ -15,14 +15,14 @@ def test_convert_to_list(client, openreview_client):
 def test_get_papers_from_group(client, openreview_client):
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
     all_papers = or_expertise.get_papers_from_group('DEF.cc/Reviewers')
-    assert len(all_papers) == 145
+    assert len(all_papers) == 146
     if os.path.isfile('publications_by_profile_id.json'):
         os.remove('publications_by_profile_id.json')
 
 def test_get_profile_ids(client, openreview_client):
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
     ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc/Reviewers'])
-    assert len(ids) == 99
+    assert len(ids) == 100
     for tilde_id, email_id in ids:
         assert '~' in tilde_id
         assert '@' in email_id
@@ -32,7 +32,7 @@ def test_get_profile_ids(client, openreview_client):
     assert sorted(ids) == sorted([('~Romeo_Mraz1', 'hkinder2b@army.mil'), ('~Stacee_Powlowski1', 'mdagg5@1und1.de'), ('~Stanley_Bogisich1', 'cchippendale26@smugmug.com')])
 
     ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc/Reviewers'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
-    assert len(ids) == 99
+    assert len(ids) == 100
 
     ids, inv_ids = or_expertise.get_profile_ids(reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de', 'mondragon@email.com'])
     assert len(ids) == 3
@@ -239,7 +239,7 @@ def test_expertise_selection(client, openreview_client):
         writers = ['~SomeTest_User1'],
         signatures = ['~SomeTest_User1'],
         content = {
-            "title": "test_title",
+            "title": "test_exclude",
             "abstract": original_note.content['abstract'],
             "authorids": original_note.content['authorids']
         },
@@ -268,3 +268,65 @@ def test_expertise_selection(client, openreview_client):
     or_expertise.excluded_ids_by_user = or_expertise.exclude()
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Harold_Rice1']) == 3
+
+def test_expertise_inclusion(client, openreview_client):
+    config = {
+        'use_email_ids': False,
+        'inclusion_inv': 'ABC.cc/-/Expertise_Selection',
+        'match_group': 'ABC.cc/Reviewers'
+    }
+    author_id = '~Harold_Rice1'
+    original_note = list(openreview.tools.iterget_notes(client, content={'authorids': author_id}))[0]
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+
+    expertise = or_expertise.retrieve_expertise()
+    assert len(expertise['~Harold_Rice1']) == 4
+
+    note = openreview.Note(
+        invitation = 'openreview.net/-/paper',
+        readers = ['everyone'],
+        writers = ['~SomeTest_User1'],
+        signatures = ['~SomeTest_User1'],
+        content = {
+            "title": "test_include",
+            "abstract": original_note.content['abstract'],
+            "authorids": original_note.content['authorids']
+        },
+        cdate = 1554819115
+    )
+
+    test_user_client = openreview.Client(username='test@google.com', password='1234')
+    note = test_user_client.post_note(note)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    expertise = or_expertise.retrieve_expertise()
+    assert len(expertise['~Harold_Rice1']) == 5
+    
+    # Post this edge to both ABC and HIJ, ABC will be deleted, HIJ will be used for the API tests
+    edge = openreview.Edge(
+                        invitation='HIJ.cc/-/Expertise_Selection',
+                        head=note.id,
+                        tail='~Harold_Rice1',
+                        label='Include',
+                        readers=['HIJ.cc', '~Harold_Rice1'],
+                        writers=['~Harold_Rice1'],
+                        signatures=['~Harold_Rice1']
+                    )
+    edge = client.post_edge(edge)
+    edge = openreview.Edge(
+                        invitation='ABC.cc/-/Expertise_Selection',
+                        head=note.id,
+                        tail='~Harold_Rice1',
+                        label='Include',
+                        readers=['ABC.cc', '~Harold_Rice1'],
+                        writers=['~Harold_Rice1'],
+                        signatures=['~Harold_Rice1']
+                    )
+    edge = client.post_edge(edge)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise.included_ids_by_user = or_expertise.include()
+    assert len(or_expertise.included_ids_by_user['~Harold_Rice1']) == 1
+    expertise = or_expertise.retrieve_expertise()
+    assert len(expertise['~Harold_Rice1']) == 1
+
+    # Clear the inclusion edges for ABC
+    client.delete_edges(invitation='ABC.cc/-/Expertise_Selection')

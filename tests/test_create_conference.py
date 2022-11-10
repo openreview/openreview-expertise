@@ -19,6 +19,7 @@ class TestConference():
         first_date = now + datetime.timedelta(days=1)
 
         # Post the request form note
+        # ABC is to be used for running the expertise model and has an inclusion invitation
         helpers.create_user('test@google.com', 'SomeTest', 'User')
         pc_client=helpers.create_user('pc@abc.cc', 'Program', 'ABCChair')
 
@@ -53,7 +54,8 @@ class TestConference():
                 'Open Reviewing Policy': 'Submissions and reviews should both be private.',
                 'submission_readers': 'Program chairs and paper authors only',
                 'How did you hear about us?': 'ML conferences',
-                'Expected Submissions': '100'
+                'Expected Submissions': '100',
+                'include_expertise_selection': 'Yes'
             }))
 
         helpers.await_queue()
@@ -86,6 +88,7 @@ class TestConference():
 
 
         # Post the request form note
+        # DEF is to be used for unit testing create_dataset and has an exclusion invitation
         pc_client=helpers.create_user('pc@def.cc', 'Program', 'DEFChair')
 
         request_form_note = pc_client.post_note(openreview.Note(
@@ -150,6 +153,73 @@ class TestConference():
 
         assert client.get_group('DEF.cc/Authors')
 
+        # Post the request form note
+        # HIJ is to be used for testing for the inclusion invitation with the expertise API
+        pc_client=helpers.create_user('pc@hij.cc', 'Program', 'HIJChair')
+
+        request_form_note = pc_client.post_note(openreview.Note(
+            invitation='openreview.net/Support/-/Request_Form',
+            signatures=['~Program_HIJChair1'],
+            readers=[
+                'openreview.net/Support',
+                '~Program_HIJChair1'
+            ],
+            writers=[],
+            content={
+                'title': 'Conference on Neural Information Processing Systems',
+                'Official Venue Name': 'Conference on Neural Information Processing Systems',
+                'Abbreviated Venue Name': 'HIJ 2021',
+                'Official Website URL': 'https://neurips.cc',
+                'program_chair_emails': ['pc@hij.cc'],
+                'contact_email': 'pc@hij.cc',
+                'Area Chairs (Metareviewers)': 'Yes, our venue has Area Chairs',
+                'senior_area_chairs': 'Yes, our venue has Senior Area Chairs',
+                'Venue Start Date': '2021/12/01',
+                'Submission Deadline': due_date.strftime('%Y/%m/%d'),
+                'abstract_registration_deadline': first_date.strftime('%Y/%m/%d'),
+                'Location': 'Virtual',
+                'Paper Matching': [
+                    'Reviewer Bid Scores',
+                    'OpenReview Affinity'],
+                'Author and Reviewer Anonymity': 'Double-blind',
+                'reviewer_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
+                'area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
+                'senior_area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
+                'Open Reviewing Policy': 'Submissions and reviews should both be private.',
+                'submission_readers': 'Program chairs and paper authors only',
+                'How did you hear about us?': 'ML conferences',
+                'Expected Submissions': '100',
+                'include_expertise_selection': 'Yes'
+            }))
+
+        helpers.await_queue()
+
+        # Post a deploy note
+        client.post_note(openreview.Note(
+            content={'venue_id': 'HIJ.cc'},
+            forum=request_form_note.forum,
+            invitation='openreview.net/Support/-/Request{}/Deploy'.format(request_form_note.number),
+            readers=['openreview.net/Support'],
+            referent=request_form_note.forum,
+            replyto=request_form_note.forum,
+            signatures=['openreview.net/Support'],
+            writers=['openreview.net/Support']
+        ))
+
+        helpers.await_queue()
+
+        assert client.get_group('HIJ.cc')
+        assert client.get_group('HIJ.cc/Senior_Area_Chairs')
+        acs=client.get_group('HIJ.cc/Area_Chairs')
+        assert acs
+        assert 'HIJ.cc/Senior_Area_Chairs' in acs.readers
+        reviewers=client.get_group('HIJ.cc/Reviewers')
+        assert reviewers
+        assert 'HIJ.cc/Senior_Area_Chairs' in reviewers.readers
+        assert 'HIJ.cc/Area_Chairs' in reviewers.readers
+
+        assert client.get_group('HIJ.cc/Authors')
+
     def test_create_groups(self, client, helpers):
         # Post test data groups to the API
 
@@ -180,6 +250,13 @@ class TestConference():
         post_profiles(data)
         members = data['groups']['DEF.cc/Reviewers']['members']
         client.add_members_to_group('DEF.cc/Reviewers', members)
+
+        # Post a small number of reviewers to the HIJ.cc group used only for testing the error message for no submissions
+        with open('tests/data/fakeData.json') as json_file:
+            data = json.load(json_file)
+        post_profiles(data)
+        members = data['groups']['ABC.cc/Reviewers']['members']
+        client.add_members_to_group('HIJ.cc/Reviewers', members)
 
     def test_create_invitations(self, client, openreview_client):
         # Post invitations for submissions and publications
@@ -221,13 +298,13 @@ class TestConference():
                         "required": False,
                         "order": 3,
                         "description": "Comma separated list of author names, as they appear in the paper.",
-                        "value-regex": "[^,\\n]*(,[^,\\n]+)*"
+                        "values-regex": "[^,\\n]*(,[^,\\n]+)*"
                     },
                     "authorids": {
                         "required": False,
                         "order": 4,
                         "description": "Comma separated list of author email addresses, in the same order as above.",
-                        "value-regex": "[^,\\n]*(,[^,\\n]+)*"
+                        "values-regex": "[^,\\n]*(,[^,\\n]+)*"
                     }
                 }
             }
@@ -248,7 +325,7 @@ class TestConference():
         assert client.get_invitation('openreview.net/-/paper')
 
     def test_post_submissions(self, client, openreview_client, helpers):
-        
+
         def post_notes(data, invitation):
             test_user_client = openreview.Client(username='test@google.com', password='1234')
             for note_json in data['notes'][invitation]:
@@ -272,7 +349,7 @@ class TestConference():
         post_notes(data, 'ABC.cc/-/Submission')
 
         pc_client=openreview.Client(username='pc@abc.cc', password='1234')
-        request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[1]
+        request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[2]
         print(request_form)
         post_submission_note=pc_client.post_note(openreview.Note(
             content= {
@@ -295,7 +372,7 @@ class TestConference():
         post_notes(data, 'DEF.cc/-/Submission')
 
         pc_client=openreview.Client(username='pc@def.cc', password='1234')
-        request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[0]
+        request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[1]
         print(request_form)
         post_submission_note=pc_client.post_note(openreview.Note(
             content= {
@@ -314,28 +391,30 @@ class TestConference():
         helpers.await_queue()
 
     def test_post_publications(self, client, openreview_client):
+        tmlr_editors = ['~Raia_Hadsell1', '~Kyunghyun_Cho1']
 
         def post_notes(data, api_invitation):
             for profile_json in data['profiles']:
                 authorid = profile_json['id']
-                for pub_json in profile_json['publications']:
-                    content = pub_json['content']
-                    content['authorids'] = [authorid]
-                    cdate = pub_json.get('cdate')
+                if authorid not in tmlr_editors:
+                    for pub_json in profile_json['publications']:
+                        content = pub_json['content']
+                        content['authorids'] = [authorid]
+                        cdate = pub_json.get('cdate')
 
-                    existing_pubs = list(openreview.tools.iterget_notes(client, content={'authorids': authorid}))
-                    existing_titles = [pub.content.get('title') for pub in existing_pubs]
+                        existing_pubs = list(openreview.tools.iterget_notes(client, content={'authorids': authorid}))
+                        existing_titles = [pub.content.get('title') for pub in existing_pubs]
 
-                    if content.get('title') not in existing_titles:
-                        note = openreview.Note(
-                            invitation = api_invitation,
-                            readers = ['everyone'],
-                            writers = ['~SomeTest_User1'],
-                            signatures = ['~SomeTest_User1'],
-                            content = content,
-                            cdate = cdate
-                        )
-                        note = client.post_note(note)
+                        if content.get('title') not in existing_titles:
+                            note = openreview.Note(
+                                invitation = api_invitation,
+                                readers = ['everyone'],
+                                writers = ['~SomeTest_User1'],
+                                signatures = ['~SomeTest_User1'],
+                                content = content,
+                                cdate = cdate
+                            )
+                            note = client.post_note(note)
 
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
