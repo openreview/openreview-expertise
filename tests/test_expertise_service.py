@@ -365,6 +365,39 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: Expertise invitation indicated but ID not provided"
 
+    def test_request_expertise_with_not_found_exclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submitting a partially filled out config without a required field (only group entity)
+        test_client = openreview_context['test_client']
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc",
+                        'expertise': { 'invitation': 'Does/Not/Exist/-/Expertise_Selection' }
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 404, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'not found' in response.json['message'].lower()
+        assert response.json['message'] == "Not found: Expertise invitation Does/Not/Exist/-/Expertise_Selection does not exist"
+
     def test_request_expertise_with_valid_parameters(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
