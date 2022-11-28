@@ -237,6 +237,24 @@ class OpenReviewExpertise(object):
 
         return valid_members, invalid_members
 
+    def get_expertise_selection_edges(self, invitation_key, label=None):
+        edge_invitations = self.convert_to_list(self.config[invitation_key])
+        selected_ids_by_user = defaultdict(list)
+        for invitation in edge_invitations:
+            user_grouped_edges = openreview.tools.iterget_grouped_edges(
+                self.openreview_client,
+                invitation=invitation,
+                groupby='tail',
+                select='id,head,label,weight,label'
+            )
+
+            for edges in user_grouped_edges:
+                for edge in edges:
+                    if not label or (label and edge.label == label):
+                        selected_ids_by_user[edge.tail].append(edge.head)
+
+        return selected_ids_by_user
+
     def exclude(self):
         exclusion_invitations = self.convert_to_list(self.config['exclusion_inv'])
         excluded_ids_by_user = defaultdict(list)
