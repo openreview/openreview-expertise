@@ -245,7 +245,7 @@ class OpenReviewExpertise(object):
                 self.openreview_client,
                 invitation=invitation,
                 groupby='tail',
-                select='id,head,label,weight,label'
+                select='id,head,label,weight'
             )
 
             for edges in user_grouped_edges:
