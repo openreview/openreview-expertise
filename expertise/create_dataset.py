@@ -237,10 +237,10 @@ class OpenReviewExpertise(object):
 
         return valid_members, invalid_members
 
-    def exclude(self):
-        exclusion_invitations = self.convert_to_list(self.config['exclusion_inv'])
-        excluded_ids_by_user = defaultdict(list)
-        for invitation in exclusion_invitations:
+    def get_expertise_selection_edges(self, invitation_key, label=None):
+        edge_invitations = self.convert_to_list(self.config[invitation_key])
+        selected_ids_by_user = defaultdict(list)
+        for invitation in edge_invitations:
             user_grouped_edges = openreview.tools.iterget_grouped_edges(
                 self.openreview_client,
                 invitation=invitation,
@@ -250,60 +250,22 @@ class OpenReviewExpertise(object):
 
             for edges in user_grouped_edges:
                 for edge in edges:
-                    excluded_ids_by_user[edge.tail].append(edge.head)
+                    if not label or (label and edge.label == label):
+                        selected_ids_by_user[edge.tail].append(edge.head)
 
-        return excluded_ids_by_user
+        return selected_ids_by_user
+
+    def exclude(self):
+        return self.get_expertise_selection_edges('exclusion_inv', 'Exclude')
     
     def alternate_exclude(self):
-        exclusion_invitations = self.convert_to_list(self.config['alternate_exclusion_inv'])
-        excluded_ids_by_user = defaultdict(list)
-        for invitation in exclusion_invitations:
-            user_grouped_edges = openreview.tools.iterget_grouped_edges(
-                self.openreview_client,
-                invitation=invitation,
-                groupby='tail',
-                select='id,head,label,weight'
-            )
-
-            for edges in user_grouped_edges:
-                for edge in edges:
-                    excluded_ids_by_user[edge.tail].append(edge.head)
-
-        return excluded_ids_by_user
+        return self.get_expertise_selection_edges('alternate_exclusion_inv', 'Exclude')
     
     def include(self):
-        inclusion_invitations = self.convert_to_list(self.config['inclusion_inv'])
-        included_ids_by_user = defaultdict(list)
-        for invitation in inclusion_invitations:
-            user_grouped_edges = openreview.tools.iterget_grouped_edges(
-                self.openreview_client,
-                invitation=invitation,
-                groupby='tail',
-                select='id,head,label,weight'
-            )
-
-            for edges in user_grouped_edges:
-                for edge in edges:
-                    included_ids_by_user[edge.tail].append(edge.head)
-
-        return included_ids_by_user
+        return self.get_expertise_selection_edges('inclusion_inv', 'Include')
     
     def alternate_include(self):
-        inclusion_invitations = self.convert_to_list(self.config['alternate_inclusion_inv'])
-        included_ids_by_user = defaultdict(list)
-        for invitation in inclusion_invitations:
-            user_grouped_edges = openreview.tools.iterget_grouped_edges(
-                self.openreview_client,
-                invitation=invitation,
-                groupby='tail',
-                select='id,head,label,weight'
-            )
-
-            for edges in user_grouped_edges:
-                for edge in edges:
-                    included_ids_by_user[edge.tail].append(edge.head)
-
-        return included_ids_by_user
+        return self.get_expertise_selection_edges('alternate_inclusion_inv', 'Include')
 
     def retrieve_expertise_helper(self, member, email):
         self.pbar.update(1)

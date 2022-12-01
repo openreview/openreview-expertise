@@ -294,12 +294,25 @@ def test_expertise_inclusion(client, openreview_client):
         },
         cdate = 1554819115
     )
+    exclude_note = openreview.Note(
+        invitation = 'openreview.net/-/paper',
+        readers = ['everyone'],
+        writers = ['~SomeTest_User1'],
+        signatures = ['~SomeTest_User1'],
+        content = {
+            "title": "test_include",
+            "abstract": original_note.content['abstract'],
+            "authorids": original_note.content['authorids']
+        },
+        cdate = 1554819115
+    )
 
     test_user_client = openreview.Client(username='test@google.com', password='1234')
     note = test_user_client.post_note(note)
+    exclude_note = test_user_client.post_note(exclude_note)
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~Harold_Rice1']) == 5
+    assert len(expertise['~Harold_Rice1']) == 6
     
     # Post this edge to both ABC and HIJ, ABC will be deleted, HIJ will be used for the API tests
     edge = openreview.Edge(
@@ -312,16 +325,99 @@ def test_expertise_inclusion(client, openreview_client):
                         signatures=['~Harold_Rice1']
                     )
     edge = client.post_edge(edge)
+
+    edge = openreview.Edge(
+        invitation='ABC.cc/-/Expertise_Selection',
+        head=note.id,
+        tail='~Harold_Rice1',
+        label='Include',
+        readers=['ABC.cc', '~Harold_Rice1'],
+        writers=['~Harold_Rice1'],
+        signatures=['~Harold_Rice1']
+    )
+    edge = client.post_edge(edge)
+
+    # Use this edge to test that 'Exclude' label edges are not included
+    inv = client.get_invitation('ABC.cc/-/Expertise_Selection')
+    inv.reply = {
+        "readers": {
+            "values-copied": [
+                "ABC.cc",
+                "{signatures}"
+            ]
+        },
+        "writers": {
+            "values-copied": [
+                "ABC.cc",
+                "{signatures}"
+            ]
+        },
+        "signatures": {
+            "values-regex": "~.*"
+        },
+        "content": {
+            "head": {
+                "type": "Note"
+            },
+            "tail": {
+                "type": "Profile"
+            },
+            "label": {
+                "value-radio": [
+                    "Exclude"
+                ],
+                "required": True
+            }
+        }
+    }
+    client.post_invitation(inv)
     edge = openreview.Edge(
                         invitation='ABC.cc/-/Expertise_Selection',
-                        head=note.id,
+                        head=exclude_note.id,
                         tail='~Harold_Rice1',
-                        label='Include',
+                        label='Exclude',
                         readers=['ABC.cc', '~Harold_Rice1'],
                         writers=['~Harold_Rice1'],
                         signatures=['~Harold_Rice1']
                     )
     edge = client.post_edge(edge)
+
+    inv = client.get_invitation('ABC.cc/-/Expertise_Selection')
+    inv.reply = {
+        "readers": {
+            "values-copied": [
+                "ABC.cc",
+                "{signatures}"
+            ]
+        },
+        "writers": {
+            "values-copied": [
+                "ABC.cc",
+                "{signatures}"
+            ]
+        },
+        "signatures": {
+            "values-regex": "~.*"
+        },
+        "content": {
+            "head": {
+                "type": "Note"
+            },
+            "tail": {
+                "type": "Profile"
+            },
+            "label": {
+                "value-radio": [
+                    "Include"
+                ],
+                "required": True
+            }
+        }
+    }
+    client.post_invitation(inv)
+
+    assert len(client.get_all_edges(invitation='ABC.cc/-/Expertise_Selection')) == 2
+
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     or_expertise.included_ids_by_user = or_expertise.include()
     assert len(or_expertise.included_ids_by_user['~Harold_Rice1']) == 1
