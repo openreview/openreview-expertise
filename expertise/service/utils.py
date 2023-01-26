@@ -107,11 +107,13 @@ class APIRequest(object):
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
         # Handle type note
         elif type == 'Note':
-            if 'invitation' in source_entity.keys() and 'id' in source_entity.keys():
-                raise openreview.OpenReviewException(f"Bad request: only provide a single id or single invitation in {entity_id}")
+            if ('invitation' in source_entity.keys() or 'withVenueId' in source_entity.keys()) and 'id' in source_entity.keys():
+                raise openreview.OpenReviewException(f"Bad request: only provide a single id or single invitation and/or venue id in {entity_id}")
 
             if 'invitation' in source_entity.keys():
                 target_entity['invitation'] = _get_from_entity('invitation')
+            elif 'withVenueId' in source_entity.keys():
+                target_entity['withVenueId'] = _get_from_entity('withVenueId')
             elif 'id' in source_entity.keys():
                 target_entity['id'] = _get_from_entity('id')
             else:
