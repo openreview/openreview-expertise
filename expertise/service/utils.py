@@ -355,8 +355,8 @@ class JobConfig(object):
                 except openreview.OpenReviewException as e:
                     if "notfound" in str(e).lower():
                         label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
-                else:
-                    raise e
+                    else:
+                        raise e
 
                 if 'exclude' not in label.lower():
                     config.inclusion_inv = edge_inv_id
@@ -379,8 +379,8 @@ class JobConfig(object):
                 except openreview.OpenReviewException as e:
                     if "notfound" in str(e).lower():
                         label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
-                else:
-                    raise e
+                    else:
+                        raise e
 
                 if 'include' in label.lower():
                     config.alternate_inclusion_inv = edge_inv_id
