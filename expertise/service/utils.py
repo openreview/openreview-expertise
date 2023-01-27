@@ -107,11 +107,13 @@ class APIRequest(object):
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
         # Handle type note
         elif type == 'Note':
-            if 'invitation' in source_entity.keys() and 'id' in source_entity.keys():
-                raise openreview.OpenReviewException(f"Bad request: only provide a single id or single invitation in {entity_id}")
+            if ('invitation' in source_entity.keys() or 'withVenueId' in source_entity.keys()) and 'id' in source_entity.keys():
+                raise openreview.OpenReviewException(f"Bad request: only provide a single id or single invitation and/or venue id in {entity_id}")
 
             if 'invitation' in source_entity.keys():
                 target_entity['invitation'] = _get_from_entity('invitation')
+            elif 'withVenueId' in source_entity.keys():
+                target_entity['withVenueId'] = _get_from_entity('withVenueId')
             elif 'id' in source_entity.keys():
                 target_entity['id'] = _get_from_entity('id')
             else:
@@ -233,6 +235,7 @@ class JobConfig(object):
         alternate_exclusion_inv=None,
         alternate_inclusion_inv=None,
         paper_invitation=None,
+        paper_venueid=None,
         paper_id=None,
         model_params=None):
         
@@ -255,6 +258,7 @@ class JobConfig(object):
         self.alternate_exclusion_inv = alternate_exclusion_inv
         self.alternate_inclusion_inv = alternate_inclusion_inv
         self.paper_invitation = paper_invitation
+        self.paper_venueid = paper_venueid
         self.paper_id = paper_id
         self.model_params = model_params
 
@@ -279,6 +283,7 @@ class JobConfig(object):
             'alternate_exclusion_inv': self.alternate_exclusion_inv,
             'alternate_inclusion_inv': self.alternate_inclusion_inv,
             'paper_invitation': self.paper_invitation,
+            'paper_venueid': self.paper_venueid,
             'paper_id': self.paper_id,
             'model_params': self.model_params
         }
@@ -370,20 +375,24 @@ class JobConfig(object):
         config.paper_id = None
 
         if api_request.entityA['type'] == 'Note':
-            inv, id = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None)
+            inv, id, venueid = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None), api_request.entityA.get('withVenueId', None)
 
             if inv:
                 config.paper_invitation = inv
             if id:
                 config.paper_id = id
+            if venueid:
+                config.paper_venueid = venueid
 
         elif api_request.entityB['type'] == 'Note':
-            inv, id = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None)
+            inv, id, venueid = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None), api_request.entityB.get('withVenueId', None)
 
             if inv:
                 config.paper_invitation = inv
             if id:
                 config.paper_id = id
+            if venueid:
+                config.paper_venueid = venueid
 
         # Validate that other paper fields are none if an alternate match group is present
         if config.alternate_match_group is not None and (config.paper_id is not None or config.paper_invitation is not None):
@@ -489,6 +498,7 @@ class JobConfig(object):
             alternate_exclusion_inv = job_config.get('alternate_exclusion_inv'),
             alternate_inclusion_inv = job_config.get('alternate_inclusion_inv'),
             paper_invitation = job_config.get('paper_invitation'),
+            paper_venueid = job_config.get('paper_venueid'),
             paper_id = job_config.get('paper_id'),
             model_params = job_config.get('model_params')
         )
