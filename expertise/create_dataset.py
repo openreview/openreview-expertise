@@ -241,17 +241,29 @@ class OpenReviewExpertise(object):
         edge_invitations = self.convert_to_list(self.config[invitation_key])
         selected_ids_by_user = defaultdict(list)
         for invitation in edge_invitations:
-            user_grouped_edges = openreview.tools.iterget_grouped_edges(
-                self.openreview_client,
-                invitation=invitation,
-                groupby='tail',
-                select='id,head,label,weight'
-            )
+            
+            # TODO: Edges can be queried from either API?
+            try:
+                user_grouped_edges = self.openreview_client.get_grouped_edges(
+                    invitation=invitation,
+                    groupby='tail',
+                    select='id,head,label,weight,tail'
+                )
+
+            except openreview.OpenReviewException as e:
+                if "notfound" in str(e).lower():
+                    user_grouped_edges = self.openreview_client_v2.get_grouped_edges(
+                        invitation=invitation,
+                        groupby='tail',
+                        select='id,head,label,weight,tail'
+                    )
+                else:
+                    raise e
 
             for edges in user_grouped_edges:
-                for edge in edges:
-                    if not label or (label and edge.label == label):
-                        selected_ids_by_user[edge.tail].append(edge.head)
+                for edge in edges['values']:
+                    if not label or (label and edge.get('label') == label):
+                        selected_ids_by_user[edge.get('tail')].append(edge.get('head'))
 
         return selected_ids_by_user
 
