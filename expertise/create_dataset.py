@@ -413,7 +413,6 @@ class OpenReviewExpertise(object):
                     submissions.extend(submissions_v1)
                     submissions.extend(self.openreview_client_v2.get_all_notes(invitation=invitation_id, content={'venueid': paper_venueid}))
             elif paper_venueid:
-                print(paper_venueid)
                 submissions_v1 = self.openreview_client.get_all_notes(content={'venueid': paper_venueid})
 
                 submissions.extend(submissions_v1)
