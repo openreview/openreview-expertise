@@ -33,7 +33,7 @@ jobs:
             DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
             cd $HOME
             wget "https://repo.anaconda.com/miniconda/Miniconda3-py37_22.11.1-1-Linux-x86_64.sh" -O miniconda.sh
-            printf '%s' "8a324adcc9eaf1c09e22a992bb6234d91a94146840ee6b11c114ecadafc68121  miniconda.sh" | sha256sum -c
+            printf '%s' "22b14d52265b4e609c6ce78e2f2884b277d976b83b5f9c8a83423e3eba2ccfbe  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
       - node/install:
           install-yarn: true
