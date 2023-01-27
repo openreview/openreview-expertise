@@ -106,7 +106,7 @@ class TestExpertiseV2():
         retrieved_submissions = or_expertise.get_submissions()
         print(retrieved_submissions)
         retrieved_titles = [pub.get('content').get('title') for pub in retrieved_submissions.values()]
-        assert len(retrieved_submissions) == 6
+        assert len(retrieved_submissions) == 5
         for submission in retrieved_submissions.values():
             assert isinstance(submission['content']['title'], str)
 
@@ -132,7 +132,7 @@ class TestExpertiseV2():
     def test_get_by_submissions_from_paper_venueid(self, client, openreview_client):
         journal_papers = openreview_client.get_notes(invitation='TMLR/-/Submission')
         for paper in journal_papers:
-            if paper.content['title']['value'] == 'EfficientCellSeg: Efficient Volumetric Cell Segmentation Using Context Aware Pseudocoloring':
+            if paper.content['authorids']['value'][0] == '~SomeFirstName_User1':
                 target_paper = paper
                 break
 
