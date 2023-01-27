@@ -249,7 +249,7 @@ class TestExpertiseV2():
         if os.path.isfile('default.log'):
             os.remove('default.log')
 
-    def test_venue_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_venueid_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
