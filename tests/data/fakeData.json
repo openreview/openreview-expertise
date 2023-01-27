@@ -67,8 +67,8 @@
         "content": {
           "title": { "value": "EfficientCellSeg: Efficient Volumetric Cell Segmentation Using Context Aware Pseudocoloring"},
           "abstract": { "value": "Since the number of available 3D microscopy images is typically limited in applications, we take a different approach and introduce a small CNN for volumetric cell segmentation. Compared to previous CNN models for cell segmentation, our model is efficient and has an asymmetric encoder-decoder structure with very few parameters in the decoder. "},
-          "venue": { "value": "ICML 2023 Conference Submission" },
-	  "venueid": { "value": "ICML.cc/2023/Conference/Submission" },
+          "venue": { "value": "TMLR Submitted" },
+	  "venueid": { "value": "TMLR/Submitted" }
         }
       }
     ]

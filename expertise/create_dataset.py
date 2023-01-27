@@ -413,6 +413,7 @@ class OpenReviewExpertise(object):
                     submissions.extend(submissions_v1)
                     submissions.extend(self.openreview_client_v2.get_all_notes(invitation=invitation_id, content={'venueid': paper_venueid}))
             elif paper_venueid:
+                print(paper_venueid)
                 submissions_v1 = self.openreview_client.get_all_notes(content={'venueid': paper_venueid})
 
                 submissions.extend(submissions_v1)
@@ -515,7 +516,7 @@ class OpenReviewExpertise(object):
         group_group_matching = 'alternate_match_group' in self.config.keys()
 
         # if invitation ID is supplied, collect records for each submission
-        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config or group_group_matching:
+        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config or 'paper_venueid' in self.config or group_group_matching:
             submissions = self.get_submissions()
             with open(self.root.joinpath('submissions.json'), 'w') as f:
                 json.dump(submissions, f, indent=2)

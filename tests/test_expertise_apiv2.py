@@ -106,7 +106,7 @@ class TestExpertiseV2():
         retrieved_submissions = or_expertise.get_submissions()
         print(retrieved_submissions)
         retrieved_titles = [pub.get('content').get('title') for pub in retrieved_submissions.values()]
-        assert len(retrieved_submissions) == 5
+        assert len(retrieved_submissions) == 6
         for submission in retrieved_submissions.values():
             assert isinstance(submission['content']['title'], str)
 
@@ -129,6 +129,22 @@ class TestExpertiseV2():
         assert not isinstance(submissions[target_paper.id]['content']['title'], dict)
         assert not isinstance(submissions[target_paper.id]['content']['abstract'], dict)
 
+    def test_get_by_submissions_from_paper_venueid(self, client, openreview_client):
+        journal_papers = openreview_client.get_notes(invitation='TMLR/-/Submission')
+        for paper in journal_papers:
+            if paper.content['title']['value'] == 'EfficientCellSeg: Efficient Volumetric Cell Segmentation Using Context Aware Pseudocoloring':
+                target_paper = paper
+                break
+
+        config = {
+            'paper_venueid': target_paper.content['venueid']['value'],
+        }
+        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        submissions = or_expertise.get_submissions()
+        print(submissions)
+        assert not isinstance(submissions[target_paper.id]['content']['title'], dict)
+        assert not isinstance(submissions[target_paper.id]['content']['abstract'], dict)
+    
     def test_journal_request_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -232,3 +248,56 @@ class TestExpertiseV2():
             os.remove('pytest.log')
         if os.path.isfile('default.log'):
             os.remove('default.log')
+
+    def test_venue_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+
+        # Make a request
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "TMLR/Action_Editors",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'withVenueId': "TMLR/Submitted"
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response[0]['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'

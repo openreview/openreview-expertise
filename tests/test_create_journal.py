@@ -55,6 +55,7 @@ class TestJournal():
                         content = {
                             'title': { 'value': content.get('title').get('value') },
                             'abstract': { 'value': content.get('abstract').get('value') },
+                            'venueid': { 'value': content.get('venueid', {}).get('value')},
                             'authors': { 'value': ['Test User']},
                             'authorids': { 'value': ['~SomeFirstName_User1']},
                             'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
