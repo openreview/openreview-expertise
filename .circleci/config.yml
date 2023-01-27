@@ -42,6 +42,7 @@ jobs:
           name: Setup environment
           command: |
             export PATH="$HOME/miniconda/bin:$PATH"
+            conda update setuptools
             conda update -y conda
             conda create -n expertise python=$PYTHON_VERSION -c conda-forge
             source ~/miniconda/etc/profile.d/conda.sh
