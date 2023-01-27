@@ -18,9 +18,9 @@ CORS(BLUEPRINT, supports_credentials=True)
 
 def get_client():
     token = flask.request.headers.get('Authorization')
-    return openreview.Client(
-        token=token,
-        baseurl=flask.current_app.config['OPENREVIEW_BASEURL']
+    return (
+        openreview.Client(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL']),
+        openreview.api.OpenReviewClient(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL_V2']),
     )
 
 def format_error(status_code, description):
@@ -77,7 +77,7 @@ def expertise():
     :type paper_invitation: str
     """
 
-    openreview_client = get_client()
+    openreview_client, openreview_client_v2 = get_client()
 
     user_id = get_user_id(openreview_client)
     if not user_id:
@@ -90,7 +90,7 @@ def expertise():
         # Parse request args
         user_request = flask.request.json
 
-        job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).start_expertise(user_request)
+        job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2).start_expertise(user_request)
 
         result = {'jobId': job_id }
         flask.current_app.logger.info('Returning from request')
@@ -130,7 +130,7 @@ def jobs():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client = get_client()
+    openreview_client, _ = get_client()
 
     user_id = get_user_id(openreview_client)
 
@@ -178,7 +178,7 @@ def all_jobs():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client = get_client()
+    openreview_client, _ = get_client()
 
     user_id = get_user_id(openreview_client)
 
@@ -223,7 +223,7 @@ def delete_job():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client = get_client()
+    openreview_client, _ = get_client()
 
     user_id = get_user_id(openreview_client)
 
@@ -275,7 +275,7 @@ def results():
     :param delete_on_get: Decide whether to keep the data on the server after getting the results
     :type delete_on_get: bool
     """
-    openreview_client = get_client()
+    openreview_client, _ = get_client()
 
     user_id = get_user_id(openreview_client)
 
