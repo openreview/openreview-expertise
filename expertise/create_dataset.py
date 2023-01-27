@@ -394,6 +394,7 @@ class OpenReviewExpertise(object):
     def get_submissions(self):
         invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
         paper_id = self.config.get('paper_id')
+        paper_venueid = self.config.get('paper_venueid', None)
         submission_groups = self.convert_to_list(self.config.get('alternate_match_group', []))
         submissions = []
 
@@ -403,15 +404,19 @@ class OpenReviewExpertise(object):
             aggregate_papers = self.get_papers_from_group(submission_groups)
             submissions.extend(aggregate_papers)
         else:
-            for invitation_id in invitation_ids:
-                # Assume invitation is valid for both APIs, but only 1
-                # will have the associated notes
-                submissions_v1 = list(openreview.tools.iterget_notes(
-                    self.openreview_client, invitation=invitation_id))
+            if invitation_ids:
+                for invitation_id in invitation_ids:
+                    # Assume invitation is valid for both APIs, but only 1
+                    # will have the associated notes
+                    submissions_v1 = self.openreview_client.get_all_notes(invitation=invitation_id, content={'venueid': paper_venueid})
+
+                    submissions.extend(submissions_v1)
+                    submissions.extend(self.openreview_client_v2.get_all_notes(invitation=invitation_id, content={'venueid': paper_venueid}))
+            elif paper_venueid:
+                submissions_v1 = self.openreview_client.get_all_notes(content={'venueid': paper_venueid})
 
                 submissions.extend(submissions_v1)
-                submissions.extend(list(openreview.tools.iterget_notes(
-                    self.openreview_client_v2, invitation=invitation_id)))
+                submissions.extend(self.openreview_client_v2.get_all_notes(content={'venueid': paper_venueid}))
 
             if paper_id:
                 # If note not found, keep executing and raise an overall exception later
