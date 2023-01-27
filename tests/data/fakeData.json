@@ -60,6 +60,16 @@
           "title": { "value": "Automatic planning of liver tumor thermal ablation using deep reinforcement learning"},
           "abstract": { "value": "Thermal ablation is a promising minimally invasive intervention to treat liver tumors. It requires a meticulous planning phase where the electrode trajectory from the skin surface to the tumor inside the liver as well as the ablation protocol are defined to reach a complete tumor ablation while considering multiple clinical constraints such as avoiding too much damage to healthy tissue. The planning is usually done manually based on 2D views of pre-operative CT images and can be extremely challenging for large or irregularly shaped tumors. Conventional optimization methods have been proposed to automate this complex task, but they suffer from high computation time.  To alleviate this drawback, we propose to leverage a deep reinforcement learning (DRL) approach to find the optimal electrode trajectory that satisfies all the clinical constraints and does not require any labels in training. Here, we define a custom environment as the 3D mask with tumor, surrounding organs, skin labels along with an electrode line and ablation zone. An agent, represented by a neural network, interacts with the custom environment by displacing the electrode and therefore can learn an optimal policy. The reward assignment is done based on the clinical constraints. To explore discrete and continuous action-based approaches with double deep Q networks and proximal policy optimization (PPO), respectively. We perform an evaluation on the publicly available liver tumor segmentation (LITs) challenge dataset. We obtain solutions that satisfy all clinical constraints comparable to the conventional method. The DRL method does not need any post-processing steps, allowing a mean inference time of 13.3 seconds per subject compared to the conventional optimization method's mean time of 135 seconds. Moreover, the best DRL method (PPO) yields a valid solution irrespective of the tumor location within the liver that demonstrates its robustness."}
         }
+      },
+      {
+        "id": "QQT55345",
+        "cdate": 1585679551,
+        "content": {
+          "title": { "value": "EfficientCellSeg: Efficient Volumetric Cell Segmentation Using Context Aware Pseudocoloring"},
+          "abstract": { "value": "Since the number of available 3D microscopy images is typically limited in applications, we take a different approach and introduce a small CNN for volumetric cell segmentation. Compared to previous CNN models for cell segmentation, our model is efficient and has an asymmetric encoder-decoder structure with very few parameters in the decoder. "},
+          "venue": { "value": "ICML 2023 Conference Submission" },
+	  "venueid": { "value": "ICML.cc/2023/Conference/Submission" },
+        }
       }
     ]
   },
