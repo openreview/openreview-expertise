@@ -14,8 +14,9 @@ from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_I
 user_index_file_lock = Lock()
 class ExpertiseService(object):
 
-    def __init__(self, client, config, logger):
+    def __init__(self, client, config, logger, client_v2 = None):
         self.client = client
+        self.client_v2 = client_v2
         self.logger = logger
         self.server_config = config
         self.default_expertise_config = config['DEFAULT_CONFIG']
@@ -68,6 +69,7 @@ class ExpertiseService(object):
             api_request = validated_request,
             starting_config = self.default_expertise_config,
             openreview_client= self.client,
+            openreview_client_v2= self.client_v2,
             server_config = self.server_config,
             working_dir = self.working_dir
         )
