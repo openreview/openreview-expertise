@@ -14,6 +14,27 @@ class TestConference():
 
     def test_create_conferences(self, client, helpers):
 
+        venue = openreview.venue.Venue(client, 'API2')
+        venue.use_area_chairs = True
+        venue.setup()
+
+        now = datetime.datetime.utcnow()
+
+        venue.submission_stage = openreview.stages.SubmissionStage(
+            double_blind=True,
+            readers=[
+                openreview.builder.SubmissionStage.Readers.REVIEWERS_ASSIGNED
+            ],
+            due_date=now + datetime.timedelta(minutes=10),
+            withdrawn_submission_reveal_authors=True,
+            desk_rejected_submission_reveal_authors=True,
+        )
+        venue.create_submission_stage()
+
+        reviewers = set()
+
+        venue.setup_post_submission_stage()
+
         now = datetime.datetime.utcnow()
         due_date = now + datetime.timedelta(days=3)
         first_date = now + datetime.timedelta(days=1)
