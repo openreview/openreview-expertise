@@ -12,12 +12,11 @@ os.environ["OPENREVIEW_PASSWORD"] = "1234"
 
 class TestConference():
 
-    def test_create_conferences(self, client, helpers):
+    def test_create_conferences(self, client, openreview_client, helpers):
 
-        venue = openreview.venue.Venue(client, 'API2')
+        venue = openreview.venue.Venue(openreview_client, 'API2', support_user='openreview.net/Support')
         venue.use_area_chairs = True
-        venue.setup()
-
+        
         now = datetime.datetime.utcnow()
 
         venue.submission_stage = openreview.stages.SubmissionStage(
@@ -29,11 +28,15 @@ class TestConference():
             withdrawn_submission_reveal_authors=True,
             desk_rejected_submission_reveal_authors=True,
         )
+        venue.setup()
         venue.create_submission_stage()
 
         reviewers = set()
 
-        venue.setup_post_submission_stage()
+        #venue.setup_post_submission_stage()
+
+        reviewer_group = openreview_client.get_group(venue.id + "/Reviewers")
+        openreview_client.add_members_to_group(reviewer_group, list(reviewers))
 
         now = datetime.datetime.utcnow()
         due_date = now + datetime.timedelta(days=3)
