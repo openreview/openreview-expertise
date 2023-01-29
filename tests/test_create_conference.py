@@ -15,6 +15,19 @@ class TestConference():
     def test_create_conferences(self, client, openreview_client, helpers):
 
         venue = openreview.venue.Venue(openreview_client, 'API2', support_user='openreview.net/Support')
+
+        openreview_client.post_invitation_edit(invitations=None,
+            readers=['openreview.net'],
+            writers=['openreview.net'],
+            signatures=['~Super_User1'],
+            invitation=openreview.api.Invitation(id='openreview.net/-/Edit',
+                invitees=['openreview.net'],
+                readers=['openreview.net'],
+                signatures=['~Super_User1'],
+                edit=True
+            )
+        )  
+
         venue.use_area_chairs = True
         
         now = datetime.datetime.utcnow()
