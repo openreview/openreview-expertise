@@ -269,6 +269,59 @@ def test_expertise_selection(client, openreview_client):
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Harold_Rice1']) == 3
 
+    # Test API2 expertise selection
+def test_expertise_selection_api2(client, openreview_client, helpers):
+    config = {
+        'use_email_ids': False,
+        'exclusion_inv': 'API2/Reviewers/-/Expertise_Selection',
+        'match_group': 'API2/Reviewers'
+    }
+    author_id = '~C.V._Lastname1'
+    original_note = client.get_all_notes(content={'authorids': author_id})[0]
+    print(original_note)
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+
+    expertise = or_expertise.retrieve_expertise()
+    assert len(expertise['~C.V._Lastname1']) == 1, expertise
+
+    test_user_client = openreview.api.OpenReviewClient(username='test@google.com', password='1234')
+    note_1 = test_user_client.post_note_edit(
+            invitation=f'API2/-/Submission',
+            signatures= ['~SomeTest_User1'],
+            note=openreview.api.Note(
+                content={
+                    'title': { 'value': 'test_exclude' },
+                    'abstract': { 'value': original_note.content['abstract'] },
+                    'authors': { 'value': ['C.V Lastname']},
+                    'authorids': { 'value': original_note.content['authorids']},
+                    'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
+                    'keywords': {'value': ['aa'] }
+                }
+            ))
+
+    helpers.await_queue_edit(openreview_client, edit_id=note_1['id'])
+
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    expertise = or_expertise.retrieve_expertise()
+    assert len(expertise['~C.V._Lastname1']) == 2
+    
+    user_client = openreview.api.OpenReviewClient(username='testdots@google.com', password='1234')
+    user_client.post_edge(
+        openreview.api.Edge(invitation = f'API2/Reviewers/-/Expertise_Selection',
+            readers = ['API2', '~C.V._Lastname1'],
+            writers = ['API2', '~C.V._Lastname1'],
+            signatures = ['~C.V._Lastname1'],
+            head = note_1['note']['id'],
+            tail = '~C.V._Lastname1',
+            label = 'Exclude'
+    ))
+
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise.excluded_ids_by_user = or_expertise.exclude()
+    expertise = or_expertise.retrieve_expertise()
+    assert len(expertise['~C.V._Lastname1']) == 1
+
+
 def test_expertise_inclusion(client, openreview_client):
     config = {
         'use_email_ids': False,

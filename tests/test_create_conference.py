@@ -12,7 +12,38 @@ os.environ["OPENREVIEW_PASSWORD"] = "1234"
 
 class TestConference():
 
-    def test_create_conferences(self, client, helpers):
+    def test_create_conferences(self, client, openreview_client, helpers):
+
+        venue = openreview.venue.Venue(openreview_client, 'API2', support_user='openreview.net/Support')
+
+        openreview_client.post_invitation_edit(invitations=None,
+            readers=['openreview.net'],
+            writers=['openreview.net'],
+            signatures=['~Super_User1'],
+            invitation=openreview.api.Invitation(id='openreview.net/-/Edit',
+                invitees=['openreview.net'],
+                readers=['openreview.net'],
+                signatures=['~Super_User1'],
+                edit=True
+            )
+        )  
+
+        venue.use_area_chairs = True
+        
+        now = datetime.datetime.utcnow()
+
+        venue.submission_stage = openreview.stages.SubmissionStage(
+            double_blind=True,
+            readers=[
+                openreview.builder.SubmissionStage.Readers.REVIEWERS_ASSIGNED
+            ],
+            due_date=now + datetime.timedelta(minutes=10),
+            withdrawn_submission_reveal_authors=True,
+            desk_rejected_submission_reveal_authors=True,
+        )
+        venue.expertise_selection_stage = openreview.stages.ExpertiseSelectionStage()
+        venue.setup()
+        venue.create_submission_stage()
 
         now = datetime.datetime.utcnow()
         due_date = now + datetime.timedelta(days=3)
@@ -220,7 +251,7 @@ class TestConference():
 
         assert client.get_group('HIJ.cc/Authors')
 
-    def test_create_groups(self, client, helpers):
+    def test_create_groups(self, client, openreview_client, helpers):
         # Post test data groups to the API
 
         def post_profiles(data):
@@ -257,6 +288,7 @@ class TestConference():
         post_profiles(data)
         members = data['groups']['ABC.cc/Reviewers']['members']
         client.add_members_to_group('HIJ.cc/Reviewers', members)
+        openreview_client.add_members_to_group('API2/Reviewers', members)
 
     def test_create_invitations(self, client, openreview_client):
         # Post invitations for submissions and publications
