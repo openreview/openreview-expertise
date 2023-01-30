@@ -273,7 +273,7 @@ def test_expertise_selection(client, openreview_client):
 def test_expertise_selection_api2(client, openreview_client, helpers):
     config = {
         'use_email_ids': False,
-        'exclusion_inv': 'API2/-/Expertise_Selection',
+        'exclusion_inv': 'API2/Reviewers/-/Expertise_Selection',
         'match_group': 'API2/Reviewers'
     }
     author_id = '~C.V._Lastname1'

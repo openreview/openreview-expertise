@@ -243,22 +243,11 @@ class OpenReviewExpertise(object):
         for invitation in edge_invitations:
             
             # TODO: Edges can be queried from either API?
-            try:
-                user_grouped_edges = self.openreview_client.get_grouped_edges(
-                    invitation=invitation,
-                    groupby='tail',
-                    select='id,head,label,weight,tail'
-                )
-
-            except openreview.OpenReviewException as e:
-                if "notfound" in str(e).lower():
-                    user_grouped_edges = self.openreview_client_v2.get_grouped_edges(
-                        invitation=invitation,
-                        groupby='tail',
-                        select='id,head,label,weight,tail'
-                    )
-                else:
-                    raise e
+            user_grouped_edges = self.openreview_client.get_grouped_edges(
+                invitation=invitation,
+                groupby='tail',
+                select='id,head,label,weight,tail'
+            )
 
             for edges in user_grouped_edges:
                 for edge in edges['values']:
