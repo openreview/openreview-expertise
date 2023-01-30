@@ -242,7 +242,6 @@ class OpenReviewExpertise(object):
         selected_ids_by_user = defaultdict(list)
         for invitation in edge_invitations:
             
-            # TODO: Edges can be queried from either API?
             user_grouped_edges = self.openreview_client.get_grouped_edges(
                 invitation=invitation,
                 groupby='tail',
