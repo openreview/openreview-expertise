@@ -41,6 +41,7 @@ class TestConference():
             withdrawn_submission_reveal_authors=True,
             desk_rejected_submission_reveal_authors=True,
         )
+        venue.expertise_selection_stage = openreview.stages.ExpertiseSelectionStage()
         venue.setup()
         venue.create_submission_stage()
 
