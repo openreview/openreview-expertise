@@ -469,7 +469,7 @@ def test_expertise_inclusion(client, openreview_client):
     }
     client.post_invitation(inv)
 
-    assert len(client.get_all_edges(invitation='ABC.cc/-/Expertise_Selection')) == 2
+    assert client.get_edges_count(invitation='ABC.cc/-/Expertise_Selection') == 2
 
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     or_expertise.included_ids_by_user = or_expertise.include()
