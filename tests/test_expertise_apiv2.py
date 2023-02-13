@@ -265,7 +265,7 @@ class TestExpertiseV2():
                     },
                     "entityB": { 
                         'type': "Note",
-                        'withVenueId': "TMLR/Submitted"
+                        'withVenueid': "TMLR/Submitted"
                     },
                     "model": {
                             "name": "specter+mfr",
