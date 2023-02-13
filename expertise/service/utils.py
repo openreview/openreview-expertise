@@ -107,13 +107,13 @@ class APIRequest(object):
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
         # Handle type note
         elif type == 'Note':
-            if ('invitation' in source_entity.keys() or 'withVenueId' in source_entity.keys()) and 'id' in source_entity.keys():
+            if ('invitation' in source_entity.keys() or 'withVenueid' in source_entity.keys()) and 'id' in source_entity.keys():
                 raise openreview.OpenReviewException(f"Bad request: only provide a single id or single invitation and/or venue id in {entity_id}")
 
             if 'invitation' in source_entity.keys():
                 target_entity['invitation'] = _get_from_entity('invitation')
-            elif 'withVenueId' in source_entity.keys():
-                target_entity['withVenueId'] = _get_from_entity('withVenueId')
+            elif 'withVenueid' in source_entity.keys():
+                target_entity['withVenueid'] = _get_from_entity('withVenueid')
             elif 'id' in source_entity.keys():
                 target_entity['id'] = _get_from_entity('id')
             else:
@@ -392,7 +392,7 @@ class JobConfig(object):
         config.paper_id = None
 
         if api_request.entityA['type'] == 'Note':
-            inv, id, venueid = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None), api_request.entityA.get('withVenueId', None)
+            inv, id, venueid = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None), api_request.entityA.get('withVenueid', None)
 
             if inv:
                 config.paper_invitation = inv
@@ -402,7 +402,7 @@ class JobConfig(object):
                 config.paper_venueid = venueid
 
         elif api_request.entityB['type'] == 'Note':
-            inv, id, venueid = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None), api_request.entityB.get('withVenueId', None)
+            inv, id, venueid = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None), api_request.entityB.get('withVenueid', None)
 
             if inv:
                 config.paper_invitation = inv
