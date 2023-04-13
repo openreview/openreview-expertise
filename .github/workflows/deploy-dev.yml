@@ -20,6 +20,10 @@ on:
     branches: [ master ]
 jobs:
   deploy:
+    # Allow the job to fetch a GitHub ID token
+    permissions:
+      id-token: write
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -39,8 +43,9 @@ jobs:
           create_credentials_file: true
           cleanup_credentials: true
           export_environment_variables: true
-      - name: Configure gcloud
-        run: gcloud config set compute/zone us-central1-c
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v1
       - name: Run deploy script
         run: |
+          gcloud config set compute/zone us-central1-c
           gcloud compute ssh openreview@instance-matching-server --command '/bin/expertise_build_dev.sh -b ${{ github.event.inputs.branch }} -p ${{ github.event.inputs.py_branch }}' --quiet
