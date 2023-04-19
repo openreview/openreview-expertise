@@ -198,7 +198,7 @@ def test_get_by_submissions_from_paper_id(client, openreview_client):
     assert retrieved_paper['content']['abstract'] == target_paper.content['abstract']
     assert retrieved_paper['id'] == target_paper.id
 
-def test_deduplication(client, openreview_client):
+def test_deduplication(client, openreview_client, helpers):
     author_id = '~Harold_Rice1'
     original_note = list(openreview.tools.iterget_notes(client, content={'authorids': author_id}))[0]
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
@@ -214,13 +214,13 @@ def test_deduplication(client, openreview_client):
         content = original_note.content,
         original = original_note.id
     )
-    test_user_client = openreview.Client(username='test@google.com', password='1234')
+    test_user_client = openreview.Client(username='test@google.com', password=helpers.strong_password)
     note = test_user_client.post_note(note)
 
     publications = or_expertise.get_publications('~Harold_Rice1')
     assert len(publications) == 3
 
-def test_expertise_selection(client, openreview_client):
+def test_expertise_selection(client, openreview_client, helpers):
     config = {
         'use_email_ids': False,
         'exclusion_inv': 'DEF.cc/-/Expertise_Selection',
@@ -246,13 +246,13 @@ def test_expertise_selection(client, openreview_client):
         cdate = 1554819115
     )
 
-    test_user_client = openreview.Client(username='test@google.com', password='1234')
+    test_user_client = openreview.Client(username='test@google.com', password=helpers.strong_password)
     note = test_user_client.post_note(note)
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Harold_Rice1']) == 4
     
-    user_client = openreview.Client(username='strevino0@ox.ac.uk', password='1234')
+    user_client = openreview.Client(username='strevino0@ox.ac.uk', password=helpers.strong_password)
     edge = openreview.Edge(
                         invitation='DEF.cc/-/Expertise_Selection',
                         head=note.id,
@@ -284,7 +284,7 @@ def test_expertise_selection_api2(client, openreview_client, helpers):
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~C.V._Lastname1']) == 1, expertise
 
-    test_user_client = openreview.api.OpenReviewClient(username='test@google.com', password='1234')
+    test_user_client = openreview.api.OpenReviewClient(username='test@google.com', password=helpers.strong_password)
     note_1 = test_user_client.post_note_edit(
             invitation=f'API2/-/Submission',
             signatures= ['~SomeTest_User1'],
@@ -305,7 +305,7 @@ def test_expertise_selection_api2(client, openreview_client, helpers):
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~C.V._Lastname1']) == 2
     
-    user_client = openreview.api.OpenReviewClient(username='testdots@google.com', password='1234')
+    user_client = openreview.api.OpenReviewClient(username='testdots@google.com', password=helpers.strong_password)
     user_client.post_edge(
         openreview.api.Edge(invitation = f'API2/Reviewers/-/Expertise_Selection',
             readers = ['API2', '~C.V._Lastname1'],
@@ -322,7 +322,7 @@ def test_expertise_selection_api2(client, openreview_client, helpers):
     assert len(expertise['~C.V._Lastname1']) == 1
 
 
-def test_expertise_inclusion(client, openreview_client):
+def test_expertise_inclusion(client, openreview_client, helpers):
     config = {
         'use_email_ids': False,
         'inclusion_inv': 'ABC.cc/-/Expertise_Selection',
@@ -360,7 +360,7 @@ def test_expertise_inclusion(client, openreview_client):
         cdate = 1554819115
     )
 
-    test_user_client = openreview.Client(username='test@google.com', password='1234')
+    test_user_client = openreview.Client(username='test@google.com', password=helpers.strong_password)
     note = test_user_client.post_note(note)
     exclude_note = test_user_client.post_note(exclude_note)
     or_expertise = OpenReviewExpertise(client, openreview_client, config)

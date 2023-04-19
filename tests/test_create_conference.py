@@ -8,7 +8,7 @@ import time
 import json
 
 os.environ["OPENREVIEW_USERNAME"] = "OpenReview.net"
-os.environ["OPENREVIEW_PASSWORD"] = "1234"
+os.environ["OPENREVIEW_PASSWORD"] = 'Or$3cur3P@ssw0rd'
 
 class TestConference():
 
@@ -359,7 +359,7 @@ class TestConference():
     def test_post_submissions(self, client, openreview_client, helpers):
 
         def post_notes(data, invitation):
-            test_user_client = openreview.Client(username='test@google.com', password='1234')
+            test_user_client = openreview.Client(username='test@google.com', password=helpers.strong_password)
             for note_json in data['notes'][invitation]:
                 content = note_json['content']
                 content['authors'] = ['SomeTest User']
@@ -380,7 +380,7 @@ class TestConference():
             data = json.load(json_file)
         post_notes(data, 'ABC.cc/-/Submission')
 
-        pc_client=openreview.Client(username='pc@abc.cc', password='1234')
+        pc_client=openreview.Client(username='pc@abc.cc', password=helpers.strong_password)
         request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[2]
         print(request_form)
         post_submission_note=pc_client.post_note(openreview.Note(
@@ -403,7 +403,7 @@ class TestConference():
             data = json.load(json_file)
         post_notes(data, 'DEF.cc/-/Submission')
 
-        pc_client=openreview.Client(username='pc@def.cc', password='1234')
+        pc_client=openreview.Client(username='pc@def.cc', password=helpers.strong_password)
         request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[1]
         print(request_form)
         post_submission_note=pc_client.post_note(openreview.Note(

@@ -174,7 +174,7 @@ For example, with file `/expertise/service/config/development.cfg`:
 LOG_FILE='development.log'
 
 OPENREVIEW_USERNAME='OpenReview.net'
-OPENREVIEW_PASSWORD='1234'
+OPENREVIEW_PASSWORD='Or$3cur3P@ssw0rd'
 OPENREVIEW_BASEURL='http://localhost:3000'
 ```
 
