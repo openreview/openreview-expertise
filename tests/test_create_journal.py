@@ -10,14 +10,14 @@ from openreview.api import Note
 from openreview.journal import Journal
 
 os.environ["OPENREVIEW_USERNAME"] = "OpenReview.net"
-os.environ["OPENREVIEW_PASSWORD"] = "1234"
+os.environ["OPENREVIEW_PASSWORD"] = 'Or$3cur3P@ssw0rd'
 
 class TestJournal():
 
     @pytest.fixture(scope="class")
-    def journal(self):
+    def journal(self, helpers):
         venue_id = 'TMLR'
-        fabian_client=OpenReviewClient(username='fabian@mail.com', password='1234')
+        fabian_client=OpenReviewClient(username='fabian@mail.com', password=helpers.strong_password)
         fabian_client.impersonate('TMLR/Editors_In_Chief')
         journal=Journal(fabian_client, venue_id, '1234', contact_info='tmlr@jmlr.org', full_name='Transactions on Machine Learning Research', short_name='TMLR', submission_name='Submission')
         return journal

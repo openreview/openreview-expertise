@@ -4,11 +4,13 @@ import requests
 import time
 
 class Helpers:
+    strong_password = 'Or$3cur3P@ssw0rd'
+
     @staticmethod
     def create_user(email, first, last, alternates=[], institution=None):
         client = openreview.Client(baseurl = 'http://localhost:3000')
         assert client is not None, "Client is none"
-        res = client.register_user(email = email, first = first, last = last, password = '1234')
+        res = client.register_user(email = email, first = first, last = last, password = Helpers.strong_password)
         username = res.get('id')
         assert res, "Res i none"
         profile_content={
@@ -37,12 +39,12 @@ class Helpers:
 
     @staticmethod
     def get_user(email):
-        return openreview.Client(baseurl = 'http://localhost:3000', username = email, password = '1234')
+        return openreview.Client(baseurl = 'http://localhost:3000', username = email, password = Helpers.strong_password)
 
     @staticmethod
     def await_queue(super_client=None):
         if super_client is None:
-            super_client = openreview.Client(baseurl='http://localhost:3000', username='openreview.net', password='1234')
+            super_client = openreview.Client(baseurl='http://localhost:3000', username='openreview.net', password=Helpers.strong_password)
             assert super_client is not None, 'Super Client is none'
 
         while True:
@@ -93,8 +95,8 @@ def helpers():
 
 @pytest.fixture(scope="session")
 def client():
-    yield openreview.Client(baseurl = 'http://localhost:3000', username='openreview.net', password='1234')
+    yield openreview.Client(baseurl = 'http://localhost:3000', username='openreview.net', password=Helpers.strong_password)
 
 @pytest.fixture(scope="session")
 def openreview_client():
-    yield openreview.api.OpenReviewClient(baseurl = 'http://localhost:3001', username='openreview.net', password='1234')
+    yield openreview.api.OpenReviewClient(baseurl = 'http://localhost:3001', username='openreview.net', password=Helpers.strong_password)
