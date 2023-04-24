@@ -211,6 +211,15 @@ class TestExpertiseV2():
         assert req['entityA']['memberOf'] == 'TMLR/Action_Editors'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['id'] == target_id
+
+        # Test for paper id query
+        response = test_client.get('/expertise/status/all', query_string={'paperId': target_id}).json['results']
+        assert len(response) == 1
+        assert response[0]['request']['entityA']['memberOf'] == 'TMLR/Action_Editors'
+
+        response = test_client.get('/expertise/status/all', query_string={'paperId': 'DoesNotExist'}).json['results']
+        assert len(response) == 0
+
         openreview_context['job_id'] = job_id
 
     def test_get_journal_results(self, openreview_context, celery_session_app, celery_session_worker):

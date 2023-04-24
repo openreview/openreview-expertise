@@ -534,17 +534,6 @@ class TestExpertiseService():
         response = test_client.get('/expertise/status/all', query_string={'paperInvitation': 'CBA'}).json['results']
         assert len(response) == 0
 
-        # Test for paper id query
-        response = test_client.get('/expertise/status/all', query_string={'paperId': openreview_context['job_id']}).json['results']
-        assert len(response) == 1
-        assert response[0]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
-
-        response = test_client.get('/expertise/status/all', query_string={'paperId': 'DoesNotExist'}).json['results']
-        assert len(response) == 0
-
-        response = test_client.get('/expertise/status/all', query_string={'paperInvitation': 'CBA'}).json['results']
-        assert len(response) == 0
-
         # Test for combination
         response = test_client.get('/expertise/status/all', query_string={'status': 'Completed', 'memberOf': 'ABC'}).json['results']
         assert len(response) == 2

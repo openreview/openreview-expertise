@@ -189,7 +189,7 @@ class ExpertiseService(object):
             return not search_invitation or inv.lower().startswith(search_invitation.lower())
 
         def check_paper_id():
-            paper_id = config.api_request.entityA.get('id') or config.api_request.entityB.get('id')
+            paper_id = config.api_request.entityA.get('id', '') or config.api_request.entityB.get('id', '')
             return not search_paper_id or paper_id.lower().startswith(search_paper_id.lower())
 
         def check_result():
