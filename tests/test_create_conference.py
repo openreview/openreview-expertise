@@ -75,9 +75,6 @@ class TestConference():
                 'Submission Deadline': due_date.strftime('%Y/%m/%d'),
                 'abstract_registration_deadline': first_date.strftime('%Y/%m/%d'),
                 'Location': 'Virtual',
-                'Paper Matching': [
-                    'Reviewer Bid Scores',
-                    'OpenReview Affinity'],
                 'Author and Reviewer Anonymity': 'Double-blind',
                 'reviewer_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
                 'area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
@@ -86,7 +83,8 @@ class TestConference():
                 'submission_readers': 'Program chairs and paper authors only',
                 'How did you hear about us?': 'ML conferences',
                 'Expected Submissions': '100',
-                'include_expertise_selection': 'Yes'
+                'include_expertise_selection': 'Yes',
+                'submission_reviewer_assignment': 'Automatic',
             }))
 
         helpers.await_queue()
@@ -143,9 +141,6 @@ class TestConference():
                 'Submission Deadline': due_date.strftime('%Y/%m/%d'),
                 'abstract_registration_deadline': first_date.strftime('%Y/%m/%d'),
                 'Location': 'Virtual',
-                'Paper Matching': [
-                    'Reviewer Bid Scores',
-                    'OpenReview Affinity'],
                 'Author and Reviewer Anonymity': 'Double-blind',
                 'reviewer_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
                 'area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
@@ -153,7 +148,8 @@ class TestConference():
                 'Open Reviewing Policy': 'Submissions and reviews should both be private.',
                 'submission_readers': 'Program chairs and paper authors only',
                 'How did you hear about us?': 'ML conferences',
-                'Expected Submissions': '100'
+                'Expected Submissions': '100',
+                'submission_reviewer_assignment': 'Automatic',
             }))
 
         helpers.await_queue()
@@ -209,9 +205,6 @@ class TestConference():
                 'Submission Deadline': due_date.strftime('%Y/%m/%d'),
                 'abstract_registration_deadline': first_date.strftime('%Y/%m/%d'),
                 'Location': 'Virtual',
-                'Paper Matching': [
-                    'Reviewer Bid Scores',
-                    'OpenReview Affinity'],
                 'Author and Reviewer Anonymity': 'Double-blind',
                 'reviewer_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
                 'area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
@@ -220,7 +213,8 @@ class TestConference():
                 'submission_readers': 'Program chairs and paper authors only',
                 'How did you hear about us?': 'ML conferences',
                 'Expected Submissions': '100',
-                'include_expertise_selection': 'Yes'
+                'include_expertise_selection': 'Yes',
+                'submission_reviewer_assignment': 'Automatic',
             }))
 
         helpers.await_queue()
