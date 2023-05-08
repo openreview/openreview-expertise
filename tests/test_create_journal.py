@@ -36,6 +36,7 @@ class TestJournal():
         journal.setup(support_role='fabian@mail.com', editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
 
         openreview_client.add_members_to_group('TMLR/Action_Editors', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
+        openreview_client.add_members_to_group('TMLR/Reviewers', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
     
     def test_post_submissions(self, client, openreview_client, helpers):
         # Post submission with a test author id
