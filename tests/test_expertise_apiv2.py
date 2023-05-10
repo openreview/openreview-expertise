@@ -270,6 +270,15 @@ class TestExpertiseV2():
         response = test_client.get('/expertise/status', query_string={'paperId': target_id, 'memberOf': 'TMLR/Reviewers'}).json['results']
         assert len(response) == 1
 
+        response = test_client.get('/expertise/status', query_string={'entityB.paperId': target_id, 'memberOf': 'TMLR/Reviewers'}).json['results']
+        assert len(response) == 1
+
+        response = test_client.get('/expertise/status', query_string={'entityB.paperId': target_id, 'entityB.memberOf': 'TMLR/Reviewers'}).json['results']
+        assert len(response) == 0
+
+        response = test_client.get('/expertise/status', query_string={'entityA.paperId': target_id}).json['results']
+        assert len(response) == 0
+
         response = test_client.get('/expertise/status', query_string={'paperId': 'DoesNotExist'}).json['results']
         assert len(response) == 0
 

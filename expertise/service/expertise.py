@@ -178,18 +178,55 @@ class ExpertiseService(object):
         """
 
         def check_status():
+            search_status = query_obj.get('status', '')
             return not search_status or status.lower().startswith(search_status.lower())
         
         def check_member():
-            memberOf = config.api_request.entityA.get('memberOf') or config.api_request.entityB.get('memberOf')
+            search_member, memberOf = '', ''
+            if 'memberOf' in query_obj.keys():
+                memberOf = config.api_request.entityA.get('memberOf', '') or config.api_request.entityB.get('memberOf', '')
+                search_member = query_obj['memberOf']
+
+            elif 'memberOf' in query_obj.get('entityA', {}).keys():
+                memberOf = config.api_request.entityA.get('memberOf', '')
+                search_member = query_obj['entityA']['memberOf']
+
+            elif 'memberOf' in query_obj.get('entityB', {}).keys():
+                memberOf = config.api_request.entityB.get('memberOf', '')
+                search_member = query_obj['entityB']['memberOf']
+            
             return not search_member or memberOf.lower().startswith(search_member.lower())
         
         def check_invitation():
-            inv = config.api_request.entityA.get('invitation') or config.api_request.entityB.get('invitation')
+            search_invitation, inv = '', ''
+            if 'paperInvitation' in query_obj.keys():
+                inv = config.api_request.entityA.get('invitation', '') or config.api_request.entityB.get('invitation', '')
+                search_invitation = query_obj['paperInvitation']
+
+            elif 'paperInvitation' in query_obj.get('entityA', {}).keys():
+                inv = config.api_request.entityA.get('invitation', '')
+                search_invitation = query_obj['entityA']['paperInvitation']
+
+            elif 'paperInvitation' in query_obj.get('entityB', {}).keys():
+                inv = config.api_request.entityB.get('invitation', '')
+                search_invitation = query_obj['entityB']['paperInvitation']
+
             return not search_invitation or inv.lower().startswith(search_invitation.lower())
 
         def check_paper_id():
-            paper_id = config.api_request.entityA.get('id', '') or config.api_request.entityB.get('id', '')
+            search_paper_id, paper_id = '', ''
+            if 'paperId' in query_obj.keys():
+                paper_id = config.api_request.entityA.get('id', '') or config.api_request.entityB.get('id', '')
+                search_paper_id = query_obj['paperId']
+
+            elif 'paperId' in query_obj.get('entityA', {}).keys():
+                paper_id = config.api_request.entityA.get('id', '')
+                search_paper_id = query_obj['entityA']['paperId']
+
+            elif 'paperId' in query_obj.get('entityB', {}).keys():
+                paper_id = config.api_request.entityB.get('id', '')
+                search_paper_id = query_obj['entityB']['paperId']
+
             return not search_paper_id or paper_id.lower().startswith(search_paper_id.lower())
 
         def check_result():
@@ -201,10 +238,24 @@ class ExpertiseService(object):
             ]
 
         result = {'results': []}
-        search_status = query_params.get('status')
-        search_member = query_params.get('memberOf')
-        search_invitation = query_params.get('paperInvitation')
-        search_paper_id = query_params.get('paperId')
+        query_obj = {}
+        '''
+        {
+            'paperId': value,
+            'entityA': {
+                'paperId': value
+            }
+        }
+        '''
+
+        for query, value in query_params.items():
+            if query.find('.') < 0: ## If no entity, store value
+                query_obj[query] = value
+            else:
+                entity, query_by = query.split('.') ## If entity, store value in entity obj
+                if entity not in query_obj.keys():
+                    query_obj[entity] = {}
+                query_obj[entity][query_by] = value
 
         for config in self.redis.load_all_jobs(user_id):
             status = config.status
