@@ -142,8 +142,9 @@ def jobs():
         # Parse query parameters
         job_id = flask.request.args.get('jobId', None)
         if job_id is None or len(job_id) == 0:
-            raise openreview.OpenReviewException('Bad request: jobId is required')
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
+            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
+        else:
+            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 

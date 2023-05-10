@@ -263,14 +263,14 @@ class TestExpertiseV2():
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         # Test for paper id query
-        response = test_client.get('/expertise/status/all', query_string={'paperId': target_id}).json['results']
+        response = test_client.get('/expertise/status', query_string={'paperId': target_id}).json['results']
         assert len(response) == 2
 
         # Test for paper id and member of query
-        response = test_client.get('/expertise/status/all', query_string={'paperId': target_id, 'memberOf': 'TMLR/Reviewers'}).json['results']
+        response = test_client.get('/expertise/status', query_string={'paperId': target_id, 'memberOf': 'TMLR/Reviewers'}).json['results']
         assert len(response) == 1
 
-        response = test_client.get('/expertise/status/all', query_string={'paperId': 'DoesNotExist'}).json['results']
+        response = test_client.get('/expertise/status', query_string={'paperId': 'DoesNotExist'}).json['results']
         assert len(response) == 0
 
         response = test_client.get('/expertise/results', query_string={'jobId': f'{job_id}', 'deleteOnGet': True})
