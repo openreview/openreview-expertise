@@ -215,17 +215,17 @@ class ExpertiseService(object):
 
         def check_paper_id():
             search_paper_id, paper_id = '', ''
-            if 'paperId' in query_obj.keys():
+            if 'id' in query_obj.keys():
                 paper_id = config.api_request.entityA.get('id', '') or config.api_request.entityB.get('id', '')
-                search_paper_id = query_obj['paperId']
+                search_paper_id = query_obj['id']
 
-            elif 'paperId' in query_obj.get('entityA', {}).keys():
+            elif 'id' in query_obj.get('entityA', {}).keys():
                 paper_id = config.api_request.entityA.get('id', '')
-                search_paper_id = query_obj['entityA']['paperId']
+                search_paper_id = query_obj['entityA']['id']
 
-            elif 'paperId' in query_obj.get('entityB', {}).keys():
+            elif 'id' in query_obj.get('entityB', {}).keys():
                 paper_id = config.api_request.entityB.get('id', '')
-                search_paper_id = query_obj['entityB']['paperId']
+                search_paper_id = query_obj['entityB']['id']
 
             return not search_paper_id or paper_id.lower().startswith(search_paper_id.lower())
 
@@ -243,7 +243,7 @@ class ExpertiseService(object):
         {
             'paperId': value,
             'entityA': {
-                'paperId': value
+                'id': value
             }
         }
         '''
