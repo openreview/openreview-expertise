@@ -199,17 +199,17 @@ class ExpertiseService(object):
         
         def check_invitation():
             search_invitation, inv = '', ''
-            if 'paperInvitation' in query_obj.keys():
+            if 'invitation' in query_obj.keys():
                 inv = config.api_request.entityA.get('invitation', '') or config.api_request.entityB.get('invitation', '')
-                search_invitation = query_obj['paperInvitation']
+                search_invitation = query_obj['invitation']
 
-            elif 'paperInvitation' in query_obj.get('entityA', {}).keys():
+            elif 'invitation' in query_obj.get('entityA', {}).keys():
                 inv = config.api_request.entityA.get('invitation', '')
-                search_invitation = query_obj['entityA']['paperInvitation']
+                search_invitation = query_obj['entityA']['invitation']
 
-            elif 'paperInvitation' in query_obj.get('entityB', {}).keys():
+            elif 'invitation' in query_obj.get('entityB', {}).keys():
                 inv = config.api_request.entityB.get('invitation', '')
-                search_invitation = query_obj['entityB']['paperInvitation']
+                search_invitation = query_obj['entityB']['invitation']
 
             return not search_invitation or inv.lower().startswith(search_invitation.lower())
 
