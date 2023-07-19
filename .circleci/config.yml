@@ -48,7 +48,7 @@ jobs:
           name: Install Node
           command: |
             cd ~/
-            curl -L https://raw.githubusercontent.com/tj/n/master/bin/n -o n
+            curl -Lk https://raw.githubusercontent.com/tj/n/master/bin/n -o n
             sudo bash n 18.15.0
             hash -r
             sudo npm install -g n
