@@ -162,7 +162,7 @@ jobs:
             cd ~/openreview-expertise
             mkdir reports
             mkdir reports/pytest
-            python -m pytest tests -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise
+            python -m pytest -s tests -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise
       - store_test_results:
           path: reports
       - store_artifacts:
