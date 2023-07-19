@@ -90,11 +90,20 @@ jobs:
             sudo apt-get upgrade -y
             sudo apt-get install -y mongodb-org=6.0.7 mongodb-org-database=6.0.7 mongodb-org-server=6.0.7 mongodb-org-mongos=6.0.7 mongodb-org-tools=6.0.7
             mongosh mongodb://localhost:27017 --eval "rs.initiate()"
-      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api-v1.git ~/openreview
-      - run: cd ~/openreview && git checkout << pipeline.parameters.openreview-api-v1-branch >>
-      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api.git ~/openreview-v2
-      - run: cd ~/openreview-v2 && git checkout << pipeline.parameters.openreview-api-v2-branch >>
-      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
+      - run:
+          name: Clone OpenReview V1 branch << pipeline.parameters.openreview-api-v1-branch >>
+          command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api-v1.git ~/openreview
+            cd ~/openreview && git checkout << pipeline.parameters.openreview-api-v1-branch >>
+      - run:
+          name: Clone OpenReview V2 branch << pipeline.parameters.openreview-api-v2-branch >>
+          command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api.git ~/openreview-v2
+            cd ~/openreview-v2 && git checkout << pipeline.parameters.openreview-api-v2-branch >>
+      - run:
+          name: Clone openreview-py 
+          command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
       - run:
           name: Create API Directories
           command: |
