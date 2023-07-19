@@ -428,5 +428,6 @@ class TestExpertiseV2():
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
+        ## no submissions with no_track
         results = test_client.get('/expertise/results', query_string={'jobId': job_id}).json['results']       
         assert len(results) == 0
