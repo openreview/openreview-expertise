@@ -119,8 +119,8 @@ class APIRequest(object):
             else:
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
             
-            if 'content' in source_entity.keys():
-                target_entity['content'] = _get_from_entity('content')
+            if 'withContent' in source_entity.keys():
+                target_entity['withContent'] = _get_from_entity('withContent')
         else:
             raise openreview.OpenReviewException(f"Bad request: invalid type in {entity_id}")
 
@@ -397,7 +397,7 @@ class JobConfig(object):
         config.paper_id = None
 
         if api_request.entityA['type'] == 'Note':
-            inv, id, venueid, content = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None), api_request.entityA.get('withVenueid', None), api_request.entityA.get('content', None)
+            inv, id, venueid, content = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None), api_request.entityA.get('withVenueid', None), api_request.entityA.get('withContent', None)
 
             if inv:
                 config.paper_invitation = inv
@@ -409,7 +409,7 @@ class JobConfig(object):
                 config.paper_content = content
 
         elif api_request.entityB['type'] == 'Note':
-            inv, id, venueid, content = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None), api_request.entityB.get('withVenueid', None), api_request.entityA.get('content', None)
+            inv, id, venueid, content = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None), api_request.entityB.get('withVenueid', None), api_request.entityA.get('withContent', None)
 
             if inv:
                 config.paper_invitation = inv

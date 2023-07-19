@@ -391,7 +391,7 @@ class TestExpertiseV2():
                     "entityB": { 
                         'type': "Note",
                         'withVenueid': "TMLR/Submitted",
-                        'content': { 'track': 'no_track' }
+                        'withContent': { 'track': 'no_track' }
                     },
                     "model": {
                             "name": "specter+mfr",
