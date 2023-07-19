@@ -44,9 +44,14 @@ jobs:
             wget "https://repo.anaconda.com/miniconda/Miniconda3-py37_22.11.1-1-Linux-x86_64.sh" -O miniconda.sh
             printf '%s' "22b14d52265b4e609c6ce78e2f2884b277d976b83b5f9c8a83423e3eba2ccfbe  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
-      - node/install:
-          install-yarn: true
-          node-version: '18.17'
+      - run:
+          name: Install Node
+          command: |
+            cd ~/
+            curl -L https://raw.githubusercontent.com/tj/n/master/bin/n -o n
+            sudo bash n 18.15.0
+            hash -r
+            sudo npm install -g n
       - run:
           name: Setup environment
           command: |
