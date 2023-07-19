@@ -53,7 +53,7 @@ jobs:
             hash -r
             sudo npm install -g n
       - run:
-          name: Setup environment
+          name: Setup Environment
           command: |
             export PATH="$HOME/miniconda/bin:$PATH"
             conda update -y conda
