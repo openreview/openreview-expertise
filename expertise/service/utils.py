@@ -238,6 +238,7 @@ class JobConfig(object):
         alternate_inclusion_inv=None,
         paper_invitation=None,
         paper_venueid=None,
+        paper_content=None,
         paper_id=None,
         model_params=None):
         
@@ -261,6 +262,7 @@ class JobConfig(object):
         self.alternate_inclusion_inv = alternate_inclusion_inv
         self.paper_invitation = paper_invitation
         self.paper_venueid = paper_venueid
+        self.paper_content = paper_content
         self.paper_id = paper_id
         self.model_params = model_params
 
@@ -286,6 +288,7 @@ class JobConfig(object):
             'alternate_inclusion_inv': self.alternate_inclusion_inv,
             'paper_invitation': self.paper_invitation,
             'paper_venueid': self.paper_venueid,
+            'paper_content': self.paper_content,
             'paper_id': self.paper_id,
             'model_params': self.model_params
         }
@@ -522,6 +525,7 @@ class JobConfig(object):
             alternate_inclusion_inv = job_config.get('alternate_inclusion_inv'),
             paper_invitation = job_config.get('paper_invitation'),
             paper_venueid = job_config.get('paper_venueid'),
+            paper_content = job_config.get('paper_content'),
             paper_id = job_config.get('paper_id'),
             model_params = job_config.get('model_params')
         )
