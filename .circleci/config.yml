@@ -46,7 +46,7 @@ jobs:
             bash miniconda.sh -b -p $HOME/miniconda
       - node/install:
           install-yarn: true
-          node-version: '18.16'
+          node-version: '18.17'
       - run:
           name: Setup environment
           command: |
