@@ -399,7 +399,6 @@ class JobConfig(object):
         if api_request.entityA['type'] == 'Note':
             inv, id, venueid, content = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None), api_request.entityA.get('withVenueid', None), api_request.entityA.get('withContent', None)
 
-            print('entityA.content', content)
             if inv:
                 config.paper_invitation = inv
             if id:
@@ -412,7 +411,6 @@ class JobConfig(object):
         elif api_request.entityB['type'] == 'Note':
             inv, id, venueid, content = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None), api_request.entityB.get('withVenueid', None), api_request.entityB.get('withContent', None)
 
-            print('entityB.content', content)
             if inv:
                 config.paper_invitation = inv
             if id:

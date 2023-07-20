@@ -65,8 +65,6 @@ class ExpertiseService(object):
         # Validate fields
         self.logger.info(f"Incoming request - {request}")
         validated_request = APIRequest(request)
-        self.logger.info(f"Validated_request - {validated_request.entityA}")
-        self.logger.info(f"Validated_request - {validated_request.entityB}")
         config = JobConfig.from_request(
             api_request = validated_request,
             starting_config = self.default_expertise_config,
