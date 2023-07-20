@@ -420,6 +420,7 @@ class TestExpertiseV2():
             time.sleep(5)
             response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
+                print('ERROR response', response)
                 assert False, response[0]['description']
             try_time = time.time() - start_time
 
