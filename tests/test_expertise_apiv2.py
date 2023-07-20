@@ -474,4 +474,4 @@ class TestExpertiseV2():
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         results = test_client.get('/expertise/results', query_string={'jobId': job_id}).json['results']       
-        assert len(results) == 0        
+        assert len(results) == 10        
