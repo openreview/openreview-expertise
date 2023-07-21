@@ -42,6 +42,19 @@ class OpenReviewExpertise(object):
             invitations = config_invitations
         assert isinstance(invitations, list), 'Input should be a str or a list'
         return invitations
+    
+    def match_content(self, content, match_content):
+        if not match_content:
+            return True
+        for name, value in match_content.items():
+
+            paper_value = content.get(name)
+            if isinstance(paper_value, dict):
+                paper_value = paper_value.get('value')
+
+            if paper_value != value:
+                return False
+        return True
 
     def get_paper_notes(self, author_id, dataset_params):
 
@@ -395,6 +408,7 @@ class OpenReviewExpertise(object):
         invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
         paper_id = self.config.get('paper_id')
         paper_venueid = self.config.get('paper_venueid', None)
+        paper_content = self.config.get('paper_content', None)
         submission_groups = self.convert_to_list(self.config.get('alternate_match_group', []))
         submissions = []
 
@@ -446,22 +460,24 @@ class OpenReviewExpertise(object):
         for paper in tqdm(submissions, total=len(submissions)):
             paper_id = paper.id
 
-            # Get title + abstract depending on API version
-            paper_title = paper.content.get('title')
-            if isinstance(paper_title, dict):
-                paper_title = paper_title.get('value')
+            if self.match_content(paper.content, paper_content):
 
-            paper_abstr = paper.content.get('abstract')
-            if isinstance(paper_abstr, dict):
-                paper_abstr = paper_abstr.get('value')
+                # Get title + abstract depending on API version
+                paper_title = paper.content.get('title')
+                if isinstance(paper_title, dict):
+                    paper_title = paper_title.get('value')
 
-            reduced_submissions[paper_id] = {
-                'id': paper_id,
-                'content': {
-                    'title': paper_title,
-                    'abstract': paper_abstr
+                paper_abstr = paper.content.get('abstract')
+                if isinstance(paper_abstr, dict):
+                    paper_abstr = paper_abstr.get('value')
+
+                reduced_submissions[paper_id] = {
+                    'id': paper_id,
+                    'content': {
+                        'title': paper_title,
+                        'abstract': paper_abstr
+                    }
                 }
-            }
 
         csv_submissions = self.config.get('csv_submissions')
         if csv_submissions:
