@@ -10,6 +10,9 @@ parameters:
 
 jobs:
   build:
+    # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
+    resource_class: large
+    parallelism: 10
     working_directory: ~/openreview-expertise
     docker:
       - image: ubuntu:22.04
@@ -21,7 +24,6 @@ jobs:
           xpack.security.enabled: false
           transport.host: localhost
           TZ: "Etc/UTC"
-    resource_class: medium+
     environment:
       PYTHON_VERSION: 3.7
     steps:
@@ -153,9 +155,10 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-expertise
+            TEST_FILES=$(circleci tests glob "tests/test_*.py" | circleci tests split --split-by=timings)
             mkdir reports
             mkdir reports/pytest
-            python -m pytest tests -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise
+            python -m pytest -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise $TEST_FILES
       - store_test_results:
           path: reports
       - store_artifacts:
