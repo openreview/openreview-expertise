@@ -35,7 +35,7 @@ We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calc
 Run this command if you plan to use ELMo (Using CPU is fine):
 ```
 conda install intel-openmp==2019.4
-conda install faiss-cpu -c pytorch
+conda install faiss-cpu=1.7.3 -c pytorch
 ```
 [Here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md) you can find the above installation command.
 
