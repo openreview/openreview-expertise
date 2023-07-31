@@ -144,7 +144,7 @@ class Specter2Predictor:
             paper_data = json.load(f)
 
         sub_jsonl = []
-        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs'):
+        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
             # preprocess the input
             inputs = self.tokenizer(text_batch, padding=True, truncation=True,
@@ -157,6 +157,12 @@ class Specter2Predictor:
             for paper, embedding in zip(batch_data, embeddings):
                 paper = paper[1]
                 sub_jsonl.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding}) + '\n')
+
+            # clean up batch data
+            del embeddings
+            del output
+            del inputs
+            torch.cuda.empty_cache()
 
         with open(submissions_path, 'w') as f:
             f.writelines(sub_jsonl)
@@ -172,7 +178,7 @@ class Specter2Predictor:
             paper_data = json.load(f)
 
         pub_jsonl = []
-        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs'):
+        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
             # preprocess the input
             inputs = self.tokenizer(text_batch, padding=True, truncation=True,
@@ -185,6 +191,12 @@ class Specter2Predictor:
             for paper, embedding in zip(batch_data, embeddings):
                 paper = paper[1]
                 pub_jsonl.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding.detach().cpu().numpy().tolist()}) + '\n')
+
+            # clean up batch data
+            del embeddings
+            del output
+            del inputs
+            torch.cuda.empty_cache()
 
         with open(publications_path, 'w') as f:
             f.writelines(pub_jsonl)
