@@ -21,12 +21,6 @@ import numpy as np
 from expertise.service.server import redis_embeddings_pool
 
 import logging
-logging.getLogger('allennlp.common.params').disabled = True
-logging.getLogger('allennlp.common.from_params').disabled = True
-logging.getLogger('allennlp.common.registrable').setLevel(logging.WARNING)
-logging.getLogger('allennlp.nn.initializers').disabled = True
-
-import_submodules('specter')
 """
 archive_file: $SPECTER_FOLDER/model.tar.gz
 input_file: $SAMPLE_ID_TRAIN
@@ -48,113 +42,6 @@ output-file: $SPECTER_TRAIN_EMB_RAW
 batch-size: 16
 silent
 """
-
-
-class _PredictManagerCustom(_PredictManager):
-    """
-    Source: https://github.com/allenai/specter/blob/master/scripts/embed.py
-
-    Extends the following functions from allennlp's _PredictManager class
-    `run` function to print predict progress
-    """
-
-    def __init__(self,
-                 predictor: Predictor,
-                 input_file: str,
-                 metadate_file: str,
-                 output_file: Optional[str],
-                 batch_size: int,
-                 print_to_console: bool,
-                 has_dataset_reader: bool,
-                 store_redis: bool = False,
-                 redis_con=None) -> None:
-        super(_PredictManagerCustom, self).__init__(predictor, input_file, output_file, batch_size, print_to_console,
-                                                    has_dataset_reader)
-        self.total_size = int(sum([1 for _ in open(self._input_file)]) / self._batch_size)
-        self._metadata = {}
-        if metadate_file:
-            with open(metadate_file) as f:
-                self._metadata = json.load(f)
-        self._store_redis = store_redis
-        if store_redis:
-            assert redis_con is not None, "Can't store in Redis, No redis connection provided"
-            assert metadate_file
-        self._redis_con = redis_con
-
-    def run(self) -> None:
-        has_reader = self._dataset_reader is not None
-        index = 0
-        if has_reader:
-            for batch in tqdm(lazy_groups_of(self._get_instance_data(), self._batch_size), total=self.total_size,
-                              unit="batches"):
-                for model_input_instance, result in zip(batch, self._predict_instances(batch)):
-                    self._maybe_print_to_console_and_file(index, result, str(model_input_instance))
-                    index = index + 1
-        else:
-            for batch_json in tqdm(lazy_groups_of(self._get_json_data(), self._batch_size), total=self.total_size,
-                                   unit="batches"):
-                for model_input_json, result in zip(batch_json, self._predict_json(batch_json)):
-                    self._maybe_print_to_console_and_file(index, result, json.dumps(model_input_json))
-                    index = index + 1
-
-        if self._output_file is not None:
-            self._output_file.close()
-
-    def _maybe_print_to_console_and_file(self,
-                                         index: int,
-                                         prediction: str,
-                                         model_input: str = None) -> None:
-        prediction_json = json.loads(prediction)
-        if self._print_to_console:
-            if model_input is not None:
-                print(f"input {index}: ", model_input)
-            print("prediction: ", prediction)
-
-        if self._output_file is not None:
-            self._output_file.write(prediction)
-        if self._store_redis:
-            paper_id = prediction_json['paper_id']
-            cache_key = paper_id + "_" + str(self._metadata[paper_id]['mdate'])
-            self._redis_con.tensorset(key=cache_key, tensor=np.array(prediction_json['embedding']))
-
-
-def predictor_from_archive(archive: Archive, predictor_name: str = None,
-                           paper_features_path: str = None) -> 'Predictor':
-    """
-    Source: https://github.com/allenai/specter/blob/master/scripts/embed.py
-
-    Extends allennlp.predictors.predictor.from_archive to allow processing multiprocess reader
-    paper_features_path is passed to replace the correct one if the dataset_reader is multiprocess
-    """
-
-    # Duplicate the config so that the config inside the archive doesn't get consumed
-    config = archive.config.duplicate()
-
-    if not predictor_name:
-        model_type = config.get("model").get("type")
-        if not model_type in DEFAULT_PREDICTORS:
-            raise ConfigurationError(f"No default predictor for model type {model_type}.\n" \
-                                     f"Please specify a predictor explicitly.")
-        predictor_name = DEFAULT_PREDICTORS[model_type]
-
-    dataset_config = config["dataset_reader"].as_dict()
-    if dataset_config['type'] == 'multiprocess':
-        dataset_config = dataset_config['base_reader']
-        if paper_features_path:
-            dataset_config['paper_features_path'] = paper_features_path
-        dataset_reader_params = Params(dataset_config)
-
-    else:
-        dataset_reader_params = config["dataset_reader"]
-
-    dataset_reader = DatasetReader.from_params(dataset_reader_params)
-
-    model = archive.model
-    model.eval()
-
-    return Predictor.by_name(predictor_name)(model, dataset_reader)
-
-
 class SpecterPredictor:
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False):
@@ -272,10 +159,6 @@ class SpecterPredictor:
                                 'vocabulary': {'directory_path': self.vocab_dir}
                                 })
 
-        archive = load_archive(self.model_archive_file,
-                               weights_file=None,
-                               cuda_device=self.cuda_device,
-                               overrides=overrides)
         predictor = predictor_from_archive(archive, self.predictor_name, metadata_file)
 
         manager = _PredictManagerCustom(predictor,
@@ -322,10 +205,6 @@ class SpecterPredictor:
                                                    },
                                 'vocabulary': {'directory_path': self.vocab_dir}
                                 })
-        archive = load_archive(self.model_archive_file,
-                               weights_file=None,
-                               cuda_device=self.cuda_device,
-                               overrides=overrides)
         predictor = predictor_from_archive(archive, self.predictor_name, metadata_file)
         redis_client = self.redis.client() if self.use_redis else None
         manager = _PredictManagerCustom(predictor,
