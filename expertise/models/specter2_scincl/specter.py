@@ -1,14 +1,5 @@
 import time
 
-from allennlp.commands.predict import _PredictManager
-from allennlp.common import Params
-from allennlp.common.checks import ConfigurationError
-from allennlp.common.util import lazy_groups_of, import_submodules
-from allennlp.data import DatasetReader
-from allennlp.models import Archive
-from allennlp.models.archival import load_archive
-from allennlp.predictors.predictor import Predictor, DEFAULT_PREDICTORS
-
 from collections import defaultdict
 import json
 import os
@@ -25,12 +16,6 @@ from transformers import AutoTokenizer, AutoModel
 from expertise.service.server import redis_embeddings_pool
 
 import logging
-logging.getLogger('allennlp.common.params').disabled = True
-logging.getLogger('allennlp.common.from_params').disabled = True
-logging.getLogger('allennlp.common.registrable').setLevel(logging.WARNING)
-logging.getLogger('allennlp.nn.initializers').disabled = True
-
-import_submodules('specter')
 """
 archive_file: $SPECTER_FOLDER/model.tar.gz
 input_file: $SAMPLE_ID_TRAIN
@@ -52,144 +37,6 @@ output-file: $SPECTER_TRAIN_EMB_RAW
 batch-size: 16
 silent
 """
-
-
-class _PredictManagerCustom(_PredictManager):
-    """
-    Source: https://github.com/allenai/specter/blob/master/scripts/embed.py
-
-    Extends the following functions from allennlp's _PredictManager class
-    `run` function to print predict progress
-    """
-
-    def __init__(self,
-                 predictor: Predictor,
-                 input_file: str,
-                 metadate_file: str,
-                 output_file: Optional[str],
-                 batch_size: int,
-                 print_to_console: bool,
-                 has_dataset_reader: bool,
-                 store_redis: bool = False,
-                 redis_con=None,
-                 cuda_device = -1) -> None:
-        super(_PredictManagerCustom, self).__init__(predictor, input_file, output_file, batch_size, print_to_console,
-                                                    has_dataset_reader)
-        self.total_size = int(sum([1 for _ in open(self._input_file)]) / self._batch_size)
-        self._metadata = {}
-        if metadate_file:
-            with open(metadate_file) as f:
-                self._metadata = json.load(f)
-        self._store_redis = store_redis
-        if store_redis:
-            assert redis_con is not None, "Can't store in Redis, No redis connection provided"
-            assert metadate_file
-        self._redis_con = redis_con
-
-        
-        self.cuda = cuda_device
-
-    def _predict_json(self, batch_data):
-        """
-        Override the AllenNLP function for computing batch embeddings and use the template code
-        provided on the updated HuggingFace implementations
-
-        Input: List[{title, abstract, paper_id, authors, mdate}]
-        Output: Iterator across JSON strings of {paper_id, embedding}
-        """
-        # concatenate title and abstract
-        text_batch = [d['title'] + self._tokenizer.sep_token + (d.get('abstract') or '') for d in batch_data]
-        # preprocess the input
-        inputs = self._tokenizer(text_batch, padding=True, truncation=True,
-                                        return_tensors="pt", return_token_type_ids=False, max_length=512)
-        inputs = inputs.to(self.cuda)
-
-        output = self._predictor._model(**inputs)
-        # take the first token in the batch as the embedding
-        embeddings = output.last_hidden_state[:, 0, :]
-        
-        return iter([json.dumps({'paper_id': paper['paper_id'], 'embedding': e}) for paper, e in  zip(batch_data, embeddings)])
-
-    def run(self) -> None:
-        has_reader = self._dataset_reader is not None # API Calls this with false
-        index = 0
-        if has_reader:
-            for batch in tqdm(lazy_groups_of(self._get_instance_data(), self._batch_size), total=self.total_size,
-                              unit="batches"):
-                for model_input_instance, result in zip(batch, self._predict_instances(batch)):
-                    self._maybe_print_to_console_and_file(index, result, str(model_input_instance))
-                    index = index + 1
-        else:
-            for batch_json in tqdm(lazy_groups_of(self._get_json_data(), self._batch_size), total=self.total_size,
-                                   unit="batches"):
-                for model_input_json, result in zip(batch_json, self._predict_json(batch_json)):
-                    self._maybe_print_to_console_and_file(index, result, json.dumps(model_input_json))
-                    index = index + 1
-
-        if self._output_file is not None:
-            self._output_file.close()
-
-    def _maybe_print_to_console_and_file(self,
-                                         index: int,
-                                         prediction: str,
-                                         model_input: str = None) -> None:
-        prediction_json = json.loads(prediction)
-        if self._print_to_console:
-            if model_input is not None:
-                print(f"input {index}: ", model_input)
-            print("prediction: ", prediction)
-
-        if self._output_file is not None:
-            self._output_file.write(prediction)
-        if self._store_redis:
-            paper_id = prediction_json['paper_id']
-            cache_key = paper_id + "_" + str(self._metadata[paper_id]['mdate'])
-            self._redis_con.tensorset(key=cache_key, tensor=np.array(prediction_json['embedding']))
-
-
-def predictor_from_archive(dataset_config: dict, predictor_name: str = None,
-                           paper_features_path: str = None, cuda_device = -1) -> 'Predictor':
-    """
-    Source: https://github.com/allenai/specter/blob/master/scripts/embed.py
-
-    Extends allennlp.predictors.predictor.from_archive to allow processing multiprocess reader
-    paper_features_path is passed to replace the correct one if the dataset_reader is multiprocess
-    """
-
-    # Duplicate the config so that the config inside the archive doesn't get consumed
-    #config = archive.config.duplicate()
-
-    if dataset_config['type'] == 'multiprocess':
-        dataset_config = dataset_config['base_reader']
-        if paper_features_path:
-            dataset_config['paper_features_path'] = paper_features_path
-        dataset_reader_params = Params(dataset_config)
-
-    else:
-        dataset_reader_params = Params(dataset_config)
-
-    dataset_reader = DatasetReader.from_params(dataset_reader_params)
-
-    '''
-    # Release old model
-    for param in archive.model.parameters():
-        param.detach().cpu()
-
-    for buffer in archive.model.buffers():
-        buffer.detach().cpu()
-    torch.cuda.empty_cache()
-    '''
-
-    #load base model
-    model = AutoModel.from_pretrained('allenai/specter2')
-    #load the adapter(s) as per the required task, provide an identifier for the adapter in load_as argument and activate it
-    model.load_adapter("allenai/specter2_proximity", source="hf", load_as="specter2_proximity", set_active=True)
-    model.to(cuda_device)
-    
-
-    return Predictor.by_name(predictor_name)(model, dataset_reader)
-
-
 class Specter2Predictor:
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False):
