@@ -1,7 +1,7 @@
 import os
 
-from .specter import SpecterPredictor
-from .multifacet_recommender import MultiFacetRecommender
+from .specter import Specter2Predictor
+from .scincl import SpecterPredictor
 from tqdm import tqdm
 
 

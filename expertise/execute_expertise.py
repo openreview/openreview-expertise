@@ -100,9 +100,9 @@ def execute_expertise(config):
                 scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
-    if config['model'] == 'specter2+scincl':
-        from .models import multifacet_recommender
-        specter_predictor = multifacet_recommender.SpecterPredictor(
+    if config['model'] == 'specter2':
+        from .models import specter2_scincl
+        specter_predictor = specter2_scincl.Specter2Predictor(
             specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
             work_dir=config['model_params'].get('work_dir', "./"),
             average_score=config['model_params'].get('average_score', False),
