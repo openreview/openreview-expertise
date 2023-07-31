@@ -70,6 +70,7 @@ class Specter2Predictor:
         #load the adapter(s) as per the required task, provide an identifier for the adapter in load_as argument and activate it
         self.model.load_adapter("allenai/specter2_proximity", source="hf", load_as="specter2_proximity", set_active=True)
         self.model.to(self.cuda_device)
+        self.model.eval()
 
     def _fetch_batches(self, dict_data, batch_size):
         iterator = iter(dict_data.items())
@@ -150,7 +151,8 @@ class Specter2Predictor:
             inputs = self.tokenizer(text_batch, padding=True, truncation=True,
                                             return_tensors="pt", return_token_type_ids=False, max_length=512)
             inputs = inputs.to(self.cuda_device)
-            output = self.model(**inputs)
+            with torch.no_grad():
+                output = self.model(**inputs)
             # take the first token in the batch as the embedding
             embeddings = output.last_hidden_state[:, 0, :]
 
@@ -184,7 +186,8 @@ class Specter2Predictor:
             inputs = self.tokenizer(text_batch, padding=True, truncation=True,
                                             return_tensors="pt", return_token_type_ids=False, max_length=512)
             inputs = inputs.to(self.cuda_device)
-            output = self.model(**inputs)
+            with torch.no_grad():
+                output = self.model(**inputs)
             # take the first token in the batch as the embedding
             embeddings = output.last_hidden_state[:, 0, :]
 
