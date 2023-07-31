@@ -1,22 +1,17 @@
 import time
 
-from allennlp.commands.predict import _PredictManager
-from allennlp.common import Params
-from allennlp.common.checks import ConfigurationError
-from allennlp.common.util import lazy_groups_of, import_submodules
-from allennlp.data import DatasetReader
-from allennlp.models import Archive
-from allennlp.models.archival import load_archive
-from allennlp.predictors.predictor import Predictor, DEFAULT_PREDICTORS
-
 from collections import defaultdict
 import json
 import os
 import torch
+import sys
+import itertools
 from tqdm import tqdm
 from typing import Optional
 import redisai
 import numpy as np
+
+from transformers import AutoTokenizer, AutoModel
 
 from expertise.service.server import redis_embeddings_pool
 
@@ -42,9 +37,10 @@ output-file: $SPECTER_TRAIN_EMB_RAW
 batch-size: 16
 silent
 """
-class SpecterPredictor:
+class SciNCLPredictor:
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False):
+        self.model_name = '' # TODO: Add SPECTER2 pointer
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
@@ -67,6 +63,42 @@ class SpecterPredictor:
             self.redis = redisai.Client(connection_pool=redis_embeddings_pool)
         else:
             self.redis = None
+
+        self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
+        #load base model
+        self.model = AutoModel.from_pretrained('malteos/scincl')
+        self.model.to(self.cuda_device)
+        self.model.eval()
+
+    def _fetch_batches(self, dict_data, batch_size):
+        iterator = iter(dict_data.items())
+        for _ in itertools.count():
+            batch = list(itertools.islice(iterator, batch_size))
+            if not batch:
+                break
+            yield batch
+
+    def _batch_predict(self, batch_data):
+        jsonl_out = []
+        text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
+        # preprocess the input
+        inputs = self.tokenizer(text_batch, padding=True, truncation=True, return_tensors="pt", max_length=512)
+        inputs = inputs.to(self.cuda_device)
+        with torch.no_grad():
+            output = self.model(**inputs)
+        # take the first token in the batch as the embedding
+        embeddings = output.last_hidden_state[:, 0, :]
+
+        for paper, embedding in zip(batch_data, embeddings):
+            paper = paper[1]
+            jsonl_out.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding.detach().cpu().numpy().tolist()}) + '\n')
+
+        # clean up batch data
+        del embeddings
+        del output
+        del inputs
+        torch.cuda.empty_cache()
+        return jsonl_out
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
@@ -129,46 +161,15 @@ class SpecterPredictor:
         metadata_file = os.path.join(self.work_dir, "specter_submission_paper_data.json")
         ids_file = os.path.join(self.work_dir, "specter_submission_paper_ids.txt")
 
-        # Overrides default config in the saved specter archive
-        overrides = json.dumps({'model': {'predict_mode': 'true', 'include_venue': 'false',
-                                          'text_field_embedder': {
-                                              'token_embedders': {
-                                                  'bert': {
-                                                      'pretrained_model': os.path.join(self.specter_dir,
-                                                                                       "data/scibert_scivocab_uncased/scibert.tar.gz")
-                                                  }
-                                              }
-                                          }
-                                          },
-                                "train_data_path": os.path.join(self.specter_dir, "data/train.csv"),
-                                "validation_data_path": os.path.join(self.specter_dir, "data/val.csv"),
-                                "test_data_path": os.path.join(self.specter_dir, "data/test.csv"),
-                                'dataset_reader': {'type': 'specter_data_reader', 'predict_mode': 'true',
-                                                   'paper_features_path': metadata_file,
-                                                   'included_text_fields': 'abstract title',
-                                                   'cache_path': os.path.join(self.specter_dir,
-                                                                              'data/dataset-instance-cache/'),
-                                                   'data_file': os.path.join(self.specter_dir, 'data/train.json'),
-                                                   'token_indexers': {
-                                                       'bert': {
-                                                           "pretrained_model": os.path.join(self.specter_dir,
-                                                                                            "data/scibert_scivocab_uncased/vocab.txt")
-                                                       }
-                                                   }
-                                                   },
-                                'vocabulary': {'directory_path': self.vocab_dir}
-                                })
+        with open(metadata_file, 'r') as f:
+            paper_data = json.load(f)
 
-        predictor = predictor_from_archive(archive, self.predictor_name, metadata_file)
+        sub_jsonl = []
+        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
+            sub_jsonl.extend(self._batch_predict(batch_data))
 
-        manager = _PredictManagerCustom(predictor,
-                                        ids_file,
-                                        "",
-                                        submissions_path,
-                                        self.batch_size,
-                                        False,
-                                        False)
-        manager.run()
+        with open(submissions_path, 'w') as f:
+            f.writelines(sub_jsonl)
 
     def embed_publications(self, publications_path=None):
         if not self.use_redis:
@@ -177,46 +178,15 @@ class SpecterPredictor:
         metadata_file = os.path.join(self.work_dir, "specter_reviewer_paper_data.json")
         ids_file = os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt")
 
-        # Overrides default config in the saved specter archive
-        overrides = json.dumps({'model': {'predict_mode': 'true', 'include_venue': 'false',
-                                          'text_field_embedder': {
-                                              'token_embedders': {
-                                                  'bert': {
-                                                      'pretrained_model': os.path.join(self.specter_dir, "data/scibert_scivocab_uncased/scibert.tar.gz")
-                                                  }
-                                              }
-                                          }
-                                          },
-                                "train_data_path": os.path.join(self.specter_dir, "data/train.csv"),
-                                "validation_data_path": os.path.join(self.specter_dir, "data/val.csv"),
-                                "test_data_path": os.path.join(self.specter_dir, "data/test.csv"),
-                                'dataset_reader': {'type': 'specter_data_reader', 'predict_mode': 'true',
-                                                   'paper_features_path': metadata_file,
-                                                   'included_text_fields': 'abstract title',
-                                                   'cache_path': os.path.join(self.specter_dir,
-                                                                              'data/dataset-instance-cache/'),
-                                                   'data_file': os.path.join(self.specter_dir, 'data/train.json'),
-                                                   'token_indexers': {
-                                                       'bert': {
-                                                           "pretrained_model": os.path.join(self.specter_dir,
-                                                                                            "data/scibert_scivocab_uncased/vocab.txt")
-                                                       }
-                                                   }
-                                                   },
-                                'vocabulary': {'directory_path': self.vocab_dir}
-                                })
-        predictor = predictor_from_archive(archive, self.predictor_name, metadata_file)
-        redis_client = self.redis.client() if self.use_redis else None
-        manager = _PredictManagerCustom(predictor,
-                                        ids_file,
-                                        metadata_file,
-                                        publications_path,
-                                        self.batch_size,
-                                        False,
-                                        False,
-                                        store_redis=self.use_redis,
-                                        redis_con=redis_client)
-        manager.run()
+        with open(metadata_file, 'r') as f:
+            paper_data = json.load(f)
+
+        pub_jsonl = []
+        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
+            pub_jsonl.extend(self._batch_predict(batch_data))
+
+        with open(publications_path, 'w') as f:
+            f.writelines(pub_jsonl)
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
         def load_emb_file(emb_file):
