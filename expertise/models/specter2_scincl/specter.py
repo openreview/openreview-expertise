@@ -184,7 +184,7 @@ class Specter2Predictor:
 
             for paper, embedding in zip(batch_data, embeddings):
                 paper = paper[1]
-                pub_jsonl.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding.numpy().tolist()}) + '\n')
+                pub_jsonl.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding.detach().cpu().numpy()}) + '\n')
 
         with open(publications_path, 'w') as f:
             f.writelines(pub_jsonl)
