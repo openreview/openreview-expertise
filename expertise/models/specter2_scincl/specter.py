@@ -80,6 +80,29 @@ class Specter2Predictor:
                 break
             yield batch
 
+    def _batch_predict(self, batch_data):
+        jsonl_out = []
+        text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
+        # preprocess the input
+        inputs = self.tokenizer(text_batch, padding=True, truncation=True,
+                                        return_tensors="pt", return_token_type_ids=False, max_length=512)
+        inputs = inputs.to(self.cuda_device)
+        with torch.no_grad():
+            output = self.model(**inputs)
+        # take the first token in the batch as the embedding
+        embeddings = output.last_hidden_state[:, 0, :]
+
+        for paper, embedding in zip(batch_data, embeddings):
+            paper = paper[1]
+            jsonl_out.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding}) + '\n')
+
+        # clean up batch data
+        del embeddings
+        del output
+        del inputs
+        torch.cuda.empty_cache()
+        return jsonl_out
+
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
         self.pub_author_ids_to_note_id = defaultdict(list)
@@ -146,25 +169,7 @@ class Specter2Predictor:
 
         sub_jsonl = []
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
-            text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
-            # preprocess the input
-            inputs = self.tokenizer(text_batch, padding=True, truncation=True,
-                                            return_tensors="pt", return_token_type_ids=False, max_length=512)
-            inputs = inputs.to(self.cuda_device)
-            with torch.no_grad():
-                output = self.model(**inputs)
-            # take the first token in the batch as the embedding
-            embeddings = output.last_hidden_state[:, 0, :]
-
-            for paper, embedding in zip(batch_data, embeddings):
-                paper = paper[1]
-                sub_jsonl.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding}) + '\n')
-
-            # clean up batch data
-            del embeddings
-            del output
-            del inputs
-            torch.cuda.empty_cache()
+            sub_jsonl.extend(self._batch_predict(batch_data))
 
         with open(submissions_path, 'w') as f:
             f.writelines(sub_jsonl)
@@ -181,25 +186,7 @@ class Specter2Predictor:
 
         pub_jsonl = []
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
-            text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
-            # preprocess the input
-            inputs = self.tokenizer(text_batch, padding=True, truncation=True,
-                                            return_tensors="pt", return_token_type_ids=False, max_length=512)
-            inputs = inputs.to(self.cuda_device)
-            with torch.no_grad():
-                output = self.model(**inputs)
-            # take the first token in the batch as the embedding
-            embeddings = output.last_hidden_state[:, 0, :]
-
-            for paper, embedding in zip(batch_data, embeddings):
-                paper = paper[1]
-                pub_jsonl.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding.detach().cpu().numpy().tolist()}) + '\n')
-
-            # clean up batch data
-            del embeddings
-            del output
-            del inputs
-            torch.cuda.empty_cache()
+            pub_jsonl.extend(self._batch_predict(batch_data))
 
         with open(publications_path, 'w') as f:
             f.writelines(pub_jsonl)
