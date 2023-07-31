@@ -120,7 +120,7 @@ def execute_expertise(config):
             publication_path = None
         ens_predictor.embed_publications(
             specter_publications_path=specter_publication_path,
-            scincl_publication_path=scincl_publication_path
+            scincl_publications_path=scincl_publication_path
         )
         ens_predictor.embed_submissions(
             specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
@@ -128,7 +128,7 @@ def execute_expertise(config):
         )
         ens_predictor.all_scores(
             specter_publications_path=specter_publication_path,
-            scincl_publication_path=scincl_publication_path,
+            scincl_publications_path=scincl_publication_path,
             specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
             scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl'),
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
