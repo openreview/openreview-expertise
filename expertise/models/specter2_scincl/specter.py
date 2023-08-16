@@ -64,11 +64,11 @@ class Specter2Predictor:
         else:
             self.redis = None
 
-        self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2')
+        self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load base model
-        self.model = AutoModel.from_pretrained('allenai/specter2')
+        self.model = AutoModel.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load the adapter(s) as per the required task, provide an identifier for the adapter in load_as argument and activate it
-        self.model.load_adapter("allenai/specter2_proximity", source="hf", load_as="specter2_proximity", set_active=True)
+        self.model.load_adapter("allenai/specter2_aug2023refresh", source="hf", set_active=True)
         self.model.to(self.cuda_device)
         self.model.eval()
 
