@@ -13,7 +13,8 @@ setup(
     ],
     install_requires=[
         'openreview-py>=1.0.1',
-        'numpy',
+        'numpy==1.24.4',
+        'scipy==1.10.1',
         'pandas',
         'nltk',
         'gensim==4.1.2',
