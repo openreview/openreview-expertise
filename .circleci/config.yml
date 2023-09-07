@@ -79,8 +79,7 @@ jobs:
             conda install -y intel-openmp==2019.4
             conda install -y faiss-cpu==1.7.3 -c pytorch
             pip install -I protobuf==3.20.1
-            pip uninstall -y numpy
-            pip install numpy==1.24.4
+            pip install numpy==1.24.4 --force-reinstall
       - run:
           name: Initialize replica set
           command: |
