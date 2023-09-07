@@ -51,9 +51,9 @@ class Specter2Predictor:
         assert max_score ^ average_score, "(Only) One of max_score or average_score must be True"
         self.batch_size = batch_size
         if use_cuda:
-            self.cuda_device = 0
+            self.cuda_device = torch.device("cuda:0")
         else:
-            self.cuda_device = -1
+            self.cuda_device = torch.device("cpu")
         self.preliminary_scores = None
         self.sparse_value = sparse_value
         if not os.path.exists(self.work_dir) and not os.path.isdir(self.work_dir):
