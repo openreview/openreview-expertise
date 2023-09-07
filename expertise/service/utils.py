@@ -484,7 +484,7 @@ class JobConfig(object):
                         raise openreview.OpenReviewException("Bad request: invalid value in field 'scoreComputation' in 'model' object")
                     continue
 
-                if param == 'name': ## BUG
+                if param == 'name':
                     config.model = api_model.get('name', config.model)
                 
                 # Handle general case

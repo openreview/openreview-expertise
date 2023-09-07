@@ -394,7 +394,7 @@ class TestExpertiseV2():
                         'withContent': { 'track': 'no_track' }
                     },
                     "model": {
-                            "name": "specter+mfr",
+                            "name": "specter2+scincl",
                             'useTitle': False, 
                             'useAbstract': True, 
                             'skipSpecter': False,
