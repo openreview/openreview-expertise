@@ -80,8 +80,7 @@ jobs:
             conda install -y faiss-cpu==1.7.3 -c pytorch
             pip install -I protobuf==3.20.1
             pip uninstall -y numpy
-            pip uninstall -y scipy
-            pip install -y numpy==1.24.4 scipy==1.10.1
+            pip install numpy==1.24.4
       - run:
           name: Initialize replica set
           command: |
