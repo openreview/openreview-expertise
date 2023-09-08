@@ -13,7 +13,7 @@ Clone this repository and install the package using pip as follows. If you plan 
 
 Run this command only if you are using conda:
 ```
-conda create -n affinity python=3.7
+conda create -n affinity python=3.8
 conda activate affinity
 conda install pip
 ```
@@ -35,7 +35,7 @@ We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calc
 Run this command if you plan to use ELMo (Using CPU is fine):
 ```
 conda install intel-openmp==2019.4
-conda install faiss-cpu=1.7.3 -c pytorch
+conda install faiss-cpu==1.7.3 -c pytorch
 ```
 [Here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md) you can find the above installation command.
 
@@ -52,6 +52,7 @@ pip install -r requirements.txt
 python setup.py install
 conda install filelock
 cd ..
+pip install numpy==1.24.4 --force-reinstall
 ```
 Pass the path to the cloned GitHub repository as `model_params.specter_dir`. 
 
