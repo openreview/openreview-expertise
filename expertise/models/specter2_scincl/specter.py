@@ -255,7 +255,13 @@ class Specter2Predictor:
         p2p_aff = torch.empty((paper_num_test, paper_num_train), device=torch.device('cpu'))
         for i in range(paper_num_test):
             p2p_aff[i, :] = torch.sum(paper_emb_test[i, :].unsqueeze(dim=0) * paper_emb_train, dim=1)
-        p2p_aff = p2p_aff / (p2p_aff.norm(dim=1, keepdim=True) + 0.000000000001)
+        
+        # Compute the minimum and maximum values for each row
+        min_values, _ = torch.min(p2p_aff, dim=1, keepdim=True)
+        max_values, _ = torch.max(p2p_aff, dim=1, keepdim=True)
+
+        # Normalize each row to span the range between 0 and 1
+        p2p_aff = (p2p_aff - min_values) / (max_values - min_values)
 
         csv_scores = []
         self.preliminary_scores = []
