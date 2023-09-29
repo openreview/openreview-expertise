@@ -12,6 +12,7 @@ import redisai
 import numpy as np
 
 from transformers import AutoTokenizer, AutoModel
+from transformers.adapters import AutoAdapterModel
 
 from expertise.service.server import redis_embeddings_pool
 
@@ -66,9 +67,9 @@ class Specter2Predictor:
 
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load base model
-        self.model = AutoModel.from_pretrained('allenai/specter2_aug2023refresh_base')
+        self.model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load the adapter(s) as per the required task, provide an identifier for the adapter in load_as argument and activate it
-        self.model.load_adapter("allenai/specter2_aug2023refresh", source="hf", set_active=True)
+        self.model.load_adapter("allenai/specter2_aug2023refresh", source="hf", load_as="proximity", set_active=True)
         self.model.to(self.cuda_device)
         self.model.eval()
 
@@ -261,7 +262,7 @@ class Specter2Predictor:
         max_values, _ = torch.max(p2p_aff, dim=1, keepdim=True)
 
         # Normalize each row to span the range between 0 and 1
-        p2p_aff = (p2p_aff - min_values) / (max_values - min_values)
+        #p2p_aff = (p2p_aff - min_values) / (max_values - min_values)
 
         csv_scores = []
         self.preliminary_scores = []

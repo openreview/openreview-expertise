@@ -139,6 +139,40 @@ def execute_expertise(config):
                 scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
+    if config['model'] == 'specter2':
+        from .models import specter2_scincl
+        spec2_predictor = specter2_scincl.Specter2Predictor(
+            specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
+            work_dir=config['model_params'].get('work_dir', "./"),
+            average_score=config['model_params'].get('average_score', False),
+            max_score=config['model_params'].get('max_score', True),
+            batch_size=config['model_params'].get('batch_size', 16),
+            use_cuda=config['model_params'].get('use_cuda', False),
+            sparse_value=config['model_params'].get('sparse_value'),
+            use_redis=config['model_params'].get('use_redis', False)
+        )
+        spec2_predictor.set_archives_dataset(archives_dataset)
+        spec2_predictor.set_submissions_dataset(submissions_dataset)
+        specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+        if config['model_params'].get('use_redis', False):
+            publication_path = None
+        spec2_predictor.embed_publications(
+            specter_publication_path
+        )
+        spec2_predictor.embed_submissions(
+            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+        )
+        spec2_predictor.all_scores(
+            specter_publication_path,
+            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
+            Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+        )
+
+        if config['model_params'].get('sparse_value'):
+            spec2_predictor.sparse_scores(
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
+            )
+
     if config['model'] == 'mfr':
         from .models import multifacet_recommender
         mfr_predictor = multifacet_recommender.MultiFacetRecommender(
