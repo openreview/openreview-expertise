@@ -10,7 +10,8 @@ class Helpers:
     def create_user(email, first, last, alternates=[], institution=None):
         client = openreview.Client(baseurl = 'http://localhost:3000')
         assert client is not None, "Client is none"
-        res = client.register_user(email = email, first = first, last = last, password = Helpers.strong_password)
+        fullname = f'{first} {last}'
+        res = client.register_user(email=email, fullname=fullname, password=Helpers.strong_password)
         username = res.get('id')
         assert res, "Res i none"
         profile_content={
