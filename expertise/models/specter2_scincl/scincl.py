@@ -39,7 +39,7 @@ silent
 """
 class SciNCLPredictor:
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False):
+                 sparse_value=None, use_redis=False, dump_p2p=False):
         self.model_name = '' # TODO: Add SPECTER2 pointer
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -63,6 +63,7 @@ class SciNCLPredictor:
             self.redis = redisai.Client(connection_pool=redis_embeddings_pool)
         else:
             self.redis = None
+        self.dump_p2p = dump_p2p
 
         self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
         #load base model
@@ -133,9 +134,9 @@ class SciNCLPredictor:
                         self._remove_keys_from_cache(publication["id"])
                 else:
                     print(f"Skipping publication {publication['id']}. Either title or abstract must be provided ")
-        with open(os.path.join(self.work_dir, "specter_reviewer_paper_data.json"), 'w') as f_out:
+        with open(os.path.join(self.work_dir, "scincl_reviewer_paper_data.json"), 'w') as f_out:
             json.dump(output_dict, f_out, indent=1)
-        with open(os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt"), 'w') as f_out:
+        with open(os.path.join(self.work_dir, "scincl_reviewer_paper_ids.txt"), 'w') as f_out:
             f_out.write('\n'.join(paper_ids_list)+'\n')
 
     def set_submissions_dataset(self, submissions_dataset):
@@ -151,15 +152,15 @@ class SciNCLPredictor:
                                              "abstract": self.sub_note_id_to_abstract[submission['id']],
                                              "paper_id": submission["id"],
                                              "authors": []}
-        with open(os.path.join(self.work_dir, "specter_submission_paper_data.json"), 'w') as f_out:
+        with open(os.path.join(self.work_dir, "scincl_submission_paper_data.json"), 'w') as f_out:
             json.dump(output_dict, f_out, indent=1)
-        with open(os.path.join(self.work_dir, "specter_submission_paper_ids.txt"), 'w') as f_out:
+        with open(os.path.join(self.work_dir, "scincl_submission_paper_ids.txt"), 'w') as f_out:
             f_out.write('\n'.join(paper_ids_list)+'\n')
 
     def embed_submissions(self, submissions_path=None):
         print('Embedding submissions...')
-        metadata_file = os.path.join(self.work_dir, "specter_submission_paper_data.json")
-        ids_file = os.path.join(self.work_dir, "specter_submission_paper_ids.txt")
+        metadata_file = os.path.join(self.work_dir, "scincl_submission_paper_data.json")
+        ids_file = os.path.join(self.work_dir, "scincl_submission_paper_ids.txt")
 
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
@@ -175,8 +176,8 @@ class SciNCLPredictor:
         if not self.use_redis:
             assert publications_path, "Either publications_path must be given or use_redis must be set to true"
         print('Embedding publications...')
-        metadata_file = os.path.join(self.work_dir, "specter_reviewer_paper_data.json")
-        ids_file = os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt")
+        metadata_file = os.path.join(self.work_dir, "scincl_reviewer_paper_data.json")
+        ids_file = os.path.join(self.work_dir, "scincl_reviewer_paper_ids.txt")
 
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
@@ -188,7 +189,7 @@ class SciNCLPredictor:
         with open(publications_path, 'w') as f:
             f.writelines(pub_jsonl)
 
-    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
+    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None, p2p_path=None):
         def load_emb_file(emb_file):
             paper_emb_size_default = 768
             id_list = []
@@ -252,6 +253,15 @@ class SciNCLPredictor:
         p2p_aff = torch.empty((paper_num_test, paper_num_train), device=torch.device('cpu'))
         for i in range(paper_num_test):
             p2p_aff[i, :] = torch.sum(paper_emb_test[i, :].unsqueeze(dim=0) * paper_emb_train, dim=1)
+
+        if self.dump_p2p:
+            p2p_dict = {}
+            for i in range(paper_num_test):
+                p2p_dict[test_id_list[i]] = {}
+                for j in range(paper_num_train):
+                    p2p_dict[test_id_list[i]][train_id_list[j]] = float(p2p_aff[i, j])
+            with open(p2p_path, 'w') as f:
+                json.dump(p2p_dict, f, indent=4)
 
         # Compute the minimum and maximum values for each row
         min_values, _ = torch.min(p2p_aff, dim=1, keepdim=True)

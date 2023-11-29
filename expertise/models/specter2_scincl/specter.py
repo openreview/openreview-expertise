@@ -40,7 +40,7 @@ silent
 """
 class Specter2Predictor:
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False):
+                 sparse_value=None, use_redis=False, dump_p2p=False):
         self.model_name = '' # TODO: Add SPECTER2 pointer
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -64,6 +64,7 @@ class Specter2Predictor:
             self.redis = redisai.Client(connection_pool=redis_embeddings_pool)
         else:
             self.redis = None
+        self.dump_p2p = dump_p2p
 
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load base model
@@ -192,7 +193,7 @@ class Specter2Predictor:
         with open(publications_path, 'w') as f:
             f.writelines(pub_jsonl)
 
-    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
+    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None, p2p_path=None):
         def load_emb_file(emb_file):
             paper_emb_size_default = 768
             id_list = []
@@ -256,6 +257,15 @@ class Specter2Predictor:
         p2p_aff = torch.empty((paper_num_test, paper_num_train), device=torch.device('cpu'))
         for i in range(paper_num_test):
             p2p_aff[i, :] = torch.sum(paper_emb_test[i, :].unsqueeze(dim=0) * paper_emb_train, dim=1)
+
+        if self.dump_p2p:
+            p2p_dict = {}
+            for i in range(paper_num_test):
+                p2p_dict[test_id_list[i]] = {}
+                for j in range(paper_num_train):
+                    p2p_dict[test_id_list[i]][train_id_list[j]] = float(p2p_aff[i, j])
+            with open(p2p_path, 'w') as f:
+                json.dump(p2p_dict, f, indent=4)
         
         # Compute the minimum and maximum values for each row
         min_values, _ = torch.min(p2p_aff, dim=1, keepdim=True)
