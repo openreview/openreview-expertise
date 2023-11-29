@@ -10,7 +10,6 @@ import numpy as np
 from expertise.execute_expertise import execute_expertise
 
 from .goldstandard import GoldStandardEvaluator
-from .utils import *
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(levelname)s - %(message)s')
