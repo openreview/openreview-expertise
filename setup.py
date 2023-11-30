@@ -40,7 +40,8 @@ setup(
         'shortuuid',
         'redisai',
         'python-dotenv',
-        'importlib-metadata==4.13.0'
+        'importlib-metadata==4.13.0',
+        "Werkzeug==2.3.7"
     ],
     zip_safe=False
 )
