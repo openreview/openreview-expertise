@@ -831,7 +831,7 @@ class TestExpertiseService():
 
         openreview_context['job_id'] = job_id
 
-    def test_get_results_and_get_error(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_and_get_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
@@ -856,7 +856,9 @@ class TestExpertiseService():
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
         # Clean up error job by calling the delete endpoint
-        response = test_client.get('/expertise/delete', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+        response = test_client.post('/expertise/delete', data=json.dumps({'jobId': f"{openreview_context['job_id']}"}),
+            content_type='application/json',
+            headers=openreview_client.headers).json
         assert response['name'] == 'test_run'
         assert response['cdate'] <= response['mdate']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
@@ -894,7 +896,7 @@ class TestExpertiseService():
 
         openreview_context['job_id'] = job_id
 
-    def test_get_results_and_get_no_submission_error(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_and_get_no_submission_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
@@ -919,7 +921,10 @@ class TestExpertiseService():
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
         # Clean up error job by calling the delete endpoint
-        response = test_client.get('/expertise/delete', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+        response = test_client.post('/expertise/delete', data=json.dumps({'jobId': f"{openreview_context['job_id']}"}),
+            content_type='application/json',
+            headers=openreview_client.headers
+        ).json
         assert response['name'] == 'test_run'
         assert response['cdate'] <= response['mdate']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")

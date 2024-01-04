@@ -213,7 +213,7 @@ def all_jobs():
         flask.current_app.logger.error(str(error_handle))
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
-@BLUEPRINT.route('/expertise/delete', methods=['GET'])
+@BLUEPRINT.route('/expertise/delete', methods=['POST'])
 def delete_job():
     """
     Retrieves the config of a job to be deleted, and removes the job by deleting the job directory.
@@ -234,11 +234,11 @@ def delete_job():
 
     try:
         # Parse query parameters
-        job_id = flask.request.args.get('jobId', None)
+        job_id = flask.request.json.get('jobId', None)
         if job_id is None or len(job_id) == 0:
             raise openreview.OpenReviewException('Bad request: jobId is required')
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).del_expertise_job(user_id, job_id)
-        flask.current_app.logger.debug('GET returns ' + str(result))
+        flask.current_app.logger.debug('POST returns ' + str(result))
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
