@@ -59,25 +59,25 @@ def on_failure_expertise(self, exc, task_id, args, kwargs, einfo):
 
 def before_userpaper_start(self, task_id, args, kwargs):
     config, logger = args[0], args[2]
-    if config.status != JobStatus.ERROR:
+    if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
         logger.info(f"New status: {JobStatus.FETCHING_DATA}")
         update_status(args[0], JobStatus.FETCHING_DATA)
 
 def before_expertise_start(self, task_id, args, kwargs):
     config, logger = args[0], args[1]
-    if config.status != JobStatus.ERROR:
+    if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
         logger.info(f"New status: {JobStatus.RUN_EXPERTISE}")
         update_status(args[0], JobStatus.RUN_EXPERTISE)
 
 def after_userpaper_return(self, status, retval, task_id, args, kwargs, einfo):
     config, logger = args[0], args[2]
-    if config.status != JobStatus.ERROR:
+    if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
         logger.info(f"New status: {JobStatus.EXPERTISE_QUEUED}")
         update_status(args[0], JobStatus.EXPERTISE_QUEUED)
 
 def after_expertise_return(self, status, retval, task_id, args, kwargs, einfo):
     config, logger = args[0], args[1]
-    if config.status != JobStatus.ERROR:
+    if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
         logger.info(f"New status: {JobStatus.COMPLETED}")
         update_status(args[0], JobStatus.COMPLETED)
 
