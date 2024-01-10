@@ -34,6 +34,19 @@ def update_status(config, new_status, desc=None):
     redis_db = RedisDatabase(connection_pool=redis_config_pool)
     redis_db.save_job(config)
 
+def check_revoked(config: JobConfig):
+    """
+    Gets the status given a config - used to check for revoked status
+
+    :param config: JobConfig of a given job
+    :type config: JobConfig
+
+    :return True if revoked:
+    """
+    redis_db = RedisDatabase(connection_pool=redis_config_pool)
+    new_config = redis_db.load_job(config.job_id, config.user_id)
+    return new_config.status == JobStatus.REVOKED
+
 def on_failure_userpaper(self, exc, task_id, args, kwargs, einfo):
     config, logger = args[0], args[2]
     logger.error(f"Error in job: {config.job_id}, {str(exc)}")
@@ -76,8 +89,9 @@ def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger):
     logger.info('CREATING DATASET')
     execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
     run_expertise.apply_async(
-            (config, logger),
+            (config, logger, config.to_json()),
             queue='expertise',
+            task_id=config.job_id + '_expertise'
     )
     logger.info('FINISHED USERPAPER')
 
@@ -89,6 +103,7 @@ def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger):
     bind=True,
     time_limit=3600 * 24
 )
-def run_expertise(self, config: dict, logger: logging.Logger):
-    execute_expertise(config=config.to_json())
+def run_expertise(self, config: JobConfig, logger: logging.Logger, config_json: dict):
+    if not check_revoked(config):
+        execute_expertise(config=config.to_json())
 
