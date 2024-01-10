@@ -399,7 +399,8 @@ class ExpertiseService(object):
         :returns: Filtered config of the job to be deleted
         """
         config = self.redis.load_job(job_id, user_id)
-        
+        descriptions = JobDescription.VALS.value
+
         # Clear directory and Redis entry if not going to be processed anymore
         STALE_STATUSES = [JobStatus.COMPLETED, JobStatus.ERROR]
         if config.status in STALE_STATUSES:
@@ -410,8 +411,9 @@ class ExpertiseService(object):
                 self.logger.info(f"No files found - only removing Redis entry")
             self.redis.remove_job(user_id, job_id)
         else:
+            self.logger.info(f"Revoking {config.job_dir} for {user_id}")
             config.status = JobStatus.REVOKED
-            config.description = JobDescription[JobStatus.REVOKED]
+            config.description = descriptions[JobStatus.REVOKED]
             self.redis.save_job(config)
 
         # Return filtered config

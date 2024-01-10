@@ -8,6 +8,12 @@ from expertise.service.server import celery_app as celery_server
 from expertise.service.server import redis_config_pool
 import openreview, celery
 
+def get_config(config):
+    """
+    Get the latest config from Redis
+    """
+    return RedisDatabase(connection_pool=redis_config_pool).load_job(config.job_id, config.user_id)
+
 def update_status(config, new_status, desc=None):
     """
     Updates the config of a given job to the new status
@@ -60,38 +66,38 @@ def clean_revoked(config: JobConfig):
     redis_db.remove_job(config.user_id, config.job_id)
 
 def on_failure_userpaper(self, exc, task_id, args, kwargs, einfo):
-    config, logger = args[0], args[2]
+    config, logger = get_config(args[0]), args[2]
     logger.error(f"Error in job: {config.job_id}, {str(exc)}")
     update_status(config, JobStatus.ERROR, str(exc))
 
 def on_failure_expertise(self, exc, task_id, args, kwargs, einfo):
-    config, logger = args[0], args[1]
+    config, logger = get_config(args[0]), args[1]
     logger.error(f"Error in job: {config.job_id}, {str(exc)}")
     update_status(config, JobStatus.ERROR, str(exc))
 
 def before_userpaper_start(self, task_id, args, kwargs):
-    config, logger = args[0], args[2]
+    config, logger = get_config(args[0]), args[2]
     if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
         logger.info(f"New status: {JobStatus.FETCHING_DATA}")
-        update_status(args[0], JobStatus.FETCHING_DATA)
+        update_status(config, JobStatus.FETCHING_DATA)
 
 def before_expertise_start(self, task_id, args, kwargs):
-    config, logger = args[0], args[1]
+    config, logger = get_config(args[0]), args[1]
     if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
         logger.info(f"New status: {JobStatus.RUN_EXPERTISE}")
-        update_status(args[0], JobStatus.RUN_EXPERTISE)
+        update_status(config, JobStatus.RUN_EXPERTISE)
 
 def after_userpaper_return(self, status, retval, task_id, args, kwargs, einfo):
-    config, logger = args[0], args[2]
+    config, logger = get_config(args[0]), args[2]
     if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
         logger.info(f"New status: {JobStatus.EXPERTISE_QUEUED}")
-        update_status(args[0], JobStatus.EXPERTISE_QUEUED)
+        update_status(config, JobStatus.EXPERTISE_QUEUED)
 
 def after_expertise_return(self, status, retval, task_id, args, kwargs, einfo):
-    config, logger = args[0], args[1]
+    config, logger = get_config(args[0]), args[1]
     if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
         logger.info(f"New status: {JobStatus.COMPLETED}")
-        update_status(args[0], JobStatus.COMPLETED)
+        update_status(config, JobStatus.COMPLETED)
 
 @celery_server.task(
     name='userpaper',

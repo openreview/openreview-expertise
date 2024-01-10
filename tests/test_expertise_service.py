@@ -1063,21 +1063,36 @@ class TestExpertiseService():
         assert id_list is not None
         openreview_context['job_id'] = id_list
     
-    def test_fetch_high_load_results(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_fetch_high_load_results(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         MAX_TIMEOUT = 1200 # Timeout after 20 minutes
         assert openreview_context['job_id'] is not None
         id_list = openreview_context['job_id']
         num_requests = len(id_list)
         test_client = openreview_context['test_client']
+        second_last_job_id = id_list[num_requests - 2]
         last_job_id = id_list[num_requests - 1]
 
-        # Assert that the last request completes
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{last_job_id}'}).json
+        # Call delete on last job id which should revoke it
+        response = test_client.post('/expertise/delete', data=json.dumps({'jobId': str(last_job_id)}),
+            content_type='application/json',
+            headers=openreview_client.headers).json
+        print(response)
+
+        time.sleep(2)
+
+        response = test_client.get('/expertise/status', query_string={'jobId': str(last_job_id)}).json
+        assert response['name'] == 'test_run'
+        assert response['status'].strip() == 'Revoked'
+        assert response['description'] == "Job is revoked and will be cleaned up"
+        assert response['cdate'] <= response['mdate']
+
+        # Assert that the second to last request completes
+        response = test_client.get('/expertise/status', query_string={'jobId': f'{second_last_job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{last_job_id}'}).json
+            response = test_client.get('/expertise/status', query_string={'jobId': f'{second_last_job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
@@ -1087,7 +1102,7 @@ class TestExpertiseService():
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         # Now fetch and empty out all previous jobs
-        for id in id_list:
+        for id in id_list[:-1]:
             # Assert that they are complete
             response = test_client.get('/expertise/status', query_string={'jobId': f'{id}'}).json
             assert response['status'] == 'Completed'
@@ -1105,6 +1120,12 @@ class TestExpertiseService():
                 assert profile_id.startswith('~')
                 assert score >= 0 and score <= 1
             assert not os.path.isdir(f"./tests/jobs/{id}")
+
+        # Check for job and directory of last job
+        time.sleep(0.5)
+        response = test_client.get('/expertise/status', query_string={'jobId': str(last_job_id)}).json
+        assert 'NotFound' in response['name']
+        assert not os.path.isdir(f"./tests/jobs/{last_job_id}")
 
     def test_request_group_group(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Test group-group without any expertise selection
