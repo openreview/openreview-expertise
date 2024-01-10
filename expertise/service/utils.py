@@ -163,7 +163,10 @@ class RedisDatabase(object):
         else:
             self.db = redis.Redis(connection_pool=connection_pool)
     def save_job(self, job_config):
+        job_config.mdate = int(time.time() * 1000)
         self.db.set(f"job:{job_config.job_id}", pickle.dumps(job_config))
+        with open(os.path.join(job_config.job_dir, 'config.json'), 'w+') as f:
+            json.dump(job_config.to_json(), f, ensure_ascii=False, indent=4)
     
     def load_all_jobs(self, user_id):
         """
