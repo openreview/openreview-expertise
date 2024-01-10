@@ -57,11 +57,23 @@ def on_failure_expertise(self, exc, task_id, args, kwargs, einfo):
     logger.error(f"Error in job: {config.job_id}, {str(exc)}")
     update_status(config, JobStatus.ERROR, str(exc))
 
-def after_userpaper_return(self, status, retval, task_id, args, kwargs, einfo):
+def before_userpaper_start(self, task_id, args, kwargs):
     config, logger = args[0], args[2]
+    if config.status != JobStatus.ERROR:
+        logger.info(f"New status: {JobStatus.FETCHING_DATA}")
+        update_status(args[0], JobStatus.FETCHING_DATA)
+
+def before_expertise_start(self, task_id, args, kwargs):
+    config, logger = args[0], args[1]
     if config.status != JobStatus.ERROR:
         logger.info(f"New status: {JobStatus.RUN_EXPERTISE}")
         update_status(args[0], JobStatus.RUN_EXPERTISE)
+
+def after_userpaper_return(self, status, retval, task_id, args, kwargs, einfo):
+    config, logger = args[0], args[2]
+    if config.status != JobStatus.ERROR:
+        logger.info(f"New status: {JobStatus.EXPERTISE_QUEUED}")
+        update_status(args[0], JobStatus.EXPERTISE_QUEUED)
 
 def after_expertise_return(self, status, retval, task_id, args, kwargs, einfo):
     config, logger = args[0], args[1]
@@ -71,6 +83,7 @@ def after_expertise_return(self, status, retval, task_id, args, kwargs, einfo):
 
 @celery_server.task(
     name='userpaper',
+    before_start=before_userpaper_start,
     after_return=after_userpaper_return,
     on_failure=on_failure_userpaper,
     track_started=True,
@@ -97,6 +110,7 @@ def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger, c
 
 @celery_server.task(
     name='expertise',
+    before_start=before_expertise_start,
     after_return=after_expertise_return,
     on_failure=on_failure_expertise,
     track_started=True,
