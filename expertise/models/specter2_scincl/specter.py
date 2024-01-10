@@ -272,7 +272,7 @@ class Specter2Predictor:
         max_values, _ = torch.max(p2p_aff, dim=1, keepdim=True)
 
         # Normalize each row to span the range between 0 and 1
-        #p2p_aff = (p2p_aff - min_values) / (max_values - min_values)
+        p2p_aff = (p2p_aff - min_values) / (max_values - min_values)
 
         csv_scores = []
         self.preliminary_scores = []
