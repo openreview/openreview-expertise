@@ -47,6 +47,18 @@ def check_revoked(config: JobConfig):
     new_config = redis_db.load_job(config.job_id, config.user_id)
     return new_config.status == JobStatus.REVOKED
 
+def clean_revoked(config: JobConfig):
+    """
+    Deletes the data for a revoked job
+
+    :param config: JobConfig of a given job
+    :type config: JobConfig
+    """
+    redis_db = RedisDatabase(connection_pool=redis_config_pool)
+    if os.path.isdir(config.job_dir):
+        shutil.rmtree(config.job_dir)
+    redis_db.remove_job(config.user_id, config.job_id)
+
 def on_failure_userpaper(self, exc, task_id, args, kwargs, einfo):
     config, logger = args[0], args[2]
     logger.error(f"Error in job: {config.job_id}, {str(exc)}")
@@ -118,6 +130,11 @@ def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger, c
     time_limit=3600 * 24
 )
 def run_expertise(self, config: JobConfig, logger: logging.Logger, config_json: dict):
+    # Run if not revoked
     if not check_revoked(config):
         execute_expertise(config=config.to_json())
 
+    # If revoked while running, or revoked at all, clean up job
+    if check_revoked(config):
+        logger.info(f"Deleting {config.job_dir} for {config.user_id}")
+        clean_revoked(config)
