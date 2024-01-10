@@ -77,7 +77,7 @@ def after_expertise_return(self, status, retval, task_id, args, kwargs, einfo):
     bind=True,
     time_limit=3600 * 24
 )
-def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger):
+def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger, config_json: dict):
     openreview_client = openreview.Client(
         token=token,
         baseurl=config.baseurl

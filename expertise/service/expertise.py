@@ -155,7 +155,7 @@ class ExpertiseService(object):
         # Config has passed validation - add it to the user index
         self.logger.info('just before submitting')
         run_userpaper.apply_async(
-            (config, token, self.logger),
+            (config, token, self.logger, config.to_json()),
             queue='userpaper',
             task_id=job_id
         )
