@@ -400,13 +400,19 @@ class ExpertiseService(object):
         """
         config = self.redis.load_job(job_id, user_id)
         
-        # Clear directory and Redis entry
-        self.logger.info(f"Deleting {config.job_dir} for {user_id}")
-        if os.path.isdir(config.job_dir):
-            shutil.rmtree(config.job_dir)
+        # Clear directory and Redis entry if not going to be processed anymore
+        STALE_STATUSES = [JobStatus.COMPLETED, JobStatus.ERROR]
+        if config.status in STALE_STATUSES:
+            self.logger.info(f"Deleting {config.job_dir} for {user_id}")
+            if os.path.isdir(config.job_dir):
+                shutil.rmtree(config.job_dir)
+            else:
+                self.logger.info(f"No files found - only removing Redis entry")
+            self.redis.remove_job(user_id, job_id)
         else:
-            self.logger.info(f"No files found - only removing Redis entry")
-        self.redis.remove_job(user_id, job_id)
+            config.status = JobStatus.REVOKED
+            config.description = JobDescription[JobStatus.REVOKED]
+            self.redis.save_job(config)
 
         # Return filtered config
         self._filter_config(config)
