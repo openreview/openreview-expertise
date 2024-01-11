@@ -118,4 +118,4 @@ def test_sparse_scores(tmp_path, create_specncl):
             scores_path=scores_path.joinpath(config['name'] + '_sparse.csv')
         )
 
-    assert len(all_scores) == 7
+    assert len(all_scores) == 8
