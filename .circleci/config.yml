@@ -71,7 +71,7 @@ jobs:
             python setup.py install
             conda install -y filelock
             cd ..
-            wget --load-cookies /tmp/cookies.txt "https://drive.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://drive.google.com/uc?export=download&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s" -O mfr.tar.gz && rm -rf /tmp/cookies.txt
+            wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
             tar -xzvf mfr.tar.gz
             mv ./multifacet_recommender_data ./multifacet_recommender
             cd ~/openreview-expertise
