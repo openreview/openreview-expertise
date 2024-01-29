@@ -8,7 +8,7 @@ If you plan to use expertise regularly, please consider installing [RedisAI](htt
 
 ## Installation
 
-This repository only supports Python 3.6 and above.
+This repository only supports Python 3.6 and above. Python 3.8 and above is required to run SPECTER2
 Clone this repository and install the package using pip as follows. If you plan to use ELMo, then you will need to install [Miniconda](https://docs.conda.io/en/latest/miniconda.html), since one of the packages is only available in conda. You may use the `pip` command in a conda environment as long as you first run all the pip installs and then conda installs. Just follow the order of the commands shown below and it should work. You may read more about this [here](https://www.anaconda.com/using-pip-in-a-conda-environment/).
 
 Run this command only if you are using conda:
@@ -52,6 +52,7 @@ pip install -r requirements.txt
 python setup.py install
 conda install filelock
 cd ..
+pip install -I protobuf==3.20.1
 pip install numpy==1.24.4 --force-reinstall
 ```
 Pass the path to the cloned GitHub repository as `model_params.specter_dir`. 
