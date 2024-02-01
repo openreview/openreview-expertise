@@ -267,12 +267,10 @@ class Specter2Predictor:
             with open(p2p_path, 'w') as f:
                 json.dump(p2p_dict, f, indent=4)
         
-        # Compute the minimum and maximum values for each row
-        min_values, _ = torch.min(p2p_aff, dim=1, keepdim=True)
-        max_values, _ = torch.max(p2p_aff, dim=1, keepdim=True)
-
-        # Normalize each row to span the range between 0 and 1
-        p2p_aff = (p2p_aff - min_values) / (max_values - min_values)
+        # Normalize all scores
+        min_val = p2p_aff.min()
+        max_val = p2p_aff.max()
+        p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
 
         csv_scores = []
         self.preliminary_scores = []
@@ -283,7 +281,7 @@ class Specter2Predictor:
             for paper_id in train_note_id_list:
                 if paper_id not in train_bad_id_set:
                     train_paper_idx.append(paper_id2train_idx[paper_id])
-            train_paper_aff_j = p2p_aff[:, train_paper_idx]
+            train_paper_aff_j = p2p_aff_norm[:, train_paper_idx]
 
             if self.average_score:
                 all_paper_aff = train_paper_aff_j.mean(dim=1)
