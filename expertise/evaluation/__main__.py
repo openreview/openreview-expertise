@@ -32,20 +32,65 @@ if __name__ == '__main__':
                 'settings': {
                     'folds': 5,
                     'samples': 10,
-                    'num_hyperparameter_samples': 2,
+                    'num_hyperparameter_samples': 50,
+                    'results_file': os.path.join(args.expertise_dir, 'expertise/evaluation/results.json')
                 },
                 'objective': {
-                    'minimize': 'loss'
+                    'type': 'maximize',
+                    'function': lambda x: (x['metrics']['easy']['point'] + x['metrics']['hard']['point'])
                 },
                 'hyperparameters': {
                     'merge': {
-                        'min': 0.2,
+                        'min': 0,
                         'max': 1
                     },
                     'select': {
-                        'type': ['max', 'avg'],
+                        'type': 'avg',
                         'min': 1,
-                        'max': 5
+                        'max': 10
+                    }
+                }
+            }
+        },
+        'use_cuda': True,
+        'skip': {
+            'dataset': {
+                'goldstandard': True
+            },
+            'embedding': {
+                'specter2': True,
+                'scincl': True
+            }
+        },
+    }
+
+    or_config = {
+        'datasets': ['goldstandard'],
+        'configs': {
+            'goldstandard': config
+        },
+        'models': ['specter2', 'scincl'],
+        'evaluate': {
+            'goldstandard': {
+                'type': 'validate',
+                'settings': {
+                    'settings_file': os.path.join(args.expertise_dir, 'expertise/evaluation/best_settings.json'),
+                    'results_file': os.path.join(args.expertise_dir, 'expertise/evaluation/results.json'),
+                    'results_dir': os.path.join(args.expertise_dir, 'expertise/evaluation/results')
+                },
+                'objective': {
+                    'type': 'maximize',
+                    'function': lambda x: (x['metrics']['easy']['point'] + x['metrics']['hard']['point'])
+                },
+                'hyperparameters': {
+                    'merge': {
+                        'min': 0,
+                        'max': 1
+                    },
+                    'select': {
+                        'type': 'avg',
+                        'min': 1,
+                        'max': 10
                     }
                 }
             }
