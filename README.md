@@ -75,6 +75,32 @@ https://www.overleaf.com/read/ygmygwtjbzfg
 
 https://www.overleaf.com/read/swqrxgqqvmyv
 
+The following instructions are all of the commands to install the dependencies used by this repository - this follows the same commands listed above:
+```
+conda update -y conda
+conda create -n expertise python=$PYTHON_VERSION -c conda-forge
+conda activate expertise
+mkdir ~/expertise-utils
+cd ~/expertise-utils
+git clone https://github.com/allenai/specter.git
+cd specter
+wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
+tar -xzvf archive.tar.gz
+conda install pytorch cudatoolkit=10.1 -c pytorch 
+pip install -r requirements.txt
+python setup.py install
+conda install -y filelock
+cd ..
+wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
+tar -xzvf mfr.tar.gz
+mv ./multifacet_recommender_data ./multifacet_recommender
+cd ~/openreview-expertise
+pip install -e .
+conda install -y intel-openmp==2019.4
+conda install -y faiss-cpu==1.7.3 -c pytorch
+pip install -I protobuf==3.20.1
+pip install numpy==1.24.4 --force-reinstall
+```
 ## Affinity Scores
 
 There are two steps to create affinity scores:
