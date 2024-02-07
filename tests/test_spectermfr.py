@@ -74,7 +74,6 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
         }
     }
 
-    redis_con = redisai.Client(host='localhost', port=6379, db=11)
     specterModel = create_specter(config)
     smfrModel = create_smfr(config)
 
@@ -82,7 +81,8 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
     publications_path.mkdir()
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
-    smfrModel.embed_publications(mfr_publications_path=None,
+    smfrModel.embed_publications(specter_publications_path=publications_path,
+                                 mfr_publications_path=None,
                                  skip_specter=config['model_params'].get('skip_specter', False))
     smfrModel.embed_submissions(submissions_path.joinpath('sub2vec.jsonl'),
             mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
@@ -120,7 +120,8 @@ def test_sparse_scores(tmp_path, create_smfr):
     publications_path.mkdir()
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
-    smfrModel.embed_publications(mfr_publications_path=None,
+    smfrModel.embed_publications(specter_publications_path=publications_path,
+                                 mfr_publications_path=None,
                                  skip_specter=config['model_params'].get('skip_specter', False))
     smfrModel.embed_submissions(submissions_path.joinpath('sub2vec.jsonl'),
             mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
