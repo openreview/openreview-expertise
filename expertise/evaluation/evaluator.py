@@ -173,29 +173,29 @@ class OpenReviewExpertiseEvaluation(object):
                                             reviewer_scores[reviewer][submission] = max(sorted_scores[: min(select, len(sorted_scores))])
                                 all_sample_reviewer_scores.append(reviewer_scores)
 
-                        # Pass to evaluation script and store metrics
-                        logging.info(f"Computing metrics...")
-                        metrics = evaluator.compute_metrics('train', fold_number=fold_num, prediction_dicts=all_sample_reviewer_scores)
-                        logging.info(metrics)
-                        all_metrics.append({
-                            'hyperparameter': hyperparameter_sample,
-                            'metrics': metrics
-                        })
+                            # Pass to evaluation script and store metrics
+                            logging.info(f"Computing metrics...")
+                            metrics = evaluator.compute_metrics('train', fold_number=fold_num, prediction_dicts=all_sample_reviewer_scores)
+                            logging.info(metrics)
+                            all_metrics.append({
+                                'hyperparameter': hyperparameter_sample,
+                                'metrics': metrics
+                            })
 
-                        # Write to file periodically
-                        if os.path.isfile(intermediate_file):
-                            with open(intermediate_file, 'r') as f:
-                                intermediate = json.load(f)
-                        else:
-                            intermediate = {}
-                        if f"fold{fold_num}" not in intermediate.keys():
-                            intermediate[f"fold{fold_num}"] = {'train': []}
-                        intermediate[f"fold{fold_num}"]['train'].append({
-                            'hyperparameter': hyperparameter_sample,
-                            'metrics': metrics
-                        })
-                        with open(intermediate_file, 'w') as f:
-                            json.dump(intermediate, f, indent=4)
+                            # Write to file periodically
+                            if os.path.isfile(intermediate_file):
+                                with open(intermediate_file, 'r') as f:
+                                    intermediate = json.load(f)
+                            else:
+                                intermediate = {}
+                            if f"fold{fold_num}" not in intermediate.keys():
+                                intermediate[f"fold{fold_num}"] = {'train': [], 'test': []}
+                            intermediate[f"fold{fold_num}"]['train'].append({
+                                'hyperparameter': hyperparameter_sample,
+                                'metrics': metrics
+                            })
+                            with open(intermediate_file, 'w') as f:
+                                json.dump(intermediate, f, indent=4)
 
                     if skip_search: # TODO: Remove duplicated code
                         with open(settings_file, 'r') as f:

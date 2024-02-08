@@ -32,7 +32,7 @@ if __name__ == '__main__':
                 'settings': {
                     'folds': 5,
                     'samples': 10,
-                    'num_hyperparameter_samples': 50,
+                    'num_hyperparameter_samples': 350,
                     'results_file': os.path.join(args.expertise_dir, 'expertise/evaluation/results.json')
                 },
                 'objective': {
@@ -63,8 +63,10 @@ if __name__ == '__main__':
             }
         },
     }
+    eval = OpenReviewExpertiseEvaluation(or_config)
+    eval.run()
 
-    or_config = {
+'''or_config = {
         'datasets': ['goldstandard'],
         'configs': {
             'goldstandard': config
@@ -105,7 +107,4 @@ if __name__ == '__main__':
                 'scincl': True
             }
         },
-    }
-
-    eval = OpenReviewExpertiseEvaluation(or_config)
-    eval.run()
+    }'''
