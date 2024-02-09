@@ -28,7 +28,7 @@ If you plan to actively develop models, it's best to install the package in "edi
 pip install -e <location of this repository>
 ```
 
-Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR) or SPECTER+MFR with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
+Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR), SPECTER+MFR, SPECTER2+SciNCL with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
 
 We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
 
@@ -57,7 +57,7 @@ pip install numpy==1.24.4 --force-reinstall
 ```
 Pass the path to the cloned GitHub repository as `model_params.specter_dir`. 
 
-If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint files from [here](https://drive.google.com/file/d/1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s/view?usp=sharing), extract it, and pass the paths:
+If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint files from [here](https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz), extract it, and pass the paths:
 ```
 "feature_vocab_file": <path_to_untarred_dir>/feature_vocab_file,
 "model_checkpoint_dir": <path_to_untarred_dir>/mfr_model_checkpoint/
@@ -75,13 +75,13 @@ https://www.overleaf.com/read/ygmygwtjbzfg
 
 https://www.overleaf.com/read/swqrxgqqvmyv
 
-The following instructions are all of the commands to install the dependencies used by this repository - this follows the same commands listed above:
+The following instructions are all of the commands to install the dependencies used by this repository - this follows the same commands listed above and assumes you start in the `openreview-expertise` directory after cloning it:
 ```
 conda update -y conda
 conda create -n expertise python=$PYTHON_VERSION -c conda-forge
 conda activate expertise
-mkdir ~/expertise-utils
-cd ~/expertise-utils
+mkdir ../expertise-utils
+cd ../expertise-utils
 git clone https://github.com/allenai/specter.git
 cd specter
 wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
