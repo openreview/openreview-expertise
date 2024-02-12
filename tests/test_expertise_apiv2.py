@@ -574,3 +574,14 @@ class TestExpertiseV2():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        response = test_client.get('/expertise/results', query_string={'jobId': f'{job_id}'})
+        metadata = response.json['metadata']
+        response = response.json['results']
+        for item in response:
+            print(item)
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            assert len(submission_id) >= 1
+            assert len(profile_id) >= 1
+            assert profile_id.startswith('~')
+            assert score >= 0 and score <= 1
