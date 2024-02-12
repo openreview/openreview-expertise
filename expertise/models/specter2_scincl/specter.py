@@ -13,6 +13,7 @@ import numpy as np
 
 from transformers import AutoTokenizer, AutoModel
 from transformers.adapters import AutoAdapterModel
+from .predictor import Predictor
 
 from expertise.service.server import redis_embeddings_pool
 
@@ -38,10 +39,10 @@ output-file: $SPECTER_TRAIN_EMB_RAW
 batch-size: 16
 silent
 """
-class Specter2Predictor:
+class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False, dump_p2p=False):
-        self.model_name = '' # TODO: Add SPECTER2 pointer
+        self.model_name = 'specter2'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
@@ -299,24 +300,6 @@ class Specter2Predictor:
                     f.write(csv_line + '\n')
 
         return self.preliminary_scores
-
-    def _sparse_scores_helper(self, all_scores, id_index):
-        counter = 0
-        # Get the first note_id or profile_id
-        current_id = self.preliminary_scores[0][id_index]
-        if id_index == 0:
-            desc = 'Note IDs'
-        else:
-            desc = 'Profiles IDs'
-        for note_id, profile_id, score in tqdm(self.preliminary_scores, total=len(self.preliminary_scores), desc=desc):
-            if counter < self.sparse_value:
-                all_scores.add((note_id, profile_id, score))
-            elif (note_id, profile_id)[id_index] != current_id:
-                counter = 0
-                all_scores.add((note_id, profile_id, score))
-                current_id = (note_id, profile_id)[id_index]
-            counter += 1
-        return all_scores
 
     def sparse_scores(self, scores_path=None):
         if self.preliminary_scores is None:
