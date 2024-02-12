@@ -119,3 +119,9 @@ def test_sparse_scores(tmp_path, create_specncl):
         )
 
     assert len(all_scores) == 8
+    for row in all_scores:
+        submission_id, profile_id, score = row[0], row[1], float(row[2])
+        assert len(submission_id) >= 1
+        assert len(profile_id) >= 1
+        assert profile_id.startswith('~')
+        assert score >= 0 and score <= 1
