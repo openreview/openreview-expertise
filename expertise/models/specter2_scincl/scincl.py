@@ -60,10 +60,7 @@ class SciNCLPredictor(Predictor):
         if not os.path.exists(self.work_dir) and not os.path.isdir(self.work_dir):
             os.makedirs(self.work_dir)
         self.use_redis = use_redis
-        if use_redis:
-            self.redis = redisai.Client(connection_pool=redis_embeddings_pool)
-        else:
-            self.redis = None
+        self.redis = None
         self.dump_p2p = dump_p2p
 
         self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
@@ -213,32 +210,9 @@ class SciNCLPredictor(Predictor):
             print(len(bad_id_set))
             return emb_tensor, id_list, bad_id_set
 
-        def load_from_redis():
-            paper_emb_size_default = 768
-            id_list = self.pub_note_id_to_title.keys()
-            emb_list = []
-            bad_id_set = set()
-            for paper_id in id_list:
-                try:
-                    paper_emb = self.redis.tensorget(key=self.pub_note_id_to_cache_key[paper_id], as_numpy_mutable=True)
-                    assert len(paper_emb) == paper_emb_size_default
-                    emb_list.append(paper_emb)
-                except Exception as e:
-                    bad_id_set.add(paper_id)
-
-            emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
-            emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
-            if bad_id_set:
-                print(f"No Embedding found for {len(bad_id_set)} Papers: ")
-                print(bad_id_set)
-            return emb_tensor, id_list, bad_id_set
-
         print('Loading cached publications...')
-        if self.use_redis:
-            paper_emb_train, train_id_list, train_bad_id_set = load_from_redis()
-        else:
-            with open(publications_path) as f_in:
-                paper_emb_train, train_id_list, train_bad_id_set = load_emb_file(f_in)
+        with open(publications_path) as f_in:
+            paper_emb_train, train_id_list, train_bad_id_set = load_emb_file(f_in)
         paper_num_train = len(train_id_list)
 
         paper_id2train_idx = {}
