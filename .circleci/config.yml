@@ -25,7 +25,7 @@ jobs:
           transport.host: localhost
           TZ: "Etc/UTC"
     environment:
-      PYTHON_VERSION: 3.7
+      PYTHON_VERSION: 3.8
     steps:
       - checkout
       - run:
@@ -40,8 +40,8 @@ jobs:
             apt install -y sudo
             DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
             cd $HOME
-            wget "https://repo.anaconda.com/miniconda/Miniconda3-py37_22.11.1-1-Linux-x86_64.sh" -O miniconda.sh
-            printf '%s' "22b14d52265b4e609c6ce78e2f2884b277d976b83b5f9c8a83423e3eba2ccfbe  miniconda.sh" | sha256sum -c
+            wget "https://repo.anaconda.com/miniconda/Miniconda3-py38_22.11.1-1-Linux-x86_64.sh" -O miniconda.sh
+            printf '%s' "473e5ecc8e078e9ef89355fbca21f8eefa5f9081544befca99867c7beac3150d  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
       - run:
           name: Install Node
@@ -71,14 +71,15 @@ jobs:
             python setup.py install
             conda install -y filelock
             cd ..
-            wget --load-cookies /tmp/cookies.txt "https://drive.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://drive.google.com/uc?export=download&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s" -O mfr.tar.gz && rm -rf /tmp/cookies.txt
+            wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
             tar -xzvf mfr.tar.gz
             mv ./multifacet_recommender_data ./multifacet_recommender
             cd ~/openreview-expertise
             pip install -e .
             conda install -y intel-openmp==2019.4
-            conda install -y faiss-cpu -c pytorch
+            conda install -y faiss-cpu==1.7.3 -c pytorch
             pip install -I protobuf==3.20.1
+            pip install numpy==1.24.4 --force-reinstall
       - run:
           name: Initialize replica set
           command: |
