@@ -43,7 +43,7 @@ setup(
         'redisai',
         'python-dotenv',
         'importlib-metadata==4.13.0',
-        'werkzeug==2.2.2',
+        'werkzeug==2.3.8',
         'adapter-transformers'
     ],
     zip_safe=False
