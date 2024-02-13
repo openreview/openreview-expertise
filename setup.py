@@ -32,7 +32,7 @@ setup(
         'rank_bm25',
         'pytest',
         'overrides==2.8.0',
-        'flask==2.2.2',
+        'flask==2.2.5',
         'flask-cors==3.0.9',
         'cffi>=1.0.0',
         'celery==5.2.7',
