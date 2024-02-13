@@ -100,6 +100,108 @@ def execute_expertise(config):
                 scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
+    if config['model'] == 'specter2+scincl':
+        from .models import specter2_scincl
+        ens_predictor = specter2_scincl.EnsembleModel(
+            specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
+            work_dir=config['model_params'].get('work_dir', "./"),
+            average_score=config['model_params'].get('average_score', False),
+            max_score=config['model_params'].get('max_score', True),
+            specter_batch_size=config['model_params'].get('batch_size', 16),
+            use_cuda=config['model_params'].get('use_cuda', False),
+            sparse_value=config['model_params'].get('sparse_value')
+        )
+        ens_predictor.set_archives_dataset(archives_dataset)
+        ens_predictor.set_submissions_dataset(submissions_dataset)
+        specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_specter.jsonl')
+        scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_scincl.jsonl')
+        ens_predictor.embed_publications(
+            specter_publications_path=specter_publication_path,
+            scincl_publications_path=scincl_publication_path
+        )
+        ens_predictor.embed_submissions(
+            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
+            scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl')
+        )
+        ens_predictor.all_scores(
+            specter_publications_path=specter_publication_path,
+            scincl_publications_path=scincl_publication_path,
+            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
+            scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl'),
+            scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+        )
+
+        if config['model_params'].get('sparse_value'):
+            ens_predictor.sparse_scores(
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
+            )
+
+    if config['model'] == 'scincl':
+        from .models import specter2_scincl
+        scincl_predictor = specter2_scincl.SciNCLPredictor(
+            specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
+            work_dir=config['model_params'].get('work_dir', "./"),
+            average_score=config['model_params'].get('average_score', False),
+            max_score=config['model_params'].get('max_score', True),
+            batch_size=config['model_params'].get('batch_size', 16),
+            use_cuda=config['model_params'].get('use_cuda', False),
+            sparse_value=config['model_params'].get('sparse_value'),
+            dump_p2p=config['model_params'].get('dump_p2p', False)
+        )
+        scincl_predictor.set_archives_dataset(archives_dataset)
+        scincl_predictor.set_submissions_dataset(submissions_dataset)
+        scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+        scincl_predictor.embed_publications(
+            scincl_publication_path
+        )
+        scincl_predictor.embed_submissions(
+            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+        )
+        scincl_predictor.all_scores(
+            scincl_publication_path,
+            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
+            Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'),
+            p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
+        )
+
+        if config['model_params'].get('sparse_value'):
+            scincl_predictor.sparse_scores(
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
+            )
+
+    if config['model'] == 'specter2':
+        from .models import specter2_scincl
+        spec2_predictor = specter2_scincl.Specter2Predictor(
+            specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
+            work_dir=config['model_params'].get('work_dir', "./"),
+            average_score=config['model_params'].get('average_score', False),
+            max_score=config['model_params'].get('max_score', True),
+            batch_size=config['model_params'].get('batch_size', 16),
+            use_cuda=config['model_params'].get('use_cuda', False),
+            sparse_value=config['model_params'].get('sparse_value'),
+            dump_p2p=config['model_params'].get('dump_p2p', False)
+        )
+        spec2_predictor.set_archives_dataset(archives_dataset)
+        spec2_predictor.set_submissions_dataset(submissions_dataset)
+        specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+        spec2_predictor.embed_publications(
+            specter_publication_path
+        )
+        spec2_predictor.embed_submissions(
+            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+        )
+        spec2_predictor.all_scores(
+            specter_publication_path,
+            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
+            Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'),
+            p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
+        )
+
+        if config['model_params'].get('sparse_value'):
+            spec2_predictor.sparse_scores(
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
+            )
+
     if config['model'] == 'mfr':
         from .models import multifacet_recommender
         mfr_predictor = multifacet_recommender.MultiFacetRecommender(

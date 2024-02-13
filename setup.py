@@ -13,10 +13,11 @@ setup(
     ],
     install_requires=[
         'openreview-py>=1.0.1',
-        'numpy',
+        'numpy==1.24.4',
+        'scipy==1.10.1',
         'pandas',
         'nltk',
-        'gensim',
+        'gensim==4.1.2',
         'torch',
         'cloudpickle',
         'scikit-learn',
@@ -31,16 +32,19 @@ setup(
         'rank_bm25',
         'pytest',
         'overrides==2.8.0',
-        'flask',
+        'flask==2.2.2',
         'flask-cors==3.0.9',
         'cffi>=1.0.0',
-        'celery',
+        'celery==5.2.7',
+        "kombu>=5.3.0,<6.0",
         'redis',
         'pytest-celery',
         'shortuuid',
         'redisai',
         'python-dotenv',
-        'importlib-metadata==4.13.0'
+        'importlib-metadata==4.13.0',
+        'werkzeug==2.2.2',
+        'adapter-transformers'
     ],
     zip_safe=False
 )
