@@ -2,6 +2,29 @@
 
 A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
 
+## Model Descriptions
+
+**SPECTER - SPECTER: Document-level Representation Learning using Citation-informed Transformers (2020)**
+
+SPECTER is a BERT-based document encoder for scientific articles using titles and abstracts. SPECTER is first initialized using SciBERT as a scientific-text specific starting point and uses inter-document citation graph information to learn a general-purpose embedding. During training, SPECTER sees 3 papers: a query paper, a paper cited by the query for a positive example, and a paper cited by the positive example but not the query. SPECTER learns to group together documents where one document cites the other and separate documents that are farther away on the citation graph. SPECTER can be used for inference without any additional citation information.
+
+**Multi-facet Recommender (MFR) - Cold-start Paper Recommendation using Multi-facet Embedding (2021)**
+
+Multi-facet Recommender (MFR) is a transformer-based recommendation system for scientific papers. The core principle is that articles can have several different key areas whose information is lost when compressing the title and abstract into a single embedding. Papers in MFR are represented with multiple vectors called facets. Authors are built by minimizing the distance between the author representation and all facets of each of their publications. A recommendation is made by scoring the author against the most similar facet of a venue’s submission.
+
+Specter + MFR are ensembled at the reviewer-paper affinity score level with a weight of 0.8 on SPECTER and 0.2 on MFR.
+
+**SPECTER2 - SciRepEval: A Multi-Format Benchmark for Scientific Document Representations (2022, model updated with papers from 2023)**
+
+SPECTER2’s underlying architecture is very similar to SPECTER, but pre-trained on a larger set of documents spanning a broader number of fields of study. This pre-trained model is SPECTER2 base, further training is done to learn task format-specific adapter layers and attention modules as a middle ground between using a single embedding for all downstream tasks and specific embeddings per task. We use the proximity adapter for paper recommendation, where the training objective is the same triplet loss as the pre-training objective, as well as the original SPECTER objective.
+
+**SciNCL - Neighborhood Contrastive Learning for Scientific Document Representations with Citation Embeddings (2022)**
+
+SciNCL is another transformer-based document encoder initialized on SciBERT. SciNCL looks to address some key design choices in the SPECTER models training procedure. While they share the same triplet-loss objective, SPECTER uses the discrete citations, which may miss similar papers but were not cited and may reflect citation policy rather than pure similarity, and unidirectional citations, which can cause a paper to be both a positive and negative example. SciNCL first trains embeddings over the citation graph to move the embeddings into a continuous space, and uses nearest neighbors of a query document to determine its triplets for training.
+
+Specter2 + SciNCL are ensembled at the paper-paper similarity level with equal weights of 0.5 on each model.
+
+
 ## Installation
 
 This repository only supports Python 3.6 and above. Python 3.8 and above is required to run SPECTER2
