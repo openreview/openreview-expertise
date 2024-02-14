@@ -2,10 +2,6 @@
 
 A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
 
-## Prerequisites (Optional)
-
-If you plan to use expertise regularly, please consider installing [RedisAI](https://oss.redis.com/redisai/) to make the runs more efficient. We recommend to use Docker image `redislabs/redisai`, however you can install it directly from the source code as explained [here](https://oss.redis.com/redisai/quickstart/).
-
 ## Installation
 
 This repository only supports Python 3.6 and above. Python 3.8 and above is required to run SPECTER2
