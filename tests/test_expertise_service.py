@@ -1,5 +1,6 @@
 from unittest.mock import patch, MagicMock
 import random
+import logging
 from pathlib import Path
 import openreview
 import sys
@@ -12,8 +13,8 @@ import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import elmo
-from expertise.service.utils import JobConfig, RedisDatabase
-
+from expertise.service.utils import JobStatus, JobConfig, RedisDatabase
+from expertise.service.celery_tasks import run_userpaper
 
 class TestExpertiseService():
 
@@ -128,8 +129,27 @@ class TestExpertiseService():
         returned_config = redis.load_job(test_config.job_id, 'test_user1@mail.com')
         assert returned_config.user_id == 'test_user1@mail.com'
         assert returned_config.job_id == 'abcde'
+        redis.remove_job('test_user1@mail.com', 'abcde')
 
-        shutil.rmtree(f"./tests/jobs/")
+        # Create a config with running status
+        test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com', status=JobStatus.RUN_EXPERTISE)
+        redis.save_job(test_config)
+
+    def test_redis_canceled(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Check that existing redis jobs are marked as canceled
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10
+        )
+
+        returned_configs = redis.load_all_jobs('test_user1@mail.com')
+        assert len(returned_configs) == 1
+        assert returned_configs[0].user_id == 'test_user1@mail.com'
+        assert returned_configs[0].job_id == 'abcde'
+        assert returned_configs[0].status == JobStatus.ERROR
+        assert returned_configs[0].description == 'Server restarted while job was running'
+        shutil.rmtree('./tests/jobs')
 
     def test_request_expertise_with_no_config(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']

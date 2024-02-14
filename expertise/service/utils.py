@@ -38,6 +38,7 @@ class JobStatus(str, Enum):
     RUN_EXPERTISE = 'Running Expertise'
     COMPLETED = 'Completed'
     ERROR = 'Error'
+    CANCEL = 'Canceled'
 
 class JobDescription(dict, Enum):
     VALS = {
@@ -47,6 +48,7 @@ class JobDescription(dict, Enum):
         JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
+        JobStatus.CANCEL: 'Job was running when the server restarted and was canceled'
     }
 class APIRequest(object):
     """
