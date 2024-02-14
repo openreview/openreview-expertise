@@ -8,11 +8,42 @@ import time
 import json
 
 os.environ["OPENREVIEW_USERNAME"] = "OpenReview.net"
-os.environ["OPENREVIEW_PASSWORD"] = "1234"
+os.environ["OPENREVIEW_PASSWORD"] = 'Or$3cur3P@ssw0rd'
 
 class TestConference():
 
-    def test_create_conferences(self, client, helpers):
+    def test_create_conferences(self, client, openreview_client, helpers):
+
+        venue = openreview.venue.Venue(openreview_client, 'API2', support_user='openreview.net/Support')
+
+        openreview_client.post_invitation_edit(invitations=None,
+            readers=['openreview.net'],
+            writers=['openreview.net'],
+            signatures=['~Super_User1'],
+            invitation=openreview.api.Invitation(id='openreview.net/-/Edit',
+                invitees=['openreview.net'],
+                readers=['openreview.net'],
+                signatures=['~Super_User1'],
+                edit=True
+            )
+        )  
+
+        venue.use_area_chairs = True
+        
+        now = datetime.datetime.utcnow()
+
+        venue.submission_stage = openreview.stages.SubmissionStage(
+            double_blind=True,
+            readers=[
+                openreview.builder.SubmissionStage.Readers.REVIEWERS_ASSIGNED
+            ],
+            due_date=now + datetime.timedelta(minutes=10),
+            withdrawn_submission_reveal_authors=True,
+            desk_rejected_submission_reveal_authors=True,
+        )
+        venue.expertise_selection_stage = openreview.stages.ExpertiseSelectionStage()
+        venue.setup()
+        venue.create_submission_stage()
 
         now = datetime.datetime.utcnow()
         due_date = now + datetime.timedelta(days=3)
@@ -40,13 +71,11 @@ class TestConference():
                 'contact_email': 'pc@abc.cc',
                 'Area Chairs (Metareviewers)': 'Yes, our venue has Area Chairs',
                 'senior_area_chairs': 'Yes, our venue has Senior Area Chairs',
+                'publication_chairs':'No, our venue does not have Publication Chairs',
                 'Venue Start Date': '2021/12/01',
                 'Submission Deadline': due_date.strftime('%Y/%m/%d'),
                 'abstract_registration_deadline': first_date.strftime('%Y/%m/%d'),
                 'Location': 'Virtual',
-                'Paper Matching': [
-                    'Reviewer Bid Scores',
-                    'OpenReview Affinity'],
                 'Author and Reviewer Anonymity': 'Double-blind',
                 'reviewer_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
                 'area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
@@ -55,7 +84,9 @@ class TestConference():
                 'submission_readers': 'Program chairs and paper authors only',
                 'How did you hear about us?': 'ML conferences',
                 'Expected Submissions': '100',
-                'include_expertise_selection': 'Yes'
+                'include_expertise_selection': 'Yes',
+                'submission_reviewer_assignment': 'Automatic',
+                'submission_license': ['CC BY-SA 4.0']
             }))
 
         helpers.await_queue()
@@ -108,13 +139,11 @@ class TestConference():
                 'contact_email': 'pc@def.cc',
                 'Area Chairs (Metareviewers)': 'Yes, our venue has Area Chairs',
                 'senior_area_chairs': 'Yes, our venue has Senior Area Chairs',
+                'publication_chairs':'No, our venue does not have Publication Chairs',  
                 'Venue Start Date': '2021/12/01',
                 'Submission Deadline': due_date.strftime('%Y/%m/%d'),
                 'abstract_registration_deadline': first_date.strftime('%Y/%m/%d'),
                 'Location': 'Virtual',
-                'Paper Matching': [
-                    'Reviewer Bid Scores',
-                    'OpenReview Affinity'],
                 'Author and Reviewer Anonymity': 'Double-blind',
                 'reviewer_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
                 'area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
@@ -122,7 +151,9 @@ class TestConference():
                 'Open Reviewing Policy': 'Submissions and reviews should both be private.',
                 'submission_readers': 'Program chairs and paper authors only',
                 'How did you hear about us?': 'ML conferences',
-                'Expected Submissions': '100'
+                'Expected Submissions': '100',
+                'submission_reviewer_assignment': 'Automatic',
+                'submission_license': ['CC BY-SA 4.0']
             }))
 
         helpers.await_queue()
@@ -174,13 +205,11 @@ class TestConference():
                 'contact_email': 'pc@hij.cc',
                 'Area Chairs (Metareviewers)': 'Yes, our venue has Area Chairs',
                 'senior_area_chairs': 'Yes, our venue has Senior Area Chairs',
+                'publication_chairs':'No, our venue does not have Publication Chairs',  
                 'Venue Start Date': '2021/12/01',
                 'Submission Deadline': due_date.strftime('%Y/%m/%d'),
                 'abstract_registration_deadline': first_date.strftime('%Y/%m/%d'),
                 'Location': 'Virtual',
-                'Paper Matching': [
-                    'Reviewer Bid Scores',
-                    'OpenReview Affinity'],
                 'Author and Reviewer Anonymity': 'Double-blind',
                 'reviewer_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
                 'area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
@@ -189,7 +218,9 @@ class TestConference():
                 'submission_readers': 'Program chairs and paper authors only',
                 'How did you hear about us?': 'ML conferences',
                 'Expected Submissions': '100',
-                'include_expertise_selection': 'Yes'
+                'include_expertise_selection': 'Yes',
+                'submission_reviewer_assignment': 'Automatic',
+                'submission_license': ['CC BY-SA 4.0']
             }))
 
         helpers.await_queue()
@@ -220,7 +251,7 @@ class TestConference():
 
         assert client.get_group('HIJ.cc/Authors')
 
-    def test_create_groups(self, client, helpers):
+    def test_create_groups(self, client, openreview_client, helpers):
         # Post test data groups to the API
 
         def post_profiles(data):
@@ -257,6 +288,7 @@ class TestConference():
         post_profiles(data)
         members = data['groups']['ABC.cc/Reviewers']['members']
         client.add_members_to_group('HIJ.cc/Reviewers', members)
+        openreview_client.add_members_to_group('API2/Reviewers', members)
 
     def test_create_invitations(self, client, openreview_client):
         # Post invitations for submissions and publications
@@ -327,7 +359,7 @@ class TestConference():
     def test_post_submissions(self, client, openreview_client, helpers):
 
         def post_notes(data, invitation):
-            test_user_client = openreview.Client(username='test@google.com', password='1234')
+            test_user_client = openreview.Client(username='test@google.com', password=helpers.strong_password)
             for note_json in data['notes'][invitation]:
                 content = note_json['content']
                 content['authors'] = ['SomeTest User']
@@ -348,7 +380,7 @@ class TestConference():
             data = json.load(json_file)
         post_notes(data, 'ABC.cc/-/Submission')
 
-        pc_client=openreview.Client(username='pc@abc.cc', password='1234')
+        pc_client=openreview.Client(username='pc@abc.cc', password=helpers.strong_password)
         request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[2]
         print(request_form)
         post_submission_note=pc_client.post_note(openreview.Note(
@@ -371,7 +403,7 @@ class TestConference():
             data = json.load(json_file)
         post_notes(data, 'DEF.cc/-/Submission')
 
-        pc_client=openreview.Client(username='pc@def.cc', password='1234')
+        pc_client=openreview.Client(username='pc@def.cc', password=helpers.strong_password)
         request_form=client.get_notes(invitation='openreview.net/Support/-/Request_Form', sort='tcdate')[1]
         print(request_form)
         post_submission_note=pc_client.post_note(openreview.Note(

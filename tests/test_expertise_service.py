@@ -53,7 +53,7 @@ class TestExpertiseService():
         config = {
             "LOG_FILE": "pytest.log",
             "OPENREVIEW_USERNAME": "openreview.net",
-            "OPENREVIEW_PASSWORD": "1234",
+            "OPENREVIEW_PASSWORD": "Or$3cur3P@ssw0rd",
             "OPENREVIEW_BASEURL": "http://localhost:3000",
             "SUPERUSER_FIRSTNAME": "Super",
             "SUPERUSER_LASTNAME": "User",
@@ -546,12 +546,12 @@ class TestExpertiseService():
         assert len(response) == 0
 
         # Test for invitation query
-        response = test_client.get('/expertise/status/all', query_string={'paperInvitation': 'ABC.cc'}).json['results']
+        response = test_client.get('/expertise/status/all', query_string={'invitation': 'ABC.cc'}).json['results']
         assert len(response) == 2
         assert response[0]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response[1]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
 
-        response = test_client.get('/expertise/status/all', query_string={'paperInvitation': 'CBA'}).json['results']
+        response = test_client.get('/expertise/status/all', query_string={'invitation': 'CBA'}).json['results']
         assert len(response) == 0
 
         # Test for combination

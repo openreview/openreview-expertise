@@ -1,23 +1,31 @@
 version: 2.1
 
-orbs: 
-  node: circleci/node@5.0.2
+parameters:
+  openreview-api-v1-branch:
+    type: string
+    default: "master"
+  openreview-api-v2-branch:
+    type: string
+    default: "main"
+
 jobs:
   build:
+    # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
+    resource_class: large
+    parallelism: 1
     working_directory: ~/openreview-expertise
     docker:
-      - image: ubuntu:18.04
+      - image: ubuntu:22.04
       - image: redislabs/redisai
-      - image: circleci/mongo:5.0.6
-        command: [--replSet,rs0]
+      - image: mongo:6.0
+        command: [ --replSet, rs0 ]
       - image: docker.elastic.co/elasticsearch/elasticsearch:7.7.0
         environment:
           xpack.security.enabled: false
           transport.host: localhost
           TZ: "Etc/UTC"
-    resource_class: medium+
     environment:
-      PYTHON_VERSION: 3.7
+      PYTHON_VERSION: 3.8
     steps:
       - checkout
       - run:
@@ -32,12 +40,17 @@ jobs:
             apt install -y sudo
             DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
             cd $HOME
-            wget "https://repo.anaconda.com/miniconda/Miniconda3-4.7.10-Linux-x86_64.sh" -O miniconda.sh
-            printf '%s' "8a324adcc9eaf1c09e22a992bb6234d91a94146840ee6b11c114ecadafc68121  miniconda.sh" | sha256sum -c
+            wget "https://repo.anaconda.com/miniconda/Miniconda3-py38_22.11.1-1-Linux-x86_64.sh" -O miniconda.sh
+            printf '%s' "473e5ecc8e078e9ef89355fbca21f8eefa5f9081544befca99867c7beac3150d  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
-      - node/install:
-          install-yarn: true
-          node-version: '16.13'
+      - run:
+          name: Install Node
+          command: |
+            cd ~/
+            curl -Lk https://raw.githubusercontent.com/tj/n/master/bin/n -o n
+            sudo bash n 18.15.0
+            hash -r
+            sudo npm install -g n
       - run:
           name: Setup environment
           command: |
@@ -58,79 +71,81 @@ jobs:
             python setup.py install
             conda install -y filelock
             cd ..
-            wget --load-cookies /tmp/cookies.txt "https://drive.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://drive.google.com/uc?export=download&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s" -O mfr.tar.gz && rm -rf /tmp/cookies.txt
+            wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
             tar -xzvf mfr.tar.gz
             mv ./multifacet_recommender_data ./multifacet_recommender
             cd ~/openreview-expertise
             pip install -e .
             conda install -y intel-openmp==2019.4
-            conda install -y faiss-cpu -c pytorch
+            conda install -y faiss-cpu==1.7.3 -c pytorch
             pip install -I protobuf==3.20.1
+            pip install numpy==1.24.4 --force-reinstall
       - run:
-          name: Initialize Replica Set
+          name: Initialize replica set
           command: |
-            wget -qO - https://www.mongodb.org/static/pgp/server-5.0.asc | sudo apt-key add -
-            sudo touch /etc/apt/sources.list.d/mongodb-org-5.0.list
-            echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/5.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-5.0.list
+            sudo apt-get install gnupg curl
+            curl -fsSL https://pgp.mongodb.com/server-6.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor
+            echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
             sudo apt-get update
-            sudo apt-get install -y mongodb-org=5.0.6 mongodb-org-server=5.0.6 mongodb-org-shell=5.0.6 mongodb-org-mongos=5.0.6 mongodb-org-tools=5.0.6
-            mongo mongodb://localhost:27017 --eval "rs.initiate()"
-      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api-v1.git ~/openreview
-      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api.git ~/openreview-v2
-      - run: git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
-      - run: mkdir ~/openreview/logs
-      - run: mkdir ~/openreview/files
-      - run: mkdir ~/openreview/files/attachments
-      - run: mkdir ~/openreview/files/pdfs
-      - run: mkdir ~/openreview/files/temp
-      - run: mkdir ~/openreview-v2/logs
-      - run: mkdir ~/openreview-v2/files
-      - run: mkdir ~/openreview-v2/files/attachments
-      - run: mkdir ~/openreview-v2/files/pdfs
-      - run: mkdir ~/openreview-v2/files/temp
-      - run: mkdir ~/openreview-py/coverage
+            sudo apt-get upgrade -y
+            sudo apt-get install -y mongodb-org=6.0.7
+            mongosh mongodb://localhost:27017 --eval "rs.initiate()"
+      - run:
+          name: Clone OpenReview API V1 branch << pipeline.parameters.openreview-api-v1-branch >>
+          command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api-v1.git ~/openreview
+            cd ~/openreview && git checkout << pipeline.parameters.openreview-api-v1-branch >>
+      - run:
+          name: Clone OpenReview API V2 branch << pipeline.parameters.openreview-api-v2-branch >>
+          command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api.git ~/openreview-v2
+            cd ~/openreview-v2 && git checkout << pipeline.parameters.openreview-api-v2-branch >>
+      - run:
+          name: Clone openreview-py 
+          command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
+      - run:
+          name: Create API directories
+          command: |
+            mkdir -p ~/openreview/logs
+            mkdir -p ~/openreview/files/attachments
+            mkdir -p ~/openreview/files/pdfs
+            mkdir -p ~/openreview/files/temp
+            mkdir -p ~/openreview-v2/logs
+            mkdir -p ~/openreview-v2/files/attachments
+            mkdir -p ~/openreview-v2/files/pdfs
+            mkdir -p ~/openreview-v2/files/temp
       - run:
           name: Install openreview-py
           command: |
+            mkdir ~/openreview-py/coverage
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             pip install --force-reinstall -e ~/openreview-py
-            ls ~/openreview-py
-            ls ~/openreview-py/openreview
-            ls ~/openreview-py/openreview/journal
-            ls ~/openreview-py/openreview/journal/process
       - run:
-          name: install api
-          command: |
-            cd ~/openreview
-            npm install
-      - run:
-          name: run api
+          name: Start API V1
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview
-            NODE_ENV=circleci node scripts/clean_start_app.js
+            npm run cleanStart
           background: true
       - run:
+          name: Wait for API V1 to start
           shell: /bin/sh
           command: |
             wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3000
             :
       - run:
-          name: install api-v2
-          command: |
-            cd ~/openreview-v2
-            npm install
-      - run:
-          name: run api-v2
+          name: Start API V2
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-v2
-            NODE_ENV=circleci node scripts/setup_app.js
+            npm run cleanStart
           background: true
       - run:
+          name: Wait for API V2 to start
           shell: /bin/sh
           command: |
             wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3001
@@ -141,9 +156,10 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-expertise
+            TEST_FILES=$(circleci tests glob "tests/test_*.py" | circleci tests split --split-by=timings)
             mkdir reports
             mkdir reports/pytest
-            python -m pytest -s tests --junitxml=reports/pytest/pytest-report.xml --ignore=expertise
+            python -m pytest -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise $TEST_FILES
       - store_test_results:
           path: reports
       - store_artifacts:

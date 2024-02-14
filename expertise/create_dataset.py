@@ -42,6 +42,19 @@ class OpenReviewExpertise(object):
             invitations = config_invitations
         assert isinstance(invitations, list), 'Input should be a str or a list'
         return invitations
+    
+    def match_content(self, content, match_content):
+        if not match_content:
+            return True
+        for name, value in match_content.items():
+
+            paper_value = content.get(name)
+            if isinstance(paper_value, dict):
+                paper_value = paper_value.get('value')
+
+            if paper_value != value:
+                return False
+        return True
 
     def get_paper_notes(self, author_id, dataset_params):
 
@@ -237,73 +250,35 @@ class OpenReviewExpertise(object):
 
         return valid_members, invalid_members
 
-    def exclude(self):
-        exclusion_invitations = self.convert_to_list(self.config['exclusion_inv'])
-        excluded_ids_by_user = defaultdict(list)
-        for invitation in exclusion_invitations:
-            user_grouped_edges = openreview.tools.iterget_grouped_edges(
-                self.openreview_client,
+    def get_expertise_selection_edges(self, invitation_key, label=None):
+        edge_invitations = self.convert_to_list(self.config[invitation_key])
+        selected_ids_by_user = defaultdict(list)
+        for invitation in edge_invitations:
+            
+            user_grouped_edges = self.openreview_client.get_grouped_edges(
                 invitation=invitation,
                 groupby='tail',
-                select='id,head,label,weight'
+                select='id,head,label,weight,tail'
             )
 
             for edges in user_grouped_edges:
-                for edge in edges:
-                    excluded_ids_by_user[edge.tail].append(edge.head)
+                for edge in edges['values']:
+                    if not label or (label and edge.get('label') == label):
+                        selected_ids_by_user[edge.get('tail')].append(edge.get('head'))
 
-        return excluded_ids_by_user
+        return selected_ids_by_user
+
+    def exclude(self):
+        return self.get_expertise_selection_edges('exclusion_inv', 'Exclude')
     
     def alternate_exclude(self):
-        exclusion_invitations = self.convert_to_list(self.config['alternate_exclusion_inv'])
-        excluded_ids_by_user = defaultdict(list)
-        for invitation in exclusion_invitations:
-            user_grouped_edges = openreview.tools.iterget_grouped_edges(
-                self.openreview_client,
-                invitation=invitation,
-                groupby='tail',
-                select='id,head,label,weight'
-            )
-
-            for edges in user_grouped_edges:
-                for edge in edges:
-                    excluded_ids_by_user[edge.tail].append(edge.head)
-
-        return excluded_ids_by_user
+        return self.get_expertise_selection_edges('alternate_exclusion_inv', 'Exclude')
     
     def include(self):
-        inclusion_invitations = self.convert_to_list(self.config['inclusion_inv'])
-        included_ids_by_user = defaultdict(list)
-        for invitation in inclusion_invitations:
-            user_grouped_edges = openreview.tools.iterget_grouped_edges(
-                self.openreview_client,
-                invitation=invitation,
-                groupby='tail',
-                select='id,head,label,weight'
-            )
-
-            for edges in user_grouped_edges:
-                for edge in edges:
-                    included_ids_by_user[edge.tail].append(edge.head)
-
-        return included_ids_by_user
+        return self.get_expertise_selection_edges('inclusion_inv', 'Include')
     
     def alternate_include(self):
-        inclusion_invitations = self.convert_to_list(self.config['alternate_inclusion_inv'])
-        included_ids_by_user = defaultdict(list)
-        for invitation in inclusion_invitations:
-            user_grouped_edges = openreview.tools.iterget_grouped_edges(
-                self.openreview_client,
-                invitation=invitation,
-                groupby='tail',
-                select='id,head,label,weight'
-            )
-
-            for edges in user_grouped_edges:
-                for edge in edges:
-                    included_ids_by_user[edge.tail].append(edge.head)
-
-        return included_ids_by_user
+        return self.get_expertise_selection_edges('alternate_inclusion_inv', 'Include')
 
     def retrieve_expertise_helper(self, member, email):
         self.pbar.update(1)
@@ -432,6 +407,8 @@ class OpenReviewExpertise(object):
     def get_submissions(self):
         invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
         paper_id = self.config.get('paper_id')
+        paper_venueid = self.config.get('paper_venueid', None)
+        paper_content = self.config.get('paper_content', None)
         submission_groups = self.convert_to_list(self.config.get('alternate_match_group', []))
         submissions = []
 
@@ -441,15 +418,19 @@ class OpenReviewExpertise(object):
             aggregate_papers = self.get_papers_from_group(submission_groups)
             submissions.extend(aggregate_papers)
         else:
-            for invitation_id in invitation_ids:
-                # Assume invitation is valid for both APIs, but only 1
-                # will have the associated notes
-                submissions_v1 = list(openreview.tools.iterget_notes(
-                    self.openreview_client, invitation=invitation_id))
+            if invitation_ids:
+                for invitation_id in invitation_ids:
+                    # Assume invitation is valid for both APIs, but only 1
+                    # will have the associated notes
+                    submissions_v1 = self.openreview_client.get_all_notes(invitation=invitation_id, content={'venueid': paper_venueid})
+
+                    submissions.extend(submissions_v1)
+                    submissions.extend(self.openreview_client_v2.get_all_notes(invitation=invitation_id, content={'venueid': paper_venueid}))
+            elif paper_venueid:
+                submissions_v1 = self.openreview_client.get_all_notes(content={'venueid': paper_venueid})
 
                 submissions.extend(submissions_v1)
-                submissions.extend(list(openreview.tools.iterget_notes(
-                    self.openreview_client_v2, invitation=invitation_id)))
+                submissions.extend(self.openreview_client_v2.get_all_notes(content={'venueid': paper_venueid}))
 
             if paper_id:
                 # If note not found, keep executing and raise an overall exception later
@@ -479,22 +460,24 @@ class OpenReviewExpertise(object):
         for paper in tqdm(submissions, total=len(submissions)):
             paper_id = paper.id
 
-            # Get title + abstract depending on API version
-            paper_title = paper.content.get('title')
-            if isinstance(paper_title, dict):
-                paper_title = paper_title.get('value')
+            if self.match_content(paper.content, paper_content):
 
-            paper_abstr = paper.content.get('abstract')
-            if isinstance(paper_abstr, dict):
-                paper_abstr = paper_abstr.get('value')
+                # Get title + abstract depending on API version
+                paper_title = paper.content.get('title')
+                if isinstance(paper_title, dict):
+                    paper_title = paper_title.get('value')
 
-            reduced_submissions[paper_id] = {
-                'id': paper_id,
-                'content': {
-                    'title': paper_title,
-                    'abstract': paper_abstr
+                paper_abstr = paper.content.get('abstract')
+                if isinstance(paper_abstr, dict):
+                    paper_abstr = paper_abstr.get('value')
+
+                reduced_submissions[paper_id] = {
+                    'id': paper_id,
+                    'content': {
+                        'title': paper_title,
+                        'abstract': paper_abstr
+                    }
                 }
-            }
 
         csv_submissions = self.config.get('csv_submissions')
         if csv_submissions:
@@ -548,7 +531,7 @@ class OpenReviewExpertise(object):
         group_group_matching = 'alternate_match_group' in self.config.keys()
 
         # if invitation ID is supplied, collect records for each submission
-        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config or group_group_matching:
+        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config or 'paper_venueid' in self.config or group_group_matching:
             submissions = self.get_submissions()
             with open(self.root.joinpath('submissions.json'), 'w') as f:
                 json.dump(submissions, f, indent=2)

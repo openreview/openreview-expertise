@@ -8,12 +8,12 @@ If you plan to use expertise regularly, please consider installing [RedisAI](htt
 
 ## Installation
 
-This repository only supports Python 3.6 and above.
+This repository only supports Python 3.6 and above. Python 3.8 and above is required to run SPECTER2
 Clone this repository and install the package using pip as follows. If you plan to use ELMo, then you will need to install [Miniconda](https://docs.conda.io/en/latest/miniconda.html), since one of the packages is only available in conda. You may use the `pip` command in a conda environment as long as you first run all the pip installs and then conda installs. Just follow the order of the commands shown below and it should work. You may read more about this [here](https://www.anaconda.com/using-pip-in-a-conda-environment/).
 
 Run this command only if you are using conda:
 ```
-conda create -n affinity python=3.7
+conda create -n affinity python=3.8
 conda activate affinity
 conda install pip
 ```
@@ -28,14 +28,14 @@ If you plan to actively develop models, it's best to install the package in "edi
 pip install -e <location of this repository>
 ```
 
-Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR) or SPECTER+MFR with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
+Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR), SPECTER+MFR, SPECTER2+SciNCL with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
 
 We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
 
 Run this command if you plan to use ELMo (Using CPU is fine):
 ```
 conda install intel-openmp==2019.4
-conda install faiss-cpu -c pytorch
+conda install faiss-cpu==1.7.3 -c pytorch
 ```
 [Here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md) you can find the above installation command.
 
@@ -52,10 +52,12 @@ pip install -r requirements.txt
 python setup.py install
 conda install filelock
 cd ..
+pip install -I protobuf==3.20.1
+pip install numpy==1.24.4 --force-reinstall
 ```
 Pass the path to the cloned GitHub repository as `model_params.specter_dir`. 
 
-If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint files from [here](https://drive.google.com/file/d/1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s/view?usp=sharing), extract it, and pass the paths:
+If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint files from [here](https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz), extract it, and pass the paths:
 ```
 "feature_vocab_file": <path_to_untarred_dir>/feature_vocab_file,
 "model_checkpoint_dir": <path_to_untarred_dir>/mfr_model_checkpoint/
@@ -73,6 +75,32 @@ https://www.overleaf.com/read/ygmygwtjbzfg
 
 https://www.overleaf.com/read/swqrxgqqvmyv
 
+The following instructions are all of the commands to install the dependencies used by this repository - this follows the same commands listed above and assumes you start in the `openreview-expertise` directory after cloning it:
+```
+conda update -y conda
+conda create -n expertise python=$PYTHON_VERSION -c conda-forge
+conda activate expertise
+mkdir ../expertise-utils
+cd ../expertise-utils
+git clone https://github.com/allenai/specter.git
+cd specter
+wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
+tar -xzvf archive.tar.gz
+conda install pytorch cudatoolkit=10.1 -c pytorch 
+pip install -r requirements.txt
+python setup.py install
+conda install -y filelock
+cd ..
+wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
+tar -xzvf mfr.tar.gz
+mv ./multifacet_recommender_data ./multifacet_recommender
+cd ~/openreview-expertise
+pip install -e .
+conda install -y intel-openmp==2019.4
+conda install -y faiss-cpu==1.7.3 -c pytorch
+pip install -I protobuf==3.20.1
+pip install numpy==1.24.4 --force-reinstall
+```
 ## Affinity Scores
 
 There are two steps to create affinity scores:
@@ -174,7 +202,7 @@ For example, with file `/expertise/service/config/development.cfg`:
 LOG_FILE='development.log'
 
 OPENREVIEW_USERNAME='OpenReview.net'
-OPENREVIEW_PASSWORD='1234'
+OPENREVIEW_PASSWORD='Or$3cur3P@ssw0rd'
 OPENREVIEW_BASEURL='http://localhost:3000'
 ```
 
@@ -197,6 +225,7 @@ This parameters could be included in a separate file, like `dataset-config.json`
 - `reviewer_ids`: (optional) Array of strings containing the IDs of the reviewers. An ID can either be an email associated to an OpenReview Profile or the OpenReview ID, also known as a Tilde ID, for a Profile. The array can be a combination of both these types of IDs. It can be provided instead of or on top of the `match_group` and `csv_expertise`, the values will be combined.
 - `csv_expertise`: (optinal) String with the relative path from `dataset.directory` to a csv file containing the expertise in the following format: "author id","publication_id","title","abstract". This can be added instead of or on top of `match_group` and `reviewer_ids`, the values will be combined.
 - `paper_invitation`: (optional) String or array of strings with the submission invitations. This is the invitation for Submissions, all the submissions in OpenReview for a particular venue have an invitation and that is how they are grouped together.
+- `paper_venueid`: (optional) String with the submission venue id. In API2, submissions may have multiple invitations which accumulate as the submission is modified. The venue id is a way of grouping submissions in API2 using a singular value.
 - `paper_id`: (optional) String with the submission ID. All submissions in OpenReview have an associated unique ID that can be used to fetch the paper.
 - `exclusion_inv` (optional): String or array of strings with the exclusion invitations. Reviewers (and Area Chairs) can choose to exclude some of their papers before the affinity scores are calculated so that they get papers that are more aligned to their current expertise/interest. Papers included here will not be taken into consideration when calculating the affinity scores.
 - `csv_submissions`: (optional) String with the relative path from `dataset.directory` to a csv file containing the submissions in the following format: "submission_id","title","abstract". This can be added on top of `paper_invitation`, the values will be combined.

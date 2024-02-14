@@ -109,15 +109,20 @@ class APIRequest(object):
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
         # Handle type note
         elif type == 'Note':
-            if 'invitation' in source_entity.keys() and 'id' in source_entity.keys():
-                raise openreview.OpenReviewException(f"Bad request: only provide a single id or single invitation in {entity_id}")
+            if ('invitation' in source_entity.keys() or 'withVenueid' in source_entity.keys()) and 'id' in source_entity.keys():
+                raise openreview.OpenReviewException(f"Bad request: only provide a single id or single invitation and/or venue id in {entity_id}")
 
             if 'invitation' in source_entity.keys():
                 target_entity['invitation'] = _get_from_entity('invitation')
+            elif 'withVenueid' in source_entity.keys():
+                target_entity['withVenueid'] = _get_from_entity('withVenueid')
             elif 'id' in source_entity.keys():
                 target_entity['id'] = _get_from_entity('id')
             else:
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
+            
+            if 'withContent' in source_entity.keys():
+                target_entity['withContent'] = _get_from_entity('withContent')
         else:
             raise openreview.OpenReviewException(f"Bad request: invalid type in {entity_id}")
 
@@ -134,8 +139,9 @@ class APIRequest(object):
 
         if len(self.model.keys()) > 0:
             body['model'] = self.model
-        if len(self.dataset.keys()) > 0:
-            body['dataset'] = self.dataset
+        if hasattr(self, 'dataset'):
+            if len(self.dataset.keys()) > 0:
+                body['dataset'] = self.dataset
 
         return body
 
@@ -172,7 +178,6 @@ class RedisDatabase(object):
 
             if not os.path.isdir(current_config.job_dir):
                 print(f"No files found {job_key} - skipping")
-                self.remove_job(user_id, current_config.job_id)
                 continue
 
             if current_config.user_id == user_id or user_id in SUPERUSER_IDS:
@@ -234,6 +239,8 @@ class JobConfig(object):
         alternate_exclusion_inv=None,
         alternate_inclusion_inv=None,
         paper_invitation=None,
+        paper_venueid=None,
+        paper_content=None,
         paper_id=None,
         model_params=None):
         
@@ -256,6 +263,8 @@ class JobConfig(object):
         self.alternate_exclusion_inv = alternate_exclusion_inv
         self.alternate_inclusion_inv = alternate_inclusion_inv
         self.paper_invitation = paper_invitation
+        self.paper_venueid = paper_venueid
+        self.paper_content = paper_content
         self.paper_id = paper_id
         self.model_params = model_params
 
@@ -280,6 +289,8 @@ class JobConfig(object):
             'alternate_exclusion_inv': self.alternate_exclusion_inv,
             'alternate_inclusion_inv': self.alternate_inclusion_inv,
             'paper_invitation': self.paper_invitation,
+            'paper_venueid': self.paper_venueid,
+            'paper_content': self.paper_content,
             'paper_id': self.paper_id,
             'model_params': self.model_params
         }
@@ -297,6 +308,7 @@ class JobConfig(object):
     def from_request(api_request: APIRequest,
         starting_config = {},
         openreview_client = None,
+        openreview_client_v2 = None,
         server_config = {},
         working_dir = None):
         """
@@ -344,7 +356,15 @@ class JobConfig(object):
                     edge_inv_id = edge_inv.get('invitation', None)
                 if edge_inv_id is None or len(edge_inv_id) <= 0:
                     raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
-                label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
+
+                try:
+                    label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
+                except openreview.OpenReviewException as e:
+                    if "notfound" in str(e).lower():
+                        label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
+                    else:
+                        raise e
+
                 if 'exclude' not in label.lower():
                     config.inclusion_inv = edge_inv_id
                 else:
@@ -360,7 +380,15 @@ class JobConfig(object):
                     edge_inv_id = edge_inv.get('invitation', None)
                 if edge_inv_id is None:
                     raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
-                label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
+
+                try:
+                    label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
+                except openreview.OpenReviewException as e:
+                    if "notfound" in str(e).lower():
+                        label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
+                    else:
+                        raise e
+
                 if 'include' in label.lower():
                     config.alternate_inclusion_inv = edge_inv_id
                 else:
@@ -371,20 +399,28 @@ class JobConfig(object):
         config.paper_id = None
 
         if api_request.entityA['type'] == 'Note':
-            inv, id = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None)
+            inv, id, venueid, content = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None), api_request.entityA.get('withVenueid', None), api_request.entityA.get('withContent', None)
 
             if inv:
                 config.paper_invitation = inv
             if id:
                 config.paper_id = id
+            if venueid:
+                config.paper_venueid = venueid
+            if content:
+                config.paper_content = content
 
         elif api_request.entityB['type'] == 'Note':
-            inv, id = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None)
+            inv, id, venueid, content = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None), api_request.entityB.get('withVenueid', None), api_request.entityB.get('withContent', None)
 
             if inv:
                 config.paper_invitation = inv
             if id:
                 config.paper_id = id
+            if venueid:
+                config.paper_venueid = venueid
+            if content:
+                config.paper_content = content                
 
         # Validate that other paper fields are none if an alternate match group is present
         if config.alternate_match_group is not None and (config.paper_id is not None or config.paper_invitation is not None):
@@ -449,6 +485,9 @@ class JobConfig(object):
                     else:
                         raise openreview.OpenReviewException("Bad request: invalid value in field 'scoreComputation' in 'model' object")
                     continue
+
+                if param == 'name':
+                    config.model = api_model.get('name', config.model)
                 
                 # Handle general case
                 if param not in allowed_model_params:
@@ -490,6 +529,8 @@ class JobConfig(object):
             alternate_exclusion_inv = job_config.get('alternate_exclusion_inv'),
             alternate_inclusion_inv = job_config.get('alternate_inclusion_inv'),
             paper_invitation = job_config.get('paper_invitation'),
+            paper_venueid = job_config.get('paper_venueid'),
+            paper_content = job_config.get('paper_content'),
             paper_id = job_config.get('paper_id'),
             model_params = job_config.get('model_params')
         )

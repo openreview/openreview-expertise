@@ -10,14 +10,14 @@ from openreview.api import Note
 from openreview.journal import Journal
 
 os.environ["OPENREVIEW_USERNAME"] = "OpenReview.net"
-os.environ["OPENREVIEW_PASSWORD"] = "1234"
+os.environ["OPENREVIEW_PASSWORD"] = 'Or$3cur3P@ssw0rd'
 
 class TestJournal():
 
     @pytest.fixture(scope="class")
-    def journal(self):
+    def journal(self, helpers):
         venue_id = 'TMLR'
-        fabian_client=OpenReviewClient(username='fabian@mail.com', password='1234')
+        fabian_client=OpenReviewClient(username='fabian@mail.com', password=helpers.strong_password)
         fabian_client.impersonate('TMLR/Editors_In_Chief')
         journal=Journal(fabian_client, venue_id, '1234', contact_info='tmlr@jmlr.org', full_name='Transactions on Machine Learning Research', short_name='TMLR', submission_name='Submission')
         return journal
@@ -36,6 +36,7 @@ class TestJournal():
         journal.setup(support_role='fabian@mail.com', editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
 
         openreview_client.add_members_to_group('TMLR/Action_Editors', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
+        openreview_client.add_members_to_group('TMLR/Reviewers', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
     
     def test_post_submissions(self, client, openreview_client, helpers):
         # Post submission with a test author id
@@ -55,13 +56,13 @@ class TestJournal():
                         content = {
                             'title': { 'value': content.get('title').get('value') },
                             'abstract': { 'value': content.get('abstract').get('value') },
+                            'venueid': { 'value': content.get('venueid', {}).get('value')},
                             'authors': { 'value': ['Test User']},
                             'authorids': { 'value': ['~SomeFirstName_User1']},
                             'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
                             'supplementary_material': { 'value': '/attachment/' + 's' * 40 +'.zip'},
                             'competing_interests': { 'value': 'None beyond the authors normal conflict of interests'},
-                            'human_subjects_reporting': { 'value': 'Not applicable'},
-                            'submission_length': { 'value': 'Regular submission (no more than 12 pages of main content)'}
+                            'human_subjects_reporting': { 'value': 'Not applicable'}
                         }
                     ))
 
@@ -99,8 +100,7 @@ class TestJournal():
                                         'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
                                         'supplementary_material': { 'value': '/attachment/' + 's' * 40 +'.zip'},
                                         'competing_interests': { 'value': 'None beyond the authors normal conflict of interests'},
-                                        'human_subjects_reporting': { 'value': 'Not applicable'},
-                                        'submission_length': { 'value': 'Regular submission (no more than 12 pages of main content)'}
+                                        'human_subjects_reporting': { 'value': 'Not applicable'}
                                     }
                                 ))
             
