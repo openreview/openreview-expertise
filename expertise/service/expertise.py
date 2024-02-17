@@ -8,13 +8,14 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
+from expertise.execute_expertise import execute_create_dataset, execute_expertise
 
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase
 
 user_index_file_lock = Lock()
 class ExpertiseService(object):
 
-    def __init__(self, client, config, logger, client_v2 = None):
+    def __init__(self, client, config, logger, client_v2 = None, containerized = False):
         self.client = client
         self.client_v2 = client_v2
         self.logger = logger
@@ -24,11 +25,14 @@ class ExpertiseService(object):
         self.specter_dir = config['SPECTER_DIR']
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
         self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
-        self.redis = RedisDatabase(
-            host = config['REDIS_ADDR'],
-            port = config['REDIS_PORT'],
-            db = config['REDIS_CONFIG_DB']
-        )
+
+        # Only load if maintaining persisted jobs on disk
+        if not containerized:
+            self.redis = RedisDatabase(
+                host = config['REDIS_ADDR'],
+                port = config['REDIS_PORT'],
+                db = config['REDIS_CONFIG_DB']
+            )
 
         # Define expected/required API fields
         self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
@@ -411,3 +415,69 @@ class ExpertiseService(object):
         # Return filtered config
         self._filter_config(config)
         return config.to_json()
+
+    def predict_expertise(self, request):
+        descriptions = JobDescription.VALS.value
+        predictions_key = 'predictions'
+
+        config, token = self._prepare_config(request)
+        job_id = config.job_id
+
+        config.mdate = int(time.time() * 1000)
+        config.status = JobStatus.QUEUED
+        config.description = descriptions[JobStatus.QUEUED]
+        # TODO: Post this status information somewhere, ignore status for now
+
+        self.logger.info(f"\nconf: {config.to_json()}\n")
+
+        # Prepare the dataset and run the model
+        self.logger.info('CREATING DATASET')
+        execute_create_dataset(self.client, self.client_v2, config=config.to_json())
+        self.logger.info('EXECUTING EXPERTISE')
+        execute_expertise(config=config.to_json())
+        self.logger.info('FINISHED EXPERTISE RETRIEVING RESULTS')
+
+        result = {predictions_key: []}
+
+        # Fetch status
+        status = config.status
+        description = config.description
+
+        # Assemble scores
+        # Search for scores files (if sparse scores exist, retrieve by default)
+        ret_list = []
+
+        # Check for output format
+        group_group_matching = config.alternate_match_group is not None
+
+        self.logger.info(f"Retrieving scores from {config.job_dir}")
+        if not group_group_matching:
+            # If reviewer-paper matching, use standard 'user' and 'score' keys
+            file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
+            with open(file_dir, 'r') as csv_file:
+                data_reader = reader(csv_file)
+                for row in data_reader:
+                    # For single paper retrieval, filter out scores against the dummy submission
+                    if row[0] == 'dummy':
+                        continue
+
+                    ret_list.append({
+                        'submission': row[0],
+                        'user': row[1],
+                        'score': float(row[2])
+                    })
+            result[predictions_key] = ret_list
+        else:
+            # If group-group matching, report results using "*_member" keys
+            file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir, group_scoring=True)
+            with open(file_dir, 'r') as csv_file:
+                data_reader = reader(csv_file)
+                for row in data_reader:
+                    ret_list.append({
+                        'match_member': row[0],
+                        'submission_member': row[1],
+                        'score': float(row[2])
+                    })
+            result[predictions_key] = ret_list
+
+        return result
