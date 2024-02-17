@@ -353,7 +353,9 @@ def expertise():
         flask.current_app.logger.info('Received expertise request')
 
         # Parse request args
-        user_request = flask.request.json
+        if 'httpBody' not in flask.request.json:
+            raise openreview.OpenReviewException("Bad request: httpBody must wrap the entire request. This model only supports calls from /rawPredict")
+        user_request = flask.request.json['httpBody']
 
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2).predict_expertise(user_request)
 
