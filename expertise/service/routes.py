@@ -315,3 +315,67 @@ def results():
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
+
+@BLUEPRINT.route('/health')
+def health():
+    """An endpoint for checking availability"""
+    flask.current_app.logger.info('In test')
+    return 'Healthy instance', 200
+
+@BLUEPRINT.route('/predict', methods=['POST'])
+def expertise():
+    """
+    Submit a job to create a dataset and execute an expertise model based on the submitted configuration
+
+    This is a blocking call and directly returns the scores
+
+    :param token: Authorization from a logged in user, which defines the set of accessible data
+    :type token: str
+
+    :param name: A name describing the job being submitted
+    :type name: str
+
+    :param match_group: A group whose profiles will be used to compute expertise
+    :type match_group: str
+
+    :param paper_invitation: An invitation containing submissions used to compute expertise
+    :type paper_invitation: str
+    """
+
+    openreview_client, openreview_client_v2 = get_client()
+
+    user_id = get_user_id(openreview_client)
+    if not user_id:
+        flask.current_app.logger.error('No Authorization token in headers')
+        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
+
+    try:
+        flask.current_app.logger.info('Received expertise request')
+
+        # Parse request args
+        user_request = flask.request.json
+
+        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2).predict_expertise(user_request)
+
+        flask.current_app.logger.debug('POST returns code 200')
+        return flask.jsonify(result), 200
+
+    except openreview.OpenReviewException as error_handle:
+        flask.current_app.logger.error(str(error_handle))
+
+        error_type = str(error_handle)
+        status = 500
+
+        if 'not found' in error_type.lower():
+            status = 404
+        elif 'forbidden' in error_type.lower():
+            status = 403
+        elif 'bad request' in error_type.lower():
+            status = 400
+
+        return flask.jsonify(format_error(status, error_type)), status
+
+    # pylint:disable=broad-except
+    except Exception as error_handle:
+        flask.current_app.logger.error(str(error_handle))
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500

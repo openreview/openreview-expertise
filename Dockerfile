@@ -52,6 +52,6 @@ RUN echo "source ${HOME}/miniconda/etc/profile.d/conda.sh" >> ${HOME}/.bashrc \
     && pip install -I protobuf==3.20.1 \
     && pip install numpy==1.24.4 --force-reinstall
 
-EXPOSE 5000
+EXPOSE 8080
 
-CMD ["FLASK_ENV=production", "python", "-m", "expertise.service", "--host", "0.0.0.0", "--port", "5000"]
+CMD ["FLASK_ENV=production", "python", "-m", "expertise.service", "--host", "0.0.0.0", "--port", "8080"]
