@@ -46,8 +46,7 @@ RUN echo "source ${HOME}/miniconda/etc/profile.d/conda.sh" >> ${HOME}/.bashrc \
     && conda install -y intel-openmp \
     && conda install -y faiss-cpu -c pytorch \
     && pip install -I protobuf==3.20.1 \
-    && pip install numpy==1.24.4 --force-reinstall \
-    && python build_expertise_utils.py
+    && pip install numpy==1.24.4 --force-reinstall
 
 EXPOSE 8080
 

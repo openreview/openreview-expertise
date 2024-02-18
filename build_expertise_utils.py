@@ -5,7 +5,7 @@ def copy_directory(bucket_name, source_blob_prefix, destination_dir):
     """Copy all files from a GCS bucket directory to a local directory."""
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
-    blobs = storage_client.list_blobs(bucket, prefix=source_blob_prefix)
+    blobs = bucket.list_blobs(prefix=source_blob_prefix)
     for blob in blobs:
         destination_path = os.path.join(destination_dir, os.path.relpath(blob.name, start=source_blob_prefix))
         os.makedirs(os.path.dirname(destination_path), exist_ok=True)
@@ -23,4 +23,4 @@ bucket_name = aip_storage_uri.split('/')[2]
 # The directory to copy the artifacts to, and the subdirectory name you want
 destination_dir = "/app/expertise-utils" ## TODO: Remove this hardcode
 
-copy_directory(bucket_name, aip_storage_uri, destination_dir)
+copy_directory(bucket_name, 'expertise-utils', destination_dir)
