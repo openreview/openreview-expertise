@@ -18,7 +18,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='localhost')
     parser.add_argument('--port', default=5000, type=int)
-    parser.add_argument('--container', default=False, type=bool)
+    parser.add_argument('--container', action='store_true', type=bool)
     args = parser.parse_args()
 
     if args.container:
