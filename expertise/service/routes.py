@@ -323,7 +323,7 @@ def health():
     return 'Healthy instance', 200
 
 @BLUEPRINT.route('/predict', methods=['POST'])
-def expertise():
+def predict():
     """
     Submit a job to create a dataset and execute an expertise model based on the submitted configuration
 
