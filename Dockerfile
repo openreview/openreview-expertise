@@ -51,4 +51,4 @@ RUN echo "source ${HOME}/miniconda/etc/profile.d/conda.sh" >> ${HOME}/.bashrc \
 EXPOSE 8080
 
 # Define the entry point and pass arguments separately
-ENTRYPOINT ["python", "-m", "expertise.service", "--host", "0.0.0.0", "--port", "8080"]
+ENTRYPOINT ["python", "-m", "expertise.service", "--host", "0.0.0.0", "--port", "8080", "--container"]
