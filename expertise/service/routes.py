@@ -352,6 +352,8 @@ def predict():
     try:
         flask.current_app.logger.info('Received expertise request')
 
+        flask.current_app.logger.info(flask.current_app.config)
+
         # Parse request args
         if 'httpBody' not in flask.request.json:
             raise openreview.OpenReviewException("Bad request: httpBody must wrap the entire request. This model only supports calls from /rawPredict")
