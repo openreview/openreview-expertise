@@ -33,27 +33,21 @@ RUN echo "source ${HOME}/miniconda/etc/profile.d/conda.sh" >> ${HOME}/.bashrc \
     && echo "conda activate expertise" >> ${HOME}/.bashrc \
     && /bin/bash -c "source ${HOME}/miniconda/etc/profile.d/conda.sh && conda activate expertise" \
     && python --version \
-    && mkdir ${HOME}/expertise-utils \
-    && cd ${HOME}/expertise-utils \
     && git clone https://github.com/allenai/specter.git \
     && cd specter \
-    && wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz \
-    && tar -xzvf archive.tar.gz \
     && conda install -y pytorch pytorch-cuda=11 -c pytorch -c nvidia  \
     && pip install -r requirements.txt \
     && python setup.py install \
+    && mkdir ${HOME}/expertise-utils \
     && conda install -y filelock \
-    && cd .. \
-    && wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz \
-    && tar -xzvf mfr.tar.gz \
-    && mv ./multifacet_recommender_data ./multifacet_recommender \
     && cd ${HOME}/openreview-expertise \
     && cp ${HOME}/openreview-expertise/expertise/service/config/default_container.cfg ${HOME}/openreview-expertise/expertise/service/config/default.cfg \
     && pip install -e . \
     && conda install -y intel-openmp \
     && conda install -y faiss-cpu -c pytorch \
     && pip install -I protobuf==3.20.1 \
-    && pip install numpy==1.24.4 --force-reinstall
+    && pip install numpy==1.24.4 --force-reinstall \
+    && python build_expertise_utils.py
 
 EXPOSE 8080
 
