@@ -48,7 +48,7 @@ RUN echo "source ${HOME}/miniconda/etc/profile.d/conda.sh" >> ${HOME}/.bashrc \
     && tar -xzvf mfr.tar.gz \
     && mv ./multifacet_recommender_data ./multifacet_recommender \
     && cd ${HOME}/openreview-expertise \
-    && cp ${HOME}/openreview-expertise/expertise/service/config/default_gpu.cfg ${HOME}/openreview-expertise/expertise/service/config/default.cfg \
+    && cp ${HOME}/openreview-expertise/expertise/service/config/default_container.cfg ${HOME}/openreview-expertise/expertise/service/config/default.cfg \
     && pip install -e . \
     && conda install -y intel-openmp \
     && conda install -y faiss-cpu -c pytorch \
