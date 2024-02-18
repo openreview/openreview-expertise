@@ -359,7 +359,7 @@ def predict():
             raise openreview.OpenReviewException("Bad request: httpBody must wrap the entire request. This model only supports calls from /rawPredict")
         user_request = flask.request.json['httpBody']
 
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2).predict_expertise(user_request)
+        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2, containerized=True).predict_expertise(user_request)
 
         flask.current_app.logger.debug('POST returns code 200')
         return flask.jsonify(result), 200
