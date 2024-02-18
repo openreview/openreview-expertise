@@ -25,6 +25,7 @@ class ExpertiseService(object):
         self.specter_dir = config['SPECTER_DIR']
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
         self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
+        self.containerized = containerized
 
         # Only load if maintaining persisted jobs on disk
         if not containerized:
@@ -84,8 +85,9 @@ class ExpertiseService(object):
             os.makedirs(config.dataset['directory'])
         with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
             json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
-        self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
-        self.redis.save_job(config)
+        if not self.containerized:
+            self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
+            self.redis.save_job(config)
 
         return config, self.client.token
 
