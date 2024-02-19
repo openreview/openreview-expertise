@@ -369,7 +369,7 @@ def predict():
             flask.current_app.logger.info('rawPredict received')
 
         token = user_request['token']
-        openreview_client, openreview_client_v2 = get_client()
+        openreview_client, openreview_client_v2 = get_client(token=token)
 
         user_id = get_user_id(openreview_client)
         if not user_id:
