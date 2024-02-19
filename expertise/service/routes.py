@@ -2,6 +2,7 @@
 Implements the Flask API endpoints.
 '''
 from expertise.service.expertise import ExpertiseService
+from expertise.service import model_ready
 import openreview
 from openreview.openreview import OpenReviewException
 from .utils import get_user_id
@@ -316,11 +317,19 @@ def results():
         flask.current_app.logger.error(str(error_handle))
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
+@BLUEPRINT.route('/startup')
+def startup():
+    """An endpoint for checking availability for predictions"""
+    flask.current_app.logger.info('In startup')
+    if not model_ready.is_set():
+        return {'status': 'Service unavailable: Artifact loading in progress'}, 503
+    return {'status': 'Available for predictions'}, 200
+
 @BLUEPRINT.route('/health')
 def health():
-    """An endpoint for checking availability"""
-    flask.current_app.logger.info('In test')
-    return 'Healthy instance', 200
+    """An endpoint for server uptime"""
+    flask.current_app.logger.info('In health')
+    return {'status': 'Healthy instance'}, 200
 
 @BLUEPRINT.route('/predict', methods=['POST'])
 def predict():
