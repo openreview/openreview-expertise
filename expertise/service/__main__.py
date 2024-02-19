@@ -12,6 +12,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.container:
-        threading.Thread(target=load_model_artifacts()).start()
+        threading.Thread(target=load_model_artifacts).start()
 
     app.run(host=args.host, port=args.port)
