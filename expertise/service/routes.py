@@ -373,6 +373,9 @@ def predict():
         token = user_request.get('token')
         openreview_client, openreview_client_v2 = get_client(token=token)
 
+        if token:
+            del user_request['token'] ## Prevent token from being seen by the rest of API directly
+
         user_id = get_user_id(openreview_client)
         if not user_id:
             flask.current_app.logger.error('No Authorization token in headers')
