@@ -2,9 +2,12 @@ import os
 import flask
 import logging, logging.handlers
 import redis
+from threading import Event
 from google.cloud import storage
 
 from celery import Celery
+
+model_ready = Event()
 
 def configure_logger(app):
     '''
@@ -118,3 +121,5 @@ def load_model_artifacts():
         os.makedirs(os.path.dirname(destination_path), exist_ok=True)
         blob.download_to_filename(destination_path)
         print(f"Copied {blob.name} to {destination_path}")
+    
+    model_ready.set()
