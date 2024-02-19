@@ -355,9 +355,15 @@ def predict():
         flask.current_app.logger.info(flask.current_app.config)
 
         # Parse request args
-        if 'httpBody' not in flask.request.json:
-            raise openreview.OpenReviewException("Bad request: httpBody must wrap the entire request. This model only supports calls from /rawPredict")
-        user_request = flask.request.json['httpBody']
+        user_request = flask.request.json.get('httpBody')
+        if not user_request:
+            user_request = flask.request.json.get('instances')
+            if not user_request:
+                raise openreview.OpenReviewException('Bad request: httpBody must wrap the whole request, or config must be in a list keyed by instances')
+            else:
+                user_request = user_request[0] # Only support 1 config at a time
+        else:
+            flask.current_app.logger.info('rawPredict received')
 
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2, containerized=True).predict_expertise(user_request)
 
