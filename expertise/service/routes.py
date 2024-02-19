@@ -20,6 +20,8 @@ CORS(BLUEPRINT, supports_credentials=True)
 def get_client(token=None):
     if not token:
         token = flask.request.headers.get('Authorization')
+        if token is None:
+            raise openreview.OpenReviewException('Forbidden: No authorization detected')
     return (
         openreview.Client(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL']),
         openreview.api.OpenReviewClient(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL_V2']),
@@ -368,7 +370,7 @@ def predict():
         else:
             flask.current_app.logger.info('rawPredict received')
 
-        token = user_request['token']
+        token = user_request.get('token')
         openreview_client, openreview_client_v2 = get_client(token=token)
 
         user_id = get_user_id(openreview_client)
