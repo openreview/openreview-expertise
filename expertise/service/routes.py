@@ -17,8 +17,9 @@ BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
 
 
-def get_client():
-    token = flask.request.headers.get('Authorization')
+def get_client(token=None):
+    if not token:
+        token = flask.request.headers.get('Authorization')
     return (
         openreview.Client(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL']),
         openreview.api.OpenReviewClient(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL_V2']),
@@ -351,13 +352,6 @@ def predict():
     :type paper_invitation: str
     """
 
-    openreview_client, openreview_client_v2 = get_client()
-
-    user_id = get_user_id(openreview_client)
-    if not user_id:
-        flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
-
     try:
         flask.current_app.logger.info('Received expertise request')
 
@@ -373,6 +367,14 @@ def predict():
                 user_request = user_request[0] # Only support 1 config at a time
         else:
             flask.current_app.logger.info('rawPredict received')
+
+        token = user_request['token']
+        openreview_client, openreview_client_v2 = get_client()
+
+        user_id = get_user_id(openreview_client)
+        if not user_id:
+            flask.current_app.logger.error('No Authorization token in headers')
+            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2, containerized=True).predict_expertise(user_request)
 
