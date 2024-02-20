@@ -116,7 +116,7 @@ def load_model_artifacts():
 
     # The directory to copy the artifacts to, and the subdirectory name you want
     destination_dir = "/app/expertise-utils" ## TODO: Parameterize this
-    source_blob_prefix = "expertise-utils"
+    source_blob_prefix = aip_storage_uri.split('://')[1]
 
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
