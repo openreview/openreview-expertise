@@ -4,6 +4,7 @@ Implements the Flask API endpoints.
 from expertise.service.expertise import ExpertiseService
 from expertise.service import model_ready
 import openreview
+import json
 from openreview.openreview import OpenReviewException
 from .utils import get_user_id
 import flask
@@ -356,6 +357,7 @@ def predict():
 
     try:
         flask.current_app.logger.info('Received expertise request')
+        flask.current_app.logger.info(json.dumps(flask.request.json))
 
         flask.current_app.logger.info(flask.current_app.config)
 
@@ -367,6 +369,11 @@ def predict():
                 raise openreview.OpenReviewException('Bad request: httpBody must wrap the whole request, or config must be in a list keyed by instances')
             else:
                 user_request = user_request[0] # Only support 1 config at a time
+                if not isinstance(user_request, dict):
+                    try:
+                        user_request = json.loads(user_request)
+                    except:
+                        raise openreview.OpenReviewException('Bad request: config at instances[0] must be deserializable into a dict')
         else:
             flask.current_app.logger.info('rawPredict received')
 
