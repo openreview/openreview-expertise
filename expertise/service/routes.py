@@ -363,7 +363,10 @@ def predict():
 
         # If /predict called before artifacts loaded, block
         if not model_ready.is_set() and artifact_loading_started.is_set():
+            flask.current_app.logger.info('Model is not ready, artifacts are loading')
             model_ready.wait()
+
+        flask.current_app.logger.info(f'Model ready: {model_ready.is_set()} | Artifact loading executed: {artifact_loading_started.is_set()}')
 
         # Parse request args
         user_request = flask.request.json.get('httpBody')
