@@ -106,11 +106,13 @@ def load_model_artifacts():
 
     # Extract the bucket name and path from the environment variable
     aip_storage_uri = os.getenv('AIP_STORAGE_URI')
+    print(f"Loading from... {aip_storage_uri}")
     if not aip_storage_uri:
         raise ValueError("AIP_STORAGE_URI environment variable is not set")
 
     # Assuming AIP_STORAGE_URI is in the format gs://bucket_name/path_to_directory
     bucket_name = aip_storage_uri.split('/')[2]
+    print(f"Bucket={bucket_name}")
 
     # The directory to copy the artifacts to, and the subdirectory name you want
     destination_dir = "/app/expertise-utils" ## TODO: Parameterize this
