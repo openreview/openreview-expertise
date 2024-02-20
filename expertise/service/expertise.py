@@ -421,6 +421,7 @@ class ExpertiseService(object):
     def predict_expertise(self, request):
         descriptions = JobDescription.VALS.value
         predictions_key = 'predictions'
+        results_key = 'results'
 
         config, token = self._prepare_config(request)
         job_id = config.job_id
@@ -439,7 +440,11 @@ class ExpertiseService(object):
         execute_expertise(config=config.to_json())
         self.logger.info('FINISHED EXPERTISE RETRIEVING RESULTS')
 
-        result = {predictions_key: []}
+        result = {
+            predictions_key: [
+                {results_key: []}
+            ]
+        }
 
         # Fetch status
         status = config.status
@@ -468,7 +473,7 @@ class ExpertiseService(object):
                         'user': row[1],
                         'score': float(row[2])
                     })
-            result[predictions_key] = ret_list
+            result[predictions_key][results_key] = ret_list
         else:
             # If group-group matching, report results using "*_member" keys
             file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir, group_scoring=True)
@@ -480,6 +485,6 @@ class ExpertiseService(object):
                         'submission_member': row[1],
                         'score': float(row[2])
                     })
-            result[predictions_key] = ret_list
+            result[predictions_key][results_key] = ret_list
 
         return result
