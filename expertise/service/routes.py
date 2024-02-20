@@ -2,7 +2,7 @@
 Implements the Flask API endpoints.
 '''
 from expertise.service.expertise import ExpertiseService
-from expertise.service import model_ready
+from expertise.service import model_ready, artifact_loading_started
 import openreview
 import json
 from openreview.openreview import OpenReviewException
@@ -360,6 +360,10 @@ def predict():
         flask.current_app.logger.info(json.dumps(flask.request.json))
 
         flask.current_app.logger.info(flask.current_app.config)
+
+        # If /predict called before artifacts loaded, block
+        if not model_ready.is_set() and artifact_loading_started.is_set():
+            model_ready.wait()
 
         # Parse request args
         user_request = flask.request.json.get('httpBody')

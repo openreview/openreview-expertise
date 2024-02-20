@@ -7,6 +7,7 @@ from google.cloud import storage
 
 from celery import Celery
 
+artifact_loading_started = Event()
 model_ready = Event()
 
 def configure_logger(app):
@@ -101,6 +102,8 @@ def create_redis(app):
 
 def load_model_artifacts():
     """Copy all files from a GCS bucket directory to a local directory."""
+    artifact_loading_started.set()
+
     # Extract the bucket name and path from the environment variable
     aip_storage_uri = os.getenv('AIP_STORAGE_URI')
     if not aip_storage_uri:
