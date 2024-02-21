@@ -422,9 +422,6 @@ class ExpertiseService(object):
         descriptions = JobDescription.VALS.value
         predictions_key = 'predictions'
 
-        if isinstance(request, list):
-            request = VertexParser.merge_instances_on(request, 'entityA.reviewerIds') ## TODO: don't hardcode this
-
         config, token = self._prepare_config(request)
         job_id = config.job_id
 
