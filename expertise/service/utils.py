@@ -103,6 +103,8 @@ class APIRequest(object):
                 # Check for optional expertise field
                 if 'expertise' in source_entity.keys():
                     target_entity['expertise'] = source_entity.pop('expertise')
+            elif 'reviewerIds' in source_entity.keys():
+                target_entity['reviewerIds'] = _get_from_entity('reviewerIds')
             else:
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
         # Handle type note
@@ -230,6 +232,7 @@ class JobConfig(object):
         description=None,
         match_group=None,
         alternate_match_group=None,
+        reviewer_ids=None,
         dataset=None,
         model=None,
         exclusion_inv=None,
@@ -254,6 +257,7 @@ class JobConfig(object):
         self.description = description
         self.match_group = match_group
         self.alternate_match_group = alternate_match_group
+        self.reviewer_ids = reviewer_ids
         self.dataset = dataset
         self.model = model
         self.exclusion_inv = exclusion_inv
@@ -280,6 +284,7 @@ class JobConfig(object):
             'mdate': self.mdate,
             'match_group': self.match_group,
             'alternate_match_group': self.alternate_match_group,
+            'reviewer_ids': self.reviewer_ids,
             'dataset': self.dataset,
             'model': self.model,
             'exclusion_inv': self.exclusion_inv,
@@ -345,7 +350,10 @@ class JobConfig(object):
         # TODO: Need new keyword
 
         if api_request.entityA['type'] == 'Group':
-            config.match_group = [api_request.entityA['memberOf']]
+            if 'memberOf' in api_request.entityA:
+                config.match_group = [api_request.entityA['memberOf']]
+            elif 'reviewerIds' in api_request.entityA:
+                config.reviewer_ids = [api_request.entityA['reviewerIds']]
             edge_inv = api_request.entityA.get('expertise', None)
 
             if edge_inv:
