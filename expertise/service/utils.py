@@ -105,6 +105,9 @@ class APIRequest(object):
                     target_entity['expertise'] = source_entity.pop('expertise')
             elif 'reviewerIds' in source_entity.keys():
                 target_entity['reviewerIds'] = _get_from_entity('reviewerIds')
+                # Check for optional expertise field
+                if 'expertise' in source_entity.keys():
+                    target_entity['expertise'] = source_entity.pop('expertise')
             else:
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
         # Handle type note
