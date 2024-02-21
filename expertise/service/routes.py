@@ -374,8 +374,6 @@ def predict():
             user_request = flask.request.json.get('instances')
             if not user_request:
                 raise openreview.OpenReviewException('Bad request: httpBody must wrap the whole request, or config must be in a list keyed by instances')
-            else:
-                user_request = VertexParser.merge_instances_on(user_request, 'entityA.reviewerIds') ## TODO: don't hardcode this
         else:
             flask.current_app.logger.info('rawPredict received')
 
