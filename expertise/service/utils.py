@@ -353,7 +353,7 @@ class JobConfig(object):
             if 'memberOf' in api_request.entityA:
                 config.match_group = [api_request.entityA['memberOf']]
             elif 'reviewerIds' in api_request.entityA:
-                config.reviewer_ids = [api_request.entityA['reviewerIds']]
+                config.reviewer_ids = api_request.entityA['reviewerIds']
             edge_inv = api_request.entityA.get('expertise', None)
 
             if edge_inv:
@@ -528,6 +528,7 @@ class JobConfig(object):
             description = job_config.get('description'),
             match_group = job_config.get('match_group'),
             alternate_match_group=job_config.get('alternate_match_group'),
+            reviewer_ids=job_config.get('reviewer_ids'),
             dataset = job_config.get('dataset'),
             model = job_config.get('model'),
             exclusion_inv = job_config.get('exclusion_inv'),
