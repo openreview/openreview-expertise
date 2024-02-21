@@ -6,7 +6,7 @@ from expertise.service import model_ready, artifact_loading_started
 import openreview
 import json
 from openreview.openreview import OpenReviewException
-from .utils import get_user_id
+from .utils import get_user_id, VertexParser
 import flask
 from copy import deepcopy
 from flask_cors import CORS
@@ -375,12 +375,7 @@ def predict():
             if not user_request:
                 raise openreview.OpenReviewException('Bad request: httpBody must wrap the whole request, or config must be in a list keyed by instances')
             else:
-                user_request = user_request[0] # Only support 1 config at a time
-                if not isinstance(user_request, dict):
-                    try:
-                        user_request = json.loads(user_request)
-                    except:
-                        raise openreview.OpenReviewException('Bad request: config at instances[0] must be deserializable into a dict')
+                user_request = VertexParser.merge_instances_on(user_request, 'entityA.reviewerIds') ## TODO: don't hardcode this
         else:
             flask.current_app.logger.info('rawPredict received')
 

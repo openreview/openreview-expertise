@@ -48,6 +48,41 @@ class JobDescription(dict, Enum):
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
     }
+class VertexParser(object):
+    """
+    GCP-specific Parser for Incoming Predictions
+    """
+    def merge_instances_on(instances, field_name):
+        """
+        Merges multiple Vertex AI instances into a single config that is recognizable by the expertise API
+        The provided field name will be converted into an array, if not already, of all values in the instances
+        """
+        field_path = field_name.split('.')
+
+        if len(instances) <= 0:
+            raise openreview.OpenReviewException('Bad request: instances must be not empty')
+
+        # Build final config based on first instance, all other fields will be the same
+        final_config = instances[0]
+        merged_field = []
+        for config in instances:
+            current_object = config
+            for key in field_path:
+                current_object = current_object[key] ## Navigate object
+
+            if isinstance(current_object, list):
+                merged_field.extend(current_object)
+            else:
+                merged_field.append(current_object)
+        
+        # Insert field
+        current_object = final_config
+        for key in field_path[:-1]:
+            current_object = current_object[key]
+        current_object[field_path[-1]] = merged_field
+
+        return final_config
+
 class APIRequest(object):
     """
     Validates and load objects and fields from POST requests
