@@ -425,25 +425,44 @@ class ExpertiseService(object):
 
         config, token = self._prepare_config(request)
         job_id = config.job_id
-
-        config.mdate = int(time.time() * 1000)
-        config.status = JobStatus.QUEUED
-        config.description = descriptions[JobStatus.QUEUED]
-        # TODO: Post this status information somewhere, ignore status for now
-
+        max_retries = self.server_config['CREATE_DATASET_RETRIES']
         self.logger.info(f"\nconf: {config.to_json()}\n")
+
+        # Load members and submission IDs to validate dataset
+        members = set(config.reviewer_ids)
+        num_submissions = request.entityA.get('count', 1) if request.entityA.get('type', 'Group').lower() == 'note' else request.entityb.get('count', 1)
 
         # Prepare the dataset and run the model
         self.logger.info('CREATING DATASET')
         execute_create_dataset(self.client, self.client_v2, config=config.to_json())
         # If dataset failed to generate, re-run
         retry = 0
-        max_retries = self.server_config['CREATE_DATASET_RETRIES']
-        while retry <= max_retries and (not Path(config.dataset['directory']).joinpath('submissions.json').exists() or not Path(config.dataset['directory']).joinpath('archives').exists()):
+        submissions_exist = Path(config.dataset['directory']).joinpath('submissions.json').exists()
+        archives_exist = Path(config.dataset['directory']).joinpath('archives').exists()
+        no_path = not submissions_exist or not archives_exist
+        incomplete_archives = members != set([file.replace('.jsonl', '') for file in os.listdir(Path(config.dataset['directory']).joinpath('archives'))])
+        if submissions_exist:
+            with open(config.dataset['directory'].joinpath('submissions.json'), 'r') as f:
+                incomplete_submissions = num_submissions != len(json.load(f).keys())
+        else:
+            incomplete_submissions = True
+        within_retry_threshold = retry <= max_retries
+        while within_retry_threshold and (no_path or incomplete_submissions or incomplete_archives):
             retry += 1
             time.sleep(5)
             self.logger.info('CREATING DATASET FAILED - RETRY')
             execute_create_dataset(self.client, self.client_v2, config=config.to_json())
+
+            submissions_exist = Path(config.dataset['directory']).joinpath('submissions.json').exists()
+            archives_exist = Path(config.dataset['directory']).joinpath('archives').exists()
+            no_path = not submissions_exist or not archives_exist
+            incomplete_archives = members != set([file.replace('.jsonl', '') for file in os.listdir(Path(config.dataset['directory']).joinpath('archives'))])
+            if submissions_exist:
+                with open(config.dataset['directory'].joinpath('submissions.json'), 'r') as f:
+                    incomplete_submissions = num_submissions != len(json.load(f).keys())
+            else:
+                incomplete_submissions = True
+            within_retry_threshold = retry <= max_retries
         self.logger.info('EXECUTING EXPERTISE')
         execute_expertise(config=config.to_json())
         self.logger.info('FINISHED EXPERTISE RETRIEVING RESULTS')
