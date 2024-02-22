@@ -423,14 +423,13 @@ class ExpertiseService(object):
         descriptions = JobDescription.VALS.value
         predictions_key = 'predictions'
 
+        # Load members and submission IDs to validate dataset
+        num_submissions = request['entityA'].get('count', 1) if request['entityA'].get('type', 'Group').lower() == 'note' else request['entityB'].get('count', 1)
         config, token = self._prepare_config(request)
         job_id = config.job_id
+        members = set(config.reviewer_ids)
         max_retries = self.server_config['CREATE_DATASET_RETRIES']
         self.logger.info(f"\nconf: {config.to_json()}\n")
-
-        # Load members and submission IDs to validate dataset
-        members = set(config.reviewer_ids)
-        num_submissions = request['entityA'].get('count', 1) if request['entityA'].get('type', 'Group').lower() == 'note' else request['entityB'].get('count', 1)
 
         # Prepare the dataset and run the model
         self.logger.info('CREATING DATASET')
