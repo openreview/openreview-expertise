@@ -441,7 +441,7 @@ class ExpertiseService(object):
         no_path = not submissions_exist or not archives_exist
         incomplete_archives = members != set([file.replace('.jsonl', '') for file in os.listdir(Path(config.dataset['directory']).joinpath('archives'))])
         if submissions_exist:
-            with open(config.dataset['directory'].joinpath('submissions.json'), 'r') as f:
+            with open(Path(config.dataset['directory']).joinpath('submissions.json'), 'r') as f:
                 incomplete_submissions = num_submissions != len(json.load(f).keys())
         else:
             incomplete_submissions = True
