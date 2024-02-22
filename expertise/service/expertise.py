@@ -9,6 +9,7 @@ from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
+from pathlib import Path
 
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase, VertexParser
 
@@ -435,6 +436,10 @@ class ExpertiseService(object):
         # Prepare the dataset and run the model
         self.logger.info('CREATING DATASET')
         execute_create_dataset(self.client, self.client_v2, config=config.to_json())
+        # If dataset failed to generate, re-run
+        while not Path(config['dataset']['directory']).joinpath('submissions.json').exists() or not Path(config['dataset']['directory']).joinpath('archives').exists():
+            self.logger.info('CREATING DATASET FAILED - RETRY')
+            execute_create_dataset(self.client, self.client_v2, config=config.to_json())
         self.logger.info('EXECUTING EXPERTISE')
         execute_expertise(config=config.to_json())
         self.logger.info('FINISHED EXPERTISE RETRIEVING RESULTS')
