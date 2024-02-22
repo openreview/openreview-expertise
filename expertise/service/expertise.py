@@ -430,7 +430,7 @@ class ExpertiseService(object):
 
         # Load members and submission IDs to validate dataset
         members = set(config.reviewer_ids)
-        num_submissions = request.entityA.get('count', 1) if request.entityA.get('type', 'Group').lower() == 'note' else request.entityb.get('count', 1)
+        num_submissions = request['entityA'].get('count', 1) if request['entityA'].get('type', 'Group').lower() == 'note' else request['entityB'].get('count', 1)
 
         # Prepare the dataset and run the model
         self.logger.info('CREATING DATASET')
