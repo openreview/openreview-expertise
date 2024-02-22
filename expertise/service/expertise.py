@@ -453,7 +453,15 @@ class ExpertiseService(object):
         while within_retry_threshold and (no_path or incomplete_submissions or incomplete_archives):
             retry += 1
             time.sleep(5)
-            self.logger.info('CREATING DATASET FAILED - RETRY')
+            self.logger.info(f'CREATING DATASET FAILED - RETRY {retry}/{max_retries} | NO_PATH={no_path} | INCOMP_ARCHIVES={incomplete_archives} | INCOMP_SUBMISSIONS={incomplete_submissions}')
+            if no_path:
+                self.logger.info(f"submissions={submissions_exist} archives={archives_exist}")
+            if incomplete_archives:
+                self.logger.info(f"m={members} archives={set([file.replace('.jsonl', '') for file in os.listdir(Path(config.dataset['directory']).joinpath('archives'))])}")
+            if incomplete_submissions and submissions_exist:
+                with open(Path(config.dataset['directory']).joinpath('submissions.json'), 'r') as f:
+                    self.logger.info(f"ids={submission_ids} s.json={set(json.load(f).keys())}")
+
             execute_create_dataset(self.client, self.client_v2, config=config.to_json())
 
             submissions_exist = Path(config.dataset['directory']).joinpath('submissions.json').exists()
