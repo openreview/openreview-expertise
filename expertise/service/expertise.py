@@ -437,7 +437,7 @@ class ExpertiseService(object):
         self.logger.info('CREATING DATASET')
         execute_create_dataset(self.client, self.client_v2, config=config.to_json())
         # If dataset failed to generate, re-run
-        while not Path(config['dataset']['directory']).joinpath('submissions.json').exists() or not Path(config['dataset']['directory']).joinpath('archives').exists():
+        while not Path(config.dataset['directory']).joinpath('submissions.json').exists() or not Path(config.dataset['directory']).joinpath('archives').exists():
             self.logger.info('CREATING DATASET FAILED - RETRY')
             execute_create_dataset(self.client, self.client_v2, config=config.to_json())
         self.logger.info('EXECUTING EXPERTISE')
