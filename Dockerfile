@@ -41,7 +41,7 @@ RUN echo "source ${HOME}/miniconda/etc/profile.d/conda.sh" >> ${HOME}/.bashrc \
     && mkdir ${HOME}/expertise-utils \
     && conda install -y filelock \
     && cd ${HOME}/openreview-expertise \
-    && cp ${HOME}/openreview-expertise/expertise/service/config/default_container.cfg ${HOME}/openreview-expertise/expertise/service/config/default.cfg \
+    && cp ${HOME}/openreview-expertise/expertise/service/config/default_container.cfg ${HOME}/openreview-expertise/expertise/service/config/production.cfg \
     && pip install -e . \
     && conda install -y intel-openmp \
     && conda install -y faiss-cpu -c pytorch \
