@@ -161,6 +161,9 @@ class APIRequest(object):
             
             if 'withContent' in source_entity.keys():
                 target_entity['withContent'] = _get_from_entity('withContent')
+
+            if 'count' in source_entity.keys():
+                target_entity['count'] = _get_from_entity('count')
         else:
             raise openreview.OpenReviewException(f"Bad request: invalid type in {entity_id}")
 
