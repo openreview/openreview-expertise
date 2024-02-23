@@ -72,11 +72,12 @@ if __name__ == '__main__':
 
     # Fetch and write to storage
     bucket_name = destination_prefix.split('/')[2]
+    blob_prefix = '/'.join(destination_prefix.split('/')[3:])
     gcs_client = storage.Client()
     bucket = gcs_client.bucket(bucket_name)
     for csv_file in [d for d in os.listdir(config.job_dir) if '.csv' in d]:
         result = []
-        destination_blob = f"{destination_prefix}/{csv_file.replace('.csv', '.jsonl')}"
+        destination_blob = f"{blob_prefix}/{csv_file.replace('.csv', '.jsonl')}"
         with open(os.path.join(config.job_dir, csv_file), 'r') as f:
             reader = csv.reader(f)
             for row in reader:
