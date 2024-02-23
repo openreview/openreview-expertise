@@ -4,7 +4,6 @@ import openreview
 import shortuuid
 import json
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
-from expertise.config import ModelConfig
 from expertise.service import load_model_artifacts
 from expertise.service.utils import APIRequest, JobConfig
 
@@ -29,7 +28,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('api_request_str', help='a JSON file containing all other arguments')
     args = parser.parse_args()
-    raw_request: dict = json.loads(args.api_request)
+    raw_request: dict = json.loads(args.api_request_str)
 
     # Pop token, base URLs and other expected variables
     token = raw_request.pop('token')
