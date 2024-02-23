@@ -3,9 +3,11 @@ import os
 import openreview
 import shortuuid
 import json
+import csv
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from expertise.service import load_model_artifacts
 from expertise.service.utils import APIRequest, JobConfig
+from google.cloud import storage
 
 DEFAULT_CONFIG = {
     "dataset": {},
@@ -34,6 +36,7 @@ if __name__ == '__main__':
     token = raw_request.pop('token')
     baseurl_v1 = raw_request.pop('baseurl_v1')
     baseurl_v2 = raw_request.pop('baseurl_v2')
+    destination_prefix = raw_request.pop('gcs_folder')
     specter_dir = os.getenv('SPECTER_DIR')
     mfr_vocab_dir = os.getenv('MFR_VOCAB_DIR')
     mfr_checkpoint_dir = os.getenv('MFR_CHECKPOINT_DIR')
@@ -66,3 +69,22 @@ if __name__ == '__main__':
     # Create Dataset and Execute Expertise
     execute_create_dataset(client_v1, client_v2, config.to_json())
     execute_expertise(config.to_json())
+
+    # Fetch and write to storage
+    bucket_name = destination_prefix.split('/')[2]
+    gcs_client = storage.Client()
+    bucket = gcs_client.bucket(bucket_name)
+    for csv_file in [d for d in os.listdir(config.job_dir) if '.csv' in d]:
+        result = []
+        destination_blob = f"{destination_prefix}/{csv_file.replace('.csv', '.jsonl')}"
+        with open(os.path.join(config.job_dir, csv_file), 'r') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                result.append({
+                    'submission': row[0],
+                    'user': row[1],
+                    'score': float(row[2])
+                })
+        blob = bucket.blob(destination_blob)
+        contents = '\n'.join([json.dumps(r) for r in result])
+        blob.upload_from_string(contents)
