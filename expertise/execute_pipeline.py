@@ -3,7 +3,7 @@ import os
 import openreview
 import shortuuid
 import json
-from execute_expertise import execute_create_dataset, execute_expertise
+from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from expertise.config import ModelConfig
 from expertise.service import load_model_artifacts
 from expertise.service.utils import APIRequest, JobConfig
