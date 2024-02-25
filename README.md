@@ -24,6 +24,25 @@ SciNCL is another transformer-based document encoder initialized on SciBERT. Sci
 
 Specter2 + SciNCL are ensembled at the paper-paper similarity level with equal weights of 0.5 on each model.
 
+### Performance
+We use metrics provided by [Stelmakh et al.](https://github.com/niharshah/goldstandard-reviewer-paper-match) as they correlated most closely with the problem of recommending papers to reviewers with sufficient expertise. The task is: given a reviewer's profile in the form of their publications, and their self-reported expertise on reviewing two papers, return the correct ordering of papers so that the higher expertise-ranked paper is recommended fist. The table below reports the following evaluations:
+1. Loss: An error from the underlying model occurs when the higher rated paper is returned as the second result. The loss is the absolute difference between the expertise ratings, so that the more obvious the error, the higher loss is incurred. A formal definition is provided [here](https://arxiv.org/pdf/2303.16750.pdf) in subsection 5.1.
+2. Easy Triples: Accuracy of a model on data where the gap between the expertise ratings is large, indicating an obvious error.
+3. Hard Triples: Accuracy of a model on data where the gap between the expertise ratings is small, indicating a less-obvious error that requires fine-grained understanding to be correct.
+
+The following table is partially taken from Stelmakh et al., where SPECTER2, SciNCL and SPECTER2+SciNCL were evaluated by the OpenReview team on their public dataset and evaluation scripts.
+
+| Model          |  Loss  |  Easy Triples  |  Hard Triples  |  
+|----------------|--------|----------------|----------------|
+|   TPMS (Full)  |  N/A   |      0.84      |      0.64      |
+|      TPMS      |  0.28  |      0.80      |      0.62      |
+|      ELMo      |  0.34  |      0.70      |      0.57      |
+|    SPECTER     |  0.27  |      0.85      |      0.57      |
+|  SPECTER+MFR   |  0.24  |      0.88      |      0.60      |
+|      ACL       |  0.30  |      0.78      |      0.62      |
+|    SPECTER2    |  0.22  |      0.89      |      0.61      |
+|     SciNCL     |  0.22  |      0.90      |      0.65      |
+| SPECTER2+SciNCL|  0.21  |      0.91      |      0.65      |
 
 ## Installation
 
