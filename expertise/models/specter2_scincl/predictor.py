@@ -1,4 +1,5 @@
 from tqdm import tqdm
+import openreview
 import itertools
 import torch, json
 class Predictor:
@@ -79,6 +80,8 @@ class Predictor:
                 paper_emb = paper_data['embedding']
             id_list.append(paper_id)
             emb_list.append(paper_emb)
+        if len(emb_list) == 0:
+            raise openreview.OpenReviewException('No embeddings found. Please check that you have at least 1 submission submitted and that you have run the Post Submission stage.')
         emb_tensor = torch.stack(emb_list)
         emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
         print(len(bad_id_set))
