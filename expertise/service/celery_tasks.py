@@ -8,6 +8,12 @@ from expertise.service.server import celery_app as celery_server
 from expertise.service.server import redis_config_pool
 import openreview, celery
 
+def get_config(config):
+    """
+    Get the latest config from Redis
+    """
+    return RedisDatabase(connection_pool=redis_config_pool).load_job(config.job_id, config.user_id)
+
 def update_status(config, new_status, desc=None):
     """
     Updates the config of a given job to the new status
@@ -34,37 +40,75 @@ def update_status(config, new_status, desc=None):
     redis_db = RedisDatabase(connection_pool=redis_config_pool)
     redis_db.save_job(config)
 
+def check_revoked(config: JobConfig):
+    """
+    Gets the status given a config - used to check for revoked status
+
+    :param config: JobConfig of a given job
+    :type config: JobConfig
+
+    :return True if revoked:
+    """
+    redis_db = RedisDatabase(connection_pool=redis_config_pool)
+    new_config = redis_db.load_job(config.job_id, config.user_id)
+    return new_config.status == JobStatus.REVOKED
+
+def clean_revoked(config: JobConfig):
+    """
+    Deletes the data for a revoked job
+
+    :param config: JobConfig of a given job
+    :type config: JobConfig
+    """
+    redis_db = RedisDatabase(connection_pool=redis_config_pool)
+    if os.path.isdir(config.job_dir):
+        shutil.rmtree(config.job_dir)
+    redis_db.remove_job(config.user_id, config.job_id)
+
 def on_failure_userpaper(self, exc, task_id, args, kwargs, einfo):
-    config, logger = args[0], args[2]
+    config, logger = get_config(args[0]), args[2]
     logger.error(f"Error in job: {config.job_id}, {str(exc)}")
     update_status(config, JobStatus.ERROR, str(exc))
 
 def on_failure_expertise(self, exc, task_id, args, kwargs, einfo):
-    config, logger = args[0], args[1]
+    config, logger = get_config(args[0]), args[1]
     logger.error(f"Error in job: {config.job_id}, {str(exc)}")
     update_status(config, JobStatus.ERROR, str(exc))
 
-def after_userpaper_return(self, status, retval, task_id, args, kwargs, einfo):
-    config, logger = args[0], args[2]
-    if config.status != JobStatus.ERROR:
+def before_userpaper_start(self, task_id, args, kwargs):
+    config, logger = get_config(args[0]), args[2]
+    if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
+        logger.info(f"New status: {JobStatus.FETCHING_DATA}")
+        update_status(config, JobStatus.FETCHING_DATA)
+
+def before_expertise_start(self, task_id, args, kwargs):
+    config, logger = get_config(args[0]), args[1]
+    if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
         logger.info(f"New status: {JobStatus.RUN_EXPERTISE}")
-        update_status(args[0], JobStatus.RUN_EXPERTISE)
+        update_status(config, JobStatus.RUN_EXPERTISE)
+
+def after_userpaper_return(self, status, retval, task_id, args, kwargs, einfo):
+    config, logger = get_config(args[0]), args[2]
+    if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
+        logger.info(f"New status: {JobStatus.EXPERTISE_QUEUED}")
+        update_status(config, JobStatus.EXPERTISE_QUEUED)
 
 def after_expertise_return(self, status, retval, task_id, args, kwargs, einfo):
-    config, logger = args[0], args[1]
-    if config.status != JobStatus.ERROR:
+    config, logger = get_config(args[0]), args[1]
+    if config.status != JobStatus.ERROR and config.status != JobStatus.REVOKED:
         logger.info(f"New status: {JobStatus.COMPLETED}")
-        update_status(args[0], JobStatus.COMPLETED)
+        update_status(config, JobStatus.COMPLETED)
 
 @celery_server.task(
     name='userpaper',
+    before_start=before_userpaper_start,
     after_return=after_userpaper_return,
     on_failure=on_failure_userpaper,
     track_started=True,
     bind=True,
     time_limit=3600 * 24
 )
-def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger):
+def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger, config_json: dict):
     openreview_client = openreview.Client(
         token=token,
         baseurl=config.baseurl
@@ -76,19 +120,27 @@ def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger):
     logger.info('CREATING DATASET')
     execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
     run_expertise.apply_async(
-            (config, logger),
+            (config, logger, config.to_json()),
             queue='expertise',
+            task_id=config.job_id + '_expertise'
     )
     logger.info('FINISHED USERPAPER')
 
 @celery_server.task(
     name='expertise',
+    before_start=before_expertise_start,
     after_return=after_expertise_return,
     on_failure=on_failure_expertise,
     track_started=True,
     bind=True,
     time_limit=3600 * 24
 )
-def run_expertise(self, config: dict, logger: logging.Logger):
-    execute_expertise(config=config.to_json())
+def run_expertise(self, config: JobConfig, logger: logging.Logger, config_json: dict):
+    # Run if not revoked
+    if not check_revoked(config):
+        execute_expertise(config=config.to_json())
 
+    # If revoked while running, or revoked at all, clean up job
+    if check_revoked(config):
+        logger.info(f"Deleting {config.job_dir} for {config.user_id}")
+        clean_revoked(config)

@@ -38,6 +38,8 @@ class JobStatus(str, Enum):
     RUN_EXPERTISE = 'Running Expertise'
     COMPLETED = 'Completed'
     ERROR = 'Error'
+    REVOKED = 'Revoked'
+    CANCEL = 'Canceled'
 
 class JobDescription(dict, Enum):
     VALS = {
@@ -47,6 +49,8 @@ class JobDescription(dict, Enum):
         JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
+        JobStatus.REVOKED: 'Job is revoked and will be cleaned up',
+        JobStatus.CANCEL: 'Job was running when the server restarted and was canceled'
     }
 class APIRequest(object):
     """
@@ -161,7 +165,11 @@ class RedisDatabase(object):
         else:
             self.db = redis.Redis(connection_pool=connection_pool)
     def save_job(self, job_config):
+        job_config.mdate = int(time.time() * 1000)
         self.db.set(f"job:{job_config.job_id}", pickle.dumps(job_config))
+        if os.path.isdir(job_config.job_dir):
+            with open(os.path.join(job_config.job_dir, 'config.json'), 'w+') as f:
+                json.dump(job_config.to_json(), f, ensure_ascii=False, indent=4)
     
     def load_all_jobs(self, user_id):
         """
