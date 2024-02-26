@@ -113,21 +113,21 @@ def execute_expertise(config):
         )
         ens_predictor.set_archives_dataset(archives_dataset)
         ens_predictor.set_submissions_dataset(submissions_dataset)
-        specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_specter.jsonl')
-        scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_scincl.jsonl')
+        specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_specter.pt')
+        scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_scincl.pt')
         ens_predictor.embed_publications(
             specter_publications_path=specter_publication_path,
             scincl_publications_path=scincl_publication_path
         )
         ens_predictor.embed_submissions(
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
-            scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl')
+            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.pt'),
+            scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.pt')
         )
         ens_predictor.all_scores(
             specter_publications_path=specter_publication_path,
             scincl_publications_path=scincl_publication_path,
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
-            scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl'),
+            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.pt'),
+            scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.pt'),
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
         )
 
@@ -150,16 +150,16 @@ def execute_expertise(config):
         )
         scincl_predictor.set_archives_dataset(archives_dataset)
         scincl_predictor.set_submissions_dataset(submissions_dataset)
-        scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+        scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.pt')
         scincl_predictor.embed_publications(
             scincl_publication_path
         )
         scincl_predictor.embed_submissions(
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+            Path(config['model_params']['submissions_path']).joinpath('sub2vec.pt')
         )
         scincl_predictor.all_scores(
             scincl_publication_path,
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
+            Path(config['model_params']['submissions_path']).joinpath('sub2vec.pt'),
             Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'),
             p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
         )
@@ -183,16 +183,16 @@ def execute_expertise(config):
         )
         spec2_predictor.set_archives_dataset(archives_dataset)
         spec2_predictor.set_submissions_dataset(submissions_dataset)
-        specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+        specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.pt')
         spec2_predictor.embed_publications(
             specter_publication_path
         )
         spec2_predictor.embed_submissions(
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+            Path(config['model_params']['submissions_path']).joinpath('sub2vec.pt')
         )
         spec2_predictor.all_scores(
             specter_publication_path,
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
+            Path(config['model_params']['submissions_path']).joinpath('sub2vec.pt'),
             Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'),
             p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
         )
