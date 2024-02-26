@@ -1,4 +1,5 @@
 from tqdm import tqdm
+import itertools
 class Predictor:
     def _sparse_scores_helper(self, all_scores, id_index):
         counter = 0
@@ -17,3 +18,11 @@ class Predictor:
                 current_id = (note_id, profile_id)[id_index]
             counter += 1
         return all_scores
+
+    def _fetch_batches(self, dict_data, batch_size):
+        iterator = iter(dict_data.items())
+        for _ in itertools.count():
+            batch = list(itertools.islice(iterator, batch_size))
+            if not batch:
+                break
+            yield batch

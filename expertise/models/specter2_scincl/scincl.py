@@ -69,14 +69,6 @@ class SciNCLPredictor(Predictor):
         self.model.to(self.cuda_device)
         self.model.eval()
 
-    def _fetch_batches(self, dict_data, batch_size):
-        iterator = iter(dict_data.items())
-        for _ in itertools.count():
-            batch = list(itertools.islice(iterator, batch_size))
-            if not batch:
-                break
-            yield batch
-
     def _batch_predict(self, batch_data):
         jsonl_out = []
         text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
