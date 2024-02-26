@@ -60,3 +60,25 @@ class Predictor:
             emb_jsonl.extend(self._batch_predict(batch_data))
 
         torch.save(emb_jsonl, embedding_path)
+
+    def _load_emb_file(emb_file, cuda_device):
+        paper_emb_size_default = 768
+        id_list = []
+        emb_list = []
+        bad_id_set = set()
+        for line in emb_file:
+            paper_data = line
+            paper_id = paper_data['paper_id']
+            paper_emb_size = len(paper_data['embedding'])
+            assert paper_emb_size == 0 or paper_emb_size == paper_emb_size_default
+            if paper_emb_size == 0:
+                paper_emb = [0] * paper_emb_size_default
+                bad_id_set.add(paper_id)
+            else:
+                paper_emb = paper_data['embedding']
+            id_list.append(paper_id)
+            emb_list.append(paper_emb)
+        emb_tensor = torch.stack(emb_list)
+        emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
+        print(len(bad_id_set))
+        return emb_tensor, id_list, bad_id_set
