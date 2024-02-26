@@ -1,5 +1,6 @@
 from tqdm import tqdm
 import itertools
+import torch, json
 class Predictor:
     def _sparse_scores_helper(self, all_scores, id_index):
         counter = 0
@@ -41,7 +42,7 @@ class Predictor:
 
         for paper, embedding in zip(batch_data, embeddings):
             paper = paper[1]
-            jsonl_out.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding.detach().cpu().numpy().tolist()}) + '\n')
+            jsonl_out.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding}) + '\n')
 
         # clean up batch data
         del embeddings
