@@ -26,3 +26,26 @@ class Predictor:
             if not batch:
                 break
             yield batch
+
+    def _batch_predict(self, batch_data):
+        jsonl_out = []
+        text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
+        # preprocess the input
+        inputs = self.tokenizer(text_batch, padding=True, truncation=True,
+                                        return_tensors="pt", return_token_type_ids=False, max_length=512)
+        inputs = inputs.to(self.cuda_device)
+        with torch.no_grad():
+            output = self.model(**inputs)
+        # take the first token in the batch as the embedding
+        embeddings = output.last_hidden_state[:, 0, :]
+
+        for paper, embedding in zip(batch_data, embeddings):
+            paper = paper[1]
+            jsonl_out.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding.detach().cpu().numpy().tolist()}) + '\n')
+
+        # clean up batch data
+        del embeddings
+        del output
+        del inputs
+        torch.cuda.empty_cache()
+        return jsonl_out
