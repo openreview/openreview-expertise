@@ -147,7 +147,7 @@ class TestExpertiseService():
         assert len(returned_configs) == 1
         assert returned_configs[0].user_id == 'test_user1@mail.com'
         assert returned_configs[0].job_id == 'abcde'
-        assert returned_configs[0].status == JobStatus.ERROR
+        assert returned_configs[0].status == JobStatus.REVOKED
         assert returned_configs[0].description == 'Server restarted while job was running'
         shutil.rmtree('./tests/jobs')
 
