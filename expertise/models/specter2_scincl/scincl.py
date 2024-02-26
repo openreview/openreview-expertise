@@ -130,15 +130,7 @@ class SciNCLPredictor(Predictor):
         metadata_file = os.path.join(self.work_dir, "scincl_submission_paper_data.json")
         ids_file = os.path.join(self.work_dir, "scincl_submission_paper_ids.txt")
 
-        with open(metadata_file, 'r') as f:
-            paper_data = json.load(f)
-
-        sub_jsonl = []
-        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
-            sub_jsonl.extend(self._batch_predict(batch_data))
-
-        with open(submissions_path, 'w') as f:
-            f.writelines(sub_jsonl)
+        self._create_embeddings(metadata_file, submissions_path)
 
     def embed_publications(self, publications_path=None):
         if not self.use_redis:
@@ -147,15 +139,7 @@ class SciNCLPredictor(Predictor):
         metadata_file = os.path.join(self.work_dir, "scincl_reviewer_paper_data.json")
         ids_file = os.path.join(self.work_dir, "scincl_reviewer_paper_ids.txt")
 
-        with open(metadata_file, 'r') as f:
-            paper_data = json.load(f)
-
-        pub_jsonl = []
-        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
-            pub_jsonl.extend(self._batch_predict(batch_data))
-
-        with open(publications_path, 'w') as f:
-            f.writelines(pub_jsonl)
+        self._create_embeddings(metadata_file, publications_path)
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None, p2p_path=None):
         def load_emb_file(emb_file):

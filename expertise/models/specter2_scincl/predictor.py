@@ -50,3 +50,13 @@ class Predictor:
         del inputs
         torch.cuda.empty_cache()
         return jsonl_out
+
+    def _create_embeddings(self, metadata_file, embedding_path):
+        with open(metadata_file, 'r') as f:
+            paper_data = json.load(f)
+
+        emb_jsonl = []
+        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
+            emb_jsonl.extend(self._batch_predict(batch_data))
+
+        torch.save(emb_jsonl, embedding_path)
