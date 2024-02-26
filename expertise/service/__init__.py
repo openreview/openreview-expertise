@@ -131,8 +131,8 @@ def create_celery(app):
     if active:
         for job_list in active.values():
             for job in job_list:
-                app.logger.info(f"Revoking task {job['id']} with terminate signal")
-                control.revoke(job['id'], terminate=True)
+                app.logger.info(f"Revoking task {job['id']}")
+                control.revoke(job['id'])
                 set_config_error(job['args'][0])
 
     app.logger.info('Scheduled queue:')
