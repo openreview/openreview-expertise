@@ -143,18 +143,17 @@ class SciNCLPredictor(Predictor):
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None, p2p_path=None):
         print('Loading cached publications...')
-        with open(publications_path) as f_in:
-            paper_emb_train, train_id_list, train_bad_id_set = self._load_emb_file(f_in)
+        paper_emb_train, train_id_list, train_bad_id_set = Predictor._load_emb_file(publications_path, self.cuda_device)
         paper_num_train = len(train_id_list)
 
         paper_id2train_idx = {}
         for idx, paper_id in enumerate(train_id_list):
             paper_id2train_idx[paper_id] = idx
 
-        with open(submissions_path) as f_in:
-            print('Loading cached submissions...')
-            paper_emb_test, test_id_list, test_bad_id_set = self._load_emb_file(f_in)
-            paper_num_test = len(test_id_list)
+        
+        print('Loading cached submissions...')
+        paper_emb_test, test_id_list, test_bad_id_set = Predictor._load_emb_file(submissions_path, self.cuda_device)
+        paper_num_test = len(test_id_list)
 
         print('Computing all scores...')
         p2p_aff = torch.empty((paper_num_test, paper_num_train), device=torch.device('cpu'))

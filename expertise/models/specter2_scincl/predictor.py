@@ -42,7 +42,7 @@ class Predictor:
 
         for paper, embedding in zip(batch_data, embeddings):
             paper = paper[1]
-            jsonl_out.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding}) + '\n')
+            jsonl_out.append({'paper_id': paper['paper_id'], 'embedding': embedding})
 
         # clean up batch data
         del embeddings
@@ -61,12 +61,13 @@ class Predictor:
 
         torch.save(emb_jsonl, embedding_path)
 
-    def _load_emb_file(emb_file, cuda_device):
+    def _load_emb_file(emb_path, cuda_device):
+        loaded_embeddings = torch.load(emb_path)
         paper_emb_size_default = 768
         id_list = []
         emb_list = []
         bad_id_set = set()
-        for line in emb_file:
+        for line in loaded_embeddings:
             paper_data = line
             paper_id = paper_data['paper_id']
             paper_emb_size = len(paper_data['embedding'])
