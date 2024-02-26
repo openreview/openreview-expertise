@@ -80,7 +80,7 @@ def create_app(config=None):
             JobStatus.RUN_EXPERTISE
         ]:
             app.logger.info(f"{config.job_id} was running - canceling job")
-            config.status = JobStatus.ERROR
+            config.status = JobStatus.REVOKED
             config.description = 'Server restarted while job was running'
             config.mdate = int(time.time() * 1000)
             redis.save_job(config)
@@ -101,7 +101,7 @@ def create_celery(app):
             JobStatus.RUN_EXPERTISE
         ]:
             app.logger.info(f"{job_config.job_id} was running - canceling job")
-            job_config.status = JobStatus.ERROR
+            job_config.status = JobStatus.REVOKED
             job_config.description = 'Server restarted while job was running'
             job_config.mdate = int(time.time() * 1000)
             redis.save_job(job_config)
