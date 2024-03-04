@@ -99,7 +99,7 @@ class TestConference():
             readers=['openreview.net/Support'],
             referent=request_form_note.forum,
             replyto=request_form_note.forum,
-            signatures=['~Super_User1'],
+            signatures=['openreview.net/Support'],
             writers=['openreview.net/Support']
         ))
 
@@ -233,7 +233,7 @@ class TestConference():
             readers=['openreview.net/Support'],
             referent=request_form_note.forum,
             replyto=request_form_note.forum,
-            signatures=['~Super_User1'],
+            signatures=['openreview.net/Support'],
             writers=['openreview.net/Support']
         ))
 
