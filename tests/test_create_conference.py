@@ -99,7 +99,7 @@ class TestConference():
             readers=['openreview.net/Support'],
             referent=request_form_note.forum,
             replyto=request_form_note.forum,
-            signatures=['openreview.net/Support'],
+            signatures=['~Super_User1'],
             writers=['openreview.net/Support']
         ))
 
@@ -166,7 +166,7 @@ class TestConference():
             readers=['openreview.net/Support'],
             referent=request_form_note.forum,
             replyto=request_form_note.forum,
-            signatures=['openreview.net/Support'],
+            signatures=['~Super_User1'],
             writers=['openreview.net/Support']
         ))
 
@@ -233,7 +233,7 @@ class TestConference():
             readers=['openreview.net/Support'],
             referent=request_form_note.forum,
             replyto=request_form_note.forum,
-            signatures=['openreview.net/Support'],
+            signatures=['~Super_User1'],
             writers=['openreview.net/Support']
         ))
 
