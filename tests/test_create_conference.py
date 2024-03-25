@@ -86,6 +86,7 @@ class TestConference():
                 'Expected Submissions': '100',
                 'include_expertise_selection': 'Yes',
                 'submission_reviewer_assignment': 'Automatic',
+                'submission_license': ['CC BY-SA 4.0']
             }))
 
         helpers.await_queue()
@@ -152,6 +153,7 @@ class TestConference():
                 'How did you hear about us?': 'ML conferences',
                 'Expected Submissions': '100',
                 'submission_reviewer_assignment': 'Automatic',
+                'submission_license': ['CC BY-SA 4.0']
             }))
 
         helpers.await_queue()
@@ -218,6 +220,7 @@ class TestConference():
                 'Expected Submissions': '100',
                 'include_expertise_selection': 'Yes',
                 'submission_reviewer_assignment': 'Automatic',
+                'submission_license': ['CC BY-SA 4.0']
             }))
 
         helpers.await_queue()

@@ -2,18 +2,56 @@
 
 A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
 
-## Prerequisites (Optional)
+## Model Descriptions
 
-If you plan to use expertise regularly, please consider installing [RedisAI](https://oss.redis.com/redisai/) to make the runs more efficient. We recommend to use Docker image `redislabs/redisai`, however you can install it directly from the source code as explained [here](https://oss.redis.com/redisai/quickstart/).
+**SPECTER - SPECTER: Document-level Representation Learning using Citation-informed Transformers (2020)**
+
+SPECTER is a BERT-based document encoder for scientific articles using titles and abstracts. SPECTER is first initialized using SciBERT as a scientific-text specific starting point and uses inter-document citation graph information to learn a general-purpose embedding. During training, SPECTER sees 3 papers: a query paper, a paper cited by the query for a positive example, and a paper cited by the positive example but not the query. SPECTER learns to group together documents where one document cites the other and separate documents that are farther away on the citation graph. SPECTER can be used for inference without any additional citation information.
+
+**Multi-facet Recommender (MFR) - Cold-start Paper Recommendation using Multi-facet Embedding (2021)**
+
+Multi-facet Recommender (MFR) is a transformer-based recommendation system for scientific papers. The core principle is that articles can have several different key areas whose information is lost when compressing the title and abstract into a single embedding. Papers in MFR are represented with multiple vectors called facets. Authors are built by minimizing the distance between the author representation and all facets of each of their publications. A recommendation is made by scoring the author against the most similar facet of a venue’s submission.
+
+Specter + MFR are ensembled at the reviewer-paper affinity score level with a weight of 0.8 on SPECTER and 0.2 on MFR.
+
+**SPECTER2 - SciRepEval: A Multi-Format Benchmark for Scientific Document Representations (2022, model updated with papers from 2023)**
+
+SPECTER2’s underlying architecture is very similar to SPECTER, but pre-trained on a larger set of documents spanning a broader number of fields of study. This pre-trained model is SPECTER2 base, further training is done to learn task format-specific adapter layers and attention modules as a middle ground between using a single embedding for all downstream tasks and specific embeddings per task. We use the proximity adapter for paper recommendation, where the training objective is the same triplet loss as the pre-training objective, as well as the original SPECTER objective.
+
+**SciNCL - Neighborhood Contrastive Learning for Scientific Document Representations with Citation Embeddings (2022)**
+
+SciNCL is another transformer-based document encoder initialized on SciBERT. SciNCL looks to address some key design choices in the SPECTER models training procedure. While they share the same triplet-loss objective, SPECTER uses the discrete citations, which may miss similar papers but were not cited and may reflect citation policy rather than pure similarity, and unidirectional citations, which can cause a paper to be both a positive and negative example. SciNCL first trains embeddings over the citation graph to move the embeddings into a continuous space, and uses nearest neighbors of a query document to determine its triplets for training.
+
+Specter2 + SciNCL are ensembled at the paper-paper similarity level with equal weights of 0.5 on each model.
+
+### Performance
+We use metrics provided by [Stelmakh et al.](https://github.com/niharshah/goldstandard-reviewer-paper-match) as they correlated most closely with the problem of recommending papers to reviewers with sufficient expertise. The task is: given a reviewer's profile in the form of their publications, and their self-reported expertise on reviewing two papers, return the correct ordering of papers so that the higher expertise-ranked paper is recommended fist. The table below reports the following evaluations:
+1. Loss: An error from the underlying model occurs when the higher rated paper is returned as the second result. The loss is the absolute difference between the expertise ratings, so that the more obvious the error, the higher loss is incurred. A formal definition is provided [here](https://arxiv.org/pdf/2303.16750.pdf) in subsection 5.1.
+2. Easy Triples: Accuracy of a model on data where the gap between the expertise ratings is large, indicating an obvious error.
+3. Hard Triples: Accuracy of a model on data where the gap between the expertise ratings is small, indicating a less-obvious error that requires fine-grained understanding to be correct.
+
+The following table is partially taken from Stelmakh et al., where SPECTER2, SciNCL and SPECTER2+SciNCL were evaluated by the OpenReview team on their public dataset and evaluation scripts.
+
+| Model          |  Loss  |  Easy Triples  |  Hard Triples  |  
+|----------------|--------|----------------|----------------|
+|   TPMS (Full)  |  N/A   |      0.84      |      0.64      |
+|      TPMS      |  0.28  |      0.80      |      0.62      |
+|      ELMo      |  0.34  |      0.70      |      0.57      |
+|    SPECTER     |  0.27  |      0.85      |      0.57      |
+|  SPECTER+MFR   |  0.24  |      0.88      |      0.60      |
+|      ACL       |  0.30  |      0.78      |      0.62      |
+|    SPECTER2    |  0.22  |      0.89      |      0.61      |
+|     SciNCL     |  0.22  |      0.90      |      0.65      |
+| SPECTER2+SciNCL|  0.21  |      0.91      |      0.65      |
 
 ## Installation
 
-This repository only supports Python 3.6 and above.
+This repository only supports Python 3.6 and above. Python 3.8 and above is required to run SPECTER2
 Clone this repository and install the package using pip as follows. If you plan to use ELMo, then you will need to install [Miniconda](https://docs.conda.io/en/latest/miniconda.html), since one of the packages is only available in conda. You may use the `pip` command in a conda environment as long as you first run all the pip installs and then conda installs. Just follow the order of the commands shown below and it should work. You may read more about this [here](https://www.anaconda.com/using-pip-in-a-conda-environment/).
 
 Run this command only if you are using conda:
 ```
-conda create -n affinity python=3.7
+conda create -n affinity python=3.8
 conda activate affinity
 conda install pip
 ```
@@ -28,14 +66,14 @@ If you plan to actively develop models, it's best to install the package in "edi
 pip install -e <location of this repository>
 ```
 
-Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR) or SPECTER+MFR with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
+Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR), SPECTER+MFR, SPECTER2+SciNCL with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
 
 We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
 
 Run this command if you plan to use ELMo (Using CPU is fine):
 ```
 conda install intel-openmp==2019.4
-conda install faiss-cpu -c pytorch
+conda install faiss-cpu==1.7.3 -c pytorch
 ```
 [Here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md) you can find the above installation command.
 
@@ -52,10 +90,12 @@ pip install -r requirements.txt
 python setup.py install
 conda install filelock
 cd ..
+pip install -I protobuf==3.20.1
+pip install numpy==1.24.4 --force-reinstall
 ```
 Pass the path to the cloned GitHub repository as `model_params.specter_dir`. 
 
-If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint files from [here](https://drive.google.com/file/d/1_mWkQ1dr_Vl121WZkbNyNMV3G_bmoQ6s/view?usp=sharing), extract it, and pass the paths:
+If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint files from [here](https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz), extract it, and pass the paths:
 ```
 "feature_vocab_file": <path_to_untarred_dir>/feature_vocab_file,
 "model_checkpoint_dir": <path_to_untarred_dir>/mfr_model_checkpoint/
@@ -73,6 +113,32 @@ https://www.overleaf.com/read/ygmygwtjbzfg
 
 https://www.overleaf.com/read/swqrxgqqvmyv
 
+The following instructions are all of the commands to install the dependencies used by this repository - this follows the same commands listed above and assumes you start in the `openreview-expertise` directory after cloning it:
+```
+conda update -y conda
+conda create -n expertise python=$PYTHON_VERSION -c conda-forge
+conda activate expertise
+mkdir ../expertise-utils
+cd ../expertise-utils
+git clone https://github.com/allenai/specter.git
+cd specter
+wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
+tar -xzvf archive.tar.gz
+conda install pytorch cudatoolkit=10.1 -c pytorch 
+pip install -r requirements.txt
+python setup.py install
+conda install -y filelock
+cd ..
+wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
+tar -xzvf mfr.tar.gz
+mv ./multifacet_recommender_data ./multifacet_recommender
+cd ~/openreview-expertise
+pip install -e .
+conda install -y intel-openmp==2019.4
+conda install -y faiss-cpu==1.7.3 -c pytorch
+pip install -I protobuf==3.20.1
+pip install numpy==1.24.4 --force-reinstall
+```
 ## Affinity Scores
 
 There are two steps to create affinity scores:
