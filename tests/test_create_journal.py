@@ -38,8 +38,9 @@ class TestJournal():
         openreview_client.add_members_to_group('TMLR/Action_Editors', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
         openreview_client.add_members_to_group('TMLR/Reviewers', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
     
-    def test_post_submissions(self, client, openreview_client, helpers):
+    def test_post_submissions(self, client, openreview_client, helpers, test_client):
         # Post submission with a test author id
+        test_client_v2 = openreview.api.OpenReviewClient(token=test_client.token)
 
         def post_notes(data, invitation):
             for note_json in data['notes'][invitation]:
@@ -48,9 +49,9 @@ class TestJournal():
 
                 # Post note edit to journal submission invitation
                 # TODO: Add in cdate to API2 notes
-                submission_note = openreview_client.post_note_edit(
+                submission_note = test_client_v2.post_note_edit(
                     invitation = invitation,
-                    signatures = ['~Super_User1'],
+                    signatures = ['~SomeFirstName_User1'],
                     note = Note(
                         #cdate = cdate,
                         content = {

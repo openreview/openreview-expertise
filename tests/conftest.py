@@ -95,6 +95,11 @@ def helpers():
     return Helpers
 
 @pytest.fixture(scope="session")
+def test_client():
+    Helpers.create_user('test@mail.com', 'SomeFirstName', 'User')
+    yield openreview.Client(baseurl = 'http://localhost:3000', username='test@mail.com', password=Helpers.strong_password)
+
+@pytest.fixture(scope="session")
 def client():
     yield openreview.Client(baseurl = 'http://localhost:3000', username='openreview.net', password=Helpers.strong_password)
 
