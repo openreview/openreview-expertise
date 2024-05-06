@@ -1,1 +1,1 @@
-find /tmp/tmp* -prune -type d -mtime +0.168 -exec rm -r {} \;
+find /tmp/tmp* -prune -type d -mmin +240 -exec rm -r {} \;
