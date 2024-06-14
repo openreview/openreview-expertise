@@ -48,6 +48,41 @@ class JobDescription(dict, Enum):
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
     }
+class VertexParser(object):
+    """
+    GCP-specific Parser for Incoming Predictions
+    """
+    def merge_instances_on(instances, field_name):
+        """
+        Merges multiple Vertex AI instances into a single config that is recognizable by the expertise API
+        The provided field name will be converted into an array, if not already, of all values in the instances
+        """
+        field_path = field_name.split('.')
+
+        if len(instances) <= 0:
+            raise openreview.OpenReviewException('Bad request: instances must be not empty')
+
+        # Build final config based on first instance, all other fields will be the same
+        final_config = instances[0]
+        merged_field = []
+        for config in instances:
+            current_object = config
+            for key in field_path:
+                current_object = current_object[key] ## Navigate object
+
+            if isinstance(current_object, list):
+                merged_field.extend(current_object)
+            else:
+                merged_field.append(current_object)
+        
+        # Insert field
+        current_object = final_config
+        for key in field_path[:-1]:
+            current_object = current_object[key]
+        current_object[field_path[-1]] = merged_field
+
+        return final_config
+
 class APIRequest(object):
     """
     Validates and load objects and fields from POST requests
@@ -103,6 +138,11 @@ class APIRequest(object):
                 # Check for optional expertise field
                 if 'expertise' in source_entity.keys():
                     target_entity['expertise'] = source_entity.pop('expertise')
+            elif 'reviewerIds' in source_entity.keys():
+                target_entity['reviewerIds'] = _get_from_entity('reviewerIds')
+                # Check for optional expertise field
+                if 'expertise' in source_entity.keys():
+                    target_entity['expertise'] = source_entity.pop('expertise')
             else:
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
         # Handle type note
@@ -121,6 +161,9 @@ class APIRequest(object):
             
             if 'withContent' in source_entity.keys():
                 target_entity['withContent'] = _get_from_entity('withContent')
+
+            if 'submissionIds' in source_entity.keys():
+                target_entity['submissionIds'] = _get_from_entity('submissionIds')
         else:
             raise openreview.OpenReviewException(f"Bad request: invalid type in {entity_id}")
 
@@ -230,6 +273,7 @@ class JobConfig(object):
         description=None,
         match_group=None,
         alternate_match_group=None,
+        reviewer_ids=None,
         dataset=None,
         model=None,
         exclusion_inv=None,
@@ -254,6 +298,7 @@ class JobConfig(object):
         self.description = description
         self.match_group = match_group
         self.alternate_match_group = alternate_match_group
+        self.reviewer_ids = reviewer_ids
         self.dataset = dataset
         self.model = model
         self.exclusion_inv = exclusion_inv
@@ -280,6 +325,7 @@ class JobConfig(object):
             'mdate': self.mdate,
             'match_group': self.match_group,
             'alternate_match_group': self.alternate_match_group,
+            'reviewer_ids': self.reviewer_ids,
             'dataset': self.dataset,
             'model': self.model,
             'exclusion_inv': self.exclusion_inv,
@@ -345,7 +391,10 @@ class JobConfig(object):
         # TODO: Need new keyword
 
         if api_request.entityA['type'] == 'Group':
-            config.match_group = [api_request.entityA['memberOf']]
+            if 'memberOf' in api_request.entityA:
+                config.match_group = [api_request.entityA['memberOf']]
+            elif 'reviewerIds' in api_request.entityA:
+                config.reviewer_ids = api_request.entityA['reviewerIds']
             edge_inv = api_request.entityA.get('expertise', None)
 
             if edge_inv:
@@ -520,6 +569,7 @@ class JobConfig(object):
             description = job_config.get('description'),
             match_group = job_config.get('match_group'),
             alternate_match_group=job_config.get('alternate_match_group'),
+            reviewer_ids=job_config.get('reviewer_ids'),
             dataset = job_config.get('dataset'),
             model = job_config.get('model'),
             exclusion_inv = job_config.get('exclusion_inv'),
