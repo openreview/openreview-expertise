@@ -25,7 +25,7 @@ jobs:
           transport.host: localhost
           TZ: "Etc/UTC"
     environment:
-      PYTHON_VERSION: 3.8
+      PYTHON_VERSION: 3.11
     steps:
       - checkout
       - run:
@@ -40,7 +40,7 @@ jobs:
             apt install -y sudo
             DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
             cd $HOME
-            wget "https://repo.anaconda.com/miniconda/Miniconda3-py38_22.11.1-1-Linux-x86_64.sh" -O miniconda.sh
+            wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.7.1-0-Linux-x86_64.sh" -O miniconda.sh
             printf '%s' "473e5ecc8e078e9ef89355fbca21f8eefa5f9081544befca99867c7beac3150d  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
       - run:
@@ -48,7 +48,7 @@ jobs:
           command: |
             cd ~/
             curl -Lk https://raw.githubusercontent.com/tj/n/master/bin/n -o n
-            sudo bash n 18.15.0
+            sudo bash n 20.17.0
             hash -r
             sudo npm install -g n
       - run:
