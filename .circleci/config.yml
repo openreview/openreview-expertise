@@ -25,7 +25,7 @@ jobs:
           transport.host: localhost
           TZ: "Etc/UTC"
     environment:
-      PYTHON_VERSION: 3.11
+      PYTHON_VERSION: 3.8
     steps:
       - checkout
       - run:
