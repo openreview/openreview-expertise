@@ -69,7 +69,7 @@ jobs:
             tar -xzvf archive.tar.gz
             conda install pytorch cudatoolkit=10.1 -c pytorch 
             pip install -r requirements.txt
-            python setup.py install
+            pip install -e .
             conda install -y filelock
             cd ..
             wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
