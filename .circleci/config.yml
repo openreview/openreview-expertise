@@ -60,7 +60,7 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             python --version
-            pip install --upgrade pip setuptools
+            pip install --upgrade pip setuptools thinc blis
             mkdir ~/expertise-utils
             cd ~/expertise-utils
             git clone https://github.com/allenai/specter.git
