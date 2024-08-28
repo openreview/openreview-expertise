@@ -16,7 +16,14 @@ task_serializer = 'pickle'
 result_serializer = 'pickle'
 accept_content = ['pickle', 'application/x-python-serialize']
 task_create_missing_queues = True
+
+worker_prefetch_multiplier = 1
 # result_backend = 'redis://localhost:6379/0'
+
+broker_transport_options = {
+    'visibility_timeout': 43200,
+    'max_retries': 0
+}
 
 registry.enable('pickle')
 registry.enable('application/x-python-serialize')

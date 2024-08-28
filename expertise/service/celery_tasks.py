@@ -62,7 +62,11 @@ def after_expertise_return(self, status, retval, task_id, args, kwargs, einfo):
     on_failure=on_failure_userpaper,
     track_started=True,
     bind=True,
-    time_limit=3600 * 24
+    time_limit=3600 * 24,
+    acks_late=False,
+    reject_on_worker_lost=False,
+    task_acks_on_failure_or_timeout=True,
+    max_retries=0
 )
 def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger):
     openreview_client = openreview.Client(
@@ -87,7 +91,11 @@ def run_userpaper(self, config: JobConfig, token: str, logger: logging.Logger):
     on_failure=on_failure_expertise,
     track_started=True,
     bind=True,
-    time_limit=3600 * 24
+    time_limit=3600 * 24,
+    acks_late=False,
+    reject_on_worker_lost=False,
+    task_acks_on_failure_or_timeout=True,
+    max_retries=0
 )
 def run_expertise(self, config: dict, logger: logging.Logger):
     execute_expertise(config=config.to_json())
