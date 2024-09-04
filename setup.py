@@ -24,14 +24,15 @@ setup(
         'tqdm',
         'pytorch_pretrained_bert',
         'ipdb',
-        'spacy==2.2.*',
+        'spacy==2.1.0',
         'en_core_web_sm@https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-2.1.0/en_core_web_sm-2.1.0.tar.gz ',
         'python-Levenshtein',
-        'allennlp==1.0.0',
+        'allennlp==0.9.0',
+        'tokenizers==0.13.3',
         'sacremoses',
         'rank_bm25',
         'pytest',
-        'overrides==3.0.0',
+        'overrides==2.8.0',
         'flask==2.2.2',
         'flask-cors==3.0.9',
         'cffi>=1.0.0',
@@ -44,7 +45,7 @@ setup(
         'python-dotenv',
         'importlib-metadata==4.13.0',
         'werkzeug==2.2.2',
-        'adapter-transformers==3.2.*'
+        'adapter-transformers==3.2.1.post0'
     ],
     zip_safe=False
 )
