@@ -69,8 +69,6 @@ jobs:
             tar -xzvf mfr.tar.gz
             mv ./multifacet_recommender_data ./multifacet_recommender
             cd ~/openreview-expertise
-            pip uninstall -y wheel
-            pip install wheel==0.32.*
             pip install -e .
             conda install -y intel-openmp==2019.4
             conda install -y faiss-cpu==1.7.3 -c pytorch
