@@ -70,6 +70,8 @@ jobs:
             mv ./multifacet_recommender_data ./multifacet_recommender
             cd ~/openreview-expertise
             pip install -e .
+            pip install spacy==2.1.0
+            pip install allennlp==0.9.0
             conda install -y intel-openmp==2019.4
             conda install -y faiss-cpu==1.7.3 -c pytorch
             pip install -I protobuf==3.20.1
