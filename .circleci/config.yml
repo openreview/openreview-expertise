@@ -63,8 +63,6 @@ jobs:
             mkdir ~/expertise-utils
             cd ~/expertise-utils
             conda install pytorch cudatoolkit=10.1 -c pytorch 
-            pip install -r requirements.txt
-            python setup.py install
             conda install -y filelock
             cd ..
             wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
