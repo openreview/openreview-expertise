@@ -30,8 +30,8 @@ setup(
         'sacremoses',
         'rank_bm25',
         'pytest',
-        'spacy',
-        'allenlp'
+        'spacy<=3.0.0',
+        'allenlp<=2.7.0'
         'overrides==2.8.0',
         'flask==2.2.2',
         'flask-cors==3.0.9',
