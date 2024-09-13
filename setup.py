@@ -15,6 +15,7 @@ setup(
         'openreview-py>=1.0.1',
         'numpy==1.24.4',
         'scipy==1.10.1',
+        'adapter-transformers==3.2.1post0',
         'pandas',
         'nltk',
         'gensim==4.1.2',
@@ -43,8 +44,7 @@ setup(
         'redisai',
         'python-dotenv',
         'importlib-metadata==4.13.0',
-        'werkzeug==2.2.2',
-        'adapter-transformers'
+        'werkzeug==2.2.2'
     ],
     zip_safe=False
 )
