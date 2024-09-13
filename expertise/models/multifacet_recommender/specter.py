@@ -24,10 +24,6 @@ import numpy as np
 from expertise.service.server import redis_embeddings_pool
 
 import logging
-logging.getLogger('allennlp.common.params').disabled = True
-logging.getLogger('allennlp.common.from_params').disabled = True
-logging.getLogger('allennlp.common.registrable').setLevel(logging.WARNING)
-logging.getLogger('allennlp.nn.initializers').disabled = True
 
 """
 archive_file: $SPECTER_FOLDER/model.tar.gz
