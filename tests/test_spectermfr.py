@@ -135,6 +135,7 @@ def test_sparse_scores(tmp_path, create_smfr):
         mfr_submissions_path=None,
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
+    print(all_scores)
 
     if config['model_params'].get('sparse_value'):
         all_scores = smfrModel.sparse_scores(
