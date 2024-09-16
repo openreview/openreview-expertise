@@ -140,5 +140,5 @@ def test_sparse_scores(tmp_path, create_smfr):
         all_scores = smfrModel.sparse_scores(
             scores_path=scores_path.joinpath(config['name'] + '_sparse.csv')
         )
-
+    print(all_scores)
     assert len(all_scores) == 8
