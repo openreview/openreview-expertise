@@ -143,6 +143,8 @@ class SpecterPredictor:
                 else:
                     print(f"Skipping publication {publication['id']}. Either title or abstract must be provided ")
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_data.json"), 'w') as f_out:
+            print(f"Writing {len(output_dict)} publications to file")
+            print(json.dumps(output_dict, indent=1))
             json.dump(output_dict, f_out, indent=1)
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt"), 'w') as f_out:
             f_out.write('\n'.join(paper_ids_list)+'\n')
@@ -161,6 +163,8 @@ class SpecterPredictor:
                                              "paper_id": submission["id"],
                                              "authors": []}
         with open(os.path.join(self.work_dir, "specter_submission_paper_data.json"), 'w') as f_out:
+            print(f"Writing {len(output_dict)} submissions to file")
+            print(json.dumps(output_dict, indent=1))
             json.dump(output_dict, f_out, indent=1)
         with open(os.path.join(self.work_dir, "specter_submission_paper_ids.txt"), 'w') as f_out:
             f_out.write('\n'.join(paper_ids_list)+'\n')
