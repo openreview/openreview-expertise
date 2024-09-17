@@ -66,16 +66,7 @@ If you plan to actively develop models, it's best to install the package in "edi
 pip install -e <location of this repository>
 ```
 
-Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR), SPECTER+MFR, SPECTER2+SciNCL with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
-
-We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
-
-Run this command if you plan to use ELMo (Using CPU is fine):
-```
-conda install intel-openmp==2019.4
-conda install faiss-cpu==1.7.3 -c pytorch
-```
-[Here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md) you can find the above installation command.
+Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use SPECTER, Multifacet-Recommender (MFR), SPECTER+MFR, SPECTER2+SciNCL with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
 
 If you plan to use SPECTER / SPECTER+MFR, with the conda environment `affinity` active:
 ```
@@ -159,7 +150,7 @@ python -m expertise.create_dataset config.json \
 If you wish to create your own dataset without using the OpenReview API to obtain the data, please follow the formatting provided below:
 ![dataset_format](https://user-images.githubusercontent.com/43583679/166930738-6e4a8ac9-f2a8-499a-8eb0-98b1f26a9a12.png)
 
-For ELMo, SPECTER, Multifacet-Recommender and BM25 run the following command
+For SPECTER, Multifacet-Recommender and BM25 run the following command
 ```
 python -m expertise.run config.json
 ```
@@ -171,38 +162,6 @@ python -m expertise.tfidf_scores config.json
 ```
 
 The output will generate a `.csv` file with the name pattern `<config_name>-scores.csv`.
-
-## Detect Duplicates
-
-Duplicate detection can be used to find duplicates both within a venue or between 2 different venues.
-
-- For detecting duplicates within a venue only one submissions directory or one submissions.jsonl file is needed.
-- For detecting duplicates between 2 different venues, either one submissions and one other submissions directories are needed or one submissions.jsonl and one other_submissions.jsonl are needed.
-
-More details about these files/directories can be found at the end of this section.
-
-There are two steps to detect duplicates:
-- Create Dataset or Datasets
-- Run Duplicate Detection
-
-The dataset can be generated using the [OpenReview python API](https://github.com/openreview/openreview-py) which should be installed when this repository is installed. You can generate your own dataset from some other source as long as it is compliant with the format shown in the Datasets section.
-Start by creating an "experiment directory" (`experiment_dir`), and a JSON config file (e.g. `config.json`) in it. Go to the Configuration File section for details on how to create the `config.json`.
-
-Duplicate detection uses ELMo exclusively, since we always normalize the scores for BM25. ELMo scores have values from 0 to 1. The closer a score is to 1, the more similar the submissions are. The `normalize` option for ELMo is disabled for duplicate detection.
-
-Create a dataset by running the following command (this is optional if you already have the dataset):
-```
-python -m expertise.create_dataset config.json \
-	--baseurl <usually https://api.openreview.net> \
-	--password <your_password> \
-	--username <your_username> \
-```
-
-For ELMo run the following command
-```
-python -m expertise.run_duplicate_detection config.json
-```
-The output will generate a `.csv` file with the name pattern `<config_name>.csv`. Read the `Configuration File` section to understand how to create one. For duplicate detection, the parameters that apply are in `Affinity Scores Configuration Options`, `ELMo specific parameters (affinity scores)`, and `ELMo specific parameters (duplicate detection)`.
 
 ## Running the Server
 The server is implemented in Flask and can be started from the command line:
@@ -383,37 +342,6 @@ Here is an example:
 }
 ```
 
-#### ELMo specific parameters (affinity scores):
-- `model_params.use_cuda`: Boolean to indicate whether to use GPU (`true`) or CPU (`false`) when running ELMo. Currently, only 1 GPU is supported, but there does not seem to be necessary to have more.
-- `model_params.batch_size`: Batch size when running ELMo. This defaults to 8, but depending on your machine, this value could be different.
-- `model_params.publications_path`: When running ELMo, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
-- `model_params.submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the Submissions are stored.
-- `model_params.knn` (optional): This parameter specifies the k Nearest Neighbors that will be printed to the csv file. For instance, if the value is 10, then only the first 10 authors with the highest affinity score will be printed for each submission. You may see that if the value is 10, more than 10 values are printed, that is because there are ties in the scores. If the parameter is not specified, then each submission will have a score for every reviewer.
-- `model_params.normalize` (optional): This parameter specifies if the ELMo scores should be normalized. Normally, the ELMo scores are between 0.5 and 1. Therefore, normalizing the scores can provide better matching between reviewers and submissions. This of course would not change the order of the results, if reviewer 1 is better than reviewer 2 for a particular submission, this will still be true after normalizing the scores.
-- `model_params.skip_elmo`: Since running ELMo can take a significant amount of time, the vectors are saved in `model_params.submissions_path` and `model_params.publications_path`. If you want to run other operations with these results, like changing the value of `model_params.knn`, you may do so without running ELMo again by setting `model_params.skip_elmo` to true. The pickle files will be loaded with all the vectors.
-
-Here is an example:
-```
-{
-    "name": "iclr2020_elmo_abstracts",
-    "dataset": {
-        "directory": "./"
-    },
-    "model": "elmo",
-    "model_params": {
-        "scores_path": "./",
-        "use_title": false,
-        "use_abstract": true,
-        "use_cuda": true,
-        "batch_size": 8,
-        "normalize": true,
-        "skip_elmo": false,
-        "publications_path": "./",
-        "submissions_path": "./"
-    }
-}
-```
-
 #### SPECTER specific parameters (affinity scores):
 - `model_params.specter_dir`: Path to the unpacked SPECTER directory. The model checkpoint will be loaded relative to this directory.
 - `model_params.work_dir`: When running SPECTER, this is where the intermediate files are stored.
@@ -522,31 +450,6 @@ Here is an example:
 }
 ```
 
-#### ELMo specific parameters (duplicate detection):
-- `model_params.other_submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the other Submissions are stored.
-All the other parameters are the same as in the affinity scores.
-
-Here is an example:
-```
-{
-    "name": "duplicate_detection",
-    "dataset": {
-        "directory": "./"
-    },
-    "model_params": {
-        "scores_path": "./",
-        "use_title": false,
-        "use_abstract": true,
-        "use_cuda": true,
-        "batch_size": 4,
-        "knn": 10,
-        "skip_elmo": false,
-        "submissions_path": "./",
-        "other_submissions_path": "./"
-    }
-}
-```
-
 #### TF-IDF Sparse Vector Similarity specific parameters with suggested values:
 - `min_count_for_vocab`: 1,
 - `random_seed`: 9,
@@ -594,7 +497,7 @@ dataset-name/
 
 ```
 
-In case BM25 or ELMo is used, then the Submissions (and Other Submissions when doing duplicate detection) can have the following format
+In case BM25 is used, then the Submissions (and Other Submissions when doing duplicate detection) can have the following format
 
 ```
 dataset-name/
@@ -608,7 +511,7 @@ The `archives` folder will contain the user ids of people that will review paper
 
 The `submissions` folder contains all the submissions of a particular venue. The name of the file is the id used to identify the submission in OpenReview. Each file will only contain one line with all the submission content.
 
-Alternatively, instead of using the `submissions` folder for BM25 and ELMo, the `submissions.jsonl` and `other_submissions.jsonl` will have a strigified JSON submission per line.
+Alternatively, instead of using the `submissions` folder for BM25, the `submissions.jsonl` and `other_submissions.jsonl` will have a strigified JSON submission per line.
 
 The stringified JSONs representing a Submission or Publication should have the following schema to work:
 ```
