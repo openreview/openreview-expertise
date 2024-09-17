@@ -3,7 +3,6 @@ import math
 import numpy as np
 import os
 import sys
-import json
 import random
 import time
 import torch
@@ -284,7 +283,6 @@ class MultiFacetRecommender(object):
                 if self.pub_note_id_to_abstract[publication['id']] is None:
                     self.pub_note_id_to_abstract[publication['id']] = ""
 
-
     def set_submissions_dataset(self, submissions_dataset):
         self.sub_note_id_to_abstract = {}
         self.sub_note_id_to_title = {}
@@ -298,7 +296,6 @@ class MultiFacetRecommender(object):
             self.sub_note_id_to_abstract[submission['id']] = submission['content'].get('abstract')
             if self.sub_note_id_to_abstract[submission['id']] is None:
                 self.sub_note_id_to_abstract[submission['id']] = ""
-
 
     @staticmethod
     def _tokenize_text(corpus):
