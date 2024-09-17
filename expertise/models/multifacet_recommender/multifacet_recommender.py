@@ -284,7 +284,6 @@ class MultiFacetRecommender(object):
                 if self.pub_note_id_to_abstract[publication['id']] is None:
                     self.pub_note_id_to_abstract[publication['id']] = ""
 
-        print(json.dumps(self.pub_note_id_to_title, indent=1))
 
     def set_submissions_dataset(self, submissions_dataset):
         self.sub_note_id_to_abstract = {}
@@ -300,7 +299,6 @@ class MultiFacetRecommender(object):
             if self.sub_note_id_to_abstract[submission['id']] is None:
                 self.sub_note_id_to_abstract[submission['id']] = ""
 
-        print(json.dumps(self.sub_note_id_to_title, indent=1))
 
     @staticmethod
     def _tokenize_text(corpus):
