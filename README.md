@@ -47,7 +47,7 @@ The following table is partially taken from Stelmakh et al., where SPECTER2, Sci
 ## Installation
 
 This repository only supports Python 3.6 and above. Python 3.8 and above is required to run SPECTER2
-Clone this repository and install the package using pip as follows. If you plan to use ELMo, then you will need to install [Miniconda](https://docs.conda.io/en/latest/miniconda.html), since one of the packages is only available in conda. You may use the `pip` command in a conda environment as long as you first run all the pip installs and then conda installs. Just follow the order of the commands shown below and it should work. You may read more about this [here](https://www.anaconda.com/using-pip-in-a-conda-environment/).
+Clone this repository and install the package using pip as follows. You may use the `pip` command in a conda environment as long as you first run all the pip installs and then conda installs. Just follow the order of the commands shown below and it should work. You may read more about this [here](https://www.anaconda.com/using-pip-in-a-conda-environment/).
 
 Run this command only if you are using conda:
 ```
@@ -586,7 +586,7 @@ To run a single set of tests from a file, you can include the file name as an ar
 pytest tests/test_double_blind_conference.py
 ```
 
-## Test
+## Test (Outdated)
 The testing methodology used for the model tries to check how good the model is. We are aware that this may not be the best strategy, but it has given good results so far. The test consists on using the publications of several reviewers and take one of those publications out from the corpus. We then use that extracted publication to calculate affinity scores against the remaining publications in the corpus. If the model is good then, we expect the authors of the extracted publication to have the highest affinity scores.
 
 This method has two obvious disadvantages:
