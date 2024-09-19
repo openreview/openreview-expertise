@@ -13,7 +13,6 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
-from expertise.models import elmo
 
 class TestExpertiseV2():
 
