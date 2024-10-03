@@ -86,14 +86,17 @@ def execute_expertise(config):
         ens_predictor.set_submissions_dataset(submissions_dataset)
         specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_specter.jsonl')
         scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_scincl.jsonl')
-        ens_predictor.embed_publications(
-            specter_publications_path=specter_publication_path,
-            scincl_publications_path=scincl_publication_path
-        )
-        ens_predictor.embed_submissions(
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
-            scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl')
-        )
+
+        if config['model_params'].get('skip_embedding', False):
+            ens_predictor.embed_publications(
+                specter_publications_path=specter_publication_path,
+                scincl_publications_path=scincl_publication_path
+            )
+            ens_predictor.embed_submissions(
+                specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
+                scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl')
+            )
+
         ens_predictor.all_scores(
             specter_publications_path=specter_publication_path,
             scincl_publications_path=scincl_publication_path,
@@ -122,12 +125,15 @@ def execute_expertise(config):
         scincl_predictor.set_archives_dataset(archives_dataset)
         scincl_predictor.set_submissions_dataset(submissions_dataset)
         scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
-        scincl_predictor.embed_publications(
-            scincl_publication_path
-        )
-        scincl_predictor.embed_submissions(
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
-        )
+
+        if config['model_params'].get('skip_embedding', False):
+            scincl_predictor.embed_publications(
+                scincl_publication_path
+            )
+            scincl_predictor.embed_submissions(
+                Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+            )
+
         scincl_predictor.all_scores(
             scincl_publication_path,
             Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
@@ -155,12 +161,15 @@ def execute_expertise(config):
         spec2_predictor.set_archives_dataset(archives_dataset)
         spec2_predictor.set_submissions_dataset(submissions_dataset)
         specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
-        spec2_predictor.embed_publications(
-            specter_publication_path
-        )
-        spec2_predictor.embed_submissions(
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
-        )
+
+        if config['model_params'].get('skip_embedding', False):
+            spec2_predictor.embed_publications(
+                specter_publication_path
+            )
+            spec2_predictor.embed_submissions(
+                Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+            )
+
         spec2_predictor.all_scores(
             specter_publication_path,
             Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
@@ -186,8 +195,11 @@ def execute_expertise(config):
         )
         mfr_predictor.set_archives_dataset(archives_dataset)
         mfr_predictor.set_submissions_dataset(submissions_dataset)
-        mfr_predictor.embed_publications(publications_path=None)
-        mfr_predictor.embed_submissions(submissions_path=None)
+
+        if config['model_params'].get('skip_embedding', False):
+            mfr_predictor.embed_publications(publications_path=None)
+            mfr_predictor.embed_submissions(submissions_path=None)
+
         mfr_predictor.all_scores(
             publications_path=None,
             submissions_path=None,
@@ -221,13 +233,16 @@ def execute_expertise(config):
         specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
         if config['model_params'].get('use_redis', False):
             specter_publication_path = None
-        ens_predictor.embed_publications(
-            specter_publications_path=specter_publication_path,
-            mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False)
-        )
-        ens_predictor.embed_submissions(
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
-            mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+
+        if config['model_params'].get('skip_embedding', False):
+            ens_predictor.embed_publications(
+                specter_publications_path=specter_publication_path,
+                mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False)
+            )
+            ens_predictor.embed_submissions(
+                specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
+                mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+
         ens_predictor.all_scores(
             specter_publications_path=specter_publication_path,
             mfr_publications_path=None,
