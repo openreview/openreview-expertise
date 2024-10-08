@@ -40,7 +40,7 @@ silent
 """
 class SciNCLPredictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, dump_p2p=False):
+                 sparse_value=None, use_redis=False, dump_p2p=False, skip_normalization=False):
         self.model_name = 'scincl'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -49,6 +49,7 @@ class SciNCLPredictor(Predictor):
         self.work_dir = work_dir
         self.average_score = average_score
         self.max_score = max_score
+        self.skip_normalization = skip_normalization
         assert max_score ^ average_score, "(Only) One of max_score or average_score must be True"
         self.batch_size = batch_size
         if use_cuda:
@@ -239,9 +240,12 @@ class SciNCLPredictor(Predictor):
                 json.dump(p2p_dict, f, indent=4)
 
         # Normalize all scores
-        min_val = p2p_aff.min()
-        max_val = p2p_aff.max()
-        p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+        if not self.skip_normalization:
+            min_val = p2p_aff.min()
+            max_val = p2p_aff.max()
+            p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+        else:
+            p2p_aff_norm = p2p_aff
 
         csv_scores = []
         self.preliminary_scores = []
