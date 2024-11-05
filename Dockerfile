@@ -33,7 +33,6 @@ RUN echo "source ${HOME}/miniconda/etc/profile.d/conda.sh" >> ${HOME}/.bashrc \
     && echo "conda activate expertise" >> ${HOME}/.bashrc \
     && /bin/bash -c "source ${HOME}/miniconda/etc/profile.d/conda.sh && conda activate expertise" \
     && python --version \
-    && cd specter \
     && conda install -y pytorch pytorch-cuda=11 -c pytorch -c nvidia  \
     && mkdir ${HOME}/expertise-utils \
     && conda install -y filelock \
