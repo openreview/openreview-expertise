@@ -33,11 +33,8 @@ RUN echo "source ${HOME}/miniconda/etc/profile.d/conda.sh" >> ${HOME}/.bashrc \
     && echo "conda activate expertise" >> ${HOME}/.bashrc \
     && /bin/bash -c "source ${HOME}/miniconda/etc/profile.d/conda.sh && conda activate expertise" \
     && python --version \
-    && git clone https://github.com/allenai/specter.git \
     && cd specter \
     && conda install -y pytorch pytorch-cuda=11 -c pytorch -c nvidia  \
-    && pip install -r requirements.txt \
-    && python setup.py install \
     && mkdir ${HOME}/expertise-utils \
     && conda install -y filelock \
     && cd ${HOME}/openreview-expertise \
