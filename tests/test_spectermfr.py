@@ -135,10 +135,20 @@ def test_sparse_scores(tmp_path, create_smfr):
         mfr_submissions_path=None,
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
+    all_users, all_submissions = set(), set()
+    for score in all_scores:
+        all_users.add(score[1])
+        all_submissions.add(score[0])
 
     if config['model_params'].get('sparse_value'):
         all_scores = smfrModel.sparse_scores(
             scores_path=scores_path.joinpath(config['name'] + '_sparse.csv')
         )
+    
+    sparse_users, sparse_submissions = set(), set()
+    for score in all_scores:
+        sparse_users.add(score[1])
+        sparse_submissions.add(score[0])
 
-    assert len(all_scores) == 8
+    assert all_users == sparse_users
+    assert all_submissions == sparse_submissions
