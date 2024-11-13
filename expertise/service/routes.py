@@ -2,9 +2,11 @@
 Implements the Flask API endpoints.
 '''
 from expertise.service.expertise import ExpertiseService
+from expertise.service import model_ready, artifact_loading_started
 import openreview
+import json
 from openreview.openreview import OpenReviewException
-from .utils import get_user_id
+from .utils import get_user_id, VertexParser
 import flask
 from copy import deepcopy
 from flask_cors import CORS
@@ -16,8 +18,11 @@ BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
 
 
-def get_client():
-    token = flask.request.headers.get('Authorization')
+def get_client(token=None):
+    if not token:
+        token = flask.request.headers.get('Authorization')
+        if token is None:
+            raise openreview.OpenReviewException('Forbidden: No authorization detected')
     return (
         openreview.Client(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL']),
         openreview.api.OpenReviewClient(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL_V2']),
@@ -294,6 +299,100 @@ def results():
         result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
 
         flask.current_app.logger.debug('GET returns code 200')
+        return flask.jsonify(result), 200
+
+    except openreview.OpenReviewException as error_handle:
+        flask.current_app.logger.error(str(error_handle))
+
+        error_type = str(error_handle)
+        status = 500
+
+        if 'not found' in error_type.lower():
+            status = 404
+        elif 'forbidden' in error_type.lower():
+            status = 403
+        elif 'bad request' in error_type.lower():
+            status = 400
+
+        return flask.jsonify(format_error(status, error_type)), status
+
+    # pylint:disable=broad-except
+    except Exception as error_handle:
+        flask.current_app.logger.error(str(error_handle))
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
+
+@BLUEPRINT.route('/startup')
+def startup():
+    """An endpoint for checking availability for predictions"""
+    flask.current_app.logger.info('In startup')
+    if not model_ready.is_set():
+        return {'status': 'Service unavailable: Artifact loading in progress'}, 503
+    return {'status': 'Available for predictions'}, 200
+
+@BLUEPRINT.route('/health')
+def health():
+    """An endpoint for server uptime"""
+    flask.current_app.logger.info('In health')
+    return {'status': 'Healthy instance'}, 200
+
+@BLUEPRINT.route('/predict', methods=['POST'])
+def predict():
+    """
+    Submit a job to create a dataset and execute an expertise model based on the submitted configuration
+
+    This is a blocking call and directly returns the scores
+
+    :param token: Authorization from a logged in user, which defines the set of accessible data
+    :type token: str
+
+    :param name: A name describing the job being submitted
+    :type name: str
+
+    :param match_group: A group whose profiles will be used to compute expertise
+    :type match_group: str
+
+    :param paper_invitation: An invitation containing submissions used to compute expertise
+    :type paper_invitation: str
+    """
+
+    try:
+        flask.current_app.logger.info('Received expertise request')
+        flask.current_app.logger.info(json.dumps(flask.request.json))
+
+        flask.current_app.logger.info(flask.current_app.config)
+
+        # If /predict called before artifacts loaded, block
+        if not model_ready.is_set() and artifact_loading_started.is_set():
+            flask.current_app.logger.info('Model is not ready, artifacts are loading')
+            model_ready.wait()
+
+        flask.current_app.logger.info(f'Model ready: {model_ready.is_set()} | Artifact loading executed: {artifact_loading_started.is_set()}')
+
+        # Parse request args
+        user_request = flask.request.json.get('httpBody')
+        if not user_request:
+            user_request = flask.request.json.get('instances')
+            if not user_request:
+                raise openreview.OpenReviewException('Bad request: httpBody must wrap the whole request, or config must be in a list keyed by instances')
+            else:
+                user_request = VertexParser.merge_instances_on(user_request, 'entityA.reviewerIds') ## TODO: don't hardcode this
+        else:
+            flask.current_app.logger.info('rawPredict received')
+
+        token = user_request.get('token')
+        openreview_client, openreview_client_v2 = get_client(token=token)
+
+        if token:
+            del user_request['token'] ## Prevent token from being seen by the rest of API directly
+
+        user_id = get_user_id(openreview_client)
+        if not user_id:
+            flask.current_app.logger.error('No Authorization token in headers')
+            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
+
+        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2, containerized=True).predict_expertise(user_request)
+
+        flask.current_app.logger.debug('POST returns code 200')
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:

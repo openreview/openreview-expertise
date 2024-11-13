@@ -8,13 +8,15 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
+from expertise.execute_expertise import execute_create_dataset, execute_expertise
+from pathlib import Path
 
-from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase
+from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase, VertexParser
 
 user_index_file_lock = Lock()
 class ExpertiseService(object):
 
-    def __init__(self, client, config, logger, client_v2 = None):
+    def __init__(self, client, config, logger, client_v2 = None, containerized = False):
         self.client = client
         self.client_v2 = client_v2
         self.logger = logger
@@ -24,11 +26,15 @@ class ExpertiseService(object):
         self.specter_dir = config['SPECTER_DIR']
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
         self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
-        self.redis = RedisDatabase(
-            host = config['REDIS_ADDR'],
-            port = config['REDIS_PORT'],
-            db = config['REDIS_CONFIG_DB']
-        )
+        self.containerized = containerized
+
+        # Only load if maintaining persisted jobs on disk
+        if not containerized:
+            self.redis = RedisDatabase(
+                host = config['REDIS_ADDR'],
+                port = config['REDIS_PORT'],
+                db = config['REDIS_CONFIG_DB']
+            )
 
         # Define expected/required API fields
         self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
@@ -80,8 +86,9 @@ class ExpertiseService(object):
             os.makedirs(config.dataset['directory'])
         with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
             json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
-        self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
-        self.redis.save_job(config)
+        if not self.containerized:
+            self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
+            self.redis.save_job(config)
 
         return config, self.client.token
 
@@ -411,3 +418,107 @@ class ExpertiseService(object):
         # Return filtered config
         self._filter_config(config)
         return config.to_json()
+
+    def predict_expertise(self, request):
+        descriptions = JobDescription.VALS.value
+        predictions_key = 'predictions'
+
+        # Load members and submission IDs to validate dataset
+        try:
+            submission_ids = set(request['entityA']['submissionIds']) if request['entityA'].get('type', 'Group').lower() == 'note' else set(request['entityB']['submissionIds'])
+        except:
+            raise openreview.OpenReviewException(f"The Note entity must contain submissionIds")
+            
+        config, token = self._prepare_config(request)
+        job_id = config.job_id
+        members = set(config.reviewer_ids)
+        max_retries = self.server_config['CREATE_DATASET_RETRIES']
+        self.logger.info(f"\nconf: {config.to_json()}\n")
+
+        # Prepare the dataset and run the model
+        self.logger.info('CREATING DATASET')
+        execute_create_dataset(self.client, self.client_v2, config=config.to_json())
+        # If dataset failed to generate, re-run
+        retry = 0
+        submissions_exist = Path(config.dataset['directory']).joinpath('submissions.json').exists()
+        archives_exist = Path(config.dataset['directory']).joinpath('archives').exists()
+        no_path = not submissions_exist or not archives_exist
+        incomplete_archives = members != set([file.replace('.jsonl', '') for file in os.listdir(Path(config.dataset['directory']).joinpath('archives'))])
+        if submissions_exist:
+            with open(Path(config.dataset['directory']).joinpath('submissions.json'), 'r') as f:
+                incomplete_submissions = submission_ids != set(json.load(f).keys())
+        else:
+            incomplete_submissions = True
+        within_retry_threshold = retry <= max_retries
+        while within_retry_threshold and (no_path or incomplete_submissions or incomplete_archives):
+            retry += 1
+            time.sleep(5)
+            self.logger.info(f'CREATING DATASET FAILED - RETRY {retry}/{max_retries} | NO_PATH={no_path} | INCOMP_ARCHIVES={incomplete_archives} | INCOMP_SUBMISSIONS={incomplete_submissions}')
+            if no_path:
+                self.logger.info(f"submissions={submissions_exist} archives={archives_exist}")
+            if incomplete_archives:
+                self.logger.info(f"m={members} archives={set([file.replace('.jsonl', '') for file in os.listdir(Path(config.dataset['directory']).joinpath('archives'))])}")
+            if incomplete_submissions and submissions_exist:
+                with open(Path(config.dataset['directory']).joinpath('submissions.json'), 'r') as f:
+                    self.logger.info(f"ids={submission_ids} s.json={set(json.load(f).keys())}")
+
+            execute_create_dataset(self.client, self.client_v2, config=config.to_json())
+
+            submissions_exist = Path(config.dataset['directory']).joinpath('submissions.json').exists()
+            archives_exist = Path(config.dataset['directory']).joinpath('archives').exists()
+            no_path = not submissions_exist or not archives_exist
+            incomplete_archives = members != set([file.replace('.jsonl', '') for file in os.listdir(Path(config.dataset['directory']).joinpath('archives'))])
+            if submissions_exist:
+                with open(Path(config.dataset['directory']).joinpath('submissions.json'), 'r') as f:
+                    incomplete_submissions = submission_ids != set(json.load(f).keys())
+            else:
+                incomplete_submissions = True
+            within_retry_threshold = retry <= max_retries
+        self.logger.info('EXECUTING EXPERTISE')
+        execute_expertise(config=config.to_json())
+        self.logger.info('FINISHED EXPERTISE RETRIEVING RESULTS')
+
+        # Fetch status
+        status = config.status
+        description = config.description
+
+        # Assemble scores
+        # Search for scores files (if sparse scores exist, retrieve by default)
+        ret_list = []
+
+        # Check for output format
+        group_group_matching = config.alternate_match_group is not None
+
+        self.logger.info(f"Retrieving scores from {config.job_dir}")
+        if not group_group_matching:
+            # If reviewer-paper matching, use standard 'user' and 'score' keys
+            file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
+            with open(file_dir, 'r') as csv_file:
+                data_reader = reader(csv_file)
+                for row in data_reader:
+                    # For single paper retrieval, filter out scores against the dummy submission
+                    if row[0] == 'dummy':
+                        continue
+
+                    ret_list.append({
+                        'submission': row[0],
+                        'user': row[1],
+                        'score': float(row[2])
+                    })
+        else:
+            # If group-group matching, report results using "*_member" keys
+            file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir, group_scoring=True)
+            with open(file_dir, 'r') as csv_file:
+                data_reader = reader(csv_file)
+                for row in data_reader:
+                    ret_list.append({
+                        'match_member': row[0],
+                        'submission_member': row[1],
+                        'score': float(row[2])
+                    })
+
+        result = {
+            predictions_key: ret_list
+        }
+
+        return result
