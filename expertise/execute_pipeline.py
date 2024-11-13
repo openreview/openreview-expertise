@@ -37,6 +37,8 @@ if __name__ == '__main__':
     baseurl_v1 = raw_request.pop('baseurl_v1')
     baseurl_v2 = raw_request.pop('baseurl_v2')
     destination_prefix = raw_request.pop('gcs_folder')
+    dump_embs = False if 'dump_embs' not in raw_request else raw_request.pop('dump_embs')
+    dump_archives = False if 'dump_archives' not in raw_request else raw_request.pop('dump_archives')
     specter_dir = os.getenv('SPECTER_DIR')
     mfr_vocab_dir = os.getenv('MFR_VOCAB_DIR')
     mfr_checkpoint_dir = os.getenv('MFR_CHECKPOINT_DIR')
@@ -89,3 +91,40 @@ if __name__ == '__main__':
         blob = bucket.blob(destination_blob)
         contents = '\n'.join([json.dumps(r) for r in result])
         blob.upload_from_string(contents)
+
+    # Dump config
+    destination_blob = f"{blob_prefix}/job_config.json"
+    blob = bucket.blob(destination_blob)
+    blob.upload_from_string(json.dumps(config.to_json()))
+
+    # Dump archives
+    if dump_archives:
+        for jsonl_file in os.listdir(os.path.join(config.job_dir, 'archives')):
+            result = []
+            destination_blob = f"{blob_prefix}/archives/{jsonl_file}"
+            with open(os.path.join(config.job_dir, 'archives' ,jsonl_file), 'r') as f:
+                for line in f:
+                    data = json.loads(line)
+                    result.append({
+                        'id': data['id'],
+                        'content': data['content']
+                    })
+            blob = bucket.blob(destination_blob)
+            contents = '\n'.join([json.dumps(r) for r in result])
+            blob.upload_from_string(contents)
+
+    # Dump embeddings
+    if dump_embs:
+        for emb_file in [d for d in os.listdir(config.job_dir) if '.jsonl' in d]:
+            result = []
+            destination_blob = f"{blob_prefix}/{emb_file}"
+            with open(os.path.join(config.job_dir, emb_file), 'r') as f:
+                for line in f:
+                    data = json.loads(line)
+                    result.append({
+                        'paper_id': data['paper_id'],
+                        'embedding': data['embedding']
+                    })
+            blob = bucket.blob(destination_blob)
+            contents = '\n'.join([json.dumps(r) for r in result])
+            blob.upload_from_string(contents)

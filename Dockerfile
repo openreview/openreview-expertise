@@ -11,6 +11,10 @@ ARG PATH="/app/miniconda/bin:${PATH}"
 
 # Set the environment variable
 ENV FLASK_ENV=production
+ENV AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/"
+ENV SPECTER_DIR="/app/expertise-utils/specter/"
+ENV MFR_VOCAB_DIR="/app/expertise-utils/multifacet_recommender/feature_vocab_file"
+ENV MFR_CHECKPOINT_DIR="/app/expertise-utils/multifacet_recommender/mfr_model_checkpoint/"
 
 COPY . /app/openreview-expertise
 
@@ -21,6 +25,7 @@ RUN apt update \
     && apt install -y build-essential \
     && apt install -y git \
     && apt install -y sudo \
+    && apt install -y vim \
     && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata \
     && cd $HOME \
     && wget "https://repo.anaconda.com/miniconda/Miniconda3-py38_22.11.1-1-Linux-x86_64.sh" -O miniconda.sh \
