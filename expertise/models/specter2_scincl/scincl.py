@@ -69,36 +69,6 @@ class SciNCLPredictor(Predictor):
         self.model.to(self.cuda_device)
         self.model.eval()
 
-    def _fetch_batches(self, dict_data, batch_size):
-        iterator = iter(dict_data.items())
-        for _ in itertools.count():
-            batch = list(itertools.islice(iterator, batch_size))
-            if not batch:
-                break
-            yield batch
-
-    def _batch_predict(self, batch_data):
-        jsonl_out = []
-        text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
-        # preprocess the input
-        inputs = self.tokenizer(text_batch, padding=True, truncation=True, return_tensors="pt", max_length=512)
-        inputs = inputs.to(self.cuda_device)
-        with torch.no_grad():
-            output = self.model(**inputs)
-        # take the first token in the batch as the embedding
-        embeddings = output.last_hidden_state[:, 0, :]
-
-        for paper, embedding in zip(batch_data, embeddings):
-            paper = paper[1]
-            jsonl_out.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding.detach().cpu().numpy().tolist()}) + '\n')
-
-        # clean up batch data
-        del embeddings
-        del output
-        del inputs
-        torch.cuda.empty_cache()
-        return jsonl_out
-
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
         self.pub_author_ids_to_note_id = defaultdict(list)
@@ -160,15 +130,7 @@ class SciNCLPredictor(Predictor):
         metadata_file = os.path.join(self.work_dir, "scincl_submission_paper_data.json")
         ids_file = os.path.join(self.work_dir, "scincl_submission_paper_ids.txt")
 
-        with open(metadata_file, 'r') as f:
-            paper_data = json.load(f)
-
-        sub_jsonl = []
-        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
-            sub_jsonl.extend(self._batch_predict(batch_data))
-
-        with open(submissions_path, 'w') as f:
-            f.writelines(sub_jsonl)
+        self._create_embeddings(metadata_file, submissions_path)
 
     def embed_publications(self, publications_path=None):
         if not self.use_redis:
@@ -177,55 +139,24 @@ class SciNCLPredictor(Predictor):
         metadata_file = os.path.join(self.work_dir, "scincl_reviewer_paper_data.json")
         ids_file = os.path.join(self.work_dir, "scincl_reviewer_paper_ids.txt")
 
-        with open(metadata_file, 'r') as f:
-            paper_data = json.load(f)
-
-        pub_jsonl = []
-        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
-            pub_jsonl.extend(self._batch_predict(batch_data))
-
-        with open(publications_path, 'w') as f:
-            f.writelines(pub_jsonl)
+        self._create_embeddings(metadata_file, publications_path)
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None, p2p_path=None):
-        def load_emb_file(emb_file):
-            paper_emb_size_default = 768
-            id_list = []
-            emb_list = []
-            bad_id_set = set()
-            for line in emb_file:
-                paper_data = json.loads(line.rstrip())
-                paper_id = paper_data['paper_id']
-                paper_emb_size = len(paper_data['embedding'])
-                assert paper_emb_size == 0 or paper_emb_size == paper_emb_size_default
-                if paper_emb_size == 0:
-                    paper_emb = [0] * paper_emb_size_default
-                    bad_id_set.add(paper_id)
-                else:
-                    paper_emb = paper_data['embedding']
-                id_list.append(paper_id)
-                emb_list.append(paper_emb)
-            emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
-            emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
-            print(len(bad_id_set))
-            return emb_tensor, id_list, bad_id_set
-
         print('Loading cached publications...')
-        with open(publications_path) as f_in:
-            paper_emb_train, train_id_list, train_bad_id_set = load_emb_file(f_in)
+        paper_emb_train, train_id_list, train_bad_id_set = Predictor._load_emb_file(publications_path, self.cuda_device)
         paper_num_train = len(train_id_list)
 
         paper_id2train_idx = {}
         for idx, paper_id in enumerate(train_id_list):
             paper_id2train_idx[paper_id] = idx
 
-        with open(submissions_path) as f_in:
-            print('Loading cached submissions...')
-            paper_emb_test, test_id_list, test_bad_id_set = load_emb_file(f_in)
-            paper_num_test = len(test_id_list)
+        
+        print('Loading cached submissions...')
+        paper_emb_test, test_id_list, test_bad_id_set = Predictor._load_emb_file(submissions_path, self.cuda_device)
+        paper_num_test = len(test_id_list)
 
         print('Computing all scores...')
-        p2p_aff = torch.empty((paper_num_test, paper_num_train), device=torch.device('cpu'))
+        p2p_aff = torch.empty((paper_num_test, paper_num_train), device=self.cuda_device)
         for i in range(paper_num_test):
             p2p_aff[i, :] = torch.sum(paper_emb_test[i, :].unsqueeze(dim=0) * paper_emb_train, dim=1)
 
