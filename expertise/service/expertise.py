@@ -11,7 +11,7 @@ from threading import Lock
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from pathlib import Path
 
-from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase, VertexParser
+from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase
 
 user_index_file_lock = Lock()
 class ExpertiseService(object):
