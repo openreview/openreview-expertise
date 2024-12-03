@@ -97,6 +97,14 @@ if __name__ == '__main__':
     blob = bucket.blob(destination_blob)
     blob.upload_from_string(json.dumps(config.to_json()))
 
+    # Dump metadata file
+    for json_file in [d for d in os.listdir(config.job_dir) if 'metadata' in d]:
+        destination_blob = f"{blob_prefix}/{json_file}"
+        with open(os.path.join(config.job_dir, json_file), 'r') as f:
+            blob = bucket.blob(destination_blob)
+            contents = json.dumps(json.load(f))
+            blob.upload_from_string(contents)
+
     # Dump archives
     if dump_archives:
         for jsonl_file in os.listdir(os.path.join(config.job_dir, 'archives')):

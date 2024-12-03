@@ -1,14 +1,12 @@
 # This workflow builds and pushes the expertise image to the Artifact Registry
 
-name: dev-deployment
+name: push-workflow-image
 
 # Controls when the workflow will run
 on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-  # Triggers the workflow on push events but only for the master branch
-  push:
-    branches: [ feature/containerize ]
+
 jobs:
   deploy:
     # Allow the job to fetch a GitHub ID token
