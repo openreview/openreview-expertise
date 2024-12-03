@@ -2,7 +2,7 @@ FROM nvidia/cuda:11.6.1-base-ubuntu20.04
 
 WORKDIR /app
 
-ENV PYTHON_VERSION=3.8
+ENV PYTHON_VERSION=3.9
 
 ENV HOME="/app"
 
@@ -28,7 +28,7 @@ RUN apt update \
     && apt install -y vim \
     && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata \
     && cd $HOME \
-    && wget "https://repo.anaconda.com/miniconda/Miniconda3-py38_22.11.1-1-Linux-x86_64.sh" -O miniconda.sh \
+    && wget "https://repo.anaconda.com/miniconda/Miniconda3-py39_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh \
     && printf '%s' "473e5ecc8e078e9ef89355fbca21f8eefa5f9081544befca99867c7beac3150d  miniconda.sh" | sha256sum -c \
     && bash miniconda.sh -b -p $HOME/miniconda \
     && conda update -y conda \
