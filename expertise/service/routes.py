@@ -6,7 +6,7 @@ from expertise.service import model_ready, artifact_loading_started
 import openreview
 import json
 from openreview.openreview import OpenReviewException
-from .utils import get_user_id, VertexParser
+from .utils import get_user_id
 import flask
 from copy import deepcopy
 from flask_cors import CORS
