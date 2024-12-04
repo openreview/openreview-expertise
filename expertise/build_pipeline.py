@@ -6,7 +6,7 @@ from kfp.registry import RegistryClient
 import argparse
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser((description="Builds and Uploads a Kubeflow Pipeline for the Expertise Model"))
+    parser = argparse.ArgumentParser(description="Builds and Uploads a Kubeflow Pipeline for the Expertise Model")
     parser.add_argument(
         "--region",
         type=str,
