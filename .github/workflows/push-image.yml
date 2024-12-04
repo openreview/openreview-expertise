@@ -40,7 +40,7 @@ jobs:
           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           create_credentials_file: true
-          cleanup_credentials: false
+          cleanup_credentials: true
           export_environment_variables: true
       - name: Set Image Tag
         run: echo "IMAGE_TAG=$REGION-docker.pkg.dev/$PROJECT/$REPO/$IMAGE" >> $GITHUB_ENV
