@@ -7,8 +7,17 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+env:
+  REGION: us
+  KFP_REGION: us-central1
+  KFP_REPO: openreview-kfp
+  REPO: openreview-docker-images
+  PROJECT: sunlit-realm-131518
+  IMAGE: expertise-test
+  TAG: latest
+
 jobs:
-  deploy:
+  push-workflow-image:
     # Allow the job to fetch a GitHub ID token
     permissions:
       id-token: write
@@ -32,9 +41,33 @@ jobs:
           create_credentials_file: true
           cleanup_credentials: true
           export_environment_variables: true
+      - name: Set Image Tag
+        run: echo "IMAGE_TAG=$REGION-docker.pkg.dev/$PROJECT/$REPO/$IMAGE" >> $GITHUB_ENV
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v1
-      - name: Run deploy script
+      - name: Setup Docker authentication
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      - name: Setup Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Install Python dependencies
         run: |
-          gcloud config set compute/zone us-central1-c
-          gcloud compute ssh openreview@instance-matching-server --command '/bin/expertise_build_dev.sh -b ${{ github.event.inputs.branch }} -p ${{ github.event.inputs.py_branch }}' --quiet
+          python -m pip install --upgrade pip
+          pip install kfp
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_TAG }}
+      - name: Run pipeline script
+        run: |
+          python build_pipeline.py \
+            --region "${{ env.REGION }}" \
+            --kfp_region "${{ env.KFP_REGION }}" \
+            --project "${{ env.PROJECT }}" \
+            --repo "${{ env.REPO }}" \
+            --kfp_repo "${{ env.KFP_REPO }}" \
+            --image "${{ env.IMAGE }}" \
+            --tag "${{ env.TAG }}"

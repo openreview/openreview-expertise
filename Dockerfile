@@ -29,7 +29,7 @@ RUN apt update \
     && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata \
     && cd $HOME \
     && wget "https://repo.anaconda.com/miniconda/Miniconda3-py39_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh \
-    && printf '%s' "473e5ecc8e078e9ef89355fbca21f8eefa5f9081544befca99867c7beac3150d  miniconda.sh" | sha256sum -c \
+    && printf '%s' "4b540d78e5bdd770b39216c0563424ef6656504cbe24c67b2d0454c2eb7afe93  miniconda.sh" | sha256sum -c \
     && bash miniconda.sh -b -p $HOME/miniconda \
     && conda update -y conda \
     && conda create -n expertise python=$PYTHON_VERSION -c conda-forge
