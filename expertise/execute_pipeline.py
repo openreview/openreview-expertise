@@ -25,14 +25,19 @@ DEFAULT_CONFIG = {
         "use_redis": False
     }
 }
+DELETED_FIELDS = ['user_id', 'cdate']
 
 if __name__ == '__main__':
+    print('Starting pipeline')
     parser = argparse.ArgumentParser()
     parser.add_argument('api_request_str', help='a JSON file containing all other arguments')
     args = parser.parse_args()
     raw_request: dict = json.loads(args.api_request_str)
 
-    # Pop token, base URLs and other expected variables
+    # Pop token, base URLs and other expected variable
+    print('Popping variables')
+    for field in DELETED_FIELDS:
+        raw_request.pop(field, None)
     token = raw_request.pop('token')
     baseurl_v1 = raw_request.pop('baseurl_v1')
     baseurl_v2 = raw_request.pop('baseurl_v2')
@@ -49,6 +54,8 @@ if __name__ == '__main__':
         'MFR_VOCAB_DIR': mfr_vocab_dir,
         'MFR_CHECKPOINT_DIR': mfr_checkpoint_dir,
     }
+
+    print('Loading model artifacts')
     load_model_artifacts()
 
     client_v1 = openreview.Client(baseurl=baseurl_v1, token=token)
@@ -58,6 +65,7 @@ if __name__ == '__main__':
     working_dir = f"/app/{job_id}"
     os.makedirs(working_dir, exist_ok=True)  
 
+    print('Creating job config')
     validated_request = APIRequest(raw_request)
     config = JobConfig.from_request(
         api_request = validated_request,
@@ -69,10 +77,14 @@ if __name__ == '__main__':
     )
 
     # Create Dataset and Execute Expertise
+    print('Creating dataset and executing expertise')
     execute_create_dataset(client_v1, client_v2, config.to_json())
     execute_expertise(config.to_json())
 
     # Fetch and write to storage
+    print('Fetching and writing to storage')
+    group_group_matching = request.entityA.get('type', '') == 'Group' and request.entityB.get('type', '') == 'Group'
+
     bucket_name = destination_prefix.split('/')[2]
     blob_prefix = '/'.join(destination_prefix.split('/')[3:])
     gcs_client = storage.Client()
@@ -83,11 +95,18 @@ if __name__ == '__main__':
         with open(os.path.join(config.job_dir, csv_file), 'r') as f:
             reader = csv.reader(f)
             for row in reader:
-                result.append({
-                    'submission': row[0],
-                    'user': row[1],
-                    'score': float(row[2])
-                })
+                if not group_group_matching:
+                    result.append({
+                        'submission': row[0],
+                        'user': row[1],
+                        'score': float(row[2])
+                    })
+                else:
+                    result.append({
+                        'match_member': row[0],
+                        'submission_member': row[1],
+                        'score': float(row[2])
+                    })
         blob = bucket.blob(destination_blob)
         contents = '\n'.join([json.dumps(r) for r in result])
         blob.upload_from_string(contents)
