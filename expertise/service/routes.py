@@ -3,6 +3,7 @@ Implements the Flask API endpoints.
 '''
 from expertise.service.expertise import ExpertiseService
 from expertise.service import model_ready, artifact_loading_started
+from expertise.service.utils import GCPInterface
 import openreview
 import json
 from openreview.openreview import OpenReviewException
@@ -95,7 +96,10 @@ def expertise():
         # Parse request args
         user_request = flask.request.json
 
-        job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2).start_expertise(user_request)
+        if flask.current_app.config.get('USE_GCP', False):
+            job_id = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).create_job(user_request)
+        else:
+            job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2).start_expertise(user_request)
 
         result = {'jobId': job_id }
         flask.current_app.logger.info('Returning from request')
@@ -147,9 +151,15 @@ def jobs():
         # Parse query parameters
         job_id = flask.request.args.get('jobId', None)
         if job_id is None or len(job_id) == 0:
-            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
+            if flask.current_app.config.get('USE_GCP', False):
+                result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_status(user_id, flask.request.args)
+            else:
+                result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
         else:
-            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
+            if flask.current_app.config.get('USE_GCP', False):
+                result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_status_by_job_id(user_id, flask.request.args)
+            else:
+                result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
@@ -194,7 +204,10 @@ def all_jobs():
 
     try:
         # Parse query parameters
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
+        if flask.current_app.config.get('USE_GCP', False):
+            result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_status(user_id, flask.request.args)
+        else:
+            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
@@ -296,7 +309,10 @@ def results():
             raise openreview.OpenReviewException('Bad request: jobId is required')
         delete_on_get = flask.request.args.get('deleteOnGet', 'False').lower() == 'true'
 
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
+        if flask.current_app.config.get('USE_GCP', False):
+            result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_results(user_id, flask.request.args)
+        else:
+            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
 
         flask.current_app.logger.debug('GET returns code 200')
         return flask.jsonify(result), 200

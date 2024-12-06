@@ -4,9 +4,13 @@ import os
 import time
 import json
 import re
+import datetime
 import redis, pickle
 from unittest.mock import MagicMock
 from enum import Enum
+import google.cloud.aiplatform as aip
+from google.cloud import storage
+from google.cloud.aiplatform_v1.types import PipelineState
 
 import re
 SUPERUSER_IDS = ['openreview.net', 'OpenReview.net', '~Super_User1']
@@ -47,6 +51,7 @@ class JobDescription(dict, Enum):
         JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
+        JobStatus.ERROR: 'Job has encountered an error and has failed to complete',
     }
 class APIRequest(object):
     """
@@ -548,3 +553,395 @@ class JobConfig(object):
             model_params = job_config.get('model_params')
         )
         return config
+
+class GCPInterface(object):
+    """
+    Provides an interface to GCP for requesting, monitoring and managing expertise jobs
+    """
+
+    GCS_STATE_TO_JOB_STATE = {
+        PipelineState.PIPELINE_STATE_PENDING: JobStatus.INITIALIZED,
+        PipelineState.PIPELINE_STATE_QUEUED: JobStatus.QUEUED,
+        PipelineState.PIPELINE_STATE_RUNNING: JobStatus.RUN_EXPERTISE,
+        PipelineState.PIPELINE_STATE_SUCCEEDED: JobStatus.COMPLETED,
+        PipelineState.PIPELINE_STATE_FAILED: JobStatus.ERROR,
+    }
+
+    def __init__(
+        self,
+        config=None,
+        project_id=None,
+        project_number=None,
+        region=None,
+        pipeline_root=None,
+        pipeline_name=None,
+        pipeline_repo=None,
+        bucket_name=None, 
+        jobs_folder=None,
+        openreview_client=None,
+        pipeline_tag='latest',
+        logger=None
+    ):
+
+        if config is not None:
+            self.project_id = config['GCP_PROJECT_ID'],
+            self.project_number = config['GCP_PROJECT_NUMBER'],
+            self.region = config['GCP_REGION'],
+            self.pipeline_root = config['GCP_PIPELINE_ROOT'],
+            self.pipeline_name = config['GCP_PIPELINE_NAME'],
+            self.pipeline_repo = config['GCP_PIPELINE_REPO'],
+            self.pipeline_tag = config['GCP_PIPELINE_TAG'],
+            self.bucket_name = config['GCP_BUCKET_NAME'],
+            self.jobs_folder = config['GCP_JOBS_FOLDER'],
+        else:
+            self.project_id = project_id
+            self.project_number = project_number
+            self.region = region
+            self.pipeline_root = pipeline_root
+            self.pipeline_name = pipeline_name
+            self.pipeline_repo = pipeline_repo
+            self.pipeline_tag = pipeline_tag
+            self.bucket_name = bucket_name
+            self.jobs_folder = jobs_folder
+        
+        self.client = openreview_client
+        self.request_fname = "request.json"
+
+        aip.init(
+            project=project_id,
+            location=region
+        )
+
+        self.gcs_client = storage.Client(
+            project=project_id
+        )
+        self.bucket = self.gcs_client.bucket(bucket_name)
+
+    def _generate_vertex_prefix(api_request):
+        # Precondition: api_request there is at least 1 group entity containing a memberOf field
+        group_entity = None
+        if api_request.entityA['type'] == 'Group':
+            group_entity = api_request.entityA
+        elif api_request.entityB['type'] == 'Group':
+            group_entity = api_request.entityB
+
+        if group_entity is None:
+            raise openreview.OpenReviewException('Bad request: No group entity found')
+        if 'memberOf' not in group_entity:
+            raise openreview.OpenReviewException('Bad request: No memberOf field in group entity')
+
+        # Handle group-group request
+        if api_request.entityA['type'] == 'Group' and api_request.entityB['type'] == 'Group':
+            return f"group-{api_request.entityA['memberOf']}"
+
+        # Handle group-note requests
+        note_entity = None
+        if api_request.entityA['type'] == 'Note':
+            note_entity = api_request.entityA
+        elif api_request.entityB['type'] == 'Note':
+            note_entity = api_request.entityB
+
+        if note_entity is None:
+            raise openreview.OpenReviewException('Bad request: No note entity found')
+
+        # Handle group-invitation request
+        if 'invitation' in note_entity:
+            return f"inv-{group_entity['memberOf']}"
+        # Handle group-withVenueid request
+        elif 'withVenueid' in note_entity:
+            return f"venueid-{group_entity['memberOf']}"
+        # Handle group-noteId request
+        elif 'id' in note_entity:
+            return f"{note_entity['id']}-{group_entity['memberOf']}"
+
+    def create_job(self, json_request: dict):
+        def create_folder(bucket_name, folder_path):
+            client = storage.Client()
+            bucket = client.get_bucket(bucket_name)
+            blob = bucket.blob(f"{folder_path}/")
+            blob.upload_from_string('')
+            print(f"Folder '{folder_path}' created in bucket '{bucket_name}'.")
+
+        def create_folder_if_not_exists(bucket_name, folder_path):
+            client = storage.Client()
+            bucket = client.bucket(bucket_name)
+
+            # Check if the folder exists by listing blobs with a prefix
+            blobs = list(bucket.list_blobs(prefix=f"{folder_path}/", max_results=1))
+            if not blobs:
+                # If the folder doesn't exist, create a "dummy" blob to simulate the folder
+                blob = bucket.blob(f"{folder_path}/")
+                blob.upload_from_string('')
+                print(f"Folder '{folder_path}' created in bucket '{bucket_name}'.")
+
+        def write_json_to_gcs(bucket_name, folder_path, file_name, data):
+            create_folder_if_not_exists(bucket_name, folder_path)
+            client = storage.Client()
+            bucket = client.bucket(bucket_name)
+
+            blob = bucket.blob(f"{folder_path}/{file_name}")
+
+            blob.upload_from_string(
+                data=json.dumps(data),
+                content_type="application/json"
+            )
+            print(f"JSON file '{file_name}' written to '{folder_path}' in bucket '{bucket_name}'.")
+
+        api_request = APIRequest(json_request)
+        job_id = GCPInterface._generate_vertex_prefix(api_request) + '-' + datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+        valid_vertex_id = job_id.replace('/','-').replace(':','-').replace('_','-').replace('.', '-').lower()
+
+        folder_path = f"{self.jobs_folder}/{valid_vertex_id}"
+        data = api_request.to_json()
+
+        # Expected fields
+        data['name'] = valid_vertex_id
+
+        # Popped fields
+        data['token'] = self.client.token
+        data['baseurl_v1'] = openreview.tools.get_base_urls(self.client)[0]
+        data['baseurl_v2'] = openreview.tools.get_base_urls(self.client)[1]
+        data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
+        #data['dump_embs'] = True
+        #data['dump_archives'] = True
+
+        # Deleted metadata fields before hitting the pipeline
+        data['user_id'] = get_user_id(self.client)
+        data['cdate'] = int(time.time() * 1000)
+
+        write_json_to_gcs(self.bucket_name, folder_path, self.request_fname, data)
+
+        job = aip.PipelineJob(
+            display_name = valid_vertex_id,
+            template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
+            job_id = valid_vertex_id,
+            pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
+            parameter_values = {'job_config': json.dumps(data)},
+            labels = {'dev': 'expertise'})
+
+        job.submit()
+
+        return valid_vertex_id
+
+    def get_job_status_by_job_id(self, user_id, job_id):
+        job_blobs = self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}")
+        all_requests = [
+            json.loads(blob.download_as_string()) for blob in job_blobs if self.request_fname in blob.name
+        ]
+        authenticated_requests = [
+            req for req in all_requests if user_id == req['user_id'] or user_id in SUPERUSER_IDS
+        ]
+        if len(all_requests) == 0:
+            raise openreview.OpenReviewException('Job not found')
+        if len(authenticated_requests) == 0:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
+        if len(authenticated_requests) > 1:
+            raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
+
+        request = authenticated_requests[0]
+        job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{job_id}")
+
+        descriptions = JobDescription.VALS.value
+        status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
+        description = descriptions[status]
+
+        return {
+                'name': job_id,
+                'tauthor': user_id,
+                'jobId': job_id,
+                'status': status,
+                'description': description,
+                'cdate': request['cdate'],
+                'mdate': int(job.update_time.timestamp() * 1000),
+                'request': request
+            }
+
+    def get_job_status(
+        self,
+        user_id,
+        query_params,
+    ):
+        # search bucket
+        def check_status(job):
+            status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
+            search_status = query_obj.get('status', '')
+            return not search_status or status.lower().startswith(search_status.lower())
+        
+        def check_member(request):
+            search_member, memberOf = '', ''
+            if 'memberOf' in query_obj.keys():
+                memberOf = request.get('entityA', {}).get('memberOf', '') or request.get('entityB', {}).get('memberOf', '')
+                search_member = query_obj['memberOf']
+
+            elif 'memberOf' in query_obj.get('entityA', {}).keys():
+                memberOf = request.get('entityA', {}).get('memberOf', '')
+                search_member = query_obj['entityA']['memberOf']
+
+            elif 'memberOf' in query_obj.get('entityB', {}).keys():
+                memberOf = request.get('entityB', {}).get('memberOf', '')
+                search_member = query_obj['entityB']['memberOf']
+            
+            return not search_member or memberOf.lower().startswith(search_member.lower())
+        
+        def check_invitation(request):
+            search_invitation, inv = '', ''
+            if 'invitation' in query_obj.keys():
+                inv = request.get('entityA', {}).get('invitation', '') or request.get('entityB', {}).get('invitation', '')
+                search_invitation = query_obj['invitation']
+
+            elif 'invitation' in query_obj.get('entityA', {}).keys():
+                inv = request.get('entityA', {}).get('invitation', '')
+                search_invitation = query_obj['entityA']['invitation']
+
+            elif 'invitation' in query_obj.get('entityB', {}).keys():
+                inv = request.get('entityB', {}).get('invitation', '')
+                search_invitation = query_obj['entityB']['invitation']
+
+            return not search_invitation or inv.lower().startswith(search_invitation.lower())
+
+        def check_paper_id(request):
+            search_paper_id, paper_id = '', ''
+            if 'id' in query_obj.keys():
+                paper_id = request.get('entityA', {}).get('id', '') or request.get('entityB', {}).get('id', '')
+                search_paper_id = query_obj['id']
+
+            elif 'id' in query_obj.get('entityA', {}).keys():
+                paper_id = request.get('entityA', {}).get('id', '')
+                search_paper_id = query_obj['entityA']['id']
+
+            elif 'id' in query_obj.get('entityB', {}).keys():
+                paper_id = request.get('entityB', {}).get('id', '')
+                search_paper_id = query_obj['entityB']['id']
+
+            return not search_paper_id or paper_id.lower().startswith(search_paper_id.lower())
+
+        def check_result(request, job):
+            return False not in [
+                check_status(job),
+                check_member(request),
+                check_invitation(request),
+                check_paper_id(request)
+            ]
+
+        result = {'results': []}
+        query_obj = {}
+        '''
+        {
+            'paperId': value,
+            'entityA': {
+                'id': value
+            }
+        }
+        '''
+
+        for query, value in query_params.items():
+            if query.find('.') < 0: ## If no entity, store value
+                query_obj[query] = value
+            else:
+                entity, query_by = query.split('.') ## If entity, store value in entity obj
+                if entity not in query_obj.keys():
+                    query_obj[entity] = {}
+                query_obj[entity][query_by] = value
+
+        all_requests = [
+            json.loads(blob.download_as_string()) for blob in self.bucket.list_blobs(prefix=f"{self.jobs_folder}/") if self.request_fname in blob.name
+        ]
+        authenticated_requests = [
+            req for req in all_requests if user_id == req['user_id'] or user_id in SUPERUSER_IDS
+        ]
+        for request in authenticated_requests:
+            request_name = request['name']
+            job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{request_name}")
+
+            descriptions = JobDescription.VALS.value
+            status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
+            description = descriptions[status]
+
+            if check_result(request, job):
+                result['results'].append(
+                    {
+                        'name': request_name,
+                        'tauthor': user_id,
+                        'jobId': request_name,
+                        'status': status,
+                        'description': description,
+                        'cdate': request['cdate'],
+                        'mdate': int(job.update_time.timestamp() * 1000),
+                        'request': request
+                    }
+                )
+        return result
+
+    def get_job_results(self, user_id, job_id, delete_on_get=False):
+
+        def _get_scores_and_metadata(all_blobs, job_id, group_scoring=False):
+            """
+            Extracts the scores and metadata from the GCS bucket
+
+            :param all_blobs: A list of all blobs for a given job
+            :type all_blobs: list
+            :param job_id: Unique job ID
+            :type job_id: str
+            :param group_scoring: Indicator for scores between groups
+            :type group_scoring: bool
+
+            :returns scores: The scores as a list of JSONs
+            :returns metadata: The metadata as a dictionary
+            """
+            metadata_files = [
+                blob for blob in all_blobs if 'metadata.json' in blob.name
+            ]
+            score_files = [
+                blob for blob in all_blobs if '.jsonl' in blob.name and job_id in blob.name
+            ]
+
+            if len(metadata_files) != 1:
+                raise openreview.OpenReviewException(f"Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}")
+            if len(score_files) < 1 or len(score_files) > 2:
+                raise openreview.OpenReviewException(f"Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}")
+
+            if not group_scoring:
+                sparse_score_files = [
+                    blob for blob in all_blobs if 'sparse' in blob.name
+                ]
+                if len(sparse_score_files) != 1:
+                    raise openreview.OpenReviewException(f"Internal Error: incorrect sparse score files found expected [1] found {len(sparse_score_files)}")
+                scores_str = sparse_score_files[0].download_as_string().decode('utf-8')
+            else:
+                non_sparse_score_files = [
+                    blob for blob in all_blobs if 'sparse' not in blob.name
+                ]
+                if len(non_sparse_score_files) != 1:
+                    raise openreview.OpenReviewException(f"Internal Error: incorrect group score files found expected [1] found {len(non_sparse_score_files)}")
+                scores_str = non_sparse_score_files[0].download_as_string().decode('utf-8')
+
+            metadata = json.loads(metadata_files[0].download_as_string())
+            scores = [json.loads(line) for line in scores_str.split('\n') if line != '']
+
+            return {
+                'results': scores,
+                'metadata': metadata
+            }
+
+        # convert to csv
+        job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}"))
+        all_requests = [
+            json.loads(blob.download_as_string()) for blob in job_blobs if self.request_fname in blob.name
+        ]
+        authenticated_requests = [
+            req for req in all_requests if user_id == req['user_id'] or user_id in SUPERUSER_IDS
+        ]
+        if len(all_requests) == 0:
+            raise openreview.OpenReviewException('Job not found')
+        if len(authenticated_requests) == 0:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
+        if len(authenticated_requests) > 1:
+            raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
+
+        ret_list = []
+        request = authenticated_requests[0]
+        group_group_matching = request.get('entityA', {}).get('type', '') == 'Group' and request.get('entityB', {}).get('type', '') == 'Group'
+
+        return _get_scores_and_metadata(job_blobs, job_id, group_scoring=group_group_matching)
+
+        
