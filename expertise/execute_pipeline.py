@@ -83,7 +83,8 @@ if __name__ == '__main__':
 
     # Fetch and write to storage
     print('Fetching and writing to storage')
-    group_group_matching = request.entityA.get('type', '') == 'Group' and request.entityB.get('type', '') == 'Group'
+    group_group_matching = validated_request.entityA.get('type', '') == 'Group' and \
+        validated_request.entityB.get('type', '') == 'Group'
 
     bucket_name = destination_prefix.split('/')[2]
     blob_prefix = '/'.join(destination_prefix.split('/')[3:])
