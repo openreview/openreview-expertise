@@ -580,7 +580,8 @@ class GCPInterface(object):
         jobs_folder=None,
         openreview_client=None,
         pipeline_tag='latest',
-        logger=None
+        logger=None,
+        gcs_client=None
     ):
 
         if config is not None:
@@ -603,16 +604,29 @@ class GCPInterface(object):
             self.pipeline_tag = pipeline_tag
             self.bucket_name = bucket_name
             self.jobs_folder = jobs_folder
+
+        required_fields = [
+            self.project_id,
+            self.project_number,
+            self.region,
+            self.pipeline_root,
+            self.pipeline_name,
+            self.pipeline_repo,
+            self.pipeline_tag,
+            self.bucket_name,
+            self.jobs_folder
+        ]
         
         self.client = openreview_client
         self.request_fname = "request.json"
-
-        aip.init(
-            project=project_id,
-            location=region
-        )
-
-        self.gcs_client = storage.Client(
+        
+        if not any(field is None for field in required_fields):
+            # Only init AIP if all fields are present to access the project
+            aip.init(
+                project=project_id,
+                location=region
+            )
+        self.gcs_client = gcs_client or storage.Client(
             project=project_id
         )
         self.bucket = self.gcs_client.bucket(bucket_name)
@@ -902,18 +916,22 @@ class GCPInterface(object):
 
             if not group_scoring:
                 sparse_score_files = [
-                    blob for blob in all_blobs if 'sparse' in blob.name
+                    blob for blob in score_files if 'sparse' in blob.name
                 ]
                 if len(sparse_score_files) != 1:
                     raise openreview.OpenReviewException(f"Internal Error: incorrect sparse score files found expected [1] found {len(sparse_score_files)}")
-                scores_str = sparse_score_files[0].download_as_string().decode('utf-8')
+                scores_str = sparse_score_files[0].download_as_string()
+                if isinstance(scores_str, bytes):
+                    scores_str = scores_str.decode('utf-8')
             else:
                 non_sparse_score_files = [
-                    blob for blob in all_blobs if 'sparse' not in blob.name
+                    blob for blob in score_files if 'sparse' not in blob.name
                 ]
                 if len(non_sparse_score_files) != 1:
                     raise openreview.OpenReviewException(f"Internal Error: incorrect group score files found expected [1] found {len(non_sparse_score_files)}")
-                scores_str = non_sparse_score_files[0].download_as_string().decode('utf-8')
+                scores_str = non_sparse_score_files[0].download_as_string()
+                if isinstance(scores_str, bytes):
+                    scores_str = scores_str.decode('utf-8')
 
             metadata = json.loads(metadata_files[0].download_as_string())
             scores = [json.loads(line) for line in scores_str.split('\n') if line != '']
@@ -924,7 +942,7 @@ class GCPInterface(object):
             }
 
         # convert to csv
-        job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}"))
+        job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
         all_requests = [
             json.loads(blob.download_as_string()) for blob in job_blobs if self.request_fname in blob.name
         ]
