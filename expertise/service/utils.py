@@ -622,7 +622,6 @@ class GCPInterface(object):
         self.logger = logger
         
         if not any(field is None for field in required_fields):
-            self.logger.info(f"All fields present, init AIPlatform")
             # Only init AIP if all fields are present to access the project
             self.logger.info(f"Init AIPlatform with project {self.project_id} and region {self.region}")
             aip.init(
@@ -680,7 +679,7 @@ class GCPInterface(object):
             bucket = client.get_bucket(bucket_name)
             blob = bucket.blob(f"{folder_path}/")
             blob.upload_from_string('')
-            print(f"Folder '{folder_path}' created in bucket '{bucket_name}'.")
+            self.logger.info(f"Folder '{folder_path}' created in bucket '{bucket_name}'.")
 
         def create_folder_if_not_exists(bucket_name, folder_path):
             client = storage.Client()
@@ -692,7 +691,7 @@ class GCPInterface(object):
                 # If the folder doesn't exist, create a "dummy" blob to simulate the folder
                 blob = bucket.blob(f"{folder_path}/")
                 blob.upload_from_string('')
-                print(f"Folder '{folder_path}' created in bucket '{bucket_name}'.")
+                self.logger.info(f"Folder '{folder_path}' created in bucket '{bucket_name}'.")
 
         def write_json_to_gcs(bucket_name, folder_path, file_name, data):
             create_folder_if_not_exists(bucket_name, folder_path)
@@ -705,7 +704,7 @@ class GCPInterface(object):
                 data=json.dumps(data),
                 content_type="application/json"
             )
-            print(f"JSON file '{file_name}' written to '{folder_path}' in bucket '{bucket_name}'.")
+            self.logger.info(f"JSON file '{file_name}' written to '{folder_path}' in bucket '{bucket_name}'.")
 
         api_request = APIRequest(json_request)
         job_id = GCPInterface._generate_vertex_prefix(api_request) + '-' + datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
@@ -863,6 +862,7 @@ class GCPInterface(object):
                 if entity not in query_obj.keys():
                     query_obj[entity] = {}
                 query_obj[entity][query_by] = value
+        self.logger.info(f"Query object: {query_obj}")
 
         all_requests = [
             json.loads(blob.download_as_string()) for blob in self.bucket.list_blobs(prefix=f"{self.jobs_folder}/") if self.request_fname in blob.name
