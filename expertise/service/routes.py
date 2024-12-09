@@ -310,7 +310,7 @@ def results():
         delete_on_get = flask.request.args.get('deleteOnGet', 'False').lower() == 'true'
 
         if flask.current_app.config.get('USE_GCP', False):
-            result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_results(user_id, flask.request.args)
+            result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_results(user_id, job_id, delete_on_get)
         else:
             result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
 

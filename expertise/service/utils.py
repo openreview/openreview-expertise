@@ -950,6 +950,8 @@ class GCPInterface(object):
 
         # convert to csv
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
+        self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}/")
+        self.logger.info(f"Found {len(job_blobs)} blobs")
         all_requests = [
             json.loads(blob.download_as_string()) for blob in job_blobs if self.request_fname in blob.name
         ]
