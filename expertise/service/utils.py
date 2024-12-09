@@ -585,15 +585,15 @@ class GCPInterface(object):
     ):
 
         if config is not None:
-            self.project_id = config['GCP_PROJECT_ID'],
-            self.project_number = config['GCP_PROJECT_NUMBER'],
-            self.region = config['GCP_REGION'],
-            self.pipeline_root = config['GCP_PIPELINE_ROOT'],
-            self.pipeline_name = config['GCP_PIPELINE_NAME'],
-            self.pipeline_repo = config['GCP_PIPELINE_REPO'],
-            self.pipeline_tag = config['GCP_PIPELINE_TAG'],
-            self.bucket_name = config['GCP_BUCKET_NAME'],
-            self.jobs_folder = config['GCP_JOBS_FOLDER'],
+            self.project_id = config['GCP_PROJECT_ID']
+            self.project_number = config['GCP_PROJECT_NUMBER']
+            self.region = config['GCP_REGION']
+            self.pipeline_root = config['GCP_PIPELINE_ROOT']
+            self.pipeline_name = config['GCP_PIPELINE_NAME']
+            self.pipeline_repo = config['GCP_PIPELINE_REPO']
+            self.pipeline_tag = config['GCP_PIPELINE_TAG']
+            self.bucket_name = config['GCP_BUCKET_NAME']
+            self.jobs_folder = config['GCP_JOBS_FOLDER']
         else:
             self.project_id = project_id
             self.project_number = project_number
@@ -619,17 +619,23 @@ class GCPInterface(object):
         
         self.client = openreview_client
         self.request_fname = "request.json"
+        self.logger = logger
         
         if not any(field is None for field in required_fields):
+            self.logger.info(f"All fields present, init AIPlatform")
             # Only init AIP if all fields are present to access the project
+            self.logger.info(f"Init AIPlatform with project {self.project_id} and region {self.region}")
             aip.init(
                 project=project_id,
                 location=region
             )
+
+        self.logger.info(f"Init GCS client with project {self.project_id}")
         self.gcs_client = gcs_client or storage.Client(
             project=project_id
         )
-        self.bucket = self.gcs_client.bucket(bucket_name)
+        self.logger.info(f"Get bucket {self.bucket_name}")
+        self.bucket = self.gcs_client.bucket(self.bucket_name)
 
     def _generate_vertex_prefix(api_request):
         # Precondition: api_request there is at least 1 group entity containing a memberOf field
@@ -739,6 +745,7 @@ class GCPInterface(object):
 
     def get_job_status_by_job_id(self, user_id, job_id):
         job_blobs = self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}")
+        self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}")
         all_requests = [
             json.loads(blob.download_as_string()) for blob in job_blobs if self.request_fname in blob.name
         ]

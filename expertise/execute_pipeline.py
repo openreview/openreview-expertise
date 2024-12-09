@@ -27,12 +27,8 @@ DEFAULT_CONFIG = {
 }
 DELETED_FIELDS = ['user_id', 'cdate']
 
-if __name__ == '__main__':
-    print('Starting pipeline')
-    parser = argparse.ArgumentParser()
-    parser.add_argument('api_request_str', help='a JSON file containing all other arguments')
-    args = parser.parse_args()
-    raw_request: dict = json.loads(args.api_request_str)
+def run_pipeline(api_request_str, working_dir=None):
+    raw_request: dict = json.loads(api_request_str)
 
     # Pop token, base URLs and other expected variable
     print('Popping variables')
@@ -62,8 +58,9 @@ if __name__ == '__main__':
     client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
 
     job_id = shortuuid.ShortUUID().random(length=5)
-    working_dir = f"/app/{job_id}"
-    os.makedirs(working_dir, exist_ok=True)  
+    if working_dir is None:
+        working_dir = f"/app/{job_id}"
+    os.makedirs(working_dir, exist_ok=True)
 
     print('Creating job config')
     validated_request = APIRequest(raw_request)
@@ -75,6 +72,13 @@ if __name__ == '__main__':
         server_config = server_config,
         working_dir = working_dir
     )
+
+    if working_dir is not None:
+        path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+        config.job_dir = working_dir
+        config.dataset['directory'] = working_dir
+        for field in path_fields:
+            config.model_params[field] = working_dir
 
     # Create Dataset and Execute Expertise
     print('Creating dataset and executing expertise')
@@ -156,3 +160,10 @@ if __name__ == '__main__':
             blob = bucket.blob(destination_blob)
             contents = '\n'.join([json.dumps(r) for r in result])
             blob.upload_from_string(contents)
+
+if __name__ == '__main__':
+    print('Starting pipeline')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('api_request_str', help='a JSON file containing all other arguments')
+    args = parser.parse_args()
+    run_pipeline(args.api_request_str)

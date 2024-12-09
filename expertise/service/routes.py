@@ -139,7 +139,7 @@ def jobs():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client, _ = get_client()
+    openreview_client, openreview_client_v2 = get_client()
 
     user_id = get_user_id(openreview_client)
 
@@ -157,7 +157,7 @@ def jobs():
                 result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
         else:
             if flask.current_app.config.get('USE_GCP', False):
-                result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_status_by_job_id(user_id, flask.request.args)
+                result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_status_by_job_id(user_id, job_id)
             else:
                 result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
@@ -194,7 +194,7 @@ def all_jobs():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client, _ = get_client()
+    openreview_client, openreview_client_v2 = get_client()
 
     user_id = get_user_id(openreview_client)
 
@@ -294,7 +294,7 @@ def results():
     :param delete_on_get: Decide whether to keep the data on the server after getting the results
     :type delete_on_get: bool
     """
-    openreview_client, _ = get_client()
+    openreview_client, openreview_client_v2 = get_client()
 
     user_id = get_user_id(openreview_client)
 
