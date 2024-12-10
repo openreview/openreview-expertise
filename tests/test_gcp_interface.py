@@ -35,7 +35,8 @@ def test_create_job(mock_storage_client, mock_pipeline_job, openreview_client):
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
     )
 
     # Prepare input request
@@ -95,7 +96,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, openreview_client):
         job_id=result,
         pipeline_root="gs://test-bucket/pipeline-root",
         parameter_values={"job_config": json.dumps(submitted_json)},
-        labels={"dev": "expertise"}
+        labels={"test": "label"}
     )
     mock_pipeline_instance.submit.assert_called_once()
 
@@ -131,7 +132,8 @@ def test_get_job_status_by_job_id(mock_storage_client, mock_pipeline_job_get, op
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
     )
 
     # Call the `get_job_status_by_job_id` method
@@ -173,7 +175,8 @@ def test_get_job_status_by_job_id_job_not_found(mock_storage_client, openreview_
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
     )
 
     # Verify that an exception is raised when no job is found
@@ -203,7 +206,8 @@ def test_get_job_status_by_job_id_insufficient_permissions(mock_storage_client, 
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
     )
 
     # Verify that an exception is raised for insufficient permissions
@@ -240,7 +244,8 @@ def test_get_job_status_by_job_id_multiple_requests(mock_storage_client, mock_pi
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
     )
 
     # Verify that an exception is raised for multiple requests
@@ -301,7 +306,8 @@ def test_get_job_status(mock_storage_client, mock_pipeline_job_get, openreview_c
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
     )
 
     # Call the method with query_params
@@ -388,7 +394,8 @@ def test_get_job_status_multiple_filters(mock_storage_client, mock_pipeline_job_
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
     )
 
     # Call the method with combined filters
@@ -430,7 +437,8 @@ def test_get_job_status_insufficient_permissions(mock_storage_client, openreview
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
     )
 
     # Call the method
@@ -481,7 +489,8 @@ def test_get_job_results(mock_storage_client, openreview_client):
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
     )
 
     # Call the method
@@ -528,7 +537,8 @@ def test_get_job_results_missing_metadata(mock_storage_client, openreview_client
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
     )
 
     # Verify exception is raised
@@ -559,7 +569,8 @@ def test_get_job_results_insufficient_permissions(mock_storage_client, openrevie
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
     )
 
     # Verify exception is raised

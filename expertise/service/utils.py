@@ -6,6 +6,7 @@ import json
 import re
 import datetime
 import redis, pickle
+import logging
 from unittest.mock import MagicMock
 from enum import Enum
 import google.cloud.aiplatform as aip
@@ -578,6 +579,7 @@ class GCPInterface(object):
         pipeline_repo=None,
         bucket_name=None, 
         jobs_folder=None,
+        service_label=None,
         openreview_client=None,
         pipeline_tag='latest',
         logger=None,
@@ -594,6 +596,7 @@ class GCPInterface(object):
             self.pipeline_tag = config['GCP_PIPELINE_TAG']
             self.bucket_name = config['GCP_BUCKET_NAME']
             self.jobs_folder = config['GCP_JOBS_FOLDER']
+            self.service_label = config['GCP_SERVICE_LABEL']
         else:
             self.project_id = project_id
             self.project_number = project_number
@@ -604,6 +607,7 @@ class GCPInterface(object):
             self.pipeline_tag = pipeline_tag
             self.bucket_name = bucket_name
             self.jobs_folder = jobs_folder
+            self.service_label = service_label
 
         required_fields = [
             self.project_id,
@@ -614,11 +618,20 @@ class GCPInterface(object):
             self.pipeline_repo,
             self.pipeline_tag,
             self.bucket_name,
-            self.jobs_folder
+            self.jobs_folder,
+            self.service_label
         ]
         
         self.client = openreview_client
         self.request_fname = "request.json"
+        if logger is None:
+            logger = logging.getLogger(__name__)
+            logger.setLevel(logging.INFO)
+            handler = logging.StreamHandler()
+            handler.setLevel(logging.INFO)
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
         self.logger = logger
         
         if not any(field is None for field in required_fields):
@@ -736,7 +749,7 @@ class GCPInterface(object):
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
             parameter_values = {'job_config': json.dumps(data)},
-            labels = {'dev': 'expertise'})
+            labels = self.service_label)
 
         job.submit()
 
