@@ -61,7 +61,7 @@ jobs:
             export PATH="$HOME/miniconda/bin:$PATH"
             conda update -y conda
             python -m ensurepip --upgrade
-            python -m pip install --upgrade pip setuptools wheel
+            python -m pip install --upgrade pip setuptools wheel setuptools_rust
             conda create -n expertise python=$PYTHON_VERSION -c conda-forge
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise

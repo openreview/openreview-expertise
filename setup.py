@@ -15,7 +15,7 @@ setup(
         'openreview-py>=1.0.1',
         'numpy==1.26.4',
         'scipy',
-        'adapter-transformers==3.2.1post0',
+        'adapter-transformers',
         'pandas',
         'nltk',
         'gensim>=4.2.0',
