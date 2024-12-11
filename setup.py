@@ -31,7 +31,7 @@ setup(
         'python-Levenshtein',
         'sacremoses',
         'rank_bm25',
-        'pytest',
+        'pytest==7.3.0',
         'overrides==3.1.0',
         'flask==2.2.2',
         'flask-cors==3.0.9',
