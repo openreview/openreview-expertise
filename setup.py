@@ -36,7 +36,7 @@ setup(
         'flask==2.2.2',
         'flask-cors==3.0.9',
         'cffi>=1.0.0',
-        'celery==5.2.7',
+        'celery==5.3.0',
         "kombu>=5.3.0,<6.0",
         'redis',
         'pytest-celery',
