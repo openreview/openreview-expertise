@@ -38,6 +38,12 @@ if __name__ == '__main__':
         help="Name of the Artifact Registry Kubeflow Repository"
     )
     parser.add_argument(
+        "--kfp_name",
+        type=str,
+        required=True,
+        help="Name of the Kubeflow Pipeline"
+    )
+    parser.add_argument(
         "--image",
         type=str,
         required=True,
@@ -61,7 +67,7 @@ if __name__ == '__main__':
         )
 
     @pipeline(
-        name='openreview-expertise-test',
+        name=args.kfp_name,
         description='Processes request for user-paper expertise scores'
     )
     def expertise_pipeline(job_config: str):
@@ -86,7 +92,7 @@ if __name__ == '__main__':
 
     client = RegistryClient(host=f"https://{args.kfp_region}-kfp.pkg.dev/{args.project}/{args.kfp_repo}")
     client.delete_tag(
-        'openreview-expertise-test',
+        args.kfp_name,
         'latest'
     )
 
