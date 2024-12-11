@@ -19,7 +19,7 @@ setup(
         'adapter-transformers',
         'pandas',
         'nltk',
-        'gensim>=4.2.0',
+        'gensim==4.3.3',
         'torch',
         'cloudpickle',
         'scikit-learn',
