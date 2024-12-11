@@ -25,7 +25,7 @@ jobs:
           transport.host: localhost
           TZ: "Etc/UTC"
     environment:
-      PYTHON_VERSION: 3.9
+      PYTHON_VERSION: 3.11
     steps:
       - checkout
       - run:
@@ -40,8 +40,8 @@ jobs:
             apt install -y sudo
             DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
             cd $HOME
-            wget "https://repo.anaconda.com/miniconda/Miniconda3-py38_22.11.1-1-Linux-x86_64.sh" -O miniconda.sh
-            printf '%s' "473e5ecc8e078e9ef89355fbca21f8eefa5f9081544befca99867c7beac3150d  miniconda.sh" | sha256sum -c
+            wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
+            printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
       - run:
           name: Install Node
@@ -56,23 +56,25 @@ jobs:
           command: |
             export PATH="$HOME/miniconda/bin:$PATH"
             conda update -y conda
+            python -m ensurepip --upgrade
+            python -m pip install --upgrade pip setuptools wheel setuptools_rust
             conda create -n expertise python=$PYTHON_VERSION -c conda-forge
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             python --version
             mkdir ~/expertise-utils
             cd ~/expertise-utils
-            conda install pytorch cudatoolkit=10.1 -c pytorch 
+            conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia
             conda install -y filelock
+            python -m pip install numpy==1.26.4 --force-reinstall
             wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
             tar -xzvf mfr.tar.gz
             mv ./multifacet_recommender_data ./multifacet_recommender
             cd ~/openreview-expertise
-            pip install -e .
+            python -m pip install -e .
             conda install -y intel-openmp==2019.4
-            conda install -y faiss-cpu==1.7.3 -c pytorch
-            pip install -I protobuf==3.20.1
-            pip install numpy==1.24.4 --force-reinstall
+            conda install -y faiss-cpu -c pytorch
+            python -m pip install -I protobuf==3.20.1
       - run:
           name: Initialize replica set
           command: |
