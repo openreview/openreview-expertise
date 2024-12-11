@@ -13,7 +13,7 @@ setup(
     ],
     install_requires=[
         'openreview-py>=1.0.1',
-        'numpy==1.24.4',
+        'numpy==1.26.4',
         'scipy==1.10.1',
         'adapter-transformers==3.2.1post0',
         'pandas',
