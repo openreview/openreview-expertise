@@ -42,6 +42,7 @@ jobs:
             cd $HOME
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             export PATH="$HOME/.cargo/bin:$PATH"
+            . "$HOME/.cargo/env"
             rustc --version
             wget "https://repo.anaconda.com/miniconda/Miniconda3-py312_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
             printf '%s' "8d936ba600300e08eca3d874dee88c61c6f39303597b2b66baee54af4f7b4122  miniconda.sh" | sha256sum -c
