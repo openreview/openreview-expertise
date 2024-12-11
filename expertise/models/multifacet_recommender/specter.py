@@ -216,7 +216,6 @@ class SpecterPredictor:
                 id_list.append(paper_id)
                 emb_list.append(paper_emb)
             emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
-            print("Shape of emb_tensor:", emb_tensor.shape)
             emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
             print(len(bad_id_set))
             return emb_tensor, id_list, bad_id_set
