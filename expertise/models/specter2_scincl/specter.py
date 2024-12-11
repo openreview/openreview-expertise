@@ -12,7 +12,7 @@ import redisai
 import numpy as np
 
 from transformers import AutoTokenizer, AutoModel
-from transformers.adapters import AutoAdapterModel
+from transformers import AutoAdapterModel
 from .predictor import Predictor
 
 from expertise.service.server import redis_embeddings_pool
