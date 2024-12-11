@@ -25,7 +25,7 @@ jobs:
           transport.host: localhost
           TZ: "Etc/UTC"
     environment:
-      PYTHON_VERSION: 3.9
+      PYTHON_VERSION: 3.12
     steps:
       - checkout
       - run:
@@ -40,8 +40,8 @@ jobs:
             apt install -y sudo
             DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
             cd $HOME
-            wget "https://repo.anaconda.com/miniconda/Miniconda3-py38_22.11.1-1-Linux-x86_64.sh" -O miniconda.sh
-            printf '%s' "473e5ecc8e078e9ef89355fbca21f8eefa5f9081544befca99867c7beac3150d  miniconda.sh" | sha256sum -c
+            wget "https://repo.anaconda.com/miniconda/Miniconda3-py312_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
+            printf '%s' "8d936ba600300e08eca3d874dee88c61c6f39303597b2b66baee54af4f7b4122  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
       - run:
           name: Install Node
@@ -62,7 +62,7 @@ jobs:
             python --version
             mkdir ~/expertise-utils
             cd ~/expertise-utils
-            conda install pytorch cudatoolkit=10.1 -c pytorch 
+            conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia
             conda install -y filelock
             wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
             tar -xzvf mfr.tar.gz
