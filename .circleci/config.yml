@@ -62,7 +62,7 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             python --version
-            pip install --upgrade setuptools
+            pip install --upgrade pip setuptools wheel
             mkdir ~/expertise-utils
             cd ~/expertise-utils
             conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia
