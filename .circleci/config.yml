@@ -39,7 +39,7 @@ jobs:
             apt install -y git
             apt install -y sudo
             sudo apt-get update
-            sudo apt install -y python3.12-dev
+            sudo apt install -y python3.12
             DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
             cd $HOME
             wget "https://repo.anaconda.com/miniconda/Miniconda3-py312_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
