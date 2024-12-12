@@ -8,6 +8,7 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
+from bullmq import Queue
 
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase
 
@@ -28,6 +29,17 @@ class ExpertiseService(object):
             host = config['REDIS_ADDR'],
             port = config['REDIS_PORT'],
             db = config['REDIS_CONFIG_DB']
+        )
+        self.queue = Queue(
+            'userpaper',
+            {
+                'prefix': 'bullmq:expertise',
+                'connection': {
+                    "host": config['REDIS_ADDR'],
+                    "port": config['REDIS_PORT'],
+                    "db": config['REDIS_PORT'],
+                }
+            }
         )
 
         # Define expected/required API fields
@@ -141,10 +153,33 @@ class ExpertiseService(object):
 
         return file_dir, metadata_dir
 
-    def start_expertise(self, request):
+    # def start_expertise(self, request):
+    #     descriptions = JobDescription.VALS.value
+
+    #     from .celery_tasks import run_userpaper
+    #     config, token = self._prepare_config(request)
+    #     job_id = config.job_id
+
+    #     config.mdate = int(time.time() * 1000)
+    #     config.status = JobStatus.QUEUED
+    #     config.description = descriptions[JobStatus.QUEUED]
+
+    #     # Config has passed validation - add it to the user index
+    #     self.logger.info('just before submitting')
+    #     run_userpaper.apply_async(
+    #         (config, token, self.logger),
+    #         queue='userpaper',
+    #         task_id=job_id
+    #     )
+    #     self.logger.info(f"\nconf: {config.to_json()}\n")
+    #     self.redis.save_job(config)
+
+    #     return job_id
+
+    async def start_expertise(self, request):
         descriptions = JobDescription.VALS.value
 
-        from .celery_tasks import run_userpaper
+        # from .celery_tasks import run_userpaper
         config, token = self._prepare_config(request)
         job_id = config.job_id
 
@@ -154,11 +189,13 @@ class ExpertiseService(object):
 
         # Config has passed validation - add it to the user index
         self.logger.info('just before submitting')
-        run_userpaper.apply_async(
-            (config, token, self.logger),
-            queue='userpaper',
-            task_id=job_id
-        )
+        # run_userpaper.apply_async(
+        #     (config, token, self.logger),
+        #     queue='userpaper',
+        #     task_id=job_id
+        # )
+        job = await self.queue.add("test-job", {"config": config.to_json(), "token": token}, {})
+
         self.logger.info(f"\nconf: {config.to_json()}\n")
         self.redis.save_job(config)
 
