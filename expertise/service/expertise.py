@@ -8,16 +8,31 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
-from bullmq import Queue
+from bullmq import Queue, Worker
+from expertise.execute_expertise import execute_create_dataset, execute_expertise
+import asyncio
+import threading
 
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase
+
+async def worker_process(job, token):
+    config = job.data['config']
+    or_token = job.data['token']
+    openreview_client = openreview.Client(
+        token=or_token,
+        baseurl=config['baseurl']
+    )
+    openreview_client_v2 = openreview.api.OpenReviewClient(
+        token=or_token,
+        baseurl=config['baseurl_v2']
+    )
+    execute_create_dataset(openreview_client, openreview_client_v2, config=config)
+    execute_expertise(config=config)
 
 user_index_file_lock = Lock()
 class ExpertiseService(object):
 
-    def __init__(self, client, config, logger, client_v2 = None):
-        self.client = client
-        self.client_v2 = client_v2
+    def __init__(self, config, logger):
         self.logger = logger
         self.server_config = config
         self.default_expertise_config = config['DEFAULT_CONFIG']
@@ -37,16 +52,38 @@ class ExpertiseService(object):
                 'connection': {
                     "host": config['REDIS_ADDR'],
                     "port": config['REDIS_PORT'],
-                    "db": config['REDIS_PORT'],
+                    "db": config['REDIS_CONFIG_DB'],
                 }
             }
         )
+
+        self.worker = Worker(
+            'userpaper',
+            worker_process,
+            {
+                'prefix': 'bullmq:expertise',
+                'connection': {
+                    "host": config['REDIS_ADDR'],
+                    "port": config['REDIS_PORT'],
+                    "db": config['REDIS_CONFIG_DB'],
+                },
+                'autorun': False,
+            }
+        )
+
+        self.start_worker_in_thread()
 
         # Define expected/required API fields
         self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
         self.optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
         self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'baseurl_v2', 'paper_invitation', 'paper_id']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+
+    def set_client(self, client):
+        self.client = client
+
+    def set_client_v2(self, client_v2):
+        self.client_v2 = client_v2
 
     def _filter_config(self, running_config):
         """
@@ -189,17 +226,36 @@ class ExpertiseService(object):
 
         # Config has passed validation - add it to the user index
         self.logger.info('just before submitting')
-        # run_userpaper.apply_async(
-        #     (config, token, self.logger),
-        #     queue='userpaper',
-        #     task_id=job_id
-        # )
-        job = await self.queue.add("test-job", {"config": config.to_json(), "token": token}, {})
+
+        job = await self.queue.add("test-job", {"config": config.to_json(), "token": token}, {'jobId': job_id})
 
         self.logger.info(f"\nconf: {config.to_json()}\n")
         self.redis.save_job(config)
 
         return job_id
+
+    def start_worker_in_thread(self):
+        def run_event_loop(loop):
+            # set the loop for the current thread
+            asyncio.set_event_loop(loop)
+            # run the event loop until stopped
+            loop.run_forever()
+
+        # create a new event loop (low-level api)
+        loop = asyncio.new_event_loop()
+
+        # create a new thread to execute a target coroutine
+        thread = threading.Thread(target=run_event_loop, args=(loop,), daemon=True)
+        # start the new thread
+        thread.start()
+
+        # future = asyncio.run_coroutine_threadsafe(self.worker.run(), loop)
+        # future.result()
+        asyncio.run_coroutine_threadsafe(self.worker.run(), loop)
+
+    async def close(self):
+        await self.worker.close()
+        await self.queue.close()
 
     def get_expertise_all_status(self, user_id, query_params):
         """

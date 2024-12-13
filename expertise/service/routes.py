@@ -10,11 +10,27 @@ from copy import deepcopy
 from flask_cors import CORS
 from multiprocessing import Value
 from csv import reader
-
+import asyncio
 
 BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
 
+def run_once(f):
+    """
+    Decorator to run a function only once and return its output for any subsequent call to the function without running
+    it again
+    """
+    def wrapper(*args, **kwargs):
+        if not wrapper.has_run:
+            wrapper.has_run = True
+            wrapper.to_return = f(*args, **kwargs)
+        return wrapper.to_return
+    wrapper.has_run = False
+    return wrapper
+
+@run_once
+def get_expertise_service(config, logger):
+    return ExpertiseService(config, logger)
 
 def get_client():
     token = flask.request.headers.get('Authorization')
@@ -59,6 +75,65 @@ def test():
     flask.current_app.logger.info('In test')
     return 'OpenReview Expertise (test)'
 
+# @BLUEPRINT.route('/expertise', methods=['POST'])
+# def expertise():
+#     """
+#     Submit a job to create a dataset and execute an expertise model based on the submitted configuration
+
+#     :param token: Authorization from a logged in user, which defines the set of accessible data
+#     :type token: str
+
+#     :param name: A name describing the job being submitted
+#     :type name: str
+
+#     :param match_group: A group whose profiles will be used to compute expertise
+#     :type match_group: str
+
+#     :param paper_invitation: An invitation containing submissions used to compute expertise
+#     :type paper_invitation: str
+#     """
+
+#     openreview_client, openreview_client_v2 = get_client()
+
+#     user_id = get_user_id(openreview_client)
+#     if not user_id:
+#         flask.current_app.logger.error('No Authorization token in headers')
+#         return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
+
+#     try:
+#         flask.current_app.logger.info('Received expertise request')
+
+#         # Parse request args
+#         user_request = flask.request.json
+
+#         job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2).start_expertise(user_request)
+
+#         result = {'jobId': job_id }
+#         flask.current_app.logger.info('Returning from request')
+
+#         flask.current_app.logger.debug('POST returns ' + str(result))
+#         return flask.jsonify(result), 200
+
+#     except openreview.OpenReviewException as error_handle:
+#         flask.current_app.logger.error(str(error_handle))
+
+#         error_type = str(error_handle)
+#         status = 500
+
+#         if 'not found' in error_type.lower():
+#             status = 404
+#         elif 'forbidden' in error_type.lower():
+#             status = 403
+#         elif 'bad request' in error_type.lower():
+#             status = 400
+
+#         return flask.jsonify(format_error(status, error_type)), status
+
+#     # pylint:disable=broad-except
+#     except Exception as error_handle:
+#         flask.current_app.logger.error(str(error_handle))
+#         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
+
 @BLUEPRINT.route('/expertise', methods=['POST'])
 def expertise():
     """
@@ -90,7 +165,11 @@ def expertise():
         # Parse request args
         user_request = flask.request.json
 
-        job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2).start_expertise(user_request)
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        expertise_service.set_client(openreview_client)
+        expertise_service.set_client_v2(openreview_client_v2)
+
+        job_id = asyncio.run(expertise_service.start_expertise(user_request))
 
         result = {'jobId': job_id }
         flask.current_app.logger.info('Returning from request')
@@ -118,7 +197,6 @@ def expertise():
         flask.current_app.logger.error(str(error_handle))
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
-
 @BLUEPRINT.route('/expertise/status', methods=['GET'])
 def jobs():
     """
@@ -141,10 +219,13 @@ def jobs():
     try:
         # Parse query parameters
         job_id = flask.request.args.get('jobId', None)
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        expertise_service.set_client(openreview_client)
+        expertise_service.set_client_v2(openreview_client)
         if job_id is None or len(job_id) == 0:
-            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
+            result = expertise_service.get_expertise_all_status(user_id, flask.request.args)
         else:
-            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
+            result = expertise_service.get_expertise_status(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
@@ -189,7 +270,9 @@ def all_jobs():
 
     try:
         # Parse query parameters
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        expertise_service.set_client(openreview_client)
+        result = expertise_service.get_expertise_all_status(user_id, flask.request.args)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
@@ -237,7 +320,9 @@ def delete_job():
         job_id = flask.request.args.get('jobId', None)
         if job_id is None or len(job_id) == 0:
             raise openreview.OpenReviewException('Bad request: jobId is required')
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).del_expertise_job(user_id, job_id)
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        expertise_service.set_client(openreview_client)
+        result = expertise_service.del_expertise_job(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
@@ -291,7 +376,9 @@ def results():
             raise openreview.OpenReviewException('Bad request: jobId is required')
         delete_on_get = flask.request.args.get('deleteOnGet', 'False').lower() == 'true'
 
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        expertise_service.set_client(openreview_client)
+        result = expertise_service.get_expertise_results(user_id, job_id, delete_on_get)
 
         flask.current_app.logger.debug('GET returns code 200')
         return flask.jsonify(result), 200
