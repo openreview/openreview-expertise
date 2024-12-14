@@ -15,20 +15,6 @@ import threading
 
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase
 
-async def worker_process(job, token):
-    config = job.data['config']
-    or_token = job.data['token']
-    openreview_client = openreview.Client(
-        token=or_token,
-        baseurl=config['baseurl']
-    )
-    openreview_client_v2 = openreview.api.OpenReviewClient(
-        token=or_token,
-        baseurl=config['baseurl_v2']
-    )
-    execute_create_dataset(openreview_client, openreview_client_v2, config=config)
-    execute_expertise(config=config)
-
 user_index_file_lock = Lock()
 class ExpertiseService(object):
 
@@ -59,7 +45,7 @@ class ExpertiseService(object):
 
         self.worker = Worker(
             'userpaper',
-            worker_process,
+            self.worker_process,
             {
                 'prefix': 'bullmq:expertise',
                 'connection': {
@@ -213,6 +199,52 @@ class ExpertiseService(object):
 
     #     return job_id
 
+    def update_status(self, config, new_status, desc=None):
+        """
+        Updates the config of a given job to the new status
+        Optionally allows manual setting of the description
+
+        :param config: JobConfig of a given job
+        :type config: JobConfig
+
+        :param new_status: The new status for the job - a value from the JobStatus enumeration
+        :type new_status: str
+        """
+        descriptions = JobDescription.VALS.value
+        config.status = new_status
+        if desc is None:
+            config.description = descriptions[new_status]
+        else:
+            # Add user friendly translation
+            if 'num_samples=0' in desc:
+                desc += '. Please check that there is at least 1 member of the match group with at least 1 publication on OpenReview.'
+            if 'Dimension out of range' in desc:
+                desc += '. Please check that you have at least 1 submission submitted and that you have run the Post Submission stage.'
+            config.description = desc
+        config.mdate = int(time.time() * 1000)
+        self.redis.save_job(config)
+
+    async def worker_process(self, job, token):
+        job_id = job.data['job_id']
+        user_id = job.data['user_id']
+        config = self.redis.load_job(job_id, user_id)
+        or_token = job.data['token']
+        openreview_client = openreview.Client(
+            token=or_token,
+            baseurl=config.baseurl
+        )
+        openreview_client_v2 = openreview.api.OpenReviewClient(
+            token=or_token,
+            baseurl=config.baseurl_v2
+        )
+        try:
+            execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
+            self.update_status(config, JobStatus.RUN_EXPERTISE)
+            execute_expertise(config=config.to_json())
+            self.update_status(config, JobStatus.COMPLETED)
+        except Exception as e:
+            self.update_status(config, JobStatus.ERROR, str(e))
+
     async def start_expertise(self, request):
         descriptions = JobDescription.VALS.value
 
@@ -227,10 +259,10 @@ class ExpertiseService(object):
         # Config has passed validation - add it to the user index
         self.logger.info('just before submitting')
 
-        job = await self.queue.add("test-job", {"config": config.to_json(), "token": token}, {'jobId': job_id})
-
         self.logger.info(f"\nconf: {config.to_json()}\n")
         self.redis.save_job(config)
+
+        job = await self.queue.add("test-job", {"job_id": job_id, "user_id": config.user_id, "token": token}, {'jobId': job_id})
 
         return job_id
 
