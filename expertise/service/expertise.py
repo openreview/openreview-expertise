@@ -42,6 +42,7 @@ class ExpertiseService(object):
                 }
             }
         )
+        self.start_queue_in_thread()
 
         self.worker = Worker(
             'userpaper',
@@ -56,7 +57,6 @@ class ExpertiseService(object):
                 'autorun': False,
             }
         )
-
         self.start_worker_in_thread()
 
         # Define expected/required API fields
@@ -245,7 +245,7 @@ class ExpertiseService(object):
         except Exception as e:
             self.update_status(config, JobStatus.ERROR, str(e))
 
-    async def start_expertise(self, request):
+    def start_expertise(self, request):
         descriptions = JobDescription.VALS.value
 
         # from .celery_tasks import run_userpaper
@@ -262,9 +262,25 @@ class ExpertiseService(object):
         self.logger.info(f"\nconf: {config.to_json()}\n")
         self.redis.save_job(config)
 
-        job = await self.queue.add("test-job", {"job_id": job_id, "user_id": config.user_id, "token": token}, {'jobId': job_id})
+        future = asyncio.run_coroutine_threadsafe(self.queue.add("test-job", {"job_id": job_id, "user_id": config.user_id, "token": token}, {'jobId': job_id}), self.queue_loop)
+        job = future.result()
 
         return job_id
+
+    def start_queue_in_thread(self):
+        def run_event_loop(loop):
+            # set the loop for the current thread
+            asyncio.set_event_loop(loop)
+            # run the event loop until stopped
+            loop.run_forever()
+
+        # create a new event loop (low-level api)
+        self.queue_loop = asyncio.new_event_loop()
+
+        # create a new thread to execute a target coroutine
+        thread = threading.Thread(target=run_event_loop, args=(self.queue_loop,), daemon=True)
+        # start the new thread
+        thread.start()
 
     def start_worker_in_thread(self):
         def run_event_loop(loop):
@@ -281,8 +297,6 @@ class ExpertiseService(object):
         # start the new thread
         thread.start()
 
-        # future = asyncio.run_coroutine_threadsafe(self.worker.run(), loop)
-        # future.result()
         asyncio.run_coroutine_threadsafe(self.worker.run(), loop)
 
     async def close(self):

@@ -10,7 +10,6 @@ from copy import deepcopy
 from flask_cors import CORS
 from multiprocessing import Value
 from csv import reader
-import asyncio
 
 BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
@@ -169,7 +168,7 @@ def expertise():
         expertise_service.set_client(openreview_client)
         expertise_service.set_client_v2(openreview_client_v2)
 
-        job_id = asyncio.run(expertise_service.start_expertise(user_request))
+        job_id = expertise_service.start_expertise(user_request)
 
         result = {'jobId': job_id }
         flask.current_app.logger.info('Returning from request')
