@@ -176,28 +176,28 @@ class ExpertiseService(object):
 
         return file_dir, metadata_dir
 
-    # def start_expertise(self, request):
-    #     descriptions = JobDescription.VALS.value
+    def start_expertise_legacy(self, request):
+        descriptions = JobDescription.VALS.value
 
-    #     from .celery_tasks import run_userpaper
-    #     config, token = self._prepare_config(request)
-    #     job_id = config.job_id
+        from .celery_tasks import run_userpaper
+        config, token = self._prepare_config(request)
+        job_id = config.job_id
 
-    #     config.mdate = int(time.time() * 1000)
-    #     config.status = JobStatus.QUEUED
-    #     config.description = descriptions[JobStatus.QUEUED]
+        config.mdate = int(time.time() * 1000)
+        config.status = JobStatus.QUEUED
+        config.description = descriptions[JobStatus.QUEUED]
 
-    #     # Config has passed validation - add it to the user index
-    #     self.logger.info('just before submitting')
-    #     run_userpaper.apply_async(
-    #         (config, token, self.logger),
-    #         queue='userpaper',
-    #         task_id=job_id
-    #     )
-    #     self.logger.info(f"\nconf: {config.to_json()}\n")
-    #     self.redis.save_job(config)
+        # Config has passed validation - add it to the user index
+        self.logger.info('just before submitting')
+        run_userpaper.apply_async(
+            (config, token, self.logger),
+            queue='userpaper',
+            task_id=job_id
+        )
+        self.logger.info(f"\nconf: {config.to_json()}\n")
+        self.redis.save_job(config)
 
-    #     return job_id
+        return job_id
 
     def update_status(self, config, new_status, desc=None):
         """
