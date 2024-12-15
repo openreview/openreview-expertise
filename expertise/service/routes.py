@@ -121,7 +121,7 @@ def expertise():
         import traceback
         traceback.print_exc()
         traceback.print_tb(error_handle.__traceback__)
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
 
         error_type = str(error_handle)
         status = 500
@@ -140,7 +140,7 @@ def expertise():
         import traceback
         traceback.print_exc()
         traceback.print_tb(error_handle.__traceback__)
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/legacy', methods=['POST'])
@@ -187,7 +187,7 @@ def expertise_legacy():
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
 
         error_type = str(error_handle)
         status = 500
@@ -203,7 +203,7 @@ def expertise_legacy():
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/status', methods=['GET'])
@@ -239,7 +239,7 @@ def jobs():
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
 
         error_type = str(error_handle)
         status = 500
@@ -255,7 +255,7 @@ def jobs():
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/status/all', methods=['GET'])
@@ -286,7 +286,9 @@ def all_jobs():
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        # import traceback
+        # traceback.print_exc()
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
 
         error_type = str(error_handle)
         status = 500
@@ -302,7 +304,9 @@ def all_jobs():
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        # import traceback
+        # traceback.print_exc()
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/delete', methods=['GET'])
@@ -336,7 +340,7 @@ def delete_job():
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
 
         error_type = str(error_handle)
         status = 500
@@ -352,7 +356,7 @@ def delete_job():
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/results', methods=['GET'])
@@ -393,7 +397,7 @@ def results():
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
 
         error_type = str(error_handle)
         status = 500
@@ -409,5 +413,5 @@ def results():
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
