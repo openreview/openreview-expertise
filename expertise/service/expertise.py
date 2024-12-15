@@ -244,13 +244,73 @@ class ExpertiseService(object):
             self.update_status(config, JobStatus.COMPLETED)
         except Exception as e:
             self.update_status(config, JobStatus.ERROR, str(e))
+            # Re raise exception so that it appears in the queue
+            exception = e.with_traceback(e.__traceback__)
+            raise exception
+
+    def _get_job_name(self, request):
+        job_name_parts = [request.get('name', 'No name provided')]
+        entities = []
+        if request.get('entityA', {}).get('type'):
+            entities.append(request['entityA'])
+        else:
+            job_name_parts.append('No Entity A Type Found')
+        if request.get('entityB', {}).get('type'):
+            entities.append(request['entityB'])
+        else:
+            job_name_parts.append('No Entity B Type Found')
+
+        for entity in entities:
+            if entity['type'] == 'Group':
+                job_name_parts.append(entity.get('memberOf', 'No Group Found'))
+            elif entity['type'] == 'Note':
+                if entity.get('id'):
+                    job_name_parts.append(entity['id'])
+                elif entity.get('invitation'):
+                    job_name_parts.append(entity['invitation'])
+                elif entity.get('withVenueid'):
+                    job_name_parts.append(entity['withVenueid'])
+                else:
+                    job_name_parts.append('No Note Information Found')
+
+        return f'{job_name_parts[0]}: {job_name_parts[1]} - {job_name_parts[2]}'
+
+    def _get_log_from_request(self, request):
+        log = []
+        if request.get('entityA'):
+            log.append(f"Entity A: {json.dumps(request.get('entityA', {}), indent=4)}")
+        if request.get('entityB'):
+            log.append(f"Entity B: {json.dumps(request.get('entityB', {}), indent=4)}")
+
+        return '\n'.join(log)
+
+    def _get_log_from_config(self, config):
+        log = []
+        if config.name:
+            log.append(f"Job name: {config.name}")
+        if config.paper_id:
+            log.append(f"Paper ID: {config.paper_id}")
+        if config.paper_invitation:
+            log.append(f"Paper invitation: {config.paper_invitation}")
+        if config.paper_venueid:
+            log.append(f"Paper venue ID: {config.paper_venueid}")
+        if config.model:
+            log.append(f"Model: {config.model}")
+        if config.model_params:
+            log.append(f"Model params: {json.dumps(config.to_json().get('model_params', {}), indent=4)}")
+
+        return '\n'.join(log)
 
     def start_expertise(self, request):
         descriptions = JobDescription.VALS.value
 
-        # from .celery_tasks import run_userpaper
+        job_name = self._get_job_name(request)
+        request_log = self._get_log_from_request(request)
+
         config, token = self._prepare_config(request)
         job_id = config.job_id
+
+        config_log = self._get_log_from_config(config)
 
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
@@ -262,8 +322,14 @@ class ExpertiseService(object):
         self.logger.info(f"\nconf: {config.to_json()}\n")
         self.redis.save_job(config)
 
-        future = asyncio.run_coroutine_threadsafe(self.queue.add("test-job", {"job_id": job_id, "user_id": config.user_id, "token": token}, {'jobId': job_id}), self.queue_loop)
+        future = asyncio.run_coroutine_threadsafe(self.queue.add(job_name, {"job_id": job_id, "user_id": config.user_id, "token": token}, {'jobId': job_id}), self.queue_loop)
         job = future.result()
+
+        future = asyncio.run_coroutine_threadsafe(job.log(request_log), self.queue_loop)
+        future.result()
+
+        future = asyncio.run_coroutine_threadsafe(job.log(config_log), self.queue_loop)
+        future.result()
 
         return job_id
 
