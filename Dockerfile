@@ -2,7 +2,7 @@ FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
 
 WORKDIR /app
 
-ENV PYTHON_VERSION=3.9 \
+ENV PYTHON_VERSION=3.11 \
     HOME="/app" \
     PATH="/app/miniconda/bin:${PATH}" \
     FLASK_ENV=production \
@@ -22,8 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     \
     && cd $HOME \
-    && wget "https://repo.anaconda.com/miniconda/Miniconda3-py39_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh \
-    && echo "4b540d78e5bdd770b39216c0563424ef6656504cbe24c67b2d0454c2eb7afe93  miniconda.sh" | sha256sum -c - \
+    && wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh \
+    && echo "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c - \
     && bash miniconda.sh -b -p $HOME/miniconda \
     && rm miniconda.sh \
     \
@@ -32,11 +32,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     \
     && . $HOME/miniconda/etc/profile.d/conda.sh \
     && conda activate expertise \
-    && conda install -y pytorch pytorch-cuda=11 -c pytorch -c nvidia \
+    && conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia \
     && conda install -y filelock intel-openmp faiss-cpu -c pytorch \
-    && pip install --no-cache-dir -e $HOME/openreview-expertise \
-    && pip install --no-cache-dir -I protobuf==3.20.1 \
-    && pip install --no-cache-dir numpy==1.24.4 --force-reinstall \
+    && python -m pip install --no-cache-dir -e $HOME/openreview-expertise \
+    && python -m pip install --no-cache-dir -I protobuf==3.20.1 \
+    && python -m pip install --no-cache-dir numpy==1.26.4 --force-reinstall \
     && conda clean --all -y \
     && apt-get purge -y build-essential wget curl git \
     && apt-get autoremove -y \
