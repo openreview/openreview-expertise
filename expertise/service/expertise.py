@@ -32,7 +32,7 @@ class ExpertiseService(object):
             db = config['REDIS_CONFIG_DB']
         )
         self.queue = Queue(
-            'userpaper',
+            'Expertise',
             {
                 'prefix': 'bullmq:expertise',
                 'connection': {
@@ -45,7 +45,7 @@ class ExpertiseService(object):
         self.start_queue_in_thread()
 
         self.worker = Worker(
-            'userpaper',
+            'Expertise',
             self.worker_process,
             {
                 'prefix': 'bullmq:expertise',
