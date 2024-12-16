@@ -215,7 +215,6 @@ class ExpertiseService(object):
         if desc is None:
             config.description = descriptions[new_status]
         else:
-            # Add user friendly translation
             if 'num_samples=0' in desc:
                 desc += '. Please check that there is at least 1 member of the match group with at least 1 publication on OpenReview.'
             if 'Dimension out of range' in desc:
@@ -301,11 +300,64 @@ class ExpertiseService(object):
 
         return '\n'.join(log)
 
+    def get_key_from_request(self, request):
+        key_parts = []
+        entities = []
+        if request.get('entityA', {}).get('type'):
+            entities.append(request['entityA'])
+        else:
+            key_parts.append('NoEntityA')
+
+        if request.get('entityB', {}).get('type'):
+            entities.append(request['entityB'])
+        else:
+            key_parts.append('NoEntityB')
+
+        for entity in entities:
+            if entity['type'] == 'Group':
+                key_parts.append(entity.get('memberOf', 'NoGroupFound'))
+            elif entity['type'] == 'Note':
+                if entity.get('id'):
+                    key_parts.append(entity['id'])
+                elif entity.get('invitation'):
+                    key_parts.append(entity['invitation'])
+                elif entity.get('withVenueid'):
+                    key_parts.append(entity['withVenueid'])
+                else:
+                    key_parts.append('NoNoteInformation')
+
+        if request.get('model', {}).get('name'):
+            key_parts.append(request['model']['name'])
+
+        return ':'.join(key_parts)
+
     def start_expertise(self, request):
         descriptions = JobDescription.VALS.value
 
         job_name = self._get_job_name(request)
         request_log = self._get_log_from_request(request)
+
+        request_key = self.get_key_from_request(request)
+
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self.queue.getJobs([
+                    'active',
+                    'delayed',
+                    'paused',
+                    'waiting',
+                    'waiting-children',
+                    'prioritized',
+                ]),
+                self.queue_loop,
+            )
+            jobs = future.result()
+        except Exception as e:
+            jobs = []
+
+        for job in jobs:
+            if job.data.get('request_key') == request_key:
+                raise openreview.OpenReviewException("Request already in queue")
 
         config, token = self._prepare_config(request)
         job_id = config.job_id
@@ -322,7 +374,27 @@ class ExpertiseService(object):
         self.logger.info(f"\nconf: {config.to_json()}\n")
         self.redis.save_job(config)
 
-        future = asyncio.run_coroutine_threadsafe(self.queue.add(job_name, {"job_id": job_id, "user_id": config.user_id, "token": token}, {'jobId': job_id}), self.queue_loop)
+        future = asyncio.run_coroutine_threadsafe(
+            self.queue.add(
+                job_name,
+                {
+                    "job_id": job_id,
+                    "request_key": request_key,
+                    "user_id": config.user_id,
+                    "token": token
+                },
+                {
+                    'jobId': job_id,
+                    'removeOnComplete': {
+                        'count': 100,
+                    },
+                    'removeOnFail': {
+                        'age': 2592000
+                    },
+                }
+            ),
+            self.queue_loop
+        )
         job = future.result()
 
         future = asyncio.run_coroutine_threadsafe(job.log(request_log), self.queue_loop)

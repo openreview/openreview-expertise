@@ -1011,7 +1011,7 @@ class TestExpertiseService():
     def test_high_load(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         test_client = openreview_context['test_client']
-        num_requests = 3
+        num_requests = 1
         id_list = []
 
         # Fetch a paper ID
