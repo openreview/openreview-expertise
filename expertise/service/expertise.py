@@ -271,6 +271,10 @@ class ExpertiseService(object):
             log.append(f"Paper invitation: {config.paper_invitation}")
         if config.paper_venueid:
             log.append(f"Paper venue ID: {config.paper_venueid}")
+        if config.match_group:
+            log.append(f"Match group: {config.match_group}")
+        if config.alternate_match_group:
+            log.append(f"Alternate match group: {config.alternate_match_group}")
         if config.model:
             log.append(f"Model: {config.model}")
         if config.model_params:
