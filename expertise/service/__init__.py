@@ -127,4 +127,5 @@ def load_model_artifacts():
         blob.download_to_filename(destination_path)
         print(f"Copied {blob.name} to {destination_path}")
     
+    print("Model artifacts loaded")
     model_ready.set()

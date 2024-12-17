@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && python -m pip install --no-cache-dir -e $HOME/openreview-expertise \
     && python -m pip install --no-cache-dir -I protobuf==3.20.1 \
     && python -m pip install --no-cache-dir numpy==1.26.4 --force-reinstall \
+    && python -m pip install openreview-py --force-reinstall \
     && conda clean --all -y \
     && apt-get purge -y build-essential wget curl git \
     && apt-get autoremove -y \

@@ -54,9 +54,11 @@ def run_pipeline(api_request_str, working_dir=None):
     print('Loading model artifacts')
     load_model_artifacts()
 
+    print('Logging into OpenReview')
     client_v1 = openreview.Client(baseurl=baseurl_v1, token=token)
     client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
 
+    print('Creating job ID')
     job_id = shortuuid.ShortUUID().random(length=5)
     if working_dir is None:
         working_dir = f"/app/{job_id}"
