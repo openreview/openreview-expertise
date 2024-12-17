@@ -11,10 +11,25 @@ from flask_cors import CORS
 from multiprocessing import Value
 from csv import reader
 
-
 BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
 
+def run_once(f):
+    """
+    Decorator to run a function only once and return its output for any subsequent call to the function without running
+    it again
+    """
+    def wrapper(*args, **kwargs):
+        if not wrapper.has_run:
+            wrapper.has_run = True
+            wrapper.to_return = f(*args, **kwargs)
+        return wrapper.to_return
+    wrapper.has_run = False
+    return wrapper
+
+@run_once
+def get_expertise_service(config, logger):
+    return ExpertiseService(config, logger)
 
 def get_client():
     token = flask.request.headers.get('Authorization')
@@ -90,7 +105,21 @@ def expertise():
         # Parse request args
         user_request = flask.request.json
 
-        job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2).start_expertise(user_request)
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        expertise_service.set_client(openreview_client)
+        expertise_service.set_client_v2(openreview_client_v2)
+
+        request_key = expertise_service.get_key_from_request(user_request)
+
+        if expertise_service.redis.db.incr(request_key) > 1:
+            raise openreview.OpenReviewException("Request already in process")
+
+        try:
+            job_id = expertise_service.start_expertise(user_request)
+            expertise_service.redis.db.delete(request_key)
+        except Exception as error_handle:
+            expertise_service.redis.db.delete(request_key)
+            raise error_handle
 
         result = {'jobId': job_id }
         flask.current_app.logger.info('Returning from request')
@@ -99,7 +128,10 @@ def expertise():
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        import traceback
+        traceback.print_exc()
+        traceback.print_tb(error_handle.__traceback__)
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
 
         error_type = str(error_handle)
         status = 500
@@ -115,9 +147,11 @@ def expertise():
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        import traceback
+        traceback.print_exc()
+        traceback.print_tb(error_handle.__traceback__)
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
-
 
 @BLUEPRINT.route('/expertise/status', methods=['GET'])
 def jobs():
@@ -141,15 +175,18 @@ def jobs():
     try:
         # Parse query parameters
         job_id = flask.request.args.get('jobId', None)
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        expertise_service.set_client(openreview_client)
+        expertise_service.set_client_v2(openreview_client)
         if job_id is None or len(job_id) == 0:
-            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
+            result = expertise_service.get_expertise_all_status(user_id, flask.request.args)
         else:
-            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
+            result = expertise_service.get_expertise_status(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
 
         error_type = str(error_handle)
         status = 500
@@ -165,7 +202,7 @@ def jobs():
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/status/all', methods=['GET'])
@@ -189,12 +226,16 @@ def all_jobs():
 
     try:
         # Parse query parameters
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        expertise_service.set_client(openreview_client)
+        result = expertise_service.get_expertise_all_status(user_id, flask.request.args)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        # import traceback
+        # traceback.print_exc()
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
 
         error_type = str(error_handle)
         status = 500
@@ -210,7 +251,9 @@ def all_jobs():
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        # import traceback
+        # traceback.print_exc()
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/delete', methods=['GET'])
@@ -237,12 +280,14 @@ def delete_job():
         job_id = flask.request.args.get('jobId', None)
         if job_id is None or len(job_id) == 0:
             raise openreview.OpenReviewException('Bad request: jobId is required')
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).del_expertise_job(user_id, job_id)
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        expertise_service.set_client(openreview_client)
+        result = expertise_service.del_expertise_job(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
 
         error_type = str(error_handle)
         status = 500
@@ -258,7 +303,7 @@ def delete_job():
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/results', methods=['GET'])
@@ -291,13 +336,15 @@ def results():
             raise openreview.OpenReviewException('Bad request: jobId is required')
         delete_on_get = flask.request.args.get('deleteOnGet', 'False').lower() == 'true'
 
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        expertise_service.set_client(openreview_client)
+        result = expertise_service.get_expertise_results(user_id, job_id, delete_on_get)
 
         flask.current_app.logger.debug('GET returns code 200')
         return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
 
         error_type = str(error_handle)
         status = 500
@@ -313,5 +360,5 @@ def results():
 
     # pylint:disable=broad-except
     except Exception as error_handle:
-        flask.current_app.logger.error(str(error_handle))
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
