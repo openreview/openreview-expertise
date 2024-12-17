@@ -2,7 +2,10 @@
 Implements the Flask API endpoints.
 '''
 from expertise.service.expertise import ExpertiseService
+from expertise.service import model_ready, artifact_loading_started
+from expertise.service.utils import GCPInterface
 import openreview
+import json
 from openreview.openreview import OpenReviewException
 from .utils import get_user_id
 import flask
@@ -16,8 +19,11 @@ BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
 
 
-def get_client():
-    token = flask.request.headers.get('Authorization')
+def get_client(token=None):
+    if not token:
+        token = flask.request.headers.get('Authorization')
+        if token is None:
+            raise openreview.OpenReviewException('Forbidden: No authorization detected')
     return (
         openreview.Client(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL']),
         openreview.api.OpenReviewClient(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL_V2']),
@@ -90,7 +96,10 @@ def expertise():
         # Parse request args
         user_request = flask.request.json
 
-        job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2).start_expertise(user_request)
+        if flask.current_app.config.get('USE_GCP', False):
+            job_id = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).create_job(user_request)
+        else:
+            job_id = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger, client_v2=openreview_client_v2).start_expertise(user_request)
 
         result = {'jobId': job_id }
         flask.current_app.logger.info('Returning from request')
@@ -130,7 +139,7 @@ def jobs():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client, _ = get_client()
+    openreview_client, openreview_client_v2 = get_client()
 
     user_id = get_user_id(openreview_client)
 
@@ -142,9 +151,15 @@ def jobs():
         # Parse query parameters
         job_id = flask.request.args.get('jobId', None)
         if job_id is None or len(job_id) == 0:
-            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
+            if flask.current_app.config.get('USE_GCP', False):
+                result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_status(user_id, flask.request.args)
+            else:
+                result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
         else:
-            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
+            if flask.current_app.config.get('USE_GCP', False):
+                result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_status_by_job_id(user_id, job_id)
+            else:
+                result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_status(user_id, job_id)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
@@ -179,7 +194,7 @@ def all_jobs():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client, _ = get_client()
+    openreview_client, openreview_client_v2 = get_client()
 
     user_id = get_user_id(openreview_client)
 
@@ -189,7 +204,10 @@ def all_jobs():
 
     try:
         # Parse query parameters
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
+        if flask.current_app.config.get('USE_GCP', False):
+            result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_status(user_id, flask.request.args)
+        else:
+            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_all_status(user_id, flask.request.args)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
 
@@ -276,7 +294,7 @@ def results():
     :param delete_on_get: Decide whether to keep the data on the server after getting the results
     :type delete_on_get: bool
     """
-    openreview_client, _ = get_client()
+    openreview_client, openreview_client_v2 = get_client()
 
     user_id = get_user_id(openreview_client)
 
@@ -291,7 +309,10 @@ def results():
             raise openreview.OpenReviewException('Bad request: jobId is required')
         delete_on_get = flask.request.args.get('deleteOnGet', 'False').lower() == 'true'
 
-        result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
+        if flask.current_app.config.get('USE_GCP', False):
+            result = GCPInterface(config=flask.current_app.config, logger=flask.current_app.logger, openreview_client=openreview_client_v2).get_job_results(user_id, job_id, delete_on_get)
+        else:
+            result = ExpertiseService(openreview_client, flask.current_app.config, flask.current_app.logger).get_expertise_results(user_id, job_id, delete_on_get)
 
         flask.current_app.logger.debug('GET returns code 200')
         return flask.jsonify(result), 200
@@ -315,3 +336,17 @@ def results():
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle))
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
+
+@BLUEPRINT.route('/startup')
+def startup():
+    """An endpoint for checking availability for predictions"""
+    flask.current_app.logger.info('In startup')
+    if not model_ready.is_set():
+        return {'status': 'Service unavailable: Artifact loading in progress'}, 503
+    return {'status': 'Available for predictions'}, 200
+
+@BLUEPRINT.route('/health')
+def health():
+    """An endpoint for server uptime"""
+    flask.current_app.logger.info('In health')
+    return {'status': 'Healthy instance'}, 200

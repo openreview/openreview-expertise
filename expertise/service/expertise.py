@@ -8,13 +8,15 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
+from expertise.execute_expertise import execute_create_dataset, execute_expertise
+from pathlib import Path
 
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase
 
 user_index_file_lock = Lock()
 class ExpertiseService(object):
 
-    def __init__(self, client, config, logger, client_v2 = None):
+    def __init__(self, client, config, logger, client_v2 = None, containerized = False):
         self.client = client
         self.client_v2 = client_v2
         self.logger = logger
@@ -24,11 +26,15 @@ class ExpertiseService(object):
         self.specter_dir = config['SPECTER_DIR']
         self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
         self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
-        self.redis = RedisDatabase(
-            host = config['REDIS_ADDR'],
-            port = config['REDIS_PORT'],
-            db = config['REDIS_CONFIG_DB']
-        )
+        self.containerized = containerized
+
+        # Only load if maintaining persisted jobs on disk
+        if not containerized:
+            self.redis = RedisDatabase(
+                host = config['REDIS_ADDR'],
+                port = config['REDIS_PORT'],
+                db = config['REDIS_CONFIG_DB']
+            )
 
         # Define expected/required API fields
         self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
@@ -80,8 +86,9 @@ class ExpertiseService(object):
             os.makedirs(config.dataset['directory'])
         with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
             json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
-        self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
-        self.redis.save_job(config)
+        if not self.containerized:
+            self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
+            self.redis.save_job(config)
 
         return config, self.client.token
 
