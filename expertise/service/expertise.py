@@ -55,6 +55,7 @@ class ExpertiseService(object):
                     "db": config['REDIS_CONFIG_DB'],
                 },
                 'autorun': False,
+                'concurrency': config['ACTIVE_JOBS'],
             }
         )
         self.start_worker_in_thread()
