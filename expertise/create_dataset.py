@@ -105,6 +105,8 @@ class OpenReviewExpertise(object):
             if self.config.get('dataset', {}).get('with_title', False):
                 if not 'title' in publication.content or not publication.content.get('title'):
                     continue
+            if getattr(publication, 'pdate') is not None:
+                publication.cdate = publication.pdate
             if getattr(publication, 'cdate') is None:
                 publication.cdate = getattr(publication, 'tcdate', 0)
 
@@ -368,9 +370,9 @@ class OpenReviewExpertise(object):
             pbar.update(1)
             profile = openreview.tools.get_profile(client, profile_id)
             if profile:
-                publications = self.deduplicate_publications(
-                    list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': profile.id}))
-                )
+                publications = [
+                    openreview.Note.from_json(n) for n in self.get_publications(profile.id)
+                ]
                 return { 'profile_id': profile_id, 'papers': publications }
         futures = []
         with ThreadPoolExecutor(max_workers=self.config.get('max_workers')) as executor:
