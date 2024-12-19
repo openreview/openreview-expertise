@@ -208,11 +208,9 @@ class ExpertiseService(object):
 
     def expertise_worker(config_json):
         try:
-            # Execute expertise with the provided configuration
             config = json.loads(config_json)
             execute_expertise(config=config)
         except Exception as e:
-            # Re-raise exceptions to allow debugging
             raise e
         finally:
             # Cleanup resources
@@ -237,22 +235,22 @@ class ExpertiseService(object):
             execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
             self.update_status(config, JobStatus.RUN_EXPERTISE)
 
-            # Run `execute_expertise` in a separate process
             config_json = json.dumps(config.to_json())  # Serialize config
             process = multiprocessing.Process(target=ExpertiseService.expertise_worker, args=(config_json,))
             process.start()
             process.join()
 
             if process.exitcode != 0:
-                raise Exception(f"Worker process for execute_expertise exited with code {process.exitcode}")
+                raise Exception(f"execute_expertise process exit code={process.exitcode}")
 
             # Update job status
             self.update_status(config, JobStatus.COMPLETED)
 
         except Exception as e:
-            # Handle and log errors
             self.update_status(config, JobStatus.ERROR, str(e))
-            raise e
+            # Re raise exception so that it appears in the queue
+            exception = e.with_traceback(e.__traceback__)
+            raise exception
         finally:
             # Cleanup resources
             torch.cuda.empty_cache()
