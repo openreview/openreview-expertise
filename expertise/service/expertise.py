@@ -207,12 +207,13 @@ class ExpertiseService(object):
         config.mdate = int(time.time() * 1000)
         self.redis.save_job(config)
 
-    def expertise_worker(config_json):
+    @staticmethod
+    def expertise_worker(config_json, queue):
         try:
             config = json.loads(config_json)
             execute_expertise(config=config)
         except Exception as e:
-            raise e
+            queue.put(e)
         finally:
             # Cleanup resources
             torch.cuda.empty_cache()
@@ -236,10 +237,15 @@ class ExpertiseService(object):
             execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
             self.update_status(config, JobStatus.RUN_EXPERTISE)
 
+            queue = multiprocessing.Queue()  # Queue for exception handling
             config_json = json.dumps(config.to_json())  # Serialize config
-            process = multiprocessing.Process(target=ExpertiseService.expertise_worker, args=(config_json,))
+            process = multiprocessing.Process(target=ExpertiseService.expertise_worker, args=(config_json, queue))
             process.start()
             process.join()
+
+            if not queue.empty():
+                exception = queue.get()
+                raise exception  # Re-raise the exception from the subprocess
 
             # Update job status
             self.update_status(config, JobStatus.COMPLETED)
