@@ -203,6 +203,9 @@ class RedisDatabase(object):
         """
         job_key = f"job:{job_id}"
 
+        for job_key in self.db.scan_iter("job:*"):
+            print(f"Checking {job_key}")
+
         if not self.db.exists(job_key):
             raise openreview.OpenReviewException('Job not found')        
         config = pickle.loads(self.db.get(job_key))
@@ -235,6 +238,7 @@ class JobConfig(object):
         name=None,
         user_id=None,
         job_id=None,
+        cloud_id=None,
         baseurl=None,
         baseurl_v2=None,
         job_dir=None,
@@ -260,6 +264,7 @@ class JobConfig(object):
         self.name = name
         self.user_id = user_id
         self.job_id = job_id
+        self.cloud_id = cloud_id
         self.baseurl = baseurl
         self.baseurl_v2 = baseurl_v2
         self.job_dir = job_dir
@@ -289,6 +294,7 @@ class JobConfig(object):
             'name': self.name,
             'user_id': self.user_id,
             'job_id': self.job_id,
+            'cloud_id': self.cloud_id,
             'baseurl': self.baseurl,
             'baseurl_v2': self.baseurl_v2,
             'job_dir': self.job_dir,
@@ -648,6 +654,9 @@ class GCPInterface(object):
         )
         self.logger.info(f"Get bucket {self.bucket_name}")
         self.bucket = self.gcs_client.bucket(self.bucket_name)
+
+    def set_client(self, client):
+        self.client = client
 
     def _generate_vertex_prefix(api_request):
         # Precondition: api_request there is at least 1 group entity containing a memberOf field

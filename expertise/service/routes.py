@@ -1,7 +1,7 @@
 '''
 Implements the Flask API endpoints.
 '''
-from expertise.service.expertise import ExpertiseService
+from expertise.service.expertise import ExpertiseService, ExpertiseCloudService
 from expertise.service import model_ready, artifact_loading_started
 from expertise.service.utils import GCPInterface
 import openreview
@@ -32,13 +32,15 @@ def run_once(f):
 
 @run_once
 def get_expertise_service(config, logger):
+    if config.get('USE_GCP', False):
+        return ExpertiseCloudService(config, logger)
     return ExpertiseService(config, logger)
 
 def get_client(token=None):
     if not token:
         token = flask.request.headers.get('Authorization')
         if token is None:
-            raise openreview.OpenReviewException('Forbidden: No authorization detected')
+            raise openreview.OpenReviewException(f'Forbidden: No authorization detected | {flask.request.headers}')
     return (
         openreview.Client(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL']),
         openreview.api.OpenReviewClient(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL_V2']),
