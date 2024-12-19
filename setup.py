@@ -48,7 +48,7 @@ setup(
         'adapter-transformers',
         'google-cloud',
         'google-cloud-storage',
-        'google-cloud-aiplatform'
+        'google-cloud-aiplatform',
         'bullmq==2.11.0'
     ],
     zip_safe=False
