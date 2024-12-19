@@ -1,8 +1,11 @@
 '''
 Implements the Flask API endpoints.
 '''
-from expertise.service.expertise import ExpertiseService
+from expertise.service.expertise import ExpertiseService, ExpertiseCloudService
+from expertise.service import model_ready, artifact_loading_started
+from expertise.service.utils import GCPInterface
 import openreview
+import json
 from openreview.openreview import OpenReviewException
 from .utils import get_user_id
 import flask
@@ -29,10 +32,15 @@ def run_once(f):
 
 @run_once
 def get_expertise_service(config, logger):
+    if config.get('USE_GCP', False):
+        return ExpertiseCloudService(config, logger)
     return ExpertiseService(config, logger)
 
-def get_client():
-    token = flask.request.headers.get('Authorization')
+def get_client(token=None):
+    if not token:
+        token = flask.request.headers.get('Authorization')
+        if token is None:
+            raise openreview.OpenReviewException(f'Forbidden: No authorization detected | {flask.request.headers}')
     return (
         openreview.Client(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL']),
         openreview.api.OpenReviewClient(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL_V2']),
@@ -164,7 +172,7 @@ def jobs():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client, _ = get_client()
+    openreview_client, openreview_client_v2 = get_client()
 
     user_id = get_user_id(openreview_client)
 
@@ -216,7 +224,7 @@ def all_jobs():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client, _ = get_client()
+    openreview_client, openreview_client_v2 = get_client()
 
     user_id = get_user_id(openreview_client)
 
@@ -321,7 +329,7 @@ def results():
     :param delete_on_get: Decide whether to keep the data on the server after getting the results
     :type delete_on_get: bool
     """
-    openreview_client, _ = get_client()
+    openreview_client, openreview_client_v2 = get_client()
 
     user_id = get_user_id(openreview_client)
 
@@ -362,3 +370,17 @@ def results():
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
+
+@BLUEPRINT.route('/startup')
+def startup():
+    """An endpoint for checking availability for predictions"""
+    flask.current_app.logger.info('In startup')
+    if not model_ready.is_set():
+        return {'status': 'Service unavailable: Artifact loading in progress'}, 503
+    return {'status': 'Available for predictions'}, 200
+
+@BLUEPRINT.route('/health')
+def health():
+    """An endpoint for server uptime"""
+    flask.current_app.logger.info('In health')
+    return {'status': 'Healthy instance'}, 200
