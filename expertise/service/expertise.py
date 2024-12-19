@@ -241,9 +241,6 @@ class ExpertiseService(object):
             process.start()
             process.join()
 
-            if process.exitcode != 0:
-                raise Exception(f"execute_expertise process exit code={process.exitcode}")
-
             # Update job status
             self.update_status(config, JobStatus.COMPLETED)
 
