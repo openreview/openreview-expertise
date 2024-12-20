@@ -82,6 +82,11 @@ class TestExpertiseCloudService():
             sync_on_disk=False
         )
 
+        # Clear Redis
+        configs = redis.load_all_jobs(openreview_context['config']['OPENREVIEW_USERNAME'])
+        for config in configs:
+            redis.remove_job(openreview_context['config']['OPENREVIEW_USERNAME'], config.job_id)
+
         # Setup mock storage client
         mock_bucket = MagicMock()
         mock_blob = MagicMock()
