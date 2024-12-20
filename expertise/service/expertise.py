@@ -969,6 +969,7 @@ class ExpertiseCloudService(object):
 
         # Config has passed validation - add it to the user index
         self.logger.info('just before submitting')
+        self.logger.info(f"vertex id={cloud_id}")
 
         self.logger.info(f"\nconf: {config.to_json()}\n")
         self.redis.save_job(config)
