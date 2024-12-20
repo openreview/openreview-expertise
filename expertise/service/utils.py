@@ -165,7 +165,8 @@ class RedisDatabase(object):
         host=None,
         port=None,
         db=None,
-        connection_pool=None) -> None:
+        connection_pool=None,
+        sync_on_disk=True) -> None:
         if not connection_pool:
             self.db = redis.Redis(
                 host = host,
@@ -174,6 +175,8 @@ class RedisDatabase(object):
             )
         else:
             self.db = redis.Redis(connection_pool=connection_pool)
+
+        self.sync_on_disk = sync_on_disk
     def save_job(self, job_config):
         self.db.set(f"job:{job_config.job_id}", pickle.dumps(job_config))
     
@@ -188,7 +191,7 @@ class RedisDatabase(object):
         for job_key in self.db.scan_iter("job:*"):
             current_config = pickle.loads(self.db.get(job_key))
 
-            if not os.path.isdir(current_config.job_dir):
+            if self.sync_on_disk and not os.path.isdir(current_config.job_dir):
                 print(f"No files found {job_key} - skipping")
                 continue
 
@@ -202,14 +205,11 @@ class RedisDatabase(object):
         Retrieves a config based on job id
         """
         job_key = f"job:{job_id}"
-
-        for job_key in self.db.scan_iter("job:*"):
-            print(f"Checking {job_key}")
-
+        
         if not self.db.exists(job_key):
             raise openreview.OpenReviewException('Job not found')        
         config = pickle.loads(self.db.get(job_key))
-        if not os.path.isdir(config.job_dir):
+        if self.sync_on_disk and not os.path.isdir(config.job_dir):
             self.remove_job(user_id, job_id)
             raise openreview.OpenReviewException('Job not found')
 

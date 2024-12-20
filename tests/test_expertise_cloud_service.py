@@ -75,60 +75,13 @@ class TestExpertiseCloudService():
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob
     @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
     def test_create_job(self, mock_storage_client, mock_pipeline_job, openreview_client, openreview_context):
-        # Setup mock storage client
-        mock_bucket = MagicMock()
-        mock_blob = MagicMock()
-        mock_storage_client.return_value.bucket.return_value = mock_bucket
-        mock_bucket.blob.return_value = mock_blob
-
-        # Mock `upload_from_string` to simulate folder and file creation
-        mock_blob.upload_from_string.return_value = None
-
-        # Setup mock PipelineJob
-        mock_pipeline_instance = MagicMock()
-        mock_pipeline_job.return_value = mock_pipeline_instance
-
-        # Submit a working job and return the job ID
-        MAX_TIMEOUT = 600 # Timeout after 10 minutes
-        test_client = openreview_context['test_client']
-        # Make a request
-        print(openreview_client)
-        print(openreview_context)
-        print(openreview_client.headers)
-        response = test_client.post(
-            '/expertise',
-            data = json.dumps({
-                    "name": "test_run",
-                    "entityA": {
-                        'type': "Group",
-                        'memberOf': "ABC.cc/Reviewers",
-                    },
-                    "entityB": { 
-                        'type': "Note",
-                        'invitation': "ABC.cc/-/Submission" 
-                    },
-                    "model": {
-                            "name": "specter+mfr",
-                            'useTitle': False, 
-                            'useAbstract': True, 
-                            'skipSpecter': False,
-                            'scoreComputation': 'avg'
-                    },
-                    "dataset": {
-                        'minimumPubDate': 0
-                    }
-                }
-            ),
-            content_type='application/json',
-            headers=openreview_client.headers
+        redis = RedisDatabase(
+            host=openreview_context['config']['REDIS_ADDR'],
+            port=openreview_context['config']['REDIS_PORT'],
+            db=openreview_context['config']['REDIS_CONFIG_DB'],
+            sync_on_disk=False
         )
-        assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['jobId']
 
-    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob
-    @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
-    @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
-    def test_create_job_check_status(self, mock_storage_client, mock_pipeline_job_get, mock_pipeline_job, openreview_client, openreview_context):
         # Setup mock storage client
         mock_bucket = MagicMock()
         mock_blob = MagicMock()
@@ -143,10 +96,20 @@ class TestExpertiseCloudService():
         mock_pipeline_job.return_value = mock_pipeline_instance
 
         # Mock PipelineJob.get()
-        mock_pipeline_ret = MagicMock()
-        mock_pipeline_ret.state = PipelineState.PIPELINE_STATE_RUNNING
-        mock_pipeline_ret.update_time.timestamp.return_value = time.time()
-        mock_pipeline_job_get.return_value = mock_pipeline_ret
+        mock_pipeline_running = MagicMock()
+        mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
+        mock_pipeline_running.update_time.timestamp.return_value = time.time()
+
+        mock_pipeline_succeeded = MagicMock()
+        mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
+        mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
+
+        mock_pipeline_job.get.side_effect = [
+            mock_pipeline_running,
+            mock_pipeline_running,
+            mock_pipeline_succeeded,
+            mock_pipeline_succeeded
+        ]
 
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -182,39 +145,56 @@ class TestExpertiseCloudService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(2)
+
+        # Setup Mock Bucket calls
+        config = redis.load_job(job_id, openreview_context['config']['OPENREVIEW_USERNAME'])
+        job_time = int(time.time() * 1000)
+        mock_blob.name = f'{config.cloud_id}/request.json'
+        mock_blob.download_as_string.return_value = json.dumps({
+            "name": config.cloud_id,
+            "user_id": "openreview.net",
+            "cdate": int(time.time() * 1000)
+        })
+        mock_storage_client.return_value.bucket.return_value = mock_bucket
+        mock_bucket.list_blobs.return_value = [mock_blob]
+
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
+        assert len(response) == 0
         
         # Set complete
         mock_pipeline_ret = MagicMock()
         mock_pipeline_ret.state = PipelineState.PIPELINE_STATE_SUCCEEDED
         mock_pipeline_ret.update_time.timestamp.return_value = time.time()
-        mock_pipeline_job_get.return_value = mock_pipeline_ret
+        mock_pipeline_job.return_value.get.return_value = mock_pipeline_ret
 
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         if response['status'] == 'Error':
             assert False, response['description']
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
+        assert len(response) == 1
 
-        assert response['status'] == 'Completed'
-        assert response['name'] == 'test_run'
-        assert response['description'] == 'Job is complete and the computed scores are ready'
+        assert response[0]['status'] == 'Completed'
+        assert response[0]['name'] == 'test_run'
+        assert response[0]['description'] == 'Job is complete and the computed scores are ready'
 
         # Build mock scores
         mock_metadata_blob = MagicMock()
-        mock_metadata_blob.name = "jobs/job_1/metadata.json"
+        mock_metadata_blob.name = f"jobs/{config.cloud_id}/metadata.json"
         mock_metadata_blob.download_as_string.return_value = json.dumps({"meta": "data"})
 
         mock_score_blob = MagicMock()
-        mock_score_blob.name = "jobs/job_1/scores.jsonl"
+        mock_score_blob.name = f"jobs/{config.cloud_id}/scores.jsonl"
         mock_score_blob.download_as_string.return_value = '{"submission": "abcd","user": "user_user1","score": 0.987}\n{"submission": "abcd","user": "user_user2","score": 0.987}'
 
         mock_sparse_score_blob = MagicMock()
-        mock_sparse_score_blob.name = "jobs/job_1/scores_sparse.jsonl"
+        mock_sparse_score_blob.name = f"jobs/{config.cloud_id}/scores_sparse.jsonl"
         mock_sparse_score_blob.download_as_string.return_value = '{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}'
 
         mock_request_blob = MagicMock()
-        mock_request_blob.name = "jobs/job_1/request.json"
+        mock_request_blob.name = f"jobs/{config.cloud_id}/request.json"
         mock_request_blob.download_as_string.return_value = json.dumps({
             "user_id": "test_user",
             "entityA": {"type": "Group"},
@@ -235,78 +215,3 @@ class TestExpertiseCloudService():
             {"submission": "abcde","user": "user_user1","score": 0.987},
             {"submission": "abcde","user": "user_user2","score": 0.987}
         ]
-
-    
-    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob
-    @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
-    @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
-    def test_create_job_check_status_all(self, mock_storage_client, mock_pipeline_job_get, mock_pipeline_job, openreview_client, openreview_context):
-        # Setup mock storage client
-        mock_bucket = MagicMock()
-        mock_blob = MagicMock()
-        mock_storage_client.return_value.bucket.return_value = mock_bucket
-        mock_bucket.blob.return_value = mock_blob
-
-        # Mock `upload_from_string` to simulate folder and file creation
-        mock_blob.upload_from_string.return_value = None
-
-        # Setup mock PipelineJob
-        mock_pipeline_instance = MagicMock()
-        mock_pipeline_job.return_value = mock_pipeline_instance
-
-        # Mock PipelineJob.get()
-        mock_pipeline_ret = MagicMock()
-        mock_pipeline_ret.state = PipelineState.PIPELINE_STATE_RUNNING
-        mock_pipeline_ret.update_time.timestamp.return_value = time.time()
-        mock_pipeline_job_get.return_value = mock_pipeline_ret
-
-        # Submit a working job and return the job ID
-        MAX_TIMEOUT = 600 # Timeout after 10 minutes
-        test_client = openreview_context['test_client']
-        # Make a request
-        response = test_client.post(
-            '/expertise',
-            data = json.dumps({
-                    "name": "test_run",
-                    "entityA": {
-                        'type': "Group",
-                        'memberOf': "ABC.cc/Reviewers",
-                    },
-                    "entityB": { 
-                        'type': "Note",
-                        'invitation': "ABC.cc/-/Submission" 
-                    },
-                    "model": {
-                            "name": "specter+mfr",
-                            'useTitle': False, 
-                            'useAbstract': True, 
-                            'skipSpecter': False,
-                            'scoreComputation': 'avg'
-                    },
-                    "dataset": {
-                        'minimumPubDate': 0
-                    }
-                }
-            ),
-            content_type='application/json',
-            headers=openreview_client.headers
-        )
-        assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['jobId']
-        time.sleep(2)
-        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
-        assert len(response) == 0
-        
-        # Set complete
-        mock_pipeline_ret = MagicMock()
-        mock_pipeline_ret.state = PipelineState.PIPELINE_STATE_SUCCEEDED
-        mock_pipeline_ret.update_time.timestamp.return_value = time.time()
-        mock_pipeline_job_get.return_value = mock_pipeline_ret
-
-        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-        if response['status'] == 'Error':
-            assert False, response['description']
-
-        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
-        assert len(response) == 1
-    

@@ -707,13 +707,9 @@ class ExpertiseCloudService(object):
             self.redis = RedisDatabase(
                 host = config['REDIS_ADDR'],
                 port = config['REDIS_PORT'],
-                db = config['REDIS_CONFIG_DB']
+                db = config['REDIS_CONFIG_DB'],
+                sync_on_disk=False
             )
-        self.redis = RedisDatabase(
-            host = config['REDIS_ADDR'],
-            port = config['REDIS_PORT'],
-            db = config['REDIS_CONFIG_DB']
-        )
         self.queue = Queue(
             'Expertise',
             {
@@ -1069,6 +1065,7 @@ class ExpertiseCloudService(object):
         for cloud_job in cloud_return['results']:
             for redis_job in redis_jobs:
                 if cloud_job['jobId'] == redis_job.cloud_id:
+                    cloud_job['name'] = redis_job.name
                     cloud_job['jobId'] = redis_job.job_id
         return cloud_return
 
@@ -1088,6 +1085,7 @@ class ExpertiseCloudService(object):
         """
         redis_job = self.redis.load_job(job_id, user_id)
         cloud_return = self.cloud.get_job_status_by_job_id(user_id, redis_job.cloud_id)
+        cloud_return['name'] = redis_job.name
         cloud_return['jobId'] = redis_job.job_id
         return cloud_return
 

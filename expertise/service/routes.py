@@ -181,6 +181,7 @@ def jobs():
         return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
 
     try:
+        flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
         # Parse query parameters
         job_id = flask.request.args.get('jobId', None)
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
@@ -234,6 +235,7 @@ def all_jobs():
 
     try:
         # Parse query parameters
+        flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
         expertise_service.set_client(openreview_client)
         result = expertise_service.get_expertise_all_status(user_id, flask.request.args)
@@ -339,6 +341,7 @@ def results():
 
     try:
         # Parse query parameters
+        flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
         job_id = flask.request.args.get('jobId', None)
         if job_id is None or len(job_id) == 0:
             raise openreview.OpenReviewException('Bad request: jobId is required')
