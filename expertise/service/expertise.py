@@ -3,6 +3,8 @@ import shutil
 import time
 import os
 import json
+import torch
+import gc
 from csv import reader
 import openreview
 from openreview import OpenReviewException
@@ -220,6 +222,10 @@ class ExpertiseService(object):
             self.update_status(config, JobStatus.RUN_EXPERTISE)
             execute_expertise(config=config.to_json())
             self.update_status(config, JobStatus.COMPLETED)
+
+            # Explicitly cleanup resources
+            torch.cuda.empty_cache()
+            gc.collect()
         except Exception as e:
             self.update_status(config, JobStatus.ERROR, str(e))
             # Re raise exception so that it appears in the queue

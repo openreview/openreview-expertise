@@ -429,7 +429,7 @@ class TestConference():
             for profile_json in data['profiles']:
                 authorid = profile_json['id']
                 if authorid not in tmlr_editors:
-                    for pub_json in profile_json['publications']:
+                    for idx, pub_json in enumerate(profile_json['publications']):
                         content = pub_json['content']
                         content['authorids'] = [authorid]
                         cdate = pub_json.get('cdate')
@@ -438,15 +438,31 @@ class TestConference():
                         existing_titles = [pub.content.get('title') for pub in existing_pubs]
 
                         if content.get('title') not in existing_titles:
-                            note = openreview.Note(
-                                invitation = api_invitation,
-                                readers = ['everyone'],
-                                writers = ['~SomeTest_User1'],
-                                signatures = ['~SomeTest_User1'],
-                                content = content,
-                                cdate = cdate
-                            )
-                            note = client.post_note(note)
+                            if idx % 2 == 0:
+                                note = openreview.Note(
+                                    invitation = api_invitation,
+                                    readers = ['everyone'],
+                                    writers = ['~SomeTest_User1'],
+                                    signatures = ['~SomeTest_User1'],
+                                    content = content,
+                                    cdate = cdate
+                                )
+                                note = client.post_note(note)
+                            else:
+                                edit = openreview_client.post_note_edit(
+                                    invitation='openreview.net/Archive/-/Direct_Upload',
+                                    signatures = ['~SomeTest_User1'],
+                                    note = openreview.api.Note(
+                                        pdate = cdate,
+                                        content = {
+                                            'title': { 'value': content['title'] },
+                                            'abstract': { 'value': content['abstract'] },
+                                            'authors': { 'value': content['authorids'] },
+                                            'authorids': { 'value': content['authorids'] },
+                                            'venue': { 'value': 'Other Venue 2024 Main' }
+                                        },
+                                        license = 'CC BY-SA 4.0'
+                                ))
 
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
