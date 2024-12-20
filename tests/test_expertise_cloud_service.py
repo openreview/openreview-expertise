@@ -124,6 +124,7 @@ class TestExpertiseCloudService():
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_create_job_filesystem(self, mock_pipeline_job, openreview_client, openreview_context):
+        MAX_TIMEOUT = 300
         redis = RedisDatabase(
             host=openreview_context['config']['REDIS_ADDR'],
             port=openreview_context['config']['REDIS_PORT'],
@@ -198,14 +199,17 @@ class TestExpertiseCloudService():
             response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
             assert len(response) == 0
 
-            time.sleep(
-                openreview_context['config']['POLL_INTERVAL'] * openreview_context['config']['POLL_MAX_ATTEMPTS'] + 1
-            )
-
+            # Query until job is complete
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] == 'Error':
-                assert False, response['description']
-            assert response['status'] == 'Completed'
+            start_time = time.time()
+            try_time = time.time() - start_time
+            while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+                time.sleep(1)
+                response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+                if response['status'] == 'Error':
+                    assert False, response['description']
+                try_time = time.time() - start_time
+
             response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
             assert len(response) == 1
 
