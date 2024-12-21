@@ -45,6 +45,10 @@ setup(
         'python-dotenv',
         'importlib-metadata==4.13.0',
         'werkzeug==2.2.2',
+        'adapter-transformers',
+        'google-cloud',
+        'google-cloud-storage',
+        'google-cloud-aiplatform',
         'bullmq==2.11.0'
     ],
     zip_safe=False

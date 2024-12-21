@@ -1,0 +1,72 @@
+# This workflow builds and pushes the expertise image to the Artifact Registry
+
+name: push-workflow-image
+
+# Controls when the workflow will run
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+env:
+  REGION: us
+  KFP_REGION: us-central1
+  KFP_REPO: openreview-kfp
+  REPO: openreview-docker-images
+  PROJECT: sunlit-realm-131518
+  IMAGE: expertise-test
+  TAG: latest
+
+jobs:
+  push-workflow-image:
+    # Allow the job to fetch a GitHub ID token
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Add SSH key
+        run: |
+          mkdir -p /home/runner/.ssh
+          echo "${{ secrets.GCLOUD_SSH_KEY }}" > /home/runner/.ssh/google_compute_engine
+          echo "${{ secrets.GCLOUD_SSH_KEY_PUB }}" > /home/runner/.ssh/google_compute_engine.pub
+          chmod 600 /home/runner/.ssh/google_compute_engine
+          chmod 600 /home/runner/.ssh/google_compute_engine.pub
+      - name: Authenticate with Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          cleanup_credentials: true
+          export_environment_variables: true
+      - name: Set Image Tag
+        run: echo "IMAGE_TAG=$REGION-docker.pkg.dev/$PROJECT/$REPO/$IMAGE" >> $GITHUB_ENV
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v1
+      - name: Setup Docker authentication
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      - name: Setup Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install kfp
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_TAG }}
+      #- name: Run pipeline script
+      #  run: |
+      #    python expertise/build_pipeline.py \
+      #      --region "${{ env.REGION }}" \
+      #      --kfp_region "${{ env.KFP_REGION }}" \
+      #      --project "${{ env.PROJECT }}" \
+      #      --repo "${{ env.REPO }}" \
+      #      --kfp_repo "${{ env.KFP_REPO }}" \
+      #      --image "${{ env.IMAGE }}" \
+      #      --tag "${{ env.TAG }}"
