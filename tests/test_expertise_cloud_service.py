@@ -215,12 +215,13 @@ class TestExpertiseCloudService():
                     assert False, response['description']
                 try_time = time.time() - start_time
 
-            response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
+            responses = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
             assert any([r['jobId'] == job_id for r in responses])
 
-            assert response[0]['status'] == 'Completed'
-            assert response[0]['name'] == 'test_run'
-            assert response[0]['description'] == 'Job is complete and the computed scores are ready'
+            job = [r for r in responses if r['jobId'] == job_id][0]
+            assert job['status'] == 'Completed'
+            assert job['name'] == 'test_run'
+            assert job['description'] == 'Job is complete and the computed scores are ready'
 
             # Build mock scores
 
