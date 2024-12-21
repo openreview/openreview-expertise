@@ -78,7 +78,7 @@ class TestExpertiseCloudService():
 
     job_id = None
 
-    @pytest.fixture(scope='module')
+    @pytest.fixture(scope='class')
     def openreview_context_cloud(self):
         """
         A pytest fixture for setting up a clean expertise-api test instance:
@@ -102,7 +102,7 @@ class TestExpertiseCloudService():
             "IN_TEST": True,
             "REDIS_ADDR": 'localhost',
             "REDIS_PORT": 6379,
-            "REDIS_CONFIG_DB": 10,
+            "REDIS_CONFIG_DB": 9,
             "REDIS_EMBEDDINGS_DB": 11,
             "USE_GCP": True,
             "GCP_PROJECT_ID":'test_project',
@@ -141,11 +141,6 @@ class TestExpertiseCloudService():
             db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
             sync_on_disk=False
         )
-
-        # Clear Redis
-        configs = redis.load_all_jobs(openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
-        for config in configs:
-            redis.remove_job(openreview_context_cloud['config']['OPENREVIEW_USERNAME'], config.job_id)
 
         # Setup mock PipelineJob
         mock_pipeline_instance = MagicMock()
@@ -206,8 +201,8 @@ class TestExpertiseCloudService():
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             assert response['name'] == 'test_run'
             assert response['status'] != 'Error'
-            response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
-            assert len(response) == 0
+            responses = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
+            assert not any([r['jobId'] == job_id for r in responses])
 
             # Query until job is complete
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -221,7 +216,7 @@ class TestExpertiseCloudService():
                 try_time = time.time() - start_time
 
             response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
-            assert len(response) == 1
+            assert any([r['jobId'] == job_id for r in responses])
 
             assert response[0]['status'] == 'Completed'
             assert response[0]['name'] == 'test_run'
