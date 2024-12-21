@@ -64,11 +64,21 @@ class LocalMockClient:
         # We ignore bucket_name since we have only one test-bucket
         return LocalMockBucket(self.bucket_dir)
 
+@pytest.fixture(autouse=True)
+def reset_run_once_state():
+    import expertise.service.routes as rts
+    rts.get_expertise_service.has_run = False
+    rts.get_expertise_service.to_return = None
+    yield
+    rts.get_expertise_service.has_run = False
+    rts.get_expertise_service.to_return = None
+
+
 class TestExpertiseCloudService():
 
     job_id = None
 
-    @pytest.fixture(scope='session')
+    @pytest.fixture(scope='module')
     def openreview_context_cloud(self):
         """
         A pytest fixture for setting up a clean expertise-api test instance:
