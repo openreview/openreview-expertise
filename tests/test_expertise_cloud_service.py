@@ -69,7 +69,7 @@ class TestExpertiseCloudService():
     job_id = None
 
     @pytest.fixture(scope='session')
-    def openreview_context(self):
+    def openreview_context_cloud(self):
         """
         A pytest fixture for setting up a clean expertise-api test instance:
         `scope` argument is set to 'function', so each function will get a clean test instance.
@@ -123,19 +123,19 @@ class TestExpertiseCloudService():
             }
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
-    def test_create_job_filesystem(self, mock_pipeline_job, openreview_client, openreview_context):
+    def test_create_job_filesystem(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
         MAX_TIMEOUT = 300
         redis = RedisDatabase(
-            host=openreview_context['config']['REDIS_ADDR'],
-            port=openreview_context['config']['REDIS_PORT'],
-            db=openreview_context['config']['REDIS_CONFIG_DB'],
+            host=openreview_context_cloud['config']['REDIS_ADDR'],
+            port=openreview_context_cloud['config']['REDIS_PORT'],
+            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
             sync_on_disk=False
         )
 
         # Clear Redis
-        configs = redis.load_all_jobs(openreview_context['config']['OPENREVIEW_USERNAME'])
+        configs = redis.load_all_jobs(openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
         for config in configs:
-            redis.remove_job(openreview_context['config']['OPENREVIEW_USERNAME'], config.job_id)
+            redis.remove_job(openreview_context_cloud['config']['OPENREVIEW_USERNAME'], config.job_id)
 
         # Setup mock PipelineJob
         mock_pipeline_instance = MagicMock()
@@ -154,7 +154,7 @@ class TestExpertiseCloudService():
 
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
-        test_client = openreview_context['test_client']
+        test_client = openreview_context_cloud['test_client']
 
         tmp_dir = Path('tests/gcp')
         if not os.path.exists(tmp_dir):
@@ -221,7 +221,7 @@ class TestExpertiseCloudService():
 
             # Fetch the job config
             ## Convert current mocking to using file system
-            config = redis.load_job(job_id, openreview_context['config']['OPENREVIEW_USERNAME'])
+            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
             
             with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/metadata.json"), 'w') as f:
                 f.write(json.dumps({"meta": "data"}))
