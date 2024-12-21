@@ -33,7 +33,9 @@ def run_once(f):
 @run_once
 def get_expertise_service(config, logger):
     if config.get('USE_GCP', False):
+        flask.current_app.logger.info('Using GCP')
         return ExpertiseCloudService(config, logger)
+    flask.current_app.logger.info('Using local')
     return ExpertiseService(config, logger)
 
 def get_client(token=None):
