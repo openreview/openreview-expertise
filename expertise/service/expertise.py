@@ -59,6 +59,7 @@ class ExpertiseService(object):
                 },
                 'autorun': False,
                 'concurrency': config['ACTIVE_JOBS'],
+                'lockDuration': config['LOCK_DURATION'],
             }
         )
         self.start_worker_in_thread()
