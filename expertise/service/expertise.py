@@ -10,6 +10,7 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
+import multiprocessing
 from bullmq import Queue, Worker
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
 import asyncio
@@ -68,6 +69,9 @@ class ExpertiseService(object):
         self.optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
         self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'baseurl_v2', 'paper_invitation', 'paper_id']
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+
+        if multiprocessing.get_start_method(allow_none=True) != 'spawn':
+            multiprocessing.set_start_method('spawn', force=True)
 
     def set_client(self, client):
         self.client = client
@@ -204,6 +208,18 @@ class ExpertiseService(object):
         config.mdate = int(time.time() * 1000)
         self.redis.save_job(config)
 
+    @staticmethod
+    def expertise_worker(config_json, queue):
+        try:
+            config = json.loads(config_json)
+            execute_expertise(config=config)
+        except Exception as e:
+            queue.put(e)
+        finally:
+            # Cleanup resources
+            torch.cuda.empty_cache()
+            gc.collect()
+
     async def worker_process(self, job, token):
         job_id = job.data['job_id']
         user_id = job.data['user_id']
@@ -218,19 +234,32 @@ class ExpertiseService(object):
             baseurl=config.baseurl_v2
         )
         try:
+            # Create dataset
             execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
             self.update_status(config, JobStatus.RUN_EXPERTISE)
-            execute_expertise(config=config.to_json())
+
+            queue = multiprocessing.Queue()  # Queue for exception handling
+            config_json = json.dumps(config.to_json())  # Serialize config
+            process = multiprocessing.Process(target=ExpertiseService.expertise_worker, args=(config_json, queue))
+            process.start()
+            process.join()
+
+            if not queue.empty():
+                exception = queue.get()
+                raise exception  # Re-raise the exception from the subprocess
+
+            # Update job status
             self.update_status(config, JobStatus.COMPLETED)
 
-            # Explicitly cleanup resources
-            torch.cuda.empty_cache()
-            gc.collect()
         except Exception as e:
             self.update_status(config, JobStatus.ERROR, str(e))
             # Re raise exception so that it appears in the queue
             exception = e.with_traceback(e.__traceback__)
             raise exception
+        finally:
+            # Cleanup resources
+            torch.cuda.empty_cache()
+            gc.collect()
 
     def _get_job_name(self, request):
         job_name_parts = [request.get('name', 'No name provided')]
