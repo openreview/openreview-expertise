@@ -354,7 +354,6 @@ class TestExpertiseV2():
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
-        time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
@@ -408,7 +407,6 @@ class TestExpertiseV2():
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
-        time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
@@ -511,7 +509,6 @@ class TestExpertiseV2():
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
-        time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
