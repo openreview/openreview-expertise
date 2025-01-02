@@ -177,6 +177,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_gcs_client, mock_exe
 
     # Ensure execute_create_dataset and execute_expertise were called
     mock_execute_expertise.assert_called_once()
+    print(mock_blob.upload_from_string.call_args_list)
 
     mock_blob.upload_from_string.assert_any_call(
         '{"match_member": "test_user", "submission_member": "sub_user", "score": 0.5}\n{"match_member": "test_user", "submission_member": "sub_user", "score": 0.5}'
