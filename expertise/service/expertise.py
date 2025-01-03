@@ -24,10 +24,6 @@ from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_I
 user_index_file_lock = Lock()
 
 class BaseExpertiseService:
-    """
-    A base class to capture the common logic across ExpertiseService and ExpertiseCloudService.
-    """
-
     def __init__(
         self,
         config,
@@ -51,8 +47,6 @@ class BaseExpertiseService:
         self.server_config = config
         self.containerized = containerized
         self.sync_on_disk = sync_on_disk  # Whether to actually save jobs on disk (for Redis usage)
-
-        # Basic config references commonly needed
         self.default_expertise_config = config.get('DEFAULT_CONFIG')
         self.working_dir = config.get('WORKING_DIR')
         self.specter_dir = config.get('SPECTER_DIR')
@@ -61,7 +55,6 @@ class BaseExpertiseService:
 
         # If using Redis to store job configs, initialize it (unless containerized means "no local Redis")
         if not containerized:
-            # Adjust import or usage per your code; below is just an example
             self.redis = RedisDatabase(
                 host=config['REDIS_ADDR'],
                 port=config['REDIS_PORT'],
@@ -83,7 +76,6 @@ class BaseExpertiseService:
         )
         self.start_queue_in_thread()
 
-        # Create the worker with possible overrides
         worker_settings = {
             'prefix': 'bullmq:expertise',
             'connection': {
@@ -98,7 +90,6 @@ class BaseExpertiseService:
         if worker_lock_duration is not None:
             worker_settings['lockDuration'] = worker_lock_duration
 
-        # We define a placeholder for `worker_process` (the child classes implement the actual logic).
         self.worker = Worker(
             'Expertise',
             self.worker_process,
@@ -115,7 +106,6 @@ class BaseExpertiseService:
         ]
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
-        # If you rely on multiprocessing for certain sub-tasks, ensure a safe start method
         if multiprocessing.get_start_method(allow_none=True) != 'spawn':
             multiprocessing.set_start_method('spawn', force=True)
 
@@ -138,9 +128,6 @@ class BaseExpertiseService:
         self.client_v2 = client_v2
 
     def start_queue_in_thread(self):
-        """
-        Common logic for running the queue's event loop in a separate thread.
-        """
         def run_event_loop(loop):
             asyncio.set_event_loop(loop)
             loop.run_forever()
@@ -150,9 +137,6 @@ class BaseExpertiseService:
         thread.start()
 
     def start_worker_in_thread(self):
-        """
-        Common logic for starting the worker in a separate thread.
-        """
         def run_event_loop(loop):
             asyncio.set_event_loop(loop)
             loop.run_forever()
@@ -165,16 +149,12 @@ class BaseExpertiseService:
         asyncio.run_coroutine_threadsafe(self.worker.run(), loop)
 
     async def close(self):
-        """
-        Common close method for both the worker and the queue.
-        """
         await self.worker.close()
         await self.queue.close()
 
     def worker_process(self, job, token):
         """
-        Placeholder for worker processing logic. Child classes (ExpertiseService, ExpertiseCloudService)
-        should override this method with their specific processing tasks.
+        Override in child classes
         """
         raise NotImplementedError("worker_process must be implemented in a child class.")
 
