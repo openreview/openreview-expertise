@@ -10,30 +10,59 @@ import openreview
 from openreview import OpenReviewException
 from enum import Enum
 from threading import Lock
+from pathlib import Path
 import multiprocessing
 from bullmq import Queue, Worker
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
+from expertise.service.utils import GCPInterface
+from copy import deepcopy
 import asyncio
 import threading
 
-from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase
+from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase, get_user_id
 
 user_index_file_lock = Lock()
-class ExpertiseService(object):
 
-    def __init__(self, config, logger):
+class BaseExpertiseService:
+    def __init__(
+        self,
+        config,
+        logger,
+        containerized=False,
+        sync_on_disk=True,
+        worker_concurrency=None,
+        worker_lock_duration=None,
+        worker_autorun=False,
+    ):
+        """
+        :param config:         Your server configuration dictionary
+        :param logger:         Logger instance for logging
+        :param containerized:  Whether your service is running in containerized mode
+        :param sync_on_disk:   Whether RedisDatabase writes files to disk or purely memory
+        :param worker_concurrency: (Optional) concurrency for the BullMQ worker
+        :param worker_lock_duration: (Optional) lock duration (ms) for the BullMQ worker
+        :param worker_autorun: (Optional) whether the worker should start automatically
+        """
         self.logger = logger
         self.server_config = config
-        self.default_expertise_config = config['DEFAULT_CONFIG']
-        self.working_dir = config['WORKING_DIR']
-        self.specter_dir = config['SPECTER_DIR']
-        self.mfr_feature_vocab_file = config['MFR_VOCAB_DIR']
-        self.mfr_checkpoint_dir = config['MFR_CHECKPOINT_DIR']
-        self.redis = RedisDatabase(
-            host = config['REDIS_ADDR'],
-            port = config['REDIS_PORT'],
-            db = config['REDIS_CONFIG_DB']
-        )
+        self.containerized = containerized
+        self.sync_on_disk = sync_on_disk  # Whether to actually save jobs on disk (for Redis usage)
+        self.default_expertise_config = config.get('DEFAULT_CONFIG')
+        self.working_dir = config.get('WORKING_DIR')
+        self.specter_dir = config.get('SPECTER_DIR')
+        self.mfr_feature_vocab_file = config.get('MFR_VOCAB_DIR')
+        self.mfr_checkpoint_dir = config.get('MFR_CHECKPOINT_DIR')
+
+        # If using Redis to store job configs, initialize it (unless containerized means "no local Redis")
+        if not containerized:
+            self.redis = RedisDatabase(
+                host=config['REDIS_ADDR'],
+                port=config['REDIS_PORT'],
+                db=config['REDIS_CONFIG_DB'],
+                sync_on_disk=self.sync_on_disk
+            )
+
+        # Create the BullMQ queue
         self.queue = Queue(
             'Expertise',
             {
@@ -47,37 +76,111 @@ class ExpertiseService(object):
         )
         self.start_queue_in_thread()
 
+        worker_settings = {
+            'prefix': 'bullmq:expertise',
+            'connection': {
+                "host": config['REDIS_ADDR'],
+                "port": config['REDIS_PORT'],
+                "db": config['REDIS_CONFIG_DB'],
+            },
+            'autorun': worker_autorun
+        }
+        if worker_concurrency is not None:
+            worker_settings['concurrency'] = worker_concurrency
+        if worker_lock_duration is not None:
+            worker_settings['lockDuration'] = worker_lock_duration
+
         self.worker = Worker(
             'Expertise',
             self.worker_process,
-            {
-                'prefix': 'bullmq:expertise',
-                'connection': {
-                    "host": config['REDIS_ADDR'],
-                    "port": config['REDIS_PORT'],
-                    "db": config['REDIS_CONFIG_DB'],
-                },
-                'autorun': False,
-                'concurrency': config['ACTIVE_JOBS'],
-                'lockDuration': config['LOCK_DURATION'],
-            }
+            worker_settings
         )
         self.start_worker_in_thread()
 
-        # Define expected/required API fields
+        # Define required/optional fields if they are reused
         self.req_fields = ['name', 'match_group', 'user_id', 'job_id']
         self.optional_model_params = ['use_title', 'use_abstract', 'average_score', 'max_score', 'skip_specter']
-        self.optional_fields = ['model', 'model_params', 'exclusion_inv', 'token', 'baseurl', 'baseurl_v2', 'paper_invitation', 'paper_id']
+        self.optional_fields = [
+            'model', 'model_params', 'exclusion_inv', 'token', 'baseurl',
+            'baseurl_v2', 'paper_invitation', 'paper_id'
+        ]
         self.path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
 
         if multiprocessing.get_start_method(allow_none=True) != 'spawn':
             multiprocessing.set_start_method('spawn', force=True)
+
+    @staticmethod
+    def expertise_worker(config_json, queue):
+        try:
+            config = json.loads(config_json)
+            execute_expertise(config=config)
+        except Exception as e:
+            queue.put(e)
+        finally:
+            # Cleanup resources
+            torch.cuda.empty_cache()
+            gc.collect()
 
     def set_client(self, client):
         self.client = client
 
     def set_client_v2(self, client_v2):
         self.client_v2 = client_v2
+
+    def start_queue_in_thread(self):
+        def run_event_loop(loop):
+            asyncio.set_event_loop(loop)
+            loop.run_forever()
+
+        self.queue_loop = asyncio.new_event_loop()
+        thread = threading.Thread(target=run_event_loop, args=(self.queue_loop,), daemon=True)
+        thread.start()
+
+    def start_worker_in_thread(self):
+        def run_event_loop(loop):
+            asyncio.set_event_loop(loop)
+            loop.run_forever()
+
+        loop = asyncio.new_event_loop()
+        thread = threading.Thread(target=run_event_loop, args=(loop,), daemon=True)
+        thread.start()
+
+        # Actually schedule the worker to run
+        asyncio.run_coroutine_threadsafe(self.worker.run(), loop)
+
+    async def close(self):
+        await self.worker.close()
+        await self.queue.close()
+
+    def worker_process(self, job, token):
+        """
+        Override in child classes
+        """
+        raise NotImplementedError("worker_process must be implemented in a child class.")
+
+    def update_status(self, config, new_status, desc=None):
+        """
+        Common logic for updating a job's status in Redis (if not containerized).
+        """
+        # from .utils import JobDescription, JobStatus  # Typically you’d import these at top
+        descriptions = JobDescription.VALS.value
+        config.status = new_status
+
+        if desc is None:
+            config.description = descriptions[new_status]
+        else:
+            # Example: special text for certain known exceptions
+            if 'num_samples=0' in desc:
+                desc += '. Please check that there is at least 1 member of the match group with some publication.'
+            if 'Dimension out of range' in desc:
+                desc += '. Please check that you have at least 1 submission submitted and that you have run the Post Submission stage.'
+            config.description = desc
+
+        config.mdate = int(time.time() * 1000)
+
+        # Save job if we have a Redis instance
+        if not self.containerized:
+            self.redis.save_job(config)
 
     def _filter_config(self, running_config):
         """
@@ -123,8 +226,9 @@ class ExpertiseService(object):
             os.makedirs(config.dataset['directory'])
         with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
             json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
-        self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
-        self.redis.save_job(config)
+        if not self.containerized:
+            self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
+            self.redis.save_job(config)
 
         return config, self.client.token
 
@@ -183,83 +287,6 @@ class ExpertiseService(object):
             raise OpenReviewException("Metadata file not found for job {job_id}".format(job_id=config.job_id))
 
         return file_dir, metadata_dir
-
-    def update_status(self, config, new_status, desc=None):
-        """
-        Updates the config of a given job to the new status
-        Optionally allows manual setting of the description
-
-        :param config: JobConfig of a given job
-        :type config: JobConfig
-
-        :param new_status: The new status for the job - a value from the JobStatus enumeration
-        :type new_status: str
-        """
-        descriptions = JobDescription.VALS.value
-        config.status = new_status
-        if desc is None:
-            config.description = descriptions[new_status]
-        else:
-            if 'num_samples=0' in desc:
-                desc += '. Please check that there is at least 1 member of the match group with at least 1 publication on OpenReview.'
-            if 'Dimension out of range' in desc:
-                desc += '. Please check that you have at least 1 submission submitted and that you have run the Post Submission stage.'
-            config.description = desc
-        config.mdate = int(time.time() * 1000)
-        self.redis.save_job(config)
-
-    @staticmethod
-    def expertise_worker(config_json, queue):
-        try:
-            config = json.loads(config_json)
-            execute_expertise(config=config)
-        except Exception as e:
-            queue.put(e)
-        finally:
-            # Cleanup resources
-            torch.cuda.empty_cache()
-            gc.collect()
-
-    async def worker_process(self, job, token):
-        job_id = job.data['job_id']
-        user_id = job.data['user_id']
-        config = self.redis.load_job(job_id, user_id)
-        or_token = job.data['token']
-        openreview_client = openreview.Client(
-            token=or_token,
-            baseurl=config.baseurl
-        )
-        openreview_client_v2 = openreview.api.OpenReviewClient(
-            token=or_token,
-            baseurl=config.baseurl_v2
-        )
-        try:
-            # Create dataset
-            execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
-            self.update_status(config, JobStatus.RUN_EXPERTISE)
-
-            queue = multiprocessing.Queue()  # Queue for exception handling
-            config_json = json.dumps(config.to_json())  # Serialize config
-            process = multiprocessing.Process(target=ExpertiseService.expertise_worker, args=(config_json, queue))
-            process.start()
-            process.join()
-
-            if not queue.empty():
-                exception = queue.get()
-                raise exception  # Re-raise the exception from the subprocess
-
-            # Update job status
-            self.update_status(config, JobStatus.COMPLETED)
-
-        except Exception as e:
-            self.update_status(config, JobStatus.ERROR, str(e))
-            # Re raise exception so that it appears in the queue
-            exception = e.with_traceback(e.__traceback__)
-            raise exception
-        finally:
-            # Cleanup resources
-            torch.cuda.empty_cache()
-            gc.collect()
 
     def _get_job_name(self, request):
         job_name_parts = [request.get('name', 'No name provided')]
@@ -349,6 +376,60 @@ class ExpertiseService(object):
 
         return ':'.join(key_parts)
 
+class ExpertiseService(BaseExpertiseService):
+
+    def __init__(self, config, logger, containerized = False):
+        super().__init__(
+            config=config,
+            logger=logger,
+            containerized=containerized,
+            sync_on_disk=True,            # We want to store jobs on disk
+            worker_concurrency=config['ACTIVE_JOBS'],
+            worker_lock_duration=config['LOCK_DURATION'],
+            worker_autorun=False         # If that is what you originally had
+        )
+
+    async def worker_process(self, job, token):
+        job_id = job.data['job_id']
+        user_id = job.data['user_id']
+        config = self.redis.load_job(job_id, user_id)
+        or_token = job.data['token']
+        openreview_client = openreview.Client(
+            token=or_token,
+            baseurl=config.baseurl
+        )
+        openreview_client_v2 = openreview.api.OpenReviewClient(
+            token=or_token,
+            baseurl=config.baseurl_v2
+        )
+        try:
+            # Create dataset
+            execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
+            self.update_status(config, JobStatus.RUN_EXPERTISE)
+
+            queue = multiprocessing.Queue()  # Queue for exception handling
+            config_json = json.dumps(config.to_json())  # Serialize config
+            process = multiprocessing.Process(target=BaseExpertiseService.expertise_worker, args=(config_json, queue))
+            process.start()
+            process.join()
+
+            if not queue.empty():
+                exception = queue.get()
+                raise exception  # Re-raise the exception from the subprocess
+
+            # Update job status
+            self.update_status(config, JobStatus.COMPLETED)
+
+        except Exception as e:
+            self.update_status(config, JobStatus.ERROR, str(e))
+            # Re raise exception so that it appears in the queue
+            exception = e.with_traceback(e.__traceback__)
+            raise exception
+        finally:
+            # Cleanup resources
+            torch.cuda.empty_cache()
+            gc.collect()
+
     def start_expertise(self, request):
         descriptions = JobDescription.VALS.value
 
@@ -422,42 +503,6 @@ class ExpertiseService(object):
         future.result()
 
         return job_id
-
-    def start_queue_in_thread(self):
-        def run_event_loop(loop):
-            # set the loop for the current thread
-            asyncio.set_event_loop(loop)
-            # run the event loop until stopped
-            loop.run_forever()
-
-        # create a new event loop (low-level api)
-        self.queue_loop = asyncio.new_event_loop()
-
-        # create a new thread to execute a target coroutine
-        thread = threading.Thread(target=run_event_loop, args=(self.queue_loop,), daemon=True)
-        # start the new thread
-        thread.start()
-
-    def start_worker_in_thread(self):
-        def run_event_loop(loop):
-            # set the loop for the current thread
-            asyncio.set_event_loop(loop)
-            # run the event loop until stopped
-            loop.run_forever()
-
-        # create a new event loop (low-level api)
-        loop = asyncio.new_event_loop()
-
-        # create a new thread to execute a target coroutine
-        thread = threading.Thread(target=run_event_loop, args=(loop,), daemon=True)
-        # start the new thread
-        thread.start()
-
-        asyncio.run_coroutine_threadsafe(self.worker.run(), loop)
-
-    async def close(self):
-        await self.worker.close()
-        await self.queue.close()
 
     def get_expertise_all_status(self, user_id, query_params):
         """
@@ -680,6 +725,229 @@ class ExpertiseService(object):
             self.redis.remove_job(user_id, job_id)
 
         return result
+
+    def del_expertise_job(self, user_id, job_id):
+        """
+        Returns the filtered config of a job and deletes the job directory
+
+        :param user_id: The ID of the user accessing the data
+        :type user_id: str
+
+        :param job_id: ID of the specific job to look up
+        :type job_id: str
+
+        :returns: Filtered config of the job to be deleted
+        """
+        config = self.redis.load_job(job_id, user_id)
+        
+        # Clear directory and Redis entry
+        self.logger.info(f"Deleting {config.job_dir} for {user_id}")
+        if os.path.isdir(config.job_dir):
+            shutil.rmtree(config.job_dir)
+        else:
+            self.logger.info(f"No files found - only removing Redis entry")
+        self.redis.remove_job(user_id, job_id)
+
+        # Return filtered config
+        self._filter_config(config)
+        return config.to_json()
+
+class ExpertiseCloudService(BaseExpertiseService):
+
+    def __init__(self, config, logger, containerized = False):
+        super().__init__(
+            config=config,
+            logger=logger,
+            containerized=containerized,
+            sync_on_disk=True,            # We want to store jobs on disk
+            worker_concurrency=None,
+            worker_lock_duration=None,
+            worker_autorun=False         # If that is what you originally had
+        )
+        self.poll_interval = config['POLL_INTERVAL']
+        self.max_attempts = config['POLL_MAX_ATTEMPTS']
+        self.cloud = GCPInterface(
+            config=config,
+            logger=logger
+        )
+
+    def set_client_v2(self, client_v2):
+        self.client_v2 = client_v2
+        self.cloud.set_client(client_v2)
+
+    async def worker_process(self, job, token):
+        user_id = job.data['user_id']
+        job_id = job.data['cloud_id']
+
+        try:
+            self.logger.info(f"In polling worker...")
+            job_completed, job_error = False, False
+
+            for attempt in range(self.max_attempts):
+                self.logger.info(f"In attempt {attempt + 1} of {self.max_attempts}...")
+                status = self.cloud.get_job_status_by_job_id(user_id, job_id)
+                self.logger.info(f"Invoked get_job_status_by_job_id for {job_id} - status: {status}")
+                if status['status'] == JobStatus.COMPLETED:
+                    self.logger.info(f"Job {job_id} completed.")
+                    job_completed = True
+                    break
+                elif status['status'] == JobStatus.ERROR:
+                    self.logger.info(f"Job {job_id} encountered an error.")
+                    job_completed = False
+                    job_error = True
+                    break
+
+                self.logger.info(f"Job {job_id} status: {status['status']}. Retrying in {self.poll_interval} seconds...")
+                await asyncio.sleep(self.poll_interval)
+
+            if not job_completed and not job_error:
+                self.logger.info(f"Polling exceeded maximum attempts for job {job_id}.")
+            elif not job_completed and job_error:
+                self.logger.info(f"Job {job_id} encountered an error.")
+
+        except Exception as e:
+            # Re-raise exception to appear in the queue
+            raise e.with_traceback(e.__traceback__)
+
+    def start_expertise(self, request):
+        descriptions = JobDescription.VALS.value
+
+        job_name = self._get_job_name(request)
+        request_log = self._get_log_from_request(request)
+
+        request_key = self.get_key_from_request(request)
+
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self.queue.getJobs([
+                    'active',
+                    'delayed',
+                    'paused',
+                    'waiting',
+                    'waiting-children',
+                    'prioritized',
+                ]),
+                self.queue_loop,
+            )
+            jobs = future.result()
+        except Exception as e:
+            jobs = []
+
+        for job in jobs:
+            if job.data.get('request_key') == request_key:
+                raise openreview.OpenReviewException("Request already in queue")
+
+        cloud_id = self.cloud.create_job(deepcopy(request))
+        config, token = self._prepare_config(request)
+        job_id = config.job_id
+
+        config_log = self._get_log_from_config(config)
+
+        config.mdate = int(time.time() * 1000)
+        config.status = JobStatus.QUEUED
+        config.description = descriptions[JobStatus.QUEUED]
+        config.cloud_id = cloud_id
+
+        # Config has passed validation - add it to the user index
+        self.logger.info('just before submitting')
+        self.logger.info(f"vertex id={cloud_id}")
+
+        self.logger.info(f"\nconf: {config.to_json()}\n")
+        self.redis.save_job(config)
+
+        self.logger.info(f"Adding job {job_name} to queue")
+        future = asyncio.run_coroutine_threadsafe(
+            self.queue.add(
+                job_name,
+                {
+                    "job_id": job_id,
+                    "request_key": request_key,
+                    "user_id": config.user_id,
+                    "cloud_id": config.cloud_id,
+                    "token": token
+                },
+                {
+                    'jobId': job_id,
+                    'removeOnComplete': {
+                        'count': 100,
+                    },
+                    'removeOnFail': {
+                        'age': 2592000
+                    },
+                }
+            ),
+            self.queue_loop
+        )
+        self.logger.info(f"Job {job_name} queued")
+        job = future.result()
+
+        future = asyncio.run_coroutine_threadsafe(job.log(request_log), self.queue_loop)
+        future.result()
+
+        future = asyncio.run_coroutine_threadsafe(job.log(config_log), self.queue_loop)
+        future.result()
+
+        return job_id
+
+    def get_expertise_all_status(self, user_id, query_params):
+        """
+        Searches the server for all jobs submitted by a user
+
+        :param user_id: The ID of the user accessing the data
+        :type user_id: str
+
+        :param query_params: Query parameters of the GET request
+        :type query_params: dict
+
+        :returns: A dictionary with the key 'results' containing a list of job statuses
+        """
+        cloud_return = self.cloud.get_job_status(user_id, query_params)
+        redis_jobs = self.redis.load_all_jobs(user_id)
+        for cloud_job in cloud_return['results']:
+            for redis_job in redis_jobs:
+                if cloud_job['jobId'] == redis_job.cloud_id:
+                    cloud_job['name'] = redis_job.name
+                    cloud_job['jobId'] = redis_job.job_id
+        return cloud_return
+
+
+    def get_expertise_status(self, user_id, job_id):
+        """
+        Searches the server for all jobs submitted by a user
+        Only fetch the status of the given job id
+
+        :param user_id: The ID of the user accessing the data
+        :type user_id: str
+
+        :param job_id: ID of the specific job to look up
+        :type job_id: str
+
+        :returns: A dictionary with the key 'results' containing a list of job statuses
+        """
+        redis_job = self.redis.load_job(job_id, user_id)
+        cloud_return = self.cloud.get_job_status_by_job_id(user_id, redis_job.cloud_id)
+        cloud_return['name'] = redis_job.name
+        cloud_return['jobId'] = redis_job.job_id
+        return cloud_return
+
+    def get_expertise_results(self, user_id, job_id, delete_on_get=False):
+        """
+        Gets the scores of a given job
+        If delete_on_get is set, delete the directory after the scores are fetched
+
+        :param user_id: The ID of the user accessing the data
+        :type user_id: str
+
+        :param job_id: ID of the specific job to fetch
+        :type job_id: str
+
+        :param delete_on_get: A flag indicating whether or not to clean up the directory after it is fetched
+        :type delete_on_get: bool
+
+        :returns: A dictionary that contains the calculated scores and metadata
+        """
+        redis_job = self.redis.load_job(job_id, user_id)
+        return self.cloud.get_job_results(user_id, redis_job.cloud_id, delete_on_get)
 
     def del_expertise_job(self, user_id, job_id):
         """

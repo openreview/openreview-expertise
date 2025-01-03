@@ -239,6 +239,8 @@ class TestExpertiseV2():
             headers=openreview_client.headers
         )
         assert response.status_code == 200, f'{response.json}'
+        print(f"second request ret: {response.json}")
+        print(f"setting job_id to {response.json['jobId']}")
         job_id = response.json['jobId']
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -414,6 +416,7 @@ class TestExpertiseV2():
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+            print(f"resp: {response}")
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             try_time = time.time() - start_time
