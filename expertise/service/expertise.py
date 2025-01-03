@@ -384,8 +384,8 @@ class ExpertiseService(BaseExpertiseService):
             logger=logger,
             containerized=containerized,
             sync_on_disk=True,            # We want to store jobs on disk
-            worker_concurrency=config['ACTIVE_JOBS'],
-            worker_lock_duration=config['LOCK_DURATION'],
+            worker_concurrency=config.get('ACTIVE_JOBS'),
+            worker_lock_duration=config.get('LOCK_DURATION'),
             worker_autorun=False         # If that is what you originally had
         )
 
@@ -759,9 +759,9 @@ class ExpertiseCloudService(BaseExpertiseService):
             config=config,
             logger=logger,
             containerized=containerized,
-            sync_on_disk=True,            # We want to store jobs on disk
-            worker_concurrency=None,
-            worker_lock_duration=None,
+            sync_on_disk=False,            # We want to store jobs on disk
+            worker_concurrency=config.get('ACTIVE_JOBS'),
+            worker_lock_duration=config.get('LOCK_DURATION'),
             worker_autorun=False         # If that is what you originally had
         )
         self.poll_interval = config['POLL_INTERVAL']
