@@ -693,7 +693,7 @@ class GCPInterface(object):
             return f"venueid-{group_entity['memberOf']}"
         # Handle group-noteId request
         elif 'id' in note_entity:
-            return f"{note_entity['id']}-{group_entity['memberOf']}"
+            return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
 
     def create_job(self, json_request: dict):
         def create_folder(bucket_name, folder_path):
