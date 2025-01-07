@@ -804,6 +804,7 @@ class ExpertiseCloudService(BaseExpertiseService):
                 self.logger.info(f"Polling exceeded maximum attempts for job {job_id}.")
             elif not job_completed and job_error:
                 self.logger.info(f"Job {job_id} encountered an error.")
+                raise Exception(f"Job {job_id} encountered an error - {status['description']}")
 
         except Exception as e:
             # Re-raise exception to appear in the queue
