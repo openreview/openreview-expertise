@@ -155,7 +155,7 @@ class TestExpertiseCloudService():
         mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
         mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-        mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 6 + [mock_pipeline_succeeded] * 7
+        mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 6 + [mock_pipeline_succeeded] * 9
 
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -216,6 +216,17 @@ class TestExpertiseCloudService():
                 try_time = time.time() - start_time
 
             responses = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
+            assert any([r['jobId'] == job_id for r in responses])
+            responses = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={
+                "entityA.memberOf": "ABC.cc/Reviewers",
+                "entityB.invitation": "ABC.cc/-/Submission"
+            }).json['results']
+            assert any([r['jobId'] == job_id for r in responses])
+            responses = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={
+                "entityA.memberOf": "ABC.cc/Reviewers",
+                "entityB.invitation": "ABC.cc/-/Submission",
+                'status': 'Completed'
+            }).json['results']
             assert any([r['jobId'] == job_id for r in responses])
 
             job = [r for r in responses if r['jobId'] == job_id][0]
