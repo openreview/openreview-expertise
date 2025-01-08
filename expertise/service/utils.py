@@ -873,23 +873,11 @@ class GCPInterface(object):
             ]
 
         def sanitize(name):
-            return name.replace('/', '-')
-                .replace(':', '-')
-                .replace('_', '-')
-                .replace('.', '-')
-                .lower()
+            return name.replace('/', '-').replace(':', '-').replace('_', '-').replace('.', '-').lower()
 
         def create_bucket_prefixes(params):
-            paper_id = (
-                params.get('entityA', {}).get('id', '') or
-                params.get('entityB', {}).get('id', '') or
-                params.get('id', '')
-            )
-            group_id = (
-                params.get('entityA', {}).get('memberOf', '') or
-                params.get('entityB', {}).get('memberOf', '') or
-                params.get('memberOf', '')
-            )
+            paper_id =  params.get('entityA', {}).get('id', '') or params.get('entityB', {}).get('id', '') or params.get('id', '')
+            group_id = params.get('entityA', {}).get('memberOf', '') or params.get('entityB', {}).get('memberOf', '') or params.get('memberOf', '')
             
             base_prefix = f"{self.jobs_folder}/"
             
