@@ -918,7 +918,7 @@ class GCPInterface(object):
         self.logger.info(f"Query object: {query_obj}")
 
         all_requests = []
-        for prefix in prefixes:
+        for prefix in create_bucket_prefixes(query_obj):
             for blob in self.bucket.list_blobs(prefix=prefix):
                 if self.request_fname in blob.name:
                     all_requests.append(json.loads(blob.download_as_string()))
