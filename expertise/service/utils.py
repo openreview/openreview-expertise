@@ -899,6 +899,7 @@ class GCPInterface(object):
             except Exception as e:
                 if '404' in str(e):
                     self.logger.info(f"No pipeline for job {request_name}")
+                    continue
                 else:
                     raise e
 
