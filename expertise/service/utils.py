@@ -872,6 +872,42 @@ class GCPInterface(object):
                 check_paper_id(request)
             ]
 
+        def sanitize(name):
+            return name.replace('/', '-')
+                .replace(':', '-')
+                .replace('_', '-')
+                .replace('.', '-')
+                .lower()
+
+        def create_bucket_prefixes(params):
+            paper_id = (
+                params.get('entityA', {}).get('id', '') or
+                params.get('entityB', {}).get('id', '') or
+                params.get('id', '')
+            )
+            group_id = (
+                params.get('entityA', {}).get('memberOf', '') or
+                params.get('entityB', {}).get('memberOf', '') or
+                params.get('memberOf', '')
+            )
+            
+            base_prefix = f"{self.jobs_folder}/"
+            
+            if paper_id:
+                # Single prefix: pid-{paper_id}-{group_id}
+                raw_prefix = f"pid-{paper_id}-{group_id}"
+                sanitized = sanitize(raw_prefix)
+                return [f"{base_prefix}{sanitized}/"]
+            else:
+                # Two possible prefixes: inv-{group_id} and venueid-{group_id}
+                results = []
+                for possible_base in ["inv", "venueid"]:
+                    raw_prefix = f"{possible_base}-{group_id}"
+                    sanitized = sanitize(raw_prefix)
+                    results.append(f"{base_prefix}{sanitized}/")
+                return results
+
+
         result = {'results': []}
         query_obj = {}
         '''
@@ -893,9 +929,12 @@ class GCPInterface(object):
                 query_obj[entity][query_by] = value
         self.logger.info(f"Query object: {query_obj}")
 
-        all_requests = [
-            json.loads(blob.download_as_string()) for blob in self.bucket.list_blobs(prefix=f"{self.jobs_folder}/") if self.request_fname in blob.name
-        ]
+        all_requests = []
+        for prefix in prefixes:
+            for blob in self.bucket.list_blobs(prefix=prefix):
+                if self.request_fname in blob.name:
+                    all_requests.append(json.loads(blob.download_as_string()))
+
         authenticated_requests = [
             req for req in all_requests if user_id == req['user_id'] or user_id in SUPERUSER_IDS
         ]
