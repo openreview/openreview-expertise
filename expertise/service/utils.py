@@ -932,6 +932,10 @@ class GCPInterface(object):
             if check_all_except_status(request):
                 shortlist.append(request)
 
+        # If none shortlisted, search all requests anyway
+        if len(shortlist) == 0:
+            shortlist = authenticated_requests
+
         for request in shortlist:
             try:
                 job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{request_name}")
