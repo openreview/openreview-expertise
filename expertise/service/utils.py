@@ -857,6 +857,13 @@ class GCPInterface(object):
 
             return not search_paper_id or paper_id.lower().startswith(search_paper_id.lower())
 
+        def check_all_except_status(request):
+            return False not in [
+                check_member(request),
+                check_invitation(request),
+                check_paper_id(request)
+            ]
+
         def check_result(request, job):
             return False not in [
                 check_status(job),
@@ -892,8 +899,13 @@ class GCPInterface(object):
         authenticated_requests = [
             req for req in all_requests if user_id == req['user_id'] or user_id in SUPERUSER_IDS
         ]
+        ## Shortlist by all but status
+        shortlist = []
         for request in authenticated_requests:
-            request_name = request['name']
+            if check_all_except_status(request):
+                shortlist.append(request)
+
+        for request in shortlist
             try:
                 job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{request_name}")
             except Exception as e:

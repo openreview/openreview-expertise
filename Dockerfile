@@ -9,7 +9,7 @@ ENV PYTHON_VERSION=3.11 \
     AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/" \
     SPECTER_DIR="/app/expertise-utils/specter/" \
     MFR_VOCAB_DIR="/app/expertise-utils/multifacet_recommender/feature_vocab_file" \
-    MFR_CHECKPOINT_DIR="/app/expertise-utils/mfr_model_checkpoint/"
+    MFR_CHECKPOINT_DIR="/app/expertise-utils/multifacet_recommender/mfr_model_checkpoint/"
 
 COPY . /app/openreview-expertise
 
