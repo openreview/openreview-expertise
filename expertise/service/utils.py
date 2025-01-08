@@ -932,7 +932,7 @@ class GCPInterface(object):
             if check_all_except_status(request):
                 shortlist.append(request)
 
-        for request in shortlist
+        for request in shortlist:
             try:
                 job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{request_name}")
             except Exception as e:
