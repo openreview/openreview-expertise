@@ -894,7 +894,13 @@ class GCPInterface(object):
         ]
         for request in authenticated_requests:
             request_name = request['name']
-            job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{request_name}")
+            try:
+                job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{request_name}")
+            except Exception as e:
+                if '404' in str(e):
+                    self.logger.info(f"No pipeline for job {request_name}")
+                else:
+                    raise e
 
             descriptions = JobDescription.VALS.value
             status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
