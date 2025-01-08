@@ -36,14 +36,21 @@ class LocalMockBucket:
         self.base_dir = base_dir
 
     def list_blobs(self, prefix=None, max_results=None):
-        search_path = os.path.join(self.base_dir, prefix) if prefix else self.base_dir
-        if not os.path.exists(search_path):
-            return []
+        prefix = prefix or ''
         blobs = []
-        for root, dirs, files in os.walk(search_path):
+        
+        for root, dirs, files in os.walk(self.base_dir):
             for filename in files:
-                file_path = os.path.join(root, filename)
-                blobs.append(LocalMockBlob(file_path, self.base_dir))
+                rel_dir = os.path.relpath(root, self.base_dir)
+                if rel_dir == '.':
+                    rel_dir = ''
+                object_path = os.path.join(rel_dir, filename)
+                object_path = object_path.replace('\\', '/')
+                
+                if object_path.startswith(prefix):
+                    file_path = os.path.join(root, filename)
+                    blobs.append(LocalMockBlob(file_path, self.base_dir))
+        
         if max_results:
             blobs = blobs[:max_results]
         return blobs
@@ -155,7 +162,7 @@ class TestExpertiseCloudService():
         mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
         mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-        mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 6 + [mock_pipeline_succeeded] * 9
+        mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 6 + [mock_pipeline_succeeded] * 10
 
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
