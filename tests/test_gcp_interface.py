@@ -350,13 +350,13 @@ def test_get_job_status(mock_storage_client, mock_pipeline_job_get, openreview_c
     # Verify Vertex AI Pipeline interaction
     assert len(
         [call for call in mock_pipeline_job_get.call_args_list if call.args[0] == "projects/123456/locations/us-central1/pipelineJobs/job_1"]
-    ) == 3
+    ) == 1
     assert len(
         [call for call in mock_pipeline_job_get.call_args_list if call.args[0] == "projects/123456/locations/us-central1/pipelineJobs/job_2"]
-    ) == 3
+    ) == 1
     assert len(
         [call for call in mock_pipeline_job_get.call_args_list if call.args[0] == "projects/123456/locations/us-central1/pipelineJobs/job_3"]
-    ) == 3
+    ) == 1
 
 
 # Test case for multiple filters

@@ -857,6 +857,13 @@ class GCPInterface(object):
 
             return not search_paper_id or paper_id.lower().startswith(search_paper_id.lower())
 
+        def check_all_except_status(request):
+            return False not in [
+                check_member(request),
+                check_invitation(request),
+                check_paper_id(request)
+            ]
+
         def check_result(request, job):
             return False not in [
                 check_status(job),
@@ -864,6 +871,32 @@ class GCPInterface(object):
                 check_invitation(request),
                 check_paper_id(request)
             ]
+
+        def sanitize(name):
+            return name.replace('/', '-').replace(':', '-').replace('_', '-').replace('.', '-').lower()
+
+        def create_bucket_prefixes(params):
+            paper_id =  params.get('entityA', {}).get('id', '') or params.get('entityB', {}).get('id', '') or params.get('id', '')
+            group_id = params.get('entityA', {}).get('memberOf', '') or params.get('entityB', {}).get('memberOf', '') or params.get('memberOf', '')
+            inv = params.get('entityA', {}).get('invitation', '') or params.get('entityB', {}).get('invitation', '') or params.get('invitation', '')
+            
+            base_prefix = f"{self.jobs_folder}/"
+            
+            if paper_id:
+                raw_prefix = f"pid-{paper_id}-{group_id}"
+                sanitized = sanitize(raw_prefix)
+                return f"{base_prefix}{sanitized}"
+            elif group_id:
+                if inv:
+                    raw_prefix = f"inv-{group_id}"
+                    sanitized = sanitize(raw_prefix)
+                    return f"{base_prefix}{sanitized}"
+                else:
+                    raw_prefix = f"venueid-{group_id}"
+                    sanitized = sanitize(raw_prefix)
+                    return f"{base_prefix}{sanitized}"
+            return base_prefix
+
 
         result = {'results': []}
         query_obj = {}
@@ -886,13 +919,26 @@ class GCPInterface(object):
                 query_obj[entity][query_by] = value
         self.logger.info(f"Query object: {query_obj}")
 
-        all_requests = [
-            json.loads(blob.download_as_string()) for blob in self.bucket.list_blobs(prefix=f"{self.jobs_folder}/") if self.request_fname in blob.name
-        ]
+        all_requests = []
+        prefix = create_bucket_prefixes(query_obj)
+        for blob in self.bucket.list_blobs(prefix=prefix):
+            if self.request_fname in blob.name:
+                all_requests.append(json.loads(blob.download_as_string()))
+
         authenticated_requests = [
             req for req in all_requests if user_id == req['user_id'] or user_id in SUPERUSER_IDS
         ]
+        ## Shortlist by all but status
+        shortlist = []
         for request in authenticated_requests:
+            if check_all_except_status(request):
+                shortlist.append(request)
+
+        # If none shortlisted, search all requests anyway
+        if len(shortlist) == 0:
+            shortlist = authenticated_requests
+
+        for request in shortlist:
             request_name = request['name']
             try:
                 job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{request_name}")
