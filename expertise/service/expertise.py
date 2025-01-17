@@ -904,11 +904,14 @@ class ExpertiseCloudService(BaseExpertiseService):
         """
         cloud_return = self.cloud.get_job_status(user_id, query_params)
         redis_jobs = self.redis.load_all_jobs(user_id)
+        filtered_results = []
         for cloud_job in cloud_return['results']:
             for redis_job in redis_jobs:
                 if cloud_job['jobId'] == redis_job.cloud_id:
                     cloud_job['name'] = redis_job.name
                     cloud_job['jobId'] = redis_job.job_id
+                    filtered_results.append(cloud_job)
+        cloud_return['results'] = filtered_results ## Ignore jobs that are not in Redis
         return cloud_return
 
 
