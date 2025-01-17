@@ -222,19 +222,42 @@ class TestExpertiseCloudService():
                     assert False, response['description']
                 try_time = time.time() - start_time
 
+            ## Create a job outside of the expertise API in the bucket
+            ### Copy request.json in os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}") to fake job
+            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+            fake_job_id = config.cloud_id + '-fake'
+            os.makedirs(os.path.join(tmp_dir, f"test-bucket/jobs/{fake_job_id}"), exist_ok=True)
+            shutil.copy(
+                os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/request.json"),
+                os.path.join(tmp_dir, f"test-bucket/jobs/{fake_job_id}/request.json")
+            )
+            ### Overwrite the job_id in the request.json
+            fake_request = {}
+            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{fake_job_id}/request.json"), 'r') as f:
+                fake_request = json.load(f)
+                fake_request['jobId'] = fake_job_id
+            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{fake_job_id}/request.json"), 'w') as f:
+                f.write(json.dumps(fake_request))
+                
             responses = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
+            job_ids = [r['jobId'] for r in responses]
+            assert job_id in job_ids
+            assert fake_job_id not in job_ids
             responses = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={
                 "entityA.memberOf": "ABC.cc/Reviewers",
                 "entityB.invitation": "ABC.cc/-/Submission"
             }).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
+            job_ids = [r['jobId'] for r in responses]
+            assert job_id in job_ids
+            assert fake_job_id not in job_ids
             responses = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={
                 "entityA.memberOf": "ABC.cc/Reviewers",
                 "entityB.invitation": "ABC.cc/-/Submission",
                 'status': 'Completed'
             }).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
+            job_ids = [r['jobId'] for r in responses]
+            assert job_id in job_ids
+            assert fake_job_id not in job_ids
 
             job = [r for r in responses if r['jobId'] == job_id][0]
             assert job['status'] == 'Completed'
