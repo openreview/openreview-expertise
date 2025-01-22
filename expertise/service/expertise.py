@@ -909,6 +909,9 @@ class ExpertiseCloudService(BaseExpertiseService):
                 if cloud_job['jobId'] == redis_job.cloud_id:
                     cloud_job['name'] = redis_job.name
                     cloud_job['jobId'] = redis_job.job_id
+
+        # Sort by cdate
+        cloud_return['results'] = sorted(cloud_return['results'], key=lambda x: x['cdate'], reverse=True)
         return cloud_return
 
 
