@@ -801,6 +801,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
         config.cloud_id = cloud_id
+        self.redis.save_job(config)
 
         try:
             self.logger.info(f"In polling worker...")
