@@ -225,6 +225,7 @@ class BaseExpertiseService:
         validated_request = APIRequest(request)
         config = JobConfig.from_request(
             api_request = validated_request,
+            job_id=job_id,
             starting_config = self.default_expertise_config,
             openreview_client= self.client,
             openreview_client_v2= self.client_v2,
@@ -795,8 +796,6 @@ class ExpertiseCloudService(BaseExpertiseService):
         cloud_id = self.cloud.create_job(deepcopy(request))
         config, _ = self._prepare_config(deepcopy(request), job_id=job_id)
 
-        config_log = self._get_log_from_config(config)
-
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
@@ -862,14 +861,16 @@ class ExpertiseCloudService(BaseExpertiseService):
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
-        job_id = shortuuid.ShortUUID().random(length=5)
+        config, _ = self._prepare_config(deepcopy(request))
+        config_log = self._get_log_from_config(config)
         self.logger.info(f"Adding job {job_id} to queue")
+
         future = asyncio.run_coroutine_threadsafe(
             self.queue.add(
                 job_name,
                 {
                     "request": request,
-                    "job_id": job_id,
+                    "job_id": config.job_id,
                     "request_key": request_key,
                 },
                 {
