@@ -863,7 +863,7 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         config, _ = self._prepare_config(deepcopy(request))
         config_log = self._get_log_from_config(config)
-        self.logger.info(f"Adding job {job_id} to queue")
+        self.logger.info(f"Adding job {config.job_id} to queue")
 
         future = asyncio.run_coroutine_threadsafe(
             self.queue.add(
