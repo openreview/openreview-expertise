@@ -793,7 +793,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         request = job.data['request']
 
         cloud_id = self.cloud.create_job(deepcopy(request))
-        config, token = self._prepare_config(deepcopy(request), job_id=job_id)
+        config, _ = self._prepare_config(deepcopy(request), job_id=job_id)
 
         config_log = self._get_log_from_config(config)
 
@@ -871,7 +871,6 @@ class ExpertiseCloudService(BaseExpertiseService):
                     "request": request,
                     "job_id": job_id,
                     "request_key": request_key,
-                    "token": token
                 },
                 {
                     'jobId': job_id,
