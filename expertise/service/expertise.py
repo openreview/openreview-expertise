@@ -894,7 +894,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         future = asyncio.run_coroutine_threadsafe(job.log(config_log), self.queue_loop)
         future.result()
 
-        return job_id
+        return config.job_id
 
     def get_expertise_all_status(self, user_id, query_params):
         """
