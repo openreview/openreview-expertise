@@ -874,7 +874,7 @@ class ExpertiseCloudService(BaseExpertiseService):
                     "request_key": request_key,
                 },
                 {
-                    'jobId': job_id,
+                    'jobId': config.job_id,
                     'removeOnComplete': {
                         'count': 100,
                     },
