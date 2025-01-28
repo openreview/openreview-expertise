@@ -197,22 +197,35 @@ class BaseExpertiseService:
         running_config.baseurl_v2 = None
         running_config.user_id = None
 
-    def _prepare_config(self, request) -> dict:
+    def _prepare_config(self, request, job_id=None) -> dict:
         """
         Overwrites/add specific key-value pairs in the submitted job config
         :param request: Contains the initial request from the user
         :type request: dict
+
+        :param job_id: If provided, use this job ID instead of generating a new one
+        :type job_id: str
 
         :returns config: A modified version of config with the server-required fields
 
         :raises Exception: Raises exceptions when a required field is missing, or when a parameter is provided
                         when it is not expected
         """
+
+        if job_id:
+            try:
+                job = self.redis.load_job(job_id, get_user_id(self.client_v2))
+                return job, self.client.token
+            except Exception as e:
+                if 'not found' not in str(e):
+                    raise e
+
         # Validate fields
         self.logger.info(f"Incoming request - {request}")
         validated_request = APIRequest(request)
         config = JobConfig.from_request(
             api_request = validated_request,
+            job_id=job_id,
             starting_config = self.default_expertise_config,
             openreview_client= self.client,
             openreview_client_v2= self.client_v2,
@@ -776,8 +789,18 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.cloud.set_client(client_v2)
 
     async def worker_process(self, job, token):
+        job_id = job.data['job_id']
         user_id = job.data['user_id']
-        job_id = job.data['cloud_id']
+        request = job.data['request']
+
+        cloud_id = self.cloud.create_job(deepcopy(request))
+        config, _ = self._prepare_config(deepcopy(request), job_id=job_id)
+
+        config.mdate = int(time.time() * 1000)
+        config.status = JobStatus.QUEUED
+        config.description = descriptions[JobStatus.QUEUED]
+        config.cloud_id = cloud_id
+        self.redis.save_job(config)
 
         try:
             self.logger.info(f"In polling worker...")
@@ -838,37 +861,23 @@ class ExpertiseCloudService(BaseExpertiseService):
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
-        cloud_id = self.cloud.create_job(deepcopy(request))
-        config, token = self._prepare_config(request)
-        job_id = config.job_id
-
-        config_log = self._get_log_from_config(config)
-
+        config, _ = self._prepare_config(deepcopy(request))
         config.mdate = int(time.time() * 1000)
-        config.status = JobStatus.QUEUED
-        config.description = descriptions[JobStatus.QUEUED]
-        config.cloud_id = cloud_id
-
-        # Config has passed validation - add it to the user index
-        self.logger.info('just before submitting')
-        self.logger.info(f"vertex id={cloud_id}")
-
-        self.logger.info(f"\nconf: {config.to_json()}\n")
         self.redis.save_job(config)
 
-        self.logger.info(f"Adding job {job_name} to queue")
+        config_log = self._get_log_from_config(config)
+        self.logger.info(f"Adding job {config.job_id} to queue")
+
         future = asyncio.run_coroutine_threadsafe(
             self.queue.add(
                 job_name,
                 {
-                    "job_id": job_id,
+                    "request": request,
+                    "job_id": config.job_id,
                     "request_key": request_key,
-                    "user_id": config.user_id,
-                    "cloud_id": config.cloud_id,
-                    "token": token
                 },
                 {
-                    'jobId': job_id,
+                    'jobId': config.job_id,
                     'removeOnComplete': {
                         'count': 100,
                     },
@@ -888,7 +897,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         future = asyncio.run_coroutine_threadsafe(job.log(config_log), self.queue_loop)
         future.result()
 
-        return job_id
+        return config.job_id
 
     def get_expertise_all_status(self, user_id, query_params):
         """
@@ -909,6 +918,9 @@ class ExpertiseCloudService(BaseExpertiseService):
                 if cloud_job['jobId'] == redis_job.cloud_id:
                     cloud_job['name'] = redis_job.name
                     cloud_job['jobId'] = redis_job.job_id
+
+        # Sort by cdate
+        cloud_return['results'] = sorted(cloud_return['results'], key=lambda x: x['cdate'], reverse=True)
         return cloud_return
 
 
@@ -926,6 +938,17 @@ class ExpertiseCloudService(BaseExpertiseService):
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
         redis_job = self.redis.load_job(job_id, user_id)
+        if redis_job.cloud_id is None:
+            return {
+                'name': config.name,
+                'tauthor': config.user_id,
+                'jobId': config.job_id,
+                'status': config.status,
+                'description': config.description,
+                'cdate': config.cdate,
+                'mdate': config.mdate,
+                'request': config.api_request.to_json()
+            }
         cloud_return = self.cloud.get_job_status_by_job_id(user_id, redis_job.cloud_id)
         cloud_return['name'] = redis_job.name
         cloud_return['jobId'] = redis_job.job_id
