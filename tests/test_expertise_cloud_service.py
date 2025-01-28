@@ -162,7 +162,7 @@ class TestExpertiseCloudService():
         mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
         mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-        mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 6 + [mock_pipeline_succeeded] * 10
+        mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 5 + [mock_pipeline_succeeded] * 10
 
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -211,16 +211,11 @@ class TestExpertiseCloudService():
             responses = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
             assert not any([r['jobId'] == job_id for r in responses])
 
-            # Query until job is complete
+            # Perform single query after waiting max time
+            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            start_time = time.time()
-            try_time = time.time() - start_time
-            while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
-                time.sleep(1)
-                response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-                if response['status'] == 'Error':
-                    assert False, response['description']
-                try_time = time.time() - start_time
+            assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
             responses = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
             assert any([r['jobId'] == job_id for r in responses])
