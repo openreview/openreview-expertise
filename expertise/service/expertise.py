@@ -862,6 +862,9 @@ class ExpertiseCloudService(BaseExpertiseService):
                 raise openreview.OpenReviewException("Request already in queue")
 
         config, _ = self._prepare_config(deepcopy(request))
+        config.mdate = int(time.time() * 1000)
+        self.redis.save_job(config)
+
         config_log = self._get_log_from_config(config)
         self.logger.info(f"Adding job {config.job_id} to queue")
 
@@ -935,6 +938,17 @@ class ExpertiseCloudService(BaseExpertiseService):
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
         redis_job = self.redis.load_job(job_id, user_id)
+        if redis_job.cloud_id is None:
+            return {
+                'name': config.name,
+                'tauthor': config.user_id,
+                'jobId': config.job_id,
+                'status': config.status,
+                'description': config.description,
+                'cdate': config.cdate,
+                'mdate': config.mdate,
+                'request': config.api_request.to_json()
+            }
         cloud_return = self.cloud.get_job_status_by_job_id(user_id, redis_job.cloud_id)
         cloud_return['name'] = redis_job.name
         cloud_return['jobId'] = redis_job.job_id
