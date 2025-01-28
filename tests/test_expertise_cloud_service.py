@@ -214,6 +214,9 @@ class TestExpertiseCloudService():
             # Perform single query after waiting max time
             time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
 
+            ## Expect 5 calls from the worker thrad, 1 call from /expertise/status and 0 calls from /expertise/status/all
+            assert len(mock_pipeline_job.get.call_args_list) == 6
+
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
