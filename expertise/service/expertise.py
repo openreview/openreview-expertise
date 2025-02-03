@@ -182,7 +182,7 @@ class BaseExpertiseService:
         if not self.containerized:
             self.redis.save_job(config)
 
-    def _search_redis_jobs(self, user_id, query_params):
+    def get_expertise_all_status(self, user_id, query_params):
         """
         Searches the server for all jobs submitted by a user that satisfies
         the HTTP GET query parameters
@@ -612,20 +612,6 @@ class ExpertiseService(BaseExpertiseService):
 
         return job_id
 
-    def get_expertise_all_status(self, user_id, query_params):
-        """
-        Searches the server for all jobs submitted by a user
-
-        :param user_id: The ID of the user accessing the data
-        :type user_id: str
-
-        :param query_params: Query parameters of the GET request
-        :type query_params: dict
-
-        :returns: A dictionary with the key 'results' containing a list of job statuses
-        """
-        return self._search_redis_jobs(user_id, query_params)
-
     def get_expertise_status(self, user_id, job_id):
         """
         Searches the server for all jobs submitted by a user
@@ -904,21 +890,6 @@ class ExpertiseCloudService(BaseExpertiseService):
         future.result()
 
         return job_id
-
-    def get_expertise_all_status(self, user_id, query_params):
-        """
-        Searches the server for all jobs submitted by a user
-
-        :param user_id: The ID of the user accessing the data
-        :type user_id: str
-
-        :param query_params: Query parameters of the GET request
-        :type query_params: dict
-
-        :returns: A dictionary with the key 'results' containing a list of job statuses
-        """
-        return self._search_redis_jobs(user_id, query_params)
-
 
     def get_expertise_status(self, user_id, job_id):
         """
