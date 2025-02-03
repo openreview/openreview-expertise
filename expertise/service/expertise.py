@@ -182,6 +182,114 @@ class BaseExpertiseService:
         if not self.containerized:
             self.redis.save_job(config)
 
+    def get_expertise_all_status(self, user_id, query_params):
+        """
+        Searches the server for all jobs submitted by a user that satisfies
+        the HTTP GET query parameters
+        """
+        def check_status():
+            search_status = query_obj.get('status', '')
+            return not search_status or status.lower().startswith(search_status.lower())
+        
+        def check_member():
+            search_member, memberOf = '', ''
+            if 'memberOf' in query_obj.keys():
+                memberOf = config.api_request.entityA.get('memberOf', '') or config.api_request.entityB.get('memberOf', '')
+                search_member = query_obj['memberOf']
+
+            elif 'memberOf' in query_obj.get('entityA', {}).keys():
+                memberOf = config.api_request.entityA.get('memberOf', '')
+                search_member = query_obj['entityA']['memberOf']
+
+            elif 'memberOf' in query_obj.get('entityB', {}).keys():
+                memberOf = config.api_request.entityB.get('memberOf', '')
+                search_member = query_obj['entityB']['memberOf']
+            
+            return not search_member or memberOf.lower().startswith(search_member.lower())
+        
+        def check_invitation():
+            search_invitation, inv = '', ''
+            if 'invitation' in query_obj.keys():
+                inv = config.api_request.entityA.get('invitation', '') or config.api_request.entityB.get('invitation', '')
+                search_invitation = query_obj['invitation']
+
+            elif 'invitation' in query_obj.get('entityA', {}).keys():
+                inv = config.api_request.entityA.get('invitation', '')
+                search_invitation = query_obj['entityA']['invitation']
+
+            elif 'invitation' in query_obj.get('entityB', {}).keys():
+                inv = config.api_request.entityB.get('invitation', '')
+                search_invitation = query_obj['entityB']['invitation']
+
+            return not search_invitation or inv.lower().startswith(search_invitation.lower())
+
+        def check_paper_id():
+            search_paper_id, paper_id = '', ''
+            if 'id' in query_obj.keys():
+                paper_id = config.api_request.entityA.get('id', '') or config.api_request.entityB.get('id', '')
+                search_paper_id = query_obj['id']
+
+            elif 'id' in query_obj.get('entityA', {}).keys():
+                paper_id = config.api_request.entityA.get('id', '')
+                search_paper_id = query_obj['entityA']['id']
+
+            elif 'id' in query_obj.get('entityB', {}).keys():
+                paper_id = config.api_request.entityB.get('id', '')
+                search_paper_id = query_obj['entityB']['id']
+
+            return not search_paper_id or paper_id.lower().startswith(search_paper_id.lower())
+
+        def check_result():
+            return False not in [
+                check_status(),
+                check_member(),
+                check_invitation(),
+                check_paper_id()
+            ]
+
+        result = {'results': []}
+        query_obj = {}
+        '''
+        {
+            'paperId': value,
+            'entityA': {
+                'id': value
+            }
+        }
+        '''
+
+        for query, value in query_params.items():
+            if query.find('.') < 0: ## If no entity, store value
+                query_obj[query] = value
+            else:
+                entity, query_by = query.split('.') ## If entity, store value in entity obj
+                if entity not in query_obj.keys():
+                    query_obj[entity] = {}
+                query_obj[entity][query_by] = value
+
+        self.logger.info(f"Searching for jobs with query: {query_obj}")
+        for config in self.redis.load_all_jobs(user_id):
+            self.logger.info(f"{config.job_id} - {config.to_json()}")
+            status = config.status
+            description = config.description
+
+            if check_result():
+                # Append filtered config to the status
+                self._filter_config(config)
+                result['results'].append(
+                    {
+                        'name': config.name,
+                        'tauthor': config.user_id,
+                        'jobId': config.job_id,
+                        'status': status,
+                        'description': description,
+                        'cdate': config.cdate,
+                        'mdate': config.mdate,
+                        'request': config.api_request.to_json()
+                    }
+                )
+        return result
+
     def _filter_config(self, running_config):
         """
         Filters out certain server-side fields of a config file in order to
@@ -504,120 +612,6 @@ class ExpertiseService(BaseExpertiseService):
 
         return job_id
 
-    def get_expertise_all_status(self, user_id, query_params):
-        """
-        Searches the server for all jobs submitted by a user
-
-        :param user_id: The ID of the user accessing the data
-        :type user_id: str
-
-        :param query_params: Query parameters of the GET request
-        :type query_params: dict
-
-        :returns: A dictionary with the key 'results' containing a list of job statuses
-        """
-
-        def check_status():
-            search_status = query_obj.get('status', '')
-            return not search_status or status.lower().startswith(search_status.lower())
-        
-        def check_member():
-            search_member, memberOf = '', ''
-            if 'memberOf' in query_obj.keys():
-                memberOf = config.api_request.entityA.get('memberOf', '') or config.api_request.entityB.get('memberOf', '')
-                search_member = query_obj['memberOf']
-
-            elif 'memberOf' in query_obj.get('entityA', {}).keys():
-                memberOf = config.api_request.entityA.get('memberOf', '')
-                search_member = query_obj['entityA']['memberOf']
-
-            elif 'memberOf' in query_obj.get('entityB', {}).keys():
-                memberOf = config.api_request.entityB.get('memberOf', '')
-                search_member = query_obj['entityB']['memberOf']
-            
-            return not search_member or memberOf.lower().startswith(search_member.lower())
-        
-        def check_invitation():
-            search_invitation, inv = '', ''
-            if 'invitation' in query_obj.keys():
-                inv = config.api_request.entityA.get('invitation', '') or config.api_request.entityB.get('invitation', '')
-                search_invitation = query_obj['invitation']
-
-            elif 'invitation' in query_obj.get('entityA', {}).keys():
-                inv = config.api_request.entityA.get('invitation', '')
-                search_invitation = query_obj['entityA']['invitation']
-
-            elif 'invitation' in query_obj.get('entityB', {}).keys():
-                inv = config.api_request.entityB.get('invitation', '')
-                search_invitation = query_obj['entityB']['invitation']
-
-            return not search_invitation or inv.lower().startswith(search_invitation.lower())
-
-        def check_paper_id():
-            search_paper_id, paper_id = '', ''
-            if 'id' in query_obj.keys():
-                paper_id = config.api_request.entityA.get('id', '') or config.api_request.entityB.get('id', '')
-                search_paper_id = query_obj['id']
-
-            elif 'id' in query_obj.get('entityA', {}).keys():
-                paper_id = config.api_request.entityA.get('id', '')
-                search_paper_id = query_obj['entityA']['id']
-
-            elif 'id' in query_obj.get('entityB', {}).keys():
-                paper_id = config.api_request.entityB.get('id', '')
-                search_paper_id = query_obj['entityB']['id']
-
-            return not search_paper_id or paper_id.lower().startswith(search_paper_id.lower())
-
-        def check_result():
-            return False not in [
-                check_status(),
-                check_member(),
-                check_invitation(),
-                check_paper_id()
-            ]
-
-        result = {'results': []}
-        query_obj = {}
-        '''
-        {
-            'paperId': value,
-            'entityA': {
-                'id': value
-            }
-        }
-        '''
-
-        for query, value in query_params.items():
-            if query.find('.') < 0: ## If no entity, store value
-                query_obj[query] = value
-            else:
-                entity, query_by = query.split('.') ## If entity, store value in entity obj
-                if entity not in query_obj.keys():
-                    query_obj[entity] = {}
-                query_obj[entity][query_by] = value
-
-        for config in self.redis.load_all_jobs(user_id):
-            status = config.status
-            description = config.description
-
-            if check_result():
-                # Append filtered config to the status
-                self._filter_config(config)
-                result['results'].append(
-                    {
-                        'name': config.name,
-                        'tauthor': config.user_id,
-                        'jobId': config.job_id,
-                        'status': status,
-                        'description': description,
-                        'cdate': config.cdate,
-                        'mdate': config.mdate,
-                        'request': config.api_request.to_json()
-                    }
-                )
-        return result
-
     def get_expertise_status(self, user_id, job_id):
         """
         Searches the server for all jobs submitted by a user
@@ -778,6 +772,7 @@ class ExpertiseCloudService(BaseExpertiseService):
     async def worker_process(self, job, token):
         user_id = job.data['user_id']
         job_id = job.data['cloud_id']
+        redis_id = job.data['redis_id']
 
         try:
             self.logger.info(f"In polling worker...")
@@ -787,6 +782,11 @@ class ExpertiseCloudService(BaseExpertiseService):
                 self.logger.info(f"In attempt {attempt + 1} of {self.max_attempts}...")
                 status = self.cloud.get_job_status_by_job_id(user_id, job_id)
                 self.logger.info(f"Invoked get_job_status_by_job_id for {job_id} - status: {status}")
+
+                # Set status in Redis
+                config = self.redis.load_job(redis_id, user_id)
+                self.update_status(config, status['status'], status['description'])
+
                 if status['status'] == JobStatus.COMPLETED:
                     self.logger.info(f"Job {job_id} completed.")
                     job_completed = True
@@ -865,6 +865,7 @@ class ExpertiseCloudService(BaseExpertiseService):
                     "request_key": request_key,
                     "user_id": config.user_id,
                     "cloud_id": config.cloud_id,
+                    "redis_id": config.job_id,
                     "token": token
                 },
                 {
@@ -889,28 +890,6 @@ class ExpertiseCloudService(BaseExpertiseService):
         future.result()
 
         return job_id
-
-    def get_expertise_all_status(self, user_id, query_params):
-        """
-        Searches the server for all jobs submitted by a user
-
-        :param user_id: The ID of the user accessing the data
-        :type user_id: str
-
-        :param query_params: Query parameters of the GET request
-        :type query_params: dict
-
-        :returns: A dictionary with the key 'results' containing a list of job statuses
-        """
-        cloud_return = self.cloud.get_job_status(user_id, query_params)
-        redis_jobs = self.redis.load_all_jobs(user_id)
-        for cloud_job in cloud_return['results']:
-            for redis_job in redis_jobs:
-                if cloud_job['jobId'] == redis_job.cloud_id:
-                    cloud_job['name'] = redis_job.name
-                    cloud_job['jobId'] = redis_job.job_id
-        return cloud_return
-
 
     def get_expertise_status(self, user_id, job_id):
         """
