@@ -300,6 +300,8 @@ class JobConfig(object):
             'job_dir': self.job_dir,
             'cdate': self.cdate,
             'mdate': self.mdate,
+            'status': self.status,
+            'description': self.description,
             'match_group': self.match_group,
             'alternate_match_group': self.alternate_match_group,
             'reviewer_ids': self.reviewer_ids,
