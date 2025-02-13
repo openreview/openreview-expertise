@@ -204,6 +204,7 @@ class TestExpertiseCloudService():
             )
             assert response.status_code == 200, f'{response.json}'
             job_id = response.json['jobId']
+            time.sleep(0.5)
 
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             assert response['name'] == 'test_run'

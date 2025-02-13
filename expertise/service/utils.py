@@ -329,6 +329,7 @@ class JobConfig(object):
         return body
 
     def from_request(api_request: APIRequest,
+        job_id=None,
         starting_config = {},
         openreview_client = None,
         openreview_client_v2 = None,
@@ -347,7 +348,7 @@ class JobConfig(object):
         # Set metadata fields from request
         config.name = api_request.name
         config.user_id = get_user_id(openreview_client)
-        config.job_id = shortuuid.ShortUUID().random(length=5)
+        config.job_id = shortuuid.ShortUUID().random(length=5) if job_id is None else job_id
         config.baseurl = server_config['OPENREVIEW_BASEURL']
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
