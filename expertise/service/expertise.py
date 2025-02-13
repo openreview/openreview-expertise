@@ -783,15 +783,13 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.cloud.set_client(client_v2)
 
     async def worker_process(self, job, token):
-        job_id = job.data['job_id']
+        descriptions = JobDescription.VALS.value
         user_id = job.data['user_id']
         request = job.data['request']
-        job_id = job.data['cloud_id']
         redis_id = job.data['redis_id']
 
         cloud_id = self.cloud.create_job(deepcopy(request))
-        config, _ = self._prepare_config(deepcopy(request), job_id=job_id)
-
+        config = self.redis.load_job(redis_id, user_id)
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
@@ -804,31 +802,31 @@ class ExpertiseCloudService(BaseExpertiseService):
 
             for attempt in range(self.max_attempts):
                 self.logger.info(f"In attempt {attempt + 1} of {self.max_attempts}...")
-                status = self.cloud.get_job_status_by_job_id(user_id, job_id)
-                self.logger.info(f"Invoked get_job_status_by_job_id for {job_id} - status: {status}")
+                status = self.cloud.get_job_status_by_job_id(user_id, cloud_id)
+                self.logger.info(f"Invoked get_job_status_by_job_id for {redis_id} - status: {status}")
 
                 # Set status in Redis
                 config = self.redis.load_job(redis_id, user_id)
                 self.update_status(config, status['status'], status['description'])
 
                 if status['status'] == JobStatus.COMPLETED:
-                    self.logger.info(f"Job {job_id} completed.")
+                    self.logger.info(f"Job {redis_id} completed.")
                     job_completed = True
                     break
                 elif status['status'] == JobStatus.ERROR:
-                    self.logger.info(f"Job {job_id} encountered an error.")
+                    self.logger.info(f"Job {redis_id} encountered an error.")
                     job_completed = False
                     job_error = True
                     break
 
-                self.logger.info(f"Job {job_id} status: {status['status']}. Retrying in {self.poll_interval} seconds...")
+                self.logger.info(f"Job {redis_id} status: {status['status']}. Retrying in {self.poll_interval} seconds...")
                 await asyncio.sleep(self.poll_interval)
 
             if not job_completed and not job_error:
-                self.logger.info(f"Polling exceeded maximum attempts for job {job_id}.")
+                self.logger.info(f"Polling exceeded maximum attempts for job {redis_id}.")
             elif not job_completed and job_error:
-                self.logger.info(f"Job {job_id} encountered an error.")
-                raise Exception(f"Job {job_id} encountered an error - {status['description']}")
+                self.logger.info(f"Job {redis_id} encountered an error.")
+                raise Exception(f"Job {redis_id} encountered an error - {status['description']}")
 
         except Exception as e:
             # Re-raise exception to appear in the queue
@@ -864,6 +862,8 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         config, _ = self._prepare_config(deepcopy(request))
         config.mdate = int(time.time() * 1000)
+        config.status = JobStatus.QUEUED
+        config.description = descriptions[JobStatus.QUEUED]
         self.redis.save_job(config)
 
         config_log = self._get_log_from_config(config)
@@ -874,12 +874,9 @@ class ExpertiseCloudService(BaseExpertiseService):
                 job_name,
                 {
                     "request": request,
-                    "job_id": config.job_id,
                     "request_key": request_key,
                     "user_id": config.user_id,
-                    "cloud_id": config.cloud_id,
-                    "redis_id": config.job_id,
-                    "token": token
+                    "redis_id": config.job_id
                 },
                 {
                     'jobId': config.job_id,
