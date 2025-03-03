@@ -106,3 +106,76 @@ The API gives the user the ability to query the status of their job at several s
 5. **Running Expertise**: Job is running the selected expertise model to compute scores
 6. **Completed**: Job is complete and the computed scores are ready
 
+# Redis Search Optimization
+
+The service now includes optimized Redis search capabilities to improve job lookup efficiency.
+
+## Redis JSON Migration Guide
+
+The system now supports Redis JSON for more efficient storage and retrieval of job data. To use this feature:
+
+1. Install Redis JSON module:
+   ```
+   # For Docker/Redis Stack
+   docker run -p 6379:6379 redis/redis-stack
+   
+   # For standalone Redis
+   # See https://redis.io/docs/stack/json/ for installation instructions
+   ```
+
+2. Migrate existing data:
+   ```
+   python -m expertise.service migrate --config=/path/to/config.cfg
+   ```
+
+3. Verify the migration:
+   ```
+   python -m expertise.service migrate --config=/path/to/config.cfg
+   ```
+   This will show statistics after the migration.
+
+## Benefits of Redis JSON
+
+- **Faster job retrieval**: Jobs are now indexed by user and creation date
+- **More efficient searching**: No need to deserialize all jobs when searching
+- **Better sorted results**: Results are pre-sorted by creation date
+- **Reduced memory usage**: No need to keep all job objects in memory
+
+## Technical Implementation
+
+The Redis database now uses:
+
+1. **JSON storage**: Jobs are stored as JSON strings instead of pickled objects
+2. **Sorted Sets**: User-to-job mappings are stored in sorted sets with creation date as score
+3. **Automatic sorting**: Results are automatically sorted by creation date
+
+This implementation significantly improves performance when:
+- Listing all jobs for a user
+- Searching for specific jobs
+- Retrieving job details
+
+## Compatibility
+
+The system maintains backward compatibility with systems that don't have Redis JSON installed. In those cases, it will:
+- Fall back to pickle serialization
+- Perform linear scans for job retrieval
+- Sort results manually after retrieval
+
+## Monitoring
+
+A new stats function has been added for monitoring Redis usage:
+```python
+from expertise.service.utils import RedisDatabase
+
+db = RedisDatabase(...)
+stats = db.get_stats()
+print(stats)
+```
+
+This will show:
+- Total job count
+- Users count
+- Jobs per user
+- Redis memory usage
+- Redis JSON module availability
+

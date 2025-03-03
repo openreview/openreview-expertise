@@ -12,6 +12,7 @@ from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
 from google.cloud.aiplatform_v1.types import PipelineState
+import warnings
 
 import re
 SUPERUSER_IDS = ['openreview.net', 'OpenReview.net', '~Super_User1']
@@ -177,26 +178,118 @@ class RedisDatabase(object):
             self.db = redis.Redis(connection_pool=connection_pool)
 
         self.sync_on_disk = sync_on_disk
+        
+        # Check for Redis modules
+        try:
+            modules = self.db.module_list()
+            self.has_redisjson = any(b'ReJSON' in module for module in modules)
+            self.has_redisearch = any(b'search' in module for module in modules)
+        except (redis.exceptions.ResponseError, AttributeError):
+            # Redis instance doesn't support module_list or not available
+            self.has_redisjson = False
+            self.has_redisearch = False
+            warnings.warn("Redis instance doesn't support module listing. Assuming JSON module is not available.")
+            
     def save_job(self, job_config):
-        self.db.set(f"job:{job_config.job_id}", pickle.dumps(job_config))
+        """
+        Saves a job configuration to Redis.
+        If RedisJSON is available, stores as JSON, otherwise falls back to pickle.
+        """
+        job_key = f"job:{job_config.job_id}"
+        
+        if hasattr(self, 'has_redisjson') and self.has_redisjson:
+            try:
+                # Try to store as JSON
+                job_data = job_config.to_json()
+                # Verify that the job data is JSON-serializable
+                json_string = json.dumps(job_data)
+                
+                # Store JSON string in Redis
+                self.db.set(job_key, json_string)
+                
+                # Store user_id as a separate indexed field for faster querying
+                user_index_key = f"user:{job_config.user_id}:jobs"
+                self.db.zadd(user_index_key, {job_config.job_id: job_config.cdate})
+            except Exception as e:
+                # If JSON serialization fails, fall back to pickle
+                print(f"Warning: Failed to save job as JSON: {str(e)}")
+                print("Falling back to pickle serialization")
+                self.db.set(job_key, pickle.dumps(job_config))
+        else:
+            # Fall back to pickle serialization
+            self.db.set(job_key, pickle.dumps(job_config))
     
     def load_all_jobs(self, user_id):
         """
         Searches all keys for configs with matching user id
         If a Redis entry exists but the files do not, remove the entry from Redis and do not return this job
         Returns empty list if no jobs found
+        
+        When RedisJSON is available, uses indexed fields for efficient retrieval.
         """
         configs = []
 
-        for job_key in self.db.scan_iter("job:*"):
-            current_config = pickle.loads(self.db.get(job_key))
+        if hasattr(self, 'has_redisjson') and self.has_redisjson:
+            # Efficient retrieval using user index
+            user_index_key = f"user:{user_id}:jobs"
+            
+            # Get all job IDs for this user, sorted by creation date (newest first)
+            job_ids = self.db.zrevrange(user_index_key, 0, -1)
+            
+            # Also include all jobs for superusers
+            if user_id in SUPERUSER_IDS:
+                # Get all job keys
+                all_job_keys = self.db.keys("job:*")
+                all_job_ids = [key.decode('utf-8').split(':')[1] for key in all_job_keys]
+                # Remove duplicates while preserving order
+                job_ids = list(dict.fromkeys([jid.decode('utf-8') if isinstance(jid, bytes) else jid 
+                                             for jid in job_ids] + all_job_ids))
+            
+            # Retrieve all job configs in batch
+            for job_id in job_ids:
+                job_key = f"job:{job_id}"
+                
+                if not self.db.exists(job_key):
+                    # Clean up the index if job doesn't exist
+                    self.db.zrem(user_index_key, job_id)
+                    continue
+                
+                # Try to load the job
+                job_data = self.db.get(job_key)
+                if job_data:
+                    try:
+                        # First try to deserialize as JSON
+                        try:
+                            job_dict = json.loads(job_data)
+                            current_config = JobConfig.from_json(job_dict)
+                        except (json.JSONDecodeError, ValueError, TypeError):
+                            # If JSON deserialization fails, try pickle as fallback
+                            current_config = pickle.loads(job_data)
+                        
+                        if self.sync_on_disk and not os.path.isdir(current_config.job_dir):
+                            print(f"No files found {job_key} - skipping")
+                            # Cleanup the index
+                            self.db.zrem(user_index_key, job_id)
+                            self.db.delete(job_key)
+                            continue
+                            
+                        configs.append(current_config)
+                    except Exception as e:
+                        print(f"Error parsing job {job_id}: {str(e)}")
+        else:
+            # Legacy implementation with linear scan
+            for job_key in self.db.scan_iter("job:*"):
+                try:
+                    current_config = pickle.loads(self.db.get(job_key))
 
-            if self.sync_on_disk and not os.path.isdir(current_config.job_dir):
-                print(f"No files found {job_key} - skipping")
-                continue
+                    if self.sync_on_disk and not os.path.isdir(current_config.job_dir):
+                        print(f"No files found {job_key} - skipping")
+                        continue
 
-            if current_config.user_id == user_id or user_id in SUPERUSER_IDS:
-                configs.append(current_config)
+                    if current_config.user_id == user_id or user_id in SUPERUSER_IDS:
+                        configs.append(current_config)
+                except Exception as e:
+                    print(f"Error loading job {job_key}: {str(e)}")
 
         return configs
 
@@ -207,8 +300,29 @@ class RedisDatabase(object):
         job_key = f"job:{job_id}"
         
         if not self.db.exists(job_key):
-            raise openreview.OpenReviewException('Job not found')        
-        config = pickle.loads(self.db.get(job_key))
+            raise openreview.OpenReviewException('Job not found')
+            
+        # Get job data
+        job_data = self.db.get(job_key)
+        if not job_data:
+            raise openreview.OpenReviewException('Job data is empty')
+            
+        # Try to deserialize - attempt JSON first, then pickle as fallback
+        try:
+            if hasattr(self, 'has_redisjson') and self.has_redisjson:
+                try:
+                    # Try JSON first
+                    job_dict = json.loads(job_data)
+                    config = JobConfig.from_json(job_dict)
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    # Fall back to pickle if JSON fails
+                    config = pickle.loads(job_data)
+            else:
+                # Directly use pickle deserialization
+                config = pickle.loads(job_data)
+        except Exception as e:
+            raise openreview.OpenReviewException(f'Error parsing job: {str(e)}')
+            
         if self.sync_on_disk and not os.path.isdir(config.job_dir):
             self.remove_job(user_id, job_id)
             raise openreview.OpenReviewException('Job not found')
@@ -219,16 +333,83 @@ class RedisDatabase(object):
         return config
     
     def remove_job(self, user_id, job_id):
+        """
+        Removes a job from Redis
+        Also removes it from the user index if RedisJSON is available
+        """
         job_key = f"job:{job_id}"
 
         if not self.db.exists(job_key):
             raise openreview.OpenReviewException('Job not found')
-        config = pickle.loads(self.db.get(job_key))
-        if config.user_id != user_id and user_id not in SUPERUSER_IDS:
-            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to modify job')
-
-        self.db.delete(job_key)
-        return config
+            
+        # Get job data
+        job_data = self.db.get(job_key)
+        if not job_data:
+            raise openreview.OpenReviewException('Job data is empty')
+        
+        # Try to load the job config
+        try:
+            # First try as JSON
+            try:
+                job_dict = json.loads(job_data)
+                config = JobConfig.from_json(job_dict)
+                is_json = True
+            except (json.JSONDecodeError, ValueError, TypeError):
+                # Fall back to pickle
+                config = pickle.loads(job_data)
+                is_json = False
+                
+            # Check permissions
+            if config.user_id != user_id and user_id not in SUPERUSER_IDS:
+                raise openreview.OpenReviewException('Forbidden: Insufficient permissions to modify job')
+            
+            # If it was stored as JSON and we have Redis JSON, clean up the index
+            if is_json and hasattr(self, 'has_redisjson') and self.has_redisjson:
+                user_index_key = f"user:{config.user_id}:jobs"
+                self.db.zrem(user_index_key, job_id)
+            
+            # Delete the job
+            self.db.delete(job_key)
+            
+            return config
+        except Exception as e:
+            raise openreview.OpenReviewException(f'Error parsing job: {str(e)}')
+            
+        
+    def get_stats(self):
+        """
+        Returns statistics about the Redis database
+        """
+        stats = {
+            'total_jobs': 0,
+            'total_users': 0,
+            'jobs_per_user': {},
+            'redis_used_memory': 'N/A',
+            'has_redisjson': hasattr(self, 'has_redisjson') and self.has_redisjson,
+            'has_redisearch': hasattr(self, 'has_redisearch') and self.has_redisearch
+        }
+        
+        # Count total jobs
+        job_keys = list(self.db.scan_iter("job:*"))
+        stats['total_jobs'] = len(job_keys)
+        
+        # Count users and jobs per user
+        user_keys = list(self.db.scan_iter("user:*:jobs"))
+        stats['total_users'] = len(user_keys)
+        
+        for user_key in user_keys:
+            user_id = user_key.decode('utf-8').split(':')[1] if isinstance(user_key, bytes) else user_key.split(':')[1]
+            job_count = self.db.zcard(user_key)
+            stats['jobs_per_user'][user_id] = job_count
+            
+        # Get Redis memory usage
+        try:
+            info = self.db.info('memory')
+            stats['redis_used_memory'] = info.get('used_memory_human', 'N/A')
+        except:
+            pass
+            
+        return stats
 
 class JobConfig(object):
     """
@@ -317,6 +498,11 @@ class JobConfig(object):
             'paper_id': self.paper_id,
             'model_params': self.model_params
         }
+        
+        # Save api_request separately if it exists
+        if hasattr(self, 'api_request') and self.api_request is not None:
+            if hasattr(self.api_request, 'to_json'):
+                pre_body['api_request_json'] = self.api_request.to_json()
 
         # Remove objects that are none
         body = {}
@@ -562,6 +748,15 @@ class JobConfig(object):
             paper_id = job_config.get('paper_id'),
             model_params = job_config.get('model_params')
         )
+        
+        # Restore api_request if available
+        if 'api_request_json' in job_config:
+            try:
+                # Create APIRequest from stored JSON
+                config.api_request = APIRequest(job_config.get('api_request_json', {}))
+            except Exception as e:
+                print(f"Warning: Failed to restore api_request from JSON: {str(e)}")
+        
         return config
 
 class GCPInterface(object):

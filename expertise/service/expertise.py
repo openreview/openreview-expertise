@@ -276,21 +276,28 @@ class BaseExpertiseService:
             if check_result():
                 # Append filtered config to the status
                 self._filter_config(config)
-                result['results'].append(
-                    {
-                        'name': config.name,
-                        'tauthor': config.user_id,
-                        'jobId': config.job_id,
-                        'status': status,
-                        'description': description,
-                        'cdate': config.cdate,
-                        'mdate': config.mdate,
-                        'request': config.api_request.to_json()
-                    }
-                )
+                result_item = {
+                    'name': config.name,
+                    'tauthor': config.user_id,
+                    'jobId': config.job_id,
+                    'status': status,
+                    'description': description,
+                    'cdate': config.cdate,
+                    'mdate': config.mdate
+                }
+                
+                # Add request data if API request is available
+                if hasattr(config, 'api_request') and config.api_request is not None:
+                    result_item['request'] = config.api_request.to_json()
+                elif hasattr(config, 'api_request_json'):
+                    result_item['request'] = config.api_request_json
+                
+                result['results'].append(result_item)
 
-        # Sort results by cdate
-        result['results'] = sorted(result['results'], key=lambda x: x['cdate'], reverse=True)
+        # Results are now pre-sorted by cdate when RedisJSON is enabled
+        # We still sort here for backwards compatibility when RedisJSON is not available
+        if not hasattr(self.redis, 'has_redisjson') or not self.redis.has_redisjson:
+            result['results'] = sorted(result['results'], key=lambda x: x['cdate'], reverse=True)
 
         return result
 
