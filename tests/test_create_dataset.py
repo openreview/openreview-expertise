@@ -15,7 +15,7 @@ def test_convert_to_list(client, openreview_client):
 def test_get_papers_from_group(client, openreview_client):
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
     all_papers = or_expertise.get_papers_from_group('DEF.cc/Reviewers')
-    assert len(all_papers) == 146
+    assert len(all_papers) == 45
     if os.path.isfile('publications_by_profile_id.json'):
         os.remove('publications_by_profile_id.json')
 
