@@ -4,3 +4,5 @@ __pycache__
 
 /tmp
 *.log
+test_pipeline/
+tests/jobs/
