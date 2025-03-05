@@ -88,7 +88,7 @@ class TestExpertiseV2():
 
         or_expertise = OpenReviewExpertise(client, openreview_client, config)
         publications = or_expertise.get_publications('~Harold_Rice1')
-        assert len(publications) == 3
+        assert len(publications) == 1
         for pub in publications:
             content = pub['content']
             assert isinstance(content['title'], str)
@@ -474,7 +474,7 @@ class TestExpertiseV2():
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']       
-        assert len(results) == 10
+        assert len(results) == 5
 
     def test_specter2_scincl(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID

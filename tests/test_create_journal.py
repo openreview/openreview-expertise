@@ -35,8 +35,8 @@ class TestJournal():
         journal=Journal(openreview_client, venue_id, '1234', contact_info='tmlr@jmlr.org', full_name='Transactions on Machine Learning Research', short_name='TMLR', submission_name='Submission')
         journal.setup(support_role='fabian@mail.com', editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
 
-        openreview_client.add_members_to_group('TMLR/Action_Editors', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
-        openreview_client.add_members_to_group('TMLR/Reviewers', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
+        openreview_client.add_members_to_group('TMLR/Action_Editors', ['~Raia_Hadsell1', '~Kyunghyun_Cho1', '~Margherita_Hilpert1'])
+        openreview_client.add_members_to_group('TMLR/Reviewers', ['~Raia_Hadsell1', '~Kyunghyun_Cho1', '~Margherita_Hilpert1'])
     
     def test_post_submissions(self, client, openreview_client, helpers, test_client):
         # Post submission with a test author id
