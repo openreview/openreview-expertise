@@ -10,6 +10,12 @@ import warnings
 from expertise.service.utils import RedisDatabase, JobConfig, APIRequest
 
 
+# Define NonSerializable at module level so it can be pickled
+class NonSerializable:
+    def __init__(self):
+        self.name = "Cannot serialize this"
+
+
 class TestRedisJSON:
     """
     Tests for the Redis JSON implementation.
@@ -64,12 +70,7 @@ class TestRedisJSON:
     @pytest.fixture
     def non_serializable_job_config(self, sample_job_config):
         """Create a job config with a non-serializable attribute"""
-        # Create a custom object that can't be JSON serialized
-        class NonSerializable:
-            def __init__(self):
-                self.name = "Cannot serialize this"
-        
-        # Add it to the sample config
+        # Add the module-level NonSerializable class to the sample config
         sample_job_config.custom_object = NonSerializable()
         return sample_job_config
     
@@ -165,23 +166,26 @@ class TestRedisJSON:
             loaded_config = pickle.loads(redis_db.db.get(job_key))
             assert loaded_config.api_request.name == "Test Request"
     
-    def test_non_serializable_fallback(self, redis_db, non_serializable_job_config):
+    def test_non_serializable_fallback(self, redis_db, sample_job_config):
         """Test fallback to pickle when object is not JSON serializable"""
+        # Add it to the sample config - use the module-level class
+        sample_job_config.custom_object = NonSerializable()
+        
         # Save the job config
-        job_key = f"test:{non_serializable_job_config.job_id}"
+        job_key = f"job:{sample_job_config.job_id}"  # Use the "job:" prefix consistently
         redis_db.db.delete(job_key)  # Ensure key doesn't exist
         
         # Try to save with JSON serialization
         if redis_db.has_redisjson:
             with pytest.warns(UserWarning):
                 # This should fall back to pickle due to non-serializable object
-                redis_db.save_job(non_serializable_job_config)
+                redis_db.save_job(sample_job_config)
         else:
             # Just save with pickle
-            redis_db.db.set(job_key, pickle.dumps(non_serializable_job_config))
+            redis_db.db.set(job_key, pickle.dumps(sample_job_config))
         
         # Verify the job was saved (either way)
-        assert redis_db.db.exists(f"job:{non_serializable_job_config.job_id}")
+        assert redis_db.db.exists(job_key)
     
     def test_sorted_set_indexing(self, redis_db):
         """Test the sorted set indexing for efficient user-based retrieval"""
