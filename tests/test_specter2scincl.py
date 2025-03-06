@@ -54,21 +54,21 @@ def test_specncl_scores(tmp_path, create_specncl):
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
     specnclModel.embed_publications(
-        specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
-        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl')
+        specter_publications_path=publications_path.joinpath('pub2vec_specter.pt'),
+        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.pt')
     )
     specnclModel.embed_submissions(
-        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
-        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
+        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.pt'),
+        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.pt'),
     )
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()
     all_scores = specnclModel.all_scores(
-        specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
-        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl'),
-        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
-        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
+        specter_publications_path=publications_path.joinpath('pub2vec_specter.pt'),
+        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.pt'),
+        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.pt'),
+        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.pt'),
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
 
@@ -95,21 +95,21 @@ def test_sparse_scores(tmp_path, create_specncl):
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
     specnclModel.embed_publications(
-        specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
-        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl')
+        specter_publications_path=publications_path.joinpath('pub2vec_specter.pt'),
+        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.pt')
     )
     specnclModel.embed_submissions(
-        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
-        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
+        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.pt'),
+        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.pt'),
     )
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()
     all_scores = specnclModel.all_scores(
-        specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
-        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl'),
-        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
-        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
+        specter_publications_path=publications_path.joinpath('pub2vec_specter.pt'),
+        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.pt'),
+        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.pt'),
+        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.pt'),
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
 
