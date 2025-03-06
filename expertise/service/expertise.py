@@ -925,14 +925,14 @@ class ExpertiseCloudService(BaseExpertiseService):
         redis_job = self.redis.load_job(job_id, user_id)
         if redis_job.cloud_id is None:
             return {
-                'name': config.name,
-                'tauthor': config.user_id,
-                'jobId': config.job_id,
-                'status': config.status,
-                'description': config.description,
-                'cdate': config.cdate,
-                'mdate': config.mdate,
-                'request': config.api_request.to_json()
+                'name': redis_job.name,
+                'tauthor': redis_job.user_id,
+                'jobId': redis_job.job_id,
+                'status': redis_job.status,
+                'description': redis_job.description,
+                'cdate': redis_job.cdate,
+                'mdate': redis_job.mdate,
+                'request': redis_job.api_request.to_json()
             }
         cloud_return = self.cloud.get_job_status_by_job_id(user_id, redis_job.cloud_id)
         cloud_return['name'] = redis_job.name
