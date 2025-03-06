@@ -288,6 +288,10 @@ class BaseExpertiseService:
                         'request': config.api_request.to_json()
                     }
                 )
+
+        # Sort results by cdate
+        result['results'] = sorted(result['results'], key=lambda x: x['cdate'], reverse=True)
+
         return result
 
     def _filter_config(self, running_config):
