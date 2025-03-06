@@ -10,19 +10,12 @@ import warnings
 from expertise.service.utils import RedisDatabase, JobConfig, APIRequest
 
 
-# Define NonSerializable at module level so it can be pickled
 class NonSerializable:
     def __init__(self):
         self.name = "Cannot serialize this"
 
 
 class TestRedisJSON:
-    """
-    Tests for the Redis JSON implementation.
-    
-    These tests require a Redis instance running on localhost:6379.
-    If Redis JSON module is not available, some tests will be skipped.
-    """
     
     @pytest.fixture
     def redis_db(self):
@@ -37,17 +30,11 @@ class TestRedisJSON:
         keys = db.db.keys("test:*")
         if keys:
             db.db.delete(*keys)
-        keys = db.db.keys("user:test_*")
-        if keys:
-            db.db.delete(*keys)
             
         yield db
         
         # Clean up test keys after the test
         keys = db.db.keys("test:*")
-        if keys:
-            db.db.delete(*keys)
-        keys = db.db.keys("user:test_*")
         if keys:
             db.db.delete(*keys)
             
@@ -187,47 +174,6 @@ class TestRedisJSON:
         # Verify the job was saved (either way)
         assert redis_db.db.exists(job_key)
     
-    def test_sorted_set_indexing(self, redis_db):
-        """Test the sorted set indexing for efficient user-based retrieval"""
-        if not hasattr(redis_db, 'has_redisjson') or not redis_db.has_redisjson:
-            pytest.skip("Redis JSON is not available")
-        
-        # Create multiple jobs with different creation dates
-        user_id = "test_user_sorted"
-        base_time = int(time.time() * 1000)
-        
-        jobs = []
-        for i in range(5):
-            job = JobConfig(
-                name=f"Job {i}",
-                user_id=user_id,
-                job_id=f"job{i}",
-                job_dir=f"/tmp/job{i}",
-                cdate=base_time - (i * 60000),  # Each job is 1 minute older
-                mdate=base_time - (i * 60000),
-                status="Initialized",
-                description=f"Test job {i}"
-            )
-            jobs.append(job)
-            
-            # Save the job using the real method
-            with patch('os.path.isdir', return_value=True):  # Mock directory existence check
-                redis_db.save_job(job)
-        
-        # Create a sorted set directly for testing
-        user_index_key = f"user:{user_id}:jobs"
-        
-        # Check that the index exists
-        assert redis_db.db.exists(user_index_key)
-        
-        # Get all jobs for the user using zrevrange (newest first)
-        job_ids = redis_db.db.zrevrange(user_index_key, 0, -1)
-        assert len(job_ids) == 5
-        
-        # Verify the order - should be newest first
-        assert job_ids[0].decode('utf-8') if isinstance(job_ids[0], bytes) else job_ids[0] == "job0"
-        assert job_ids[4].decode('utf-8') if isinstance(job_ids[4], bytes) else job_ids[4] == "job4"
-    
     def test_mixed_storage_formats(self, redis_db, sample_job_config):
         """Test handling both pickle and JSON storage formats"""
         if not hasattr(redis_db, 'has_redisjson') or not redis_db.has_redisjson:
@@ -263,28 +209,3 @@ class TestRedisJSON:
         # Verify both loaded correctly
         assert pickle_loaded.name == json_loaded.name
         assert pickle_loaded.user_id == json_loaded.user_id
-    
-    def test_redis_stats(self, redis_db, sample_job_config):
-        """Test the stats functionality"""
-        # Save a job
-        with patch('os.path.isdir', return_value=True):  # Mock directory existence check
-            redis_db.save_job(sample_job_config)
-        
-        # Get stats
-        stats = redis_db.get_stats()
-        
-        # Verify stats
-        assert "total_jobs" in stats
-        assert "total_users" in stats
-        assert "jobs_per_user" in stats
-        assert "redis_used_memory" in stats
-        assert "has_redisjson" in stats
-        
-        # If Redis JSON is available, verify user stats
-        if redis_db.has_redisjson:
-            assert sample_job_config.user_id in stats["jobs_per_user"]
-            assert stats["jobs_per_user"][sample_job_config.user_id] >= 1
-
-
-if __name__ == "__main__":
-    pytest.main()

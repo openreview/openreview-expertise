@@ -16,7 +16,7 @@ jobs:
     working_directory: ~/openreview-expertise
     docker:
       - image: ubuntu:22.04
-      - image: redislabs/redisai
+      - image: redis/redis-stack
       - image: mongo:6.0
         command: [ --replSet, rs0 ]
       - image: docker.elastic.co/elasticsearch/elasticsearch:7.7.0

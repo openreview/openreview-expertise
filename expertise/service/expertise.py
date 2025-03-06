@@ -294,13 +294,6 @@ class BaseExpertiseService:
                 
                 result['results'].append(result_item)
 
-        # Ensure all results have a cdate value to avoid comparison issues
-        for item in result['results']:
-            if 'cdate' not in item or item['cdate'] is None:
-                item['cdate'] = 0
-                
-        # Results are now pre-sorted by cdate when RedisJSON is enabled
-        # We still sort here for backwards compatibility when RedisJSON is not available
         result['results'] = sorted(result['results'], key=lambda x: x['cdate'], reverse=True)
 
         return result
