@@ -88,7 +88,7 @@ class TestJournal():
                         existing_titles = [pub.content.get('title') for pub in existing_pubs]
 
                         if content.get('title') not in existing_titles:
-                            publication_note = openreview_client.post_note_edit(
+                            submission_note = openreview_client.post_note_edit(
                                 invitation = 'TMLR/-/Submission',
                                 signatures = ['~Super_User1'],
                                 note = Note(
@@ -103,6 +103,19 @@ class TestJournal():
                                         'competing_interests': { 'value': 'None beyond the authors normal conflict of interests'},
                                         'human_subjects_reporting': { 'value': 'Not applicable'}
                                     }
+                                ))
+                            publication_note = openreview_client.post_note_edit(
+                                invitation = 'openreview.net/Archive/-/Direct_Upload',
+                                signatures = [authorid],
+                                note = Note(
+                                    pdate = cdate,
+                                    content = {
+                                        'title': { 'value': content.get('title').get('value') },
+                                        'abstract': { 'value': content.get('abstract').get('value') },
+                                        'authors': { 'value': [name]},
+                                        'authorids': { 'value': [authorid]},
+                                    },
+                                    license = 'CC BY-SA 4.0'
                                 ))
             
         with open('tests/data/fakeData.json') as json_file:
