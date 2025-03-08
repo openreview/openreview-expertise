@@ -513,7 +513,7 @@ class OpenReviewModelEvaluator(AffinityModelEvaluator):
                 return str(scores_file_path)
             
             raise RuntimeError(f"Failed to execute model: {e}")
-    
+
     def process_predictions(self, scores_file: str) -> Dict:
         """
         Process the model predictions into the required format.
@@ -524,9 +524,25 @@ class OpenReviewModelEvaluator(AffinityModelEvaluator):
         Returns:
             Dictionary mapping reviewers to papers with affinity scores
         """
+
+        def _preprocess_scores_file():
+            # Helper function to swap columns 0 and 1 and add headers
+            # Writes to a new file and returns the path
+            new_file = scores_file.replace(".csv", "_preprocessed.csv")
+            with open(scores_file, 'r') as f, open(new_file, 'w') as out:
+                lines = f.readlines()
+                out.write("reviewer,submission,score\n")
+                for line in lines:
+                    parts = line.strip().split(",")
+                    out.write(f"{parts[1][1:]},{parts[0]},{parts[2]}\n") ## Swap columns and chop tilde
+            return new_file
+
         try:
+            # Preprocess CSV
+            preprocessed_file = _preprocess_scores_file()
+
             # Read scores
-            scores_df = pd.read_csv(scores_file)
+            scores_df = pd.read_csv(preprocessed_file)
             
             # Validate the file has the required columns
             required_columns = ['reviewer', 'submission', 'score']
@@ -561,7 +577,7 @@ class OpenReviewModelEvaluator(AffinityModelEvaluator):
             return predictions
             
         except Exception as e:
-            logger.error(f"Error processing predictions file {scores_file}: {e}")
+            logger.error(f"Error processing predictions file {preprocessed_file}: {e}")
             raise
     
     def convert_to_gold_standard_format(self, predictions: Dict) -> Dict:
