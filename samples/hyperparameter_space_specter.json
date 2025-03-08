@@ -1,0 +1,6 @@
+{
+    "max_score": [true, false],
+    "average_score": [true, false],
+    "batch_size": [8],
+    "use_cuda": [true]
+} 
