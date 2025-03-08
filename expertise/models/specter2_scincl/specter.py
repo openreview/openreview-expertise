@@ -41,7 +41,7 @@ silent
 """
 class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, dump_p2p=False):
+                 sparse_value=None, use_redis=False, dump_p2p=False, top_k=None, attn_clustering=False):
         self.model_name = 'specter2'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -63,6 +63,8 @@ class Specter2Predictor(Predictor):
         self.use_redis = use_redis
         self.redis = None
         self.dump_p2p = dump_p2p
+        self.top_k = top_k
+        self.attn_clustering = attn_clustering
 
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load base model
@@ -258,7 +260,14 @@ class Specter2Predictor(Predictor):
                     train_paper_idx.append(paper_id2train_idx[paper_id])
             train_paper_aff_j = p2p_aff_norm[:, train_paper_idx]
 
-            if self.average_score:
+            if self.top_k is not None:
+                # Average the top k scores
+                # If top k is <= 0, then use all scores
+                if self.top_k <= 0:
+                    all_paper_aff = train_paper_aff_j.mean(dim=1)
+                else:
+                    all_paper_aff = torch.topk(train_paper_aff_j, self.top_k, dim=1).values.mean(dim=1)
+            elif self.average_score:
                 all_paper_aff = train_paper_aff_j.mean(dim=1)
             elif self.max_score:
                 all_paper_aff = train_paper_aff_j.max(dim=1)[0]
