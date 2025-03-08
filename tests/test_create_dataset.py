@@ -15,7 +15,7 @@ def test_convert_to_list(client, openreview_client):
 def test_get_papers_from_group(client, openreview_client):
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
     all_papers = or_expertise.get_papers_from_group('DEF.cc/Reviewers')
-    assert len(all_papers) == 146
+    assert len(all_papers) == 45
     if os.path.isfile('publications_by_profile_id.json'):
         os.remove('publications_by_profile_id.json')
 
@@ -47,7 +47,7 @@ def test_get_publications(client, openreview_client):
     assert publications == []
 
     publications = or_expertise.get_publications('~Perry_Volkman1')
-    assert len(publications) == 3
+    assert len(publications) == 1
 
     minimum_pub_date = 1554819115
     config = {
@@ -57,7 +57,7 @@ def test_get_publications(client, openreview_client):
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     publications = or_expertise.get_publications('~Perry_Volkman1')
-    assert len(publications) == 2
+    assert len(publications) == 1
     for publication in publications:
         assert publication['cdate'] > minimum_pub_date
 
@@ -69,7 +69,7 @@ def test_get_publications(client, openreview_client):
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     publications = or_expertise.get_publications('~Perry_Volkman1')
-    assert len(publications) == 2
+    assert len(publications) == 1
     for publication in publications:
         assert publication['cdate'] > minimum_pub_date
 
@@ -96,7 +96,7 @@ def test_get_publications(client, openreview_client):
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     publications = or_expertise.get_publications('~Perry_Volkman1')
-    assert len(publications) == 2
+    assert len(publications) == 1
     for publication in publications:
         assert publication['cdate'] > minimum_pub_date
 
@@ -111,7 +111,7 @@ def test_get_publications(client, openreview_client):
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     publications = or_expertise.get_publications('~Perry_Volkman1')
-    assert len(publications) == 2
+    assert len(publications) == 1
     for publication in publications:
         assert publication['cdate'] > minimum_pub_date
 
@@ -161,12 +161,10 @@ def test_retrieve_expertise(get_paperhash, client, openreview_client):
     profiles = data['profiles']
     for profile in profiles:
         if len(profile['publications']) > 0:
-            if profile['id'] == '~Perry_Volkman1':
-                assert len(expertise[profile['id']]) < len(profile['publications'])
-            elif profile['id'] in exclude_ids:
+            if profile['id'] in exclude_ids:
                 assert len(expertise[profile['id']]) == 0
             else:
-                assert len(expertise[profile['id']]) == len(profile['publications'])
+                assert len(expertise[profile['id']]) < len(profile['publications'])
 
 def test_get_submissions_from_invitation(client, openreview_client):
     config = {
@@ -204,7 +202,7 @@ def test_deduplication(client, openreview_client, helpers):
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
 
     publications = or_expertise.get_publications('~Harold_Rice1')
-    assert len(publications) == 3
+    assert len(publications) == 1
 
     note = openreview.Note(
         invitation = 'openreview.net/-/paper',
@@ -218,7 +216,7 @@ def test_deduplication(client, openreview_client, helpers):
     note = test_user_client.post_note(note)
 
     publications = or_expertise.get_publications('~Harold_Rice1')
-    assert len(publications) == 3
+    assert len(publications) == 1
 
 def test_expertise_selection(client, openreview_client, helpers):
     config = {
@@ -231,31 +229,32 @@ def test_expertise_selection(client, openreview_client, helpers):
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
 
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~Harold_Rice1']) == 3
+    assert len(expertise['~Harold_Rice1']) == 1
 
-    note = openreview.Note(
-        invitation = 'openreview.net/-/paper',
-        readers = ['everyone'],
-        writers = ['~SomeTest_User1'],
-        signatures = ['~SomeTest_User1'],
+    note = openreview.api.Note(
         content = {
-            "title": "test_exclude",
-            "abstract": original_note.content['abstract'],
-            "authorids": original_note.content['authorids']
+            "title": { 'value': "test_exclude_def" },
+            "abstract": { 'value': original_note.content['abstract'] },
+            "authors": { 'value': original_note.content['authorids'] },
+            "authorids": { 'value': original_note.content['authorids'] },
         },
-        cdate = 1554819115
+        pdate = 1554819115,
+        license = 'CC BY-SA 4.0'
     )
 
-    test_user_client = openreview.Client(username='test@google.com', password=helpers.strong_password)
-    note = test_user_client.post_note(note)
+    note_edit = openreview_client.post_note_edit(
+        invitation='openreview.net/Archive/-/Direct_Upload',
+        signatures = ['~SomeTest_User1'],
+        note=note
+    )
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~Harold_Rice1']) == 4
+    assert len(expertise['~Harold_Rice1']) == 2 # New note added
     
     user_client = openreview.Client(username='strevino0@ox.ac.uk', password=helpers.strong_password)
     edge = openreview.Edge(
                         invitation='DEF.cc/-/Expertise_Selection',
-                        head=note.id,
+                        head=note_edit['note']['id'],
                         tail='~Harold_Rice1',
                         label='Exclude',
                         readers=['DEF.cc', '~Harold_Rice1'],
@@ -267,7 +266,7 @@ def test_expertise_selection(client, openreview_client, helpers):
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     or_expertise.excluded_ids_by_user = or_expertise.exclude()
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~Harold_Rice1']) == 3
+    assert len(expertise['~Harold_Rice1']) == 1
 
     # Test API2 expertise selection
 def test_expertise_selection_api2(client, openreview_client, helpers):
@@ -282,7 +281,7 @@ def test_expertise_selection_api2(client, openreview_client, helpers):
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
 
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~C.V._Lastname1']) == 1, expertise
+    assert len(expertise['~C.V._Lastname1']) == 0, expertise
 
     test_user_client = openreview.api.OpenReviewClient(username='test@google.com', password=helpers.strong_password)
     note_1 = test_user_client.post_note_edit(
@@ -303,7 +302,7 @@ def test_expertise_selection_api2(client, openreview_client, helpers):
 
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~C.V._Lastname1']) == 2
+    assert len(expertise['~C.V._Lastname1']) == 0
     
     user_client = openreview.api.OpenReviewClient(username='testdots@google.com', password=helpers.strong_password)
     user_client.post_edge(
@@ -319,7 +318,7 @@ def test_expertise_selection_api2(client, openreview_client, helpers):
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     or_expertise.excluded_ids_by_user = or_expertise.exclude()
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~C.V._Lastname1']) == 1
+    assert len(expertise['~C.V._Lastname1']) == 0
 
 
 def test_expertise_inclusion(client, openreview_client, helpers):
@@ -333,44 +332,47 @@ def test_expertise_inclusion(client, openreview_client, helpers):
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
 
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~Harold_Rice1']) == 4
+    assert len(expertise['~Harold_Rice1']) == 2 # No edges use all publications
 
-    note = openreview.Note(
-        invitation = 'openreview.net/-/paper',
-        readers = ['everyone'],
-        writers = ['~SomeTest_User1'],
-        signatures = ['~SomeTest_User1'],
+    note = openreview.api.Note(
         content = {
-            "title": "test_include",
-            "abstract": original_note.content['abstract'],
-            "authorids": original_note.content['authorids']
+            "title": { 'value': "test_include_abchij" },
+            "abstract": { 'value': original_note.content['abstract'] },
+            "authors": { 'value': original_note.content['authorids'] },
+            "authorids": { 'value': original_note.content['authorids'] },
         },
-        cdate = 1554819115
+        pdate = 1554819115,
+        license = 'CC BY-SA 4.0'
     )
-    exclude_note = openreview.Note(
-        invitation = 'openreview.net/-/paper',
-        readers = ['everyone'],
-        writers = ['~SomeTest_User1'],
-        signatures = ['~SomeTest_User1'],
+    exclude_note = openreview.api.Note(
         content = {
-            "title": "test_include",
-            "abstract": original_note.content['abstract'],
-            "authorids": original_note.content['authorids']
+            "title": { 'value': "test_exclude_abchij" },
+            "abstract": { 'value': original_note.content['abstract'] },
+            "authors": { 'value': original_note.content['authorids'] },
+            "authorids": { 'value': original_note.content['authorids'] },
         },
-        cdate = 1554819115
+        pdate = 1554819115,
+        license = 'CC BY-SA 4.0'
     )
 
-    test_user_client = openreview.Client(username='test@google.com', password=helpers.strong_password)
-    note = test_user_client.post_note(note)
-    exclude_note = test_user_client.post_note(exclude_note)
+    note_edit = openreview_client.post_note_edit(
+        invitation='openreview.net/Archive/-/Direct_Upload',
+        signatures = ['~SomeTest_User1'],
+        note=note
+    )
+    exclude_note_edit = openreview_client.post_note_edit(
+        invitation='openreview.net/Archive/-/Direct_Upload',
+        signatures = ['~SomeTest_User1'],
+        note=exclude_note
+    )
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
-    assert len(expertise['~Harold_Rice1']) == 6
+    assert len(expertise['~Harold_Rice1']) == 4 # New notes added
     
     # Post this edge to both ABC and HIJ, ABC will be deleted, HIJ will be used for the API tests
     edge = openreview.Edge(
                         invitation='HIJ.cc/-/Expertise_Selection',
-                        head=note.id,
+                        head=note_edit['note']['id'],
                         tail='~Harold_Rice1',
                         label='Include',
                         readers=['HIJ.cc', '~Harold_Rice1'],
@@ -381,7 +383,7 @@ def test_expertise_inclusion(client, openreview_client, helpers):
 
     edge = openreview.Edge(
         invitation='ABC.cc/-/Expertise_Selection',
-        head=note.id,
+        head=note_edit['note']['id'],
         tail='~Harold_Rice1',
         label='Include',
         readers=['ABC.cc', '~Harold_Rice1'],
@@ -426,7 +428,7 @@ def test_expertise_inclusion(client, openreview_client, helpers):
     client.post_invitation(inv)
     edge = openreview.Edge(
                         invitation='ABC.cc/-/Expertise_Selection',
-                        head=exclude_note.id,
+                        head=exclude_note_edit['note']['id'],
                         tail='~Harold_Rice1',
                         label='Exclude',
                         readers=['ABC.cc', '~Harold_Rice1'],

@@ -35,8 +35,8 @@ class TestJournal():
         journal=Journal(openreview_client, venue_id, '1234', contact_info='tmlr@jmlr.org', full_name='Transactions on Machine Learning Research', short_name='TMLR', submission_name='Submission')
         journal.setup(support_role='fabian@mail.com', editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
 
-        openreview_client.add_members_to_group('TMLR/Action_Editors', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
-        openreview_client.add_members_to_group('TMLR/Reviewers', ['~Raia_Hadsell1', '~Kyunghyun_Cho1'])
+        openreview_client.add_members_to_group('TMLR/Action_Editors', ['~Raia_Hadsell1', '~Kyunghyun_Cho1', '~Margherita_Hilpert1'])
+        openreview_client.add_members_to_group('TMLR/Reviewers', ['~Raia_Hadsell1', '~Kyunghyun_Cho1', '~Margherita_Hilpert1'])
     
     def test_post_submissions(self, client, openreview_client, helpers, test_client):
         # Post submission with a test author id
@@ -88,7 +88,7 @@ class TestJournal():
                         existing_titles = [pub.content.get('title') for pub in existing_pubs]
 
                         if content.get('title') not in existing_titles:
-                            publication_note = openreview_client.post_note_edit(
+                            submission_note = openreview_client.post_note_edit(
                                 invitation = 'TMLR/-/Submission',
                                 signatures = ['~Super_User1'],
                                 note = Note(
@@ -103,6 +103,19 @@ class TestJournal():
                                         'competing_interests': { 'value': 'None beyond the authors normal conflict of interests'},
                                         'human_subjects_reporting': { 'value': 'Not applicable'}
                                     }
+                                ))
+                            publication_note = openreview_client.post_note_edit(
+                                invitation = 'openreview.net/Archive/-/Direct_Upload',
+                                signatures = [authorid],
+                                note = Note(
+                                    pdate = cdate,
+                                    content = {
+                                        'title': { 'value': content.get('title').get('value') },
+                                        'abstract': { 'value': content.get('abstract').get('value') },
+                                        'authors': { 'value': [name]},
+                                        'authorids': { 'value': [authorid]},
+                                    },
+                                    license = 'CC BY-SA 4.0'
                                 ))
             
         with open('tests/data/fakeData.json') as json_file:
