@@ -1430,6 +1430,11 @@ class TestExpertiseService():
             assert match_id.startswith('~')
             assert submitter_id.startswith('~')
             assert score >= 0 and score <= 1
+
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
+        # Check that all results are sorted in desc cdate
+        for i in range(len(response) - 1):
+            assert response[i]['cdate'] >= response[i + 1]['cdate']
         
         # Clean up journal request
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
