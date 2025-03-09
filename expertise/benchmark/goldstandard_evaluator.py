@@ -438,7 +438,9 @@ class OpenReviewModelEvaluator(AffinityModelEvaluator):
                 "use_cuda": use_cuda,
                 "publications_path": str(self.predictions_dir),
                 "submissions_path": str(self.predictions_dir),
-                "scores_path": str(self.predictions_dir)
+                "scores_path": str(self.predictions_dir),
+                "attn_clustering": False,
+                "top_k": 1
             }
         else:
             raise ValueError(f"Unsupported model type: {self.model_type}")

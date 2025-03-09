@@ -14,6 +14,7 @@ import numpy as np
 from transformers import AutoTokenizer, AutoModel
 from adapters import AutoAdapterModel
 from .predictor import Predictor
+from .attention_clustering import SelfAttentionClusteringPredictor
 
 from expertise.service.server import redis_embeddings_pool
 
@@ -231,6 +232,45 @@ class Specter2Predictor(Predictor):
             paper_num_test = len(test_id_list)
 
         print('Computing all scores...')
+        csv_scores = []
+        self.preliminary_scores = []
+
+        if self.attn_clustering:
+            print('Computing clustered reviewer embeddings...')
+            # Use attention clustering
+            attn_module = SelfAttentionClusteringPredictor(
+                top_k=self.top_k,
+                batch_size=self.batch_size,
+                device=self.cuda_device
+            )
+            reviewer_embeddings = attn_module.compute_embeddings(
+                paper_emb_train,
+                self.pub_author_ids_to_note_id,
+                paper_id2train_idx
+            )
+            # Stack reviewer embeddings and map reviewer_id to reviewer_embedding index
+            reviewer_embeddings_matrix = torch.stack(list(reviewer_embeddings.values()))
+            reviewer_id_to_embedding_idx = {reviewer_id: i for i, reviewer_id in enumerate(reviewer_embeddings.keys())}
+
+            # Compute scores between submissions and reviewer embeddings with mm
+            reviewer_sub_scores_matrix = torch.mm(reviewer_embeddings_matrix, paper_emb_test.t())
+            # Extract scores for each reviewer
+            reviewer_sub_scores = {}
+            for reviewer_id, reviewer_embedding_idx in reviewer_id_to_embedding_idx.items():
+                reviewer_sub_scores[reviewer_id] = {}
+                for i in range(paper_num_test):
+                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[i], reviewer=reviewer_id,
+                                                                score=reviewer_sub_scores_matrix[reviewer_embedding_idx, i])
+                    csv_scores.append(csv_line)
+                    self.preliminary_scores.append((test_id_list[i], reviewer_id, reviewer_sub_scores_matrix[reviewer_embedding_idx, i]))
+
+            if scores_path:
+                with open(scores_path, 'w') as f:
+                    for csv_line in csv_scores:
+                        f.write(csv_line + '\n')
+
+            return self.preliminary_scores
+        
         p2p_aff = torch.empty((paper_num_test, paper_num_train), device=torch.device('cpu'))
         for i in range(paper_num_test):
             p2p_aff[i, :] = torch.sum(paper_emb_test[i, :].unsqueeze(dim=0) * paper_emb_train, dim=1)
@@ -249,8 +289,6 @@ class Specter2Predictor(Predictor):
         max_val = p2p_aff.max()
         p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
 
-        csv_scores = []
-        self.preliminary_scores = []
         for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
             if len(train_note_id_list) == 0:
                 continue
