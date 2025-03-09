@@ -332,7 +332,7 @@ class SelfAttentionClusteringPredictor:
                 # Compute final scores using the filtered weights
                 # Shape: (batch_size, sub_batch_size, max_pubs) * (batch_size, sub_batch_size, max_pubs)
                 # -> Sum over max_pubs dimension to get (batch_size, sub_batch_size)
-                weighted_scores = (cross_scores_transposed * filtered_weights).sum(dim=2)
+                weighted_scores = (cross_scores_transposed * filtered_weights).mean(dim=2)
                 
                 # Store in the scores matrix
                 # Shape: (batch_size, sub_batch_size)
