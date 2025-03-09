@@ -248,6 +248,10 @@ class SciNCLPredictor(Predictor):
             reviewer_embeddings_matrix = torch.stack(list(reviewer_embeddings.values()))
             reviewer_id_to_embedding_idx = {reviewer_id: i for i, reviewer_id in enumerate(reviewer_embeddings.keys())}
 
+            # Make sure reviewer_embeddings_matrix is on the same device as paper_emb_test
+            reviewer_embeddings_matrix = reviewer_embeddings_matrix.to(self.cuda_device)
+            paper_emb_test = paper_emb_test.to(self.cuda_device)
+
             # Compute scores between submissions and reviewer embeddings with mm
             reviewer_sub_scores_matrix = torch.mm(reviewer_embeddings_matrix, paper_emb_test.t())
             # Extract scores for each reviewer
