@@ -77,9 +77,95 @@ class SelfAttentionClusteringPredictor:
         
         return reviewer_embedding
     
+    def _compute_reviewer_embeddings_batch(self, publication_embeddings_batch, attention_mask):
+        """
+        Compute reviewer embeddings for a batch of reviewers using vectorized self-attention.
+        
+        Args:
+            publication_embeddings_batch: Tensor of shape (batch_size, max_pubs, embedding_dim)
+                                         containing padded embeddings for all reviewers
+            attention_mask: Tensor of shape (batch_size, max_pubs) with 1s for real publications
+                          and 0s for padding
+        
+        Returns:
+            Tensor of shape (batch_size, embedding_dim) containing reviewer embeddings
+        """
+        batch_size, max_pubs, embedding_dim = publication_embeddings_batch.shape
+        
+        # Handle single-publication case
+        if max_pubs == 1:
+            return publication_embeddings_batch.squeeze(1)
+        
+        # Normalize embeddings for cosine similarity
+        normalized_embeddings = F.normalize(publication_embeddings_batch, p=2, dim=2)
+        
+        # Compute attention scores (shape: batch_size, max_pubs, max_pubs)
+        # bmm performs batch matrix multiplication
+        attention_scores = torch.bmm(normalized_embeddings, normalized_embeddings.transpose(1, 2))
+        
+        # Apply mask to attention scores to ignore padding
+        # Create a 2D mask for each reviewer (expanded for broadcasting)
+        mask_2d = attention_mask.unsqueeze(2) * attention_mask.unsqueeze(1)
+        
+        # Apply the mask to zero out attention scores for padding
+        attention_scores = attention_scores * mask_2d
+        
+        # Sum attention scores across rows to get weights (shape: batch_size, max_pubs)
+        attention_weights = attention_scores.sum(dim=2)
+        
+        # Replace NaN/Inf values that might occur with zeros 
+        attention_weights = torch.where(
+            torch.isfinite(attention_weights),
+            attention_weights,
+            torch.zeros_like(attention_weights)
+        )
+        
+        # Apply mask again to ensure only real publications have weights
+        attention_weights = attention_weights * attention_mask
+        
+        # Handle zero weights (if any) by replacing with uniform distribution over real publications
+        zero_weight_rows = (attention_weights.sum(dim=1) == 0)
+        if zero_weight_rows.any():
+            # For rows with zero weights, set uniform weights for real publications
+            uniform_weights = attention_mask.float() / (attention_mask.sum(dim=1, keepdim=True) + 1e-10)
+            attention_weights = torch.where(
+                zero_weight_rows.unsqueeze(1).expand_as(attention_weights),
+                uniform_weights,
+                attention_weights
+            )
+        
+        # Apply softmax to get final weights (with masking to ignore padding)
+        # First add a large negative value to padded positions
+        attention_weights = attention_weights.masked_fill(attention_mask == 0, -1e9)
+        attention_weights = F.softmax(attention_weights, dim=1)
+        
+        # Apply top-k if specified
+        if self.top_k is not None and self.top_k > 0:
+            # Get top-k values and indices
+            top_k = min(self.top_k, max_pubs)
+            _, top_indices = torch.topk(attention_weights, top_k, dim=1)
+            
+            # Create a mask for top-k weights
+            top_k_mask = torch.zeros_like(attention_weights)
+            
+            # Use scatter to set top-k positions to 1
+            batch_indices = torch.arange(batch_size).unsqueeze(1).expand(-1, top_k).to(self.device)
+            top_k_mask[batch_indices, top_indices] = 1.0
+            
+            # Apply mask and renormalize
+            attention_weights = attention_weights * top_k_mask
+            # Handle potential division by zero
+            sum_weights = attention_weights.sum(dim=1, keepdim=True)
+            attention_weights = attention_weights / (sum_weights + (sum_weights == 0).float())
+        
+        # Compute weighted sum of publication embeddings (shape: batch_size, embedding_dim)
+        reviewer_embeddings = torch.bmm(attention_weights.unsqueeze(1), publication_embeddings_batch).squeeze(1)
+        
+        return reviewer_embeddings
+    
     def compute_embeddings(self, publication_embeddings_matrix, reviewer_to_pub_ids, pub_id_to_index):
         """
-        Compute embeddings for multiple reviewers using self-attention clustering.
+        Compute embeddings for multiple reviewers using vectorized self-attention clustering.
         
         Args:
             publication_embeddings_matrix: Matrix of shape (n_total_publications, embedding_dim)
@@ -95,9 +181,17 @@ class SelfAttentionClusteringPredictor:
         
         # Process reviewers in batches to avoid memory issues
         reviewer_ids = list(reviewer_to_pub_ids.keys())
+        embedding_dim = publication_embeddings_matrix.shape[1]
         
-        for batch_start in tqdm(range(0, len(reviewer_ids), self.batch_size), desc="Computing reviewer embeddings", total=int(len(reviewer_ids)/self.batch_size), unit="batches"):
+        for batch_start in tqdm(range(0, len(reviewer_ids), self.batch_size), 
+                               desc="Computing reviewer embeddings", 
+                               total=(len(reviewer_ids) + self.batch_size - 1) // self.batch_size,
+                               unit="batches"):
             batch_reviewer_ids = reviewer_ids[batch_start:batch_start + self.batch_size]
+            
+            # Collect valid reviewers and their publication indices
+            valid_reviewers = []
+            publication_indices_list = []
             
             for reviewer_id in batch_reviewer_ids:
                 # Get publication IDs for this reviewer
@@ -118,14 +212,33 @@ class SelfAttentionClusteringPredictor:
                 if not indices:
                     continue
                 
-                # Extract embeddings for this reviewer's publications
-                reviewer_pub_embeddings = publication_embeddings_matrix[indices]
-                
-                # Compute reviewer embedding using self-attention
-                reviewer_embedding = self._compute_reviewer_embedding(reviewer_pub_embeddings)
-                
-                # Store the computed embedding
-                reviewer_embeddings[reviewer_id] = reviewer_embedding
+                valid_reviewers.append(reviewer_id)
+                publication_indices_list.append(indices)
+            
+            # Skip if no valid reviewers in this batch
+            if not valid_reviewers:
+                continue
+            
+            # Find maximum number of publications for padding
+            max_pubs = max(len(indices) for indices in publication_indices_list)
+            
+            # Create padded embeddings and attention mask
+            batch_size = len(valid_reviewers)
+            padded_embeddings = torch.zeros((batch_size, max_pubs, embedding_dim), device=self.device)
+            attention_mask = torch.zeros((batch_size, max_pubs), device=self.device)
+            
+            # Fill in the embeddings and mask
+            for i, indices in enumerate(publication_indices_list):
+                n_pubs = len(indices)
+                padded_embeddings[i, :n_pubs] = publication_embeddings_matrix[indices]
+                attention_mask[i, :n_pubs] = 1.0
+            
+            # Compute embeddings for the batch
+            batch_embeddings = self._compute_reviewer_embeddings_batch(padded_embeddings, attention_mask)
+            
+            # Store the computed embeddings
+            for i, reviewer_id in enumerate(valid_reviewers):
+                reviewer_embeddings[reviewer_id] = batch_embeddings[i].cpu()
         
         return reviewer_embeddings
     
