@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 
+from tqdm import tqdm
 class SelfAttentionClusteringPredictor:
     """
     A predictor that uses self-attention mechanisms to compute reviewer embeddings.
@@ -90,12 +91,12 @@ class SelfAttentionClusteringPredictor:
             Dictionary mapping reviewer IDs to their computed embeddings
         """
         reviewer_embeddings = {}
-        publication_embeddings_matrix = torch.tensor(publication_embeddings_matrix, device=self.device)
+        publication_embeddings_matrix = publication_embeddings_matrix.to(self.device)
         
         # Process reviewers in batches to avoid memory issues
         reviewer_ids = list(reviewer_to_pub_ids.keys())
         
-        for batch_start in range(0, len(reviewer_ids), self.batch_size):
+        for batch_start in tqdm(range(0, len(reviewer_ids), self.batch_size), desc="Computing reviewer embeddings", total=int(len(reviewer_ids)/self.batch_size), unit="batches"):
             batch_reviewer_ids = reviewer_ids[batch_start:batch_start + self.batch_size]
             
             for reviewer_id in batch_reviewer_ids:
