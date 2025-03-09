@@ -42,7 +42,7 @@ silent
 """
 class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, dump_p2p=False, top_k=None, attn_clustering=False):
+                 sparse_value=None, use_redis=False, dump_p2p=False, top_k=None, attn_clustering=False, cross_attention=False):
         self.model_name = 'specter2'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -66,6 +66,7 @@ class Specter2Predictor(Predictor):
         self.dump_p2p = dump_p2p
         self.top_k = top_k
         self.attn_clustering = attn_clustering
+        self.cross_attention = cross_attention
 
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load base model
@@ -241,32 +242,45 @@ class Specter2Predictor(Predictor):
             attn_module = SelfAttentionClusteringPredictor(
                 top_k=self.top_k,
                 batch_size=self.batch_size,
-                device=self.cuda_device
+                device=self.cuda_device,
+                cross_attention=self.cross_attention
             )
-            reviewer_embeddings = attn_module.compute_embeddings(
+            attn_ret_val = attn_module.compute_embeddings(
                 paper_emb_train,
                 self.pub_author_ids_to_note_id,
-                paper_id2train_idx
+                paper_id2train_idx,
+                submission_embeddings_matrix = paper_emb_test if self.cross_attention else None,
+                submission_ids = test_id_list if self.cross_attention else None
             )
-            # Stack reviewer embeddings and map reviewer_id to reviewer_embedding index
-            reviewer_embeddings_matrix = torch.stack(list(reviewer_embeddings.values()))
-            reviewer_id_to_embedding_idx = {reviewer_id: i for i, reviewer_id in enumerate(reviewer_embeddings.keys())}
+            if self.cross_attention:
+                reviewer_submission_scores = attn_ret_val
+                for reviewer_id, reviewer_scores in reviewer_submission_scores.items():
+                    for submission_id, score in reviewer_scores.items():
+                        csv_line = '{note_id},{reviewer},{score}'.format(note_id=submission_id, reviewer=reviewer_id,
+                                                                    score=score)
+                        csv_scores.append(csv_line)
+                        self.preliminary_scores.append((submission_id, reviewer_id, score))
+            else:
+                reviewer_embeddings = attn_ret_val
+                # Stack reviewer embeddings and map reviewer_id to reviewer_embedding index
+                reviewer_embeddings_matrix = torch.stack(list(reviewer_embeddings.values()))
+                reviewer_id_to_embedding_idx = {reviewer_id: i for i, reviewer_id in enumerate(reviewer_embeddings.keys())}
 
-            # Make sure reviewer_embeddings_matrix is on the same device as paper_emb_test
-            reviewer_embeddings_matrix = reviewer_embeddings_matrix.to(self.cuda_device)
-            paper_emb_test = paper_emb_test.to(self.cuda_device)
+                # Make sure reviewer_embeddings_matrix is on the same device as paper_emb_test
+                reviewer_embeddings_matrix = reviewer_embeddings_matrix.to(self.cuda_device)
+                paper_emb_test = paper_emb_test.to(self.cuda_device)
 
-            # Compute scores between submissions and reviewer embeddings with mm
-            reviewer_sub_scores_matrix = torch.mm(reviewer_embeddings_matrix, paper_emb_test.t())
-            # Extract scores for each reviewer
-            reviewer_sub_scores = {}
-            for reviewer_id, reviewer_embedding_idx in reviewer_id_to_embedding_idx.items():
-                reviewer_sub_scores[reviewer_id] = {}
-                for i in range(paper_num_test):
-                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[i], reviewer=reviewer_id,
-                                                                score=reviewer_sub_scores_matrix[reviewer_embedding_idx, i])
-                    csv_scores.append(csv_line)
-                    self.preliminary_scores.append((test_id_list[i], reviewer_id, reviewer_sub_scores_matrix[reviewer_embedding_idx, i]))
+                # Compute scores between submissions and reviewer embeddings with mm
+                reviewer_sub_scores_matrix = torch.mm(reviewer_embeddings_matrix, paper_emb_test.t())
+                # Extract scores for each reviewer
+                reviewer_sub_scores = {}
+                for reviewer_id, reviewer_embedding_idx in reviewer_id_to_embedding_idx.items():
+                    reviewer_sub_scores[reviewer_id] = {}
+                    for i in range(paper_num_test):
+                        csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[i], reviewer=reviewer_id,
+                                                                    score=reviewer_sub_scores_matrix[reviewer_embedding_idx, i])
+                        csv_scores.append(csv_line)
+                        self.preliminary_scores.append((test_id_list[i], reviewer_id, reviewer_sub_scores_matrix[reviewer_embedding_idx, i]))
 
             if scores_path:
                 with open(scores_path, 'w') as f:
