@@ -84,15 +84,16 @@ class SelfAttentionClusteringPredictor:
         Helper function to apply top-k filtering and normalize weights.
         
         Args:
-            attention_weights: Tensor of attention weights
-            mask: Optional binary mask (1 for real values, 0 for padding)
+            attention_weights: Tensor of shape (batch_size, seq_len)
+            mask: Optional binary mask of shape (batch_size, seq_len) with 1s for real values, 0s for padding
             k: Number of top weights to keep (uses self.top_k if None)
         
         Returns:
-            Filtered and normalized attention weights
+            Filtered and normalized attention weights of shape (batch_size, seq_len)
         """
         if mask is not None:
             # Apply mask to zero out padding
+            # Shape: (batch_size, seq_len)
             attention_weights = attention_weights * mask
         
         # Get top-k value (default to self.top_k)
@@ -100,45 +101,62 @@ class SelfAttentionClusteringPredictor:
         
         # Apply top-k if specified
         if top_k is not None and top_k > 0:
+            batch_size, seq_len = attention_weights.shape
+            
+            # Vectorized approach for top-k selection
             if mask is not None:
-                # Ensure we don't select more elements than exist in each row
-                effective_k = torch.min(
-                    torch.tensor(top_k, device=self.device),
-                    mask.sum(dim=-1, keepdim=True).to(torch.int32)
-                )
-                # For each row, we need the correct k value
-                k_values = effective_k.squeeze(-1)
+                # Compute effective k for each row based on available valid elements
+                # Shape: (batch_size, 1)
+                valid_counts = mask.sum(dim=1, keepdim=True).to(torch.int32)
+                # Ensure k doesn't exceed valid count for each row
+                # Shape: (batch_size, 1)
+                effective_k = torch.min(torch.tensor(top_k, device=self.device).expand_as(valid_counts), valid_counts)
                 
-                # Apply top-k with different k for each row
-                batch_size = attention_weights.shape[0]
-                row_indices = torch.arange(batch_size, device=self.device)
+                # Create a large negative value mask for padding
+                # Shape: (batch_size, seq_len)
+                neg_inf_mask = (mask == 0) * -1e9
                 
-                # Initialize mask for top-k weights
+                # Apply the negative mask to attention weights
+                # Shape: (batch_size, seq_len)
+                masked_weights = attention_weights + neg_inf_mask
+                
+                # Get top-k values and indices - will correctly ignore padded positions
+                # due to large negative values
+                # Shape: values and indices both (batch_size, top_k)
+                top_values, top_indices = torch.topk(masked_weights, min(top_k, seq_len), dim=1)
+                
+                # Create new mask for top-k weights
+                # Initialize with zeros: Shape (batch_size, seq_len)
                 top_k_mask = torch.zeros_like(attention_weights)
                 
-                # Apply top-k for each row
-                for i in range(batch_size):
-                    if k_values[i] > 0:
-                        _, top_indices = torch.topk(attention_weights[i], k_values[i])
-                        top_k_mask[i].scatter_(0, top_indices, 1.0)
+                # Use scatter to set top-k positions to 1
+                # - batch_indices: Shape (batch_size, top_k) containing row indices
+                # - top_indices: Shape (batch_size, top_k) containing column indices where values should be 1
+                batch_indices = torch.arange(batch_size, device=self.device).unsqueeze(1).expand(-1, top_indices.size(1))
+                top_k_mask[batch_indices, top_indices] = 1.0
             else:
                 # Simple case - same k for all rows
-                _, top_indices = torch.topk(attention_weights, min(top_k, attention_weights.shape[-1]), dim=-1)
+                # Shape: values and indices both (batch_size, top_k)
+                _, top_indices = torch.topk(attention_weights, min(top_k, seq_len), dim=1)
                 
                 # Create mask for top-k weights
-                batch_indices = torch.arange(attention_weights.shape[0], device=self.device)
-                batch_indices = batch_indices.unsqueeze(-1).expand(-1, top_indices.shape[-1])
-                
+                # Shape: (batch_size, seq_len)
                 top_k_mask = torch.zeros_like(attention_weights)
-                top_k_mask.scatter_(-1, top_indices, 1.0)
+                
+                # Use scatter to set top-k positions to 1
+                batch_indices = torch.arange(batch_size, device=self.device).unsqueeze(1).expand(-1, top_indices.size(1))
+                top_k_mask[batch_indices, top_indices] = 1.0
             
             # Apply mask to keep only top-k weights
+            # Shape: (batch_size, seq_len)
             attention_weights = attention_weights * top_k_mask
         
-        # Normalize to sum to 1
-        sum_weights = attention_weights.sum(dim=-1, keepdim=True)
-        # Handle potential division by zero
-        normalized_weights = attention_weights / (sum_weights + (sum_weights == 0).float())
+        # Normalize to sum to 1 along dim=1
+        # Shape: (batch_size, 1)
+        sum_weights = attention_weights.sum(dim=1, keepdim=True)
+        # Handle potential division by zero by adding small epsilon where sum is zero
+        # Shape: (batch_size, seq_len)
+        normalized_weights = attention_weights / (sum_weights + (sum_weights == 0).float() * 1e-10)
         
         return normalized_weights
     
@@ -166,34 +184,47 @@ class SelfAttentionClusteringPredictor:
         # Handle single-publication case
         if max_pubs == 1:
             # For single publication reviewers, the embedding is just the publication
+            # Shape: (batch_size, embedding_dim)
             reviewer_embeddings = publication_embeddings_batch.squeeze(1)
             
             # If cross_attention, compute scores directly
             if self.cross_attention and submission_embeddings is not None:
+                # Normalize embeddings for cosine similarity
+                # Shape: (batch_size, embedding_dim)
                 normalized_reviewer_embs = F.normalize(reviewer_embeddings, p=2, dim=1)
+                # Shape: (n_submissions, embedding_dim)
                 normalized_submissions = F.normalize(submission_embeddings, p=2, dim=1)
+                
+                # Compute cosine similarity
+                # Shape: (batch_size, n_submissions)
                 scores = torch.mm(normalized_reviewer_embs, normalized_submissions.t())
                 return scores
             
             return reviewer_embeddings
         
         # Normalize reviewer publication embeddings for cosine similarity
+        # Shape: (batch_size, max_pubs, embedding_dim)
         normalized_pub_embeddings = F.normalize(publication_embeddings_batch, p=2, dim=2)
         
         # COMPUTE SELF-ATTENTION SCORES FOR ALL REVIEWERS
         # This is used in both branches
         
-        # Compute attention scores (shape: batch_size, max_pubs, max_pubs)
+        # Compute attention scores using batch matrix multiplication
+        # Shape: (batch_size, max_pubs, max_pubs)
         self_attention_scores = torch.bmm(normalized_pub_embeddings, normalized_pub_embeddings.transpose(1, 2))
         
         # Apply mask to attention scores to ignore padding
+        # Create a 2D mask for each reviewer by broadcasting
+        # Shape: (batch_size, max_pubs, max_pubs)
         mask_2d = attention_mask.unsqueeze(2) * attention_mask.unsqueeze(1)
         self_attention_scores = self_attention_scores * mask_2d
         
-        # Sum attention scores across rows to get weights (shape: batch_size, max_pubs)
+        # Sum attention scores across rows to get weights
+        # Shape: (batch_size, max_pubs)
         self_attention_weights = self_attention_scores.sum(dim=2)
         
         # Replace NaN/Inf values with zeros
+        # Shape: (batch_size, max_pubs)
         self_attention_weights = torch.where(
             torch.isfinite(self_attention_weights),
             self_attention_weights,
@@ -201,14 +232,22 @@ class SelfAttentionClusteringPredictor:
         )
         
         # Apply mask again to zero out padding
+        # Shape: (batch_size, max_pubs)
         self_attention_weights = self_attention_weights * attention_mask
         
         # Handle zero weights with uniform distribution
-        zero_weight_rows = (self_attention_weights.sum(dim=1) == 0)
+        # Shape: (batch_size, 1) - boolean tensor indicating which rows have all zeros
+        zero_weight_rows = (self_attention_weights.sum(dim=1, keepdim=True) == 0)
+        
         if zero_weight_rows.any():
+            # For rows with zero weights, set uniform weights for real publications
+            # Shape: (batch_size, max_pubs)
             uniform_weights = attention_mask.float() / (attention_mask.sum(dim=1, keepdim=True) + 1e-10)
+            
+            # Apply uniform weights where needed
+            # Shape: (batch_size, max_pubs)
             self_attention_weights = torch.where(
-                zero_weight_rows.unsqueeze(1).expand_as(self_attention_weights),
+                zero_weight_rows.expand_as(self_attention_weights),
                 uniform_weights,
                 self_attention_weights
             )
@@ -216,10 +255,12 @@ class SelfAttentionClusteringPredictor:
         # DIRECT REVIEWER-SUBMISSION SCORING WITH CROSS-ATTENTION
         if self.cross_attention and submission_embeddings is not None:
             # Normalize submission embeddings
+            # Shape: (n_submissions, embedding_dim)
             normalized_submissions = F.normalize(submission_embeddings, p=2, dim=1)
             n_submissions = submission_embeddings.shape[0]
             
-            # Initialize scores matrix (batch_size × n_submissions)
+            # Initialize scores matrix
+            # Shape: (batch_size, n_submissions)
             reviewer_submission_scores = torch.zeros((batch_size, n_submissions), device=self.device)
             
             # Process submissions in batches to manage memory
@@ -227,66 +268,94 @@ class SelfAttentionClusteringPredictor:
             
             for sub_batch_start in range(0, n_submissions, submission_batch_size):
                 sub_batch_end = min(sub_batch_start + submission_batch_size, n_submissions)
+                # Shape: (sub_batch_size, embedding_dim)
                 sub_batch_submissions = normalized_submissions[sub_batch_start:sub_batch_end]
                 sub_batch_size = sub_batch_submissions.shape[0]
                 
-                # Compute cosine similarity between each submission and each reviewer's publications
+                # VECTORIZED CROSS-ATTENTION COMPUTATION
+
+                # Compute cosine similarity between each reviewer's publications and each submission
                 # Shape: (batch_size, max_pubs, sub_batch_size)
                 cross_attention_scores = torch.bmm(
                     normalized_pub_embeddings, 
                     sub_batch_submissions.t().unsqueeze(0).expand(batch_size, -1, -1)
                 )
                 
-                # Iterate through each submission in the batch
-                for sub_idx in range(sub_batch_size):
-                    # Get cross-attention weights for current submission
-                    cross_weights = cross_attention_scores[:, :, sub_idx]  # (batch_size, max_pubs)
-                    
-                    # Apply mask to zero out padding
-                    cross_weights = cross_weights * attention_mask
-                    
-                    # PRODUCT OF EXPERTS - Combine self-attention and cross-attention
-                    # Multiply the weights element-wise
-                    combined_weights = self_attention_weights * cross_weights
-                    
-                    # Replace any NaN/Inf values
-                    combined_weights = torch.where(
-                        torch.isfinite(combined_weights),
-                        combined_weights,
-                        torch.zeros_like(combined_weights)
-                    )
-                    
-                    # Apply softmax to normalize the combined weights
-                    # First mask out padding by setting large negative value
-                    combined_weights = combined_weights.masked_fill(attention_mask == 0, -1e9)
-                    attention_weights = F.softmax(combined_weights, dim=1)
-                    
-                    # Apply top-k filtering if specified
-                    attention_weights = self._apply_top_k_and_normalize(
-                        attention_weights, mask=attention_mask
-                    )
-                    
-                    # Compute weighted score for current submission
-                    # Dot product between attention weights and publication-submission similarities
-                    weighted_score = (cross_weights * attention_weights).sum(dim=1)
-                    
-                    # Store in the scores matrix
-                    reviewer_submission_scores[:, sub_batch_start + sub_idx] = weighted_score
+                # Reshape for more efficient vectorized operations
+                # Transpose to get (batch_size, sub_batch_size, max_pubs)
+                cross_scores_transposed = cross_attention_scores.transpose(1, 2)
+                
+                # Expand self_attention_weights for broadcasting
+                # Shape: (batch_size, 1, max_pubs)
+                self_attn_expanded = self_attention_weights.unsqueeze(1)
+                
+                # Expand attention_mask for broadcasting
+                # Shape: (batch_size, 1, max_pubs)
+                mask_expanded = attention_mask.unsqueeze(1)
+                
+                # Apply mask to cross-attention scores
+                # Shape: (batch_size, sub_batch_size, max_pubs)
+                cross_scores_masked = cross_scores_transposed * mask_expanded
+                
+                # PRODUCT OF EXPERTS - Combine self-attention and cross-attention
+                # Multiply element-wise: (batch_size, sub_batch_size, max_pubs)
+                combined_weights = cross_scores_masked * self_attn_expanded
+                
+                # Replace NaN/Inf values
+                # Shape: (batch_size, sub_batch_size, max_pubs)
+                combined_weights = torch.where(
+                    torch.isfinite(combined_weights),
+                    combined_weights,
+                    torch.zeros_like(combined_weights)
+                )
+                
+                # Apply softmax along publication dimension
+                # First mask padding with large negative values
+                # Shape: (batch_size, sub_batch_size, max_pubs)
+                combined_weights = combined_weights.masked_fill(mask_expanded == 0, -1e9)
+                attention_weights = F.softmax(combined_weights, dim=2)
+                
+                # Apply top-k filtering to each (reviewer, submission) pair
+                # Reshape for top-k operation
+                # Shape: (batch_size * sub_batch_size, max_pubs)
+                flat_weights = attention_weights.reshape(-1, max_pubs)
+                flat_mask = attention_mask.unsqueeze(1).expand(-1, sub_batch_size, -1).reshape(-1, max_pubs)
+                
+                # Apply top-k filtering
+                # Shape: (batch_size * sub_batch_size, max_pubs)
+                filtered_weights = self._apply_top_k_and_normalize(flat_weights, flat_mask)
+                
+                # Reshape back
+                # Shape: (batch_size, sub_batch_size, max_pubs)
+                filtered_weights = filtered_weights.reshape(batch_size, sub_batch_size, max_pubs)
+                
+                # Compute final scores using the filtered weights
+                # Shape: (batch_size, sub_batch_size, max_pubs) * (batch_size, sub_batch_size, max_pubs)
+                # -> Sum over max_pubs dimension to get (batch_size, sub_batch_size)
+                weighted_scores = (cross_scores_transposed * filtered_weights).sum(dim=2)
+                
+                # Store in the scores matrix
+                # Shape: (batch_size, sub_batch_size)
+                reviewer_submission_scores[:, sub_batch_start:sub_batch_end] = weighted_scores
             
             return reviewer_submission_scores
         
         # STANDARD SELF-ATTENTION FOR REVIEWER EMBEDDINGS
         else:
             # Apply softmax to get normalized weights from self-attention
+            # Shape: (batch_size, max_pubs)
             self_attention_weights = self_attention_weights.masked_fill(attention_mask == 0, -1e9)
             attention_weights = F.softmax(self_attention_weights, dim=1)
             
             # Apply top-k filtering
+            # Shape: (batch_size, max_pubs)
             attention_weights = self._apply_top_k_and_normalize(
                 attention_weights, mask=attention_mask
             )
             
             # Compute weighted sum of publication embeddings
+            # Shape: (batch_size, 1, max_pubs) × (batch_size, max_pubs, embedding_dim)
+            # -> (batch_size, 1, embedding_dim) -> (batch_size, embedding_dim)
             reviewer_embeddings = torch.bmm(
                 attention_weights.unsqueeze(1), 
                 publication_embeddings_batch
@@ -326,52 +395,44 @@ class SelfAttentionClusteringPredictor:
         reviewer_ids = list(reviewer_to_pub_ids.keys())
         embedding_dim = publication_embeddings_matrix.shape[1]
         
-        for batch_start in tqdm(range(0, len(reviewer_ids), self.batch_size), 
-                               desc="Computing reviewer embeddings", 
-                               total=(len(reviewer_ids) + self.batch_size - 1) // self.batch_size,
-                               unit="batches"):
-            batch_reviewer_ids = reviewer_ids[batch_start:batch_start + self.batch_size]
-            
-            # Collect valid reviewers and their publication indices
-            valid_reviewers = []
-            publication_indices_list = []
-            
-            for reviewer_id in batch_reviewer_ids:
-                # Get publication IDs for this reviewer
-                pub_ids = reviewer_to_pub_ids[reviewer_id]
+        # Pre-filter valid reviewers and prepare data (this can't be easily vectorized)
+        valid_reviewers = []
+        publication_indices_list = []
+        
+        for reviewer_id in reviewer_ids:
+            pub_ids = reviewer_to_pub_ids[reviewer_id]
+            if not pub_ids:
+                continue
                 
-                # Skip reviewers with no publications
-                if not pub_ids:
-                    continue
-                
-                # Get indices of publications in the embedding matrix
-                try:
-                    indices = [pub_id_to_index[pub_id] for pub_id in pub_ids if pub_id in pub_id_to_index]
-                except KeyError as e:
-                    print(f"Warning: Publication ID {e} not found in pub_id_to_index mapping. Skipping.")
-                    continue
-                
-                # Skip reviewers with no valid publications
+            try:
+                indices = [pub_id_to_index[pub_id] for pub_id in pub_ids if pub_id in pub_id_to_index]
                 if not indices:
                     continue
-                
+                    
                 valid_reviewers.append(reviewer_id)
                 publication_indices_list.append(indices)
-            
-            # Skip if no valid reviewers in this batch
-            if not valid_reviewers:
-                continue
+            except KeyError as e:
+                print(f"Warning: Publication ID {e} not found in pub_id_to_index mapping. Skipping reviewer {reviewer_id}.")
+        
+        # Process in batches
+        for batch_start in tqdm(range(0, len(valid_reviewers), self.batch_size), 
+                               desc="Computing reviewer embeddings", 
+                               total=(len(valid_reviewers) + self.batch_size - 1) // self.batch_size,
+                               unit="batches"):
+            batch_end = min(batch_start + self.batch_size, len(valid_reviewers))
+            batch_reviewer_ids = valid_reviewers[batch_start:batch_end]
+            batch_publication_indices = publication_indices_list[batch_start:batch_end]
             
             # Find maximum number of publications for padding
-            max_pubs = max(len(indices) for indices in publication_indices_list)
+            max_pubs = max(len(indices) for indices in batch_publication_indices)
             
             # Create padded embeddings and attention mask
-            batch_size = len(valid_reviewers)
+            batch_size = len(batch_reviewer_ids)
             padded_embeddings = torch.zeros((batch_size, max_pubs, embedding_dim), device=self.device)
             attention_mask = torch.zeros((batch_size, max_pubs), device=self.device)
             
             # Fill in the embeddings and mask
-            for i, indices in enumerate(publication_indices_list):
+            for i, indices in enumerate(batch_publication_indices):
                 n_pubs = len(indices)
                 padded_embeddings[i, :n_pubs] = publication_embeddings_matrix[indices]
                 attention_mask[i, :n_pubs] = 1.0
@@ -383,17 +444,18 @@ class SelfAttentionClusteringPredictor:
                 submission_embeddings=submission_embeddings_matrix
             )
 
-            # Store embeddings or scores
-            if self.cross_attention:
-                # If cross attention, batch_ret_val is a subset of all scores -> copy into all_scores
-                for r_idx, reviewer_id in enumerate(valid_reviewers):
-                    all_scores[reviewer_id] = {}
-                    for s_idx, submission_id in enumerate(submission_ids):
-                        all_scores[reviewer_id][submission_id] = batch_ret_val[r_idx, s_idx]
+            # Store embeddings or scores efficiently
+            if self.cross_attention and submission_ids is not None:
+                # Vectorized storage of scores
+                for i, reviewer_id in enumerate(batch_reviewer_ids):
+                    all_scores[reviewer_id] = {
+                        sub_id: float(batch_ret_val[i, j].item())
+                        for j, sub_id in enumerate(submission_ids)
+                    }
             else:
-                # If self attention, batch_ret_val is reviewer embeddings -> copy into reviewer_embeddings
-                for i, reviewer_id in enumerate(valid_reviewers):
-                    reviewer_embeddings[reviewer_id] = batch_ret_val[i]
+                # Vectorized storage of embeddings
+                for i, reviewer_id in enumerate(batch_reviewer_ids):
+                    reviewer_embeddings[reviewer_id] = batch_ret_val[i].cpu()
         
         if self.cross_attention:
             return all_scores
@@ -416,48 +478,68 @@ class SelfAttentionClusteringPredictor:
         Returns:
             Dictionary mapping (reviewer_id, submission_id) pairs to affinity scores
         """
-        # First compute reviewer embeddings
-        reviewer_embeddings = self.compute_embeddings(
-            publication_embeddings_matrix, reviewer_to_pub_ids, pub_id_to_index
-        )
-        
-        # Convert submission embeddings to torch tensor
-        submission_embeddings_matrix = torch.tensor(submission_embeddings_matrix, device=self.device)
-        
-        # Normalize submission embeddings for cosine similarity
-        normalized_submissions = F.normalize(submission_embeddings_matrix, p=2, dim=1)
-        
-        scores = {}
-        
-        # Process reviewers in batches
-        reviewer_ids = list(reviewer_embeddings.keys())
-        submission_ids = list(range(submission_embeddings_matrix.shape[0]))
-        
-        for batch_start in range(0, len(reviewer_ids), self.batch_size):
-            batch_reviewer_ids = reviewer_ids[batch_start:batch_start + self.batch_size]
+        # If using cross-attention, compute scores with direct approach
+        if self.cross_attention:
+            submission_ids = list(range(submission_embeddings_matrix.shape[0]))
             
-            # Create batch of reviewer embeddings
-            batch_embeddings = [torch.tensor(reviewer_embeddings[r_id], device=self.device) 
-                               for r_id in batch_reviewer_ids]
+            # Get nested dictionary of reviewer -> submission -> score
+            reviewer_scores = self.compute_embeddings(
+                publication_embeddings_matrix, 
+                reviewer_to_pub_ids, 
+                pub_id_to_index,
+                submission_embeddings_matrix,
+                submission_ids
+            )
             
-            if not batch_embeddings:
-                continue
+            # Convert to flat dictionary for consistent return format
+            scores = {}
+            for reviewer_id, sub_scores in reviewer_scores.items():
+                for submission_id, score in sub_scores.items():
+                    scores[(reviewer_id, submission_id)] = score
+            
+            return scores
+        
+        # Otherwise, use traditional approach: compute embeddings then score
+        else:
+            # First compute reviewer embeddings
+            reviewer_embeddings = self.compute_embeddings(
+                publication_embeddings_matrix, reviewer_to_pub_ids, pub_id_to_index
+            )
+            
+            # Convert submission embeddings to torch tensor
+            submission_embeddings_matrix = torch.tensor(submission_embeddings_matrix, device=self.device)
+            
+            # Normalize submission embeddings for cosine similarity
+            # Shape: (n_submissions, embedding_dim)
+            normalized_submissions = F.normalize(submission_embeddings_matrix, p=2, dim=1)
+            
+            scores = {}
+            reviewer_ids = list(reviewer_embeddings.keys())
+            submission_ids = list(range(submission_embeddings_matrix.shape[0]))
+            
+            # Process reviewers in batches
+            for batch_start in range(0, len(reviewer_ids), self.batch_size):
+                batch_end = min(batch_start + self.batch_size, len(reviewer_ids))
+                batch_reviewer_ids = reviewer_ids[batch_start:batch_end]
                 
-            batch_embeddings_tensor = torch.stack(batch_embeddings)
+                # Create batch of reviewer embeddings - vectorized
+                # Shape: (batch_size, embedding_dim)
+                batch_embeddings = torch.stack([
+                    torch.tensor(reviewer_embeddings[r_id], device=self.device) 
+                    for r_id in batch_reviewer_ids
+                ])
+                
+                # Normalize for cosine similarity
+                # Shape: (batch_size, embedding_dim)
+                normalized_reviewers = F.normalize(batch_embeddings, p=2, dim=1)
+                
+                # Compute cosine similarity between reviewers and submissions
+                # Shape: (batch_size, n_submissions)
+                similarity_scores = torch.mm(normalized_reviewers, normalized_submissions.t())
+                
+                # Vectorized conversion to dictionary
+                for i, reviewer_id in enumerate(batch_reviewer_ids):
+                    for j, submission_id in enumerate(submission_ids):
+                        scores[(reviewer_id, submission_id)] = float(similarity_scores[i, j].item())
             
-            # Normalize for cosine similarity
-            normalized_reviewers = F.normalize(batch_embeddings_tensor, p=2, dim=1)
-            
-            # Compute cosine similarity between reviewers and submissions
-            # Shape: (batch_size, n_submissions)
-            similarity_scores = torch.mm(normalized_reviewers, normalized_submissions.t())
-            
-            # Convert to numpy for storage
-            similarity_scores = similarity_scores.cpu().numpy()
-            
-            # Store scores
-            for i, reviewer_id in enumerate(batch_reviewer_ids):
-                for j, submission_id in enumerate(submission_ids):
-                    scores[(reviewer_id, submission_id)] = float(similarity_scores[i, j])
-        
-        return scores
+            return scores
