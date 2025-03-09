@@ -911,6 +911,416 @@ class ExternalModelEvaluator(AffinityModelEvaluator):
         return results
 
 
+class CrossValidatedModelEvaluator(OpenReviewModelEvaluator):
+    """
+    Evaluator for OpenReview expertise models with hyperparameter optimization using nested cross-validation.
+    
+    This class extends the OpenReviewModelEvaluator to perform hyperparameter optimization
+    using nested cross-validation. It uses the 10 existing dataset iterations as outer folds
+    and implements an inner cross-validation loop for hyperparameter selection.
+    """
+    
+    def __init__(
+        self,
+        goldstandard_dir: str,
+        output_dir: str,
+        model_name: str,
+        model_type: str,
+        hyperparameter_space: Dict[str, List],
+        inner_cv_splits: int = 3,
+        random_state: int = 42,
+        skip_train: bool = True
+    ):
+        """
+        Initialize the cross-validated model evaluator.
+        
+        Args:
+            goldstandard_dir: Path to the gold standard dataset directory
+            output_dir: Directory to save evaluation results
+            model_name: Name of the model being evaluated
+            model_type: Type of model (e.g., 'specter', 'bm25', 'specter+mfr')
+            hyperparameter_space: Dictionary mapping parameter names to lists of possible values
+            inner_cv_splits: Number of inner cross-validation splits
+            random_state: Random seed for reproducibility
+        """
+        super().__init__(goldstandard_dir, output_dir, model_name, model_type)
+        self.hyperparameter_space = hyperparameter_space
+        self.inner_cv_splits = inner_cv_splits
+        self.random_state = random_state
+        
+        # Create a directory for hyperparameter tuning results
+        self.tuning_dir = self.output_dir / "hyperparameter_tuning"
+        self.tuning_dir.mkdir(parents=True, exist_ok=True)
+
+        self.skip_train = skip_train
+        
+    def _generate_hyperparameter_combinations(self) -> List[Dict]:
+        """
+        Generate all combinations of hyperparameters to evaluate.
+        
+        Returns:
+            List of dictionaries, each containing a specific combination of hyperparameters
+        """
+        import itertools
+        
+        # Get all parameter names and their possible values
+        param_names = list(self.hyperparameter_space.keys())
+        param_values = [self.hyperparameter_space[name] for name in param_names]
+        
+        # Generate all combinations
+        combinations = list(itertools.product(*param_values))
+        
+        # Convert to list of dictionaries
+        result = []
+        for combo in combinations:
+            result.append({name: value for name, value in zip(param_names, combo)})
+            
+        return result
+        
+    def _get_inner_folds(self, outer_train_iterations: List[int]) -> List[Tuple[List[int], List[int]]]:
+        """
+        Create inner cross-validation folds from the outer training iterations.
+        
+        Args:
+            outer_train_iterations: List of iteration numbers to use for inner CV
+            
+        Returns:
+            List of tuples, each containing (inner_train_iterations, inner_val_iterations)
+        """
+        import numpy as np
+        from sklearn.model_selection import KFold
+        
+        np.random.seed(self.random_state)
+        kf = KFold(n_splits=self.inner_cv_splits, shuffle=True, random_state=self.random_state)
+        
+        # Convert iterations to indices for KFold
+        indices = np.arange(len(outer_train_iterations))
+        
+        # Generate folds
+        result = []
+        for inner_train_idx, inner_val_idx in kf.split(indices):
+            inner_train = [outer_train_iterations[i] for i in inner_train_idx]
+            inner_val = [outer_train_iterations[i] for i in inner_val_idx]
+            result.append((inner_train, inner_val))
+            
+        return result
+        
+    def optimize_hyperparameters(self) -> Dict:
+        """
+        Perform nested cross-validation for hyperparameter optimization.
+        
+        This method implements the nested cross-validation approach described in the guide:
+        - Outer loop: Use the 10 existing dataset iterations as outer folds
+        - Inner loop: Implement a k-fold cross-validation for hyperparameter selection
+        
+        Returns:
+            Dictionary of evaluation results, including best hyperparameters for each outer fold
+        """
+        logger.info(f"Starting hyperparameter optimization for {self.model_name}")
+        
+        # Outer folds (use the 10 existing dataset iterations)
+        outer_folds = list(range(1, 11))
+        hyperparameter_combinations = self._generate_hyperparameter_combinations()
+        
+        logger.info(f"Evaluating {len(hyperparameter_combinations)} hyperparameter combinations using "
+                    f"{len(outer_folds)} outer folds and {self.inner_cv_splits} inner CV splits")
+        
+        outer_results = []
+        best_hyperparams_per_fold = []
+        
+        # Outer cross-validation loop
+        for i, outer_test_iter in enumerate(outer_folds):
+            # Create outer train/test split
+            outer_train_iterations = [j for j in outer_folds if j != outer_test_iter]
+            
+            logger.info(f"Outer fold {i+1}/{len(outer_folds)}: Test on iteration {outer_test_iter}, "
+                        f"Train on iterations {outer_train_iterations}")
+            
+            # Inner folds for cross-validation
+            inner_folds = self._get_inner_folds(outer_train_iterations)
+            
+            # Find best hyperparameters using inner CV
+            best_score = float('inf')  # Lower is better for the main metric (loss)
+            best_hyperparams = None
+            
+            # Store all inner CV results for analysis
+            inner_results = []
+            
+            # Evaluate each hyperparameter combination
+            for hp_idx, hyperparams in enumerate(hyperparameter_combinations):
+                inner_scores = []
+                
+                logger.info(f"Evaluating hyperparameter combination {hp_idx+1}/{len(hyperparameter_combinations)}: {hyperparams}")
+                
+                # Inner cross-validation loop
+                for fold_idx, (inner_train, inner_val) in enumerate(inner_folds):
+                    logger.info(f"Inner fold {fold_idx+1}/{len(inner_folds)}: "
+                                f"Train on {inner_train}, Validate on {inner_val}")
+                    
+                    # Train on inner train set with current hyperparameters
+                    if not self.skip_train:
+                        train_scores = self._evaluate_on_iterations(inner_train, hyperparams)
+                    
+                    # Evaluate on inner validation set
+                    val_scores = self._evaluate_on_iterations(inner_val, hyperparams)
+                    
+                    # Store validation score (main metric)
+                    inner_scores.append(np.mean(val_scores['pointwise']))
+                
+                # Calculate average inner validation score
+                avg_inner_score = np.mean(inner_scores)
+                
+                # Store result for this hyperparameter combination
+                inner_results.append({
+                    'hyperparams': hyperparams,
+                    'inner_scores': inner_scores,
+                    'avg_inner_score': avg_inner_score
+                })
+                
+                logger.info(f"Average inner validation score: {avg_inner_score:.4f}")
+                
+                # Update best hyperparameters if this combination is better
+                if avg_inner_score < best_score:
+                    best_score = avg_inner_score
+                    best_hyperparams = hyperparams
+                    logger.info(f"New best hyperparameters found: {best_hyperparams} (score: {best_score:.4f})")
+            
+            # Store best hyperparameters for this outer fold
+            best_hyperparams_per_fold.append({
+                'outer_fold': outer_test_iter,
+                'best_hyperparams': best_hyperparams,
+                'best_inner_score': best_score
+            })
+            
+            # Evaluate on outer test set using best hyperparameters
+            logger.info(f"Evaluating on outer test fold {outer_test_iter} with best hyperparameters: {best_hyperparams}")
+            outer_test_results = self._evaluate_on_iterations([outer_test_iter], best_hyperparams)
+            
+            # Store results for this outer fold
+            outer_results.append({
+                'outer_test_fold': outer_test_iter,
+                'best_hyperparams': best_hyperparams,
+                'test_score': np.mean(outer_test_results['pointwise']),
+                'test_results': outer_test_results
+            })
+            
+            # Save inner CV results for this outer fold
+            inner_results_path = self.tuning_dir / f"inner_cv_results_fold_{outer_test_iter}.json"
+            with open(inner_results_path, 'w') as f:
+                json.dump(inner_results, f, indent=2)
+        
+        # Calculate final generalization score
+        final_scores = [r['test_score'] for r in outer_results]
+        final_generalization_score = np.mean(final_scores)
+        final_std_dev = np.std(final_scores)
+        
+        # Determine most frequently selected hyperparameters
+        from collections import Counter
+        
+        # Convert hyperparameter dictionaries to tuples for counting
+        hyp_tuples = [tuple(sorted(r['best_hyperparams'].items())) for r in best_hyperparams_per_fold]
+        most_common_hyperparams = Counter(hyp_tuples).most_common(1)[0][0]
+        
+        # Convert back to dictionary
+        final_hyperparams = dict(most_common_hyperparams)
+        
+        # Prepare final results
+        final_results = {
+            'model': self.model_name,
+            'model_type': self.model_type,
+            'final_generalization_score': round(final_generalization_score, 4),
+            'final_std_dev': round(final_std_dev, 4),
+            'final_hyperparams': final_hyperparams,
+            'outer_fold_results': outer_results,
+            'best_hyperparams_per_fold': best_hyperparams_per_fold
+        }
+        
+        # Save final results
+        final_results_path = self.tuning_dir / f"{self.model_name}_cv_tuning_results.json"
+        with open(final_results_path, 'w') as f:
+            json.dump(final_results, f, indent=2)
+            
+        logger.info(f"Hyperparameter optimization complete. Final generalization score: "
+                    f"{final_generalization_score:.4f} ± {final_std_dev:.4f}")
+        logger.info(f"Best hyperparameters: {final_hyperparams}")
+        logger.info(f"Results saved to {final_results_path}")
+        
+        return final_results
+        
+    def _evaluate_on_iterations(self, iterations: List[int], hyperparams: Dict) -> Dict:
+        """
+        Evaluate the model on specific dataset iterations with given hyperparameters.
+        
+        Args:
+            iterations: List of dataset iteration numbers to evaluate on
+            hyperparams: Dictionary of hyperparameters to use
+            
+        Returns:
+            Dictionary of evaluation results
+        """
+        results = {'pointwise': [], 'variations': [], 'easy_triples': [], 'hard_triples': []}
+        completed_iterations = []
+        
+        for iteration in iterations:
+            dataset_path = self.evaluation_datasets_dir / f"d_20_{iteration}"
+            
+            # Validate dataset existence
+            if not dataset_path.exists():
+                logger.error(f"Dataset not found at {dataset_path}. Skipping iteration {iteration}.")
+                continue
+                
+            logger.info(f"Evaluating on dataset {dataset_path} (iteration {iteration}) with hyperparams: {hyperparams}")
+            
+            try:
+                # Create a dataset config
+                dataset_config = self.prepare_dataset_config(str(dataset_path))
+                
+                # Create a model config with the current hyperparameters
+                model_config = self.prepare_model_config(dataset_config)
+                
+                # Override with current hyperparameters
+                for param_name, param_value in hyperparams.items():
+                    if param_name not in model_config["model_params"]:
+                        logger.warning(f"Hyperparameter {param_name} not found in model config. Adding it.")
+                    model_config["model_params"][param_name] = param_value
+                
+                # Save the configuration
+                config_path = self.predictions_dir / f"{self.model_name}_iter_{iteration}_config.json"
+                with open(config_path, 'w') as f:
+                    json.dump(model_config, f, indent=2)
+                
+                # Run model with this configuration
+                scores_file = self.run_model(dataset_path, config_path=str(config_path))
+                
+                # Process predictions
+                raw_predictions = self.process_predictions(scores_file)
+                predictions = self.convert_to_gold_standard_format(raw_predictions)
+                
+                # Compute metrics
+                score = self.compute_main_metric(predictions, self.all_papers, self.all_reviewers)
+                variations = [self.compute_main_metric(predictions, self.all_papers, bootstrap) 
+                            for bootstrap in self.bootstraps]
+                easy_triples = self.compute_resolution(
+                    predictions, self.all_papers, self.all_reviewers, regime='easy'
+                )
+                hard_triples = self.compute_resolution(
+                    predictions, self.all_papers, self.all_reviewers, regime='hard'
+                )
+                
+                # Store results
+                results['pointwise'].append(score)
+                results['variations'].append(variations)
+                results['easy_triples'].append(easy_triples)
+                results['hard_triples'].append(hard_triples)
+                completed_iterations.append(iteration)
+                
+                logger.info(f"Iteration {iteration} complete. Loss: {score:.4f}")
+                
+            except Exception as e:
+                logger.error(f"Error evaluating iteration {iteration} with hyperparams {hyperparams}: {e}")
+                logger.error(traceback.format_exc())
+                continue
+        
+        return results
+
+    def run_model(self, dataset_path: str, config_path: str = None) -> str:
+        """
+        Override run_model to accept a config_path parameter.
+        
+        Args:
+            dataset_path: Path to the dataset
+            config_path: Path to the model configuration file
+            
+        Returns:
+            Path to the scores file
+        """
+        if config_path is None:
+            # Create a dataset config
+            dataset_config = self.prepare_dataset_config(str(dataset_path))
+            
+            # Create a model config
+            model_config = self.prepare_model_config(dataset_config)
+            
+            # Save the configuration
+            config_path = self.predictions_dir / f"{self.model_name}_{Path(dataset_path).name}_config.json"
+            with open(config_path, 'w') as f:
+                json.dump(model_config, f, indent=2)
+        
+        # Use the provided config path
+        dataset_name = Path(dataset_path).name
+        logger.info(f"Running model {self.model_name} on dataset {dataset_name} with config {config_path}")
+        
+        # Load the provided config
+        with open(config_path, 'r') as f:
+            model_config = json.load(f)
+        
+        # Set up paths specific to this run
+        predictions_dir = Path(self.predictions_dir) / f"{self.model_name}_{dataset_name}"
+        predictions_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Update paths in the config
+        model_config["model_params"]["scores_path"] = str(predictions_dir)
+        model_config["model_params"]["publications_path"] = str(predictions_dir)
+        model_config["model_params"]["submissions_path"] = str(predictions_dir)
+        if "work_dir" in model_config["model_params"]:
+            model_config["model_params"]["work_dir"] = str(predictions_dir)
+        
+        # Save the updated config
+        updated_config_path = predictions_dir / f"config.json"
+        with open(updated_config_path, 'w') as f:
+            json.dump(model_config, f, indent=2)
+        
+        # Import and run the model
+        # Import execute_expertise - should be available directly now that we're inside the package
+        from expertise.execute_expertise import execute_expertise
+        try:
+            logger.info(f"Executing {self.model_type} model on dataset {dataset_path}")
+            execute_expertise(model_config)
+
+            # Return path to the scores file
+            scores_file = predictions_dir / f"{model_config['name']}.csv"
+            return str(scores_file)
+            
+        except Exception as e:
+            logger.error(f"Error running model: {e}")
+            logger.error(traceback.format_exc())
+            raise
+        
+    def evaluate_model_with_cv(self, hyperparameter_space: Dict[str, List] = None) -> Dict:
+        """
+        Perform hyperparameter optimization with cross-validation and then evaluate the model.
+        
+        Args:
+            hyperparameter_space: Dictionary mapping parameter names to lists of possible values.
+                If None, use the hyperparameter space provided at initialization.
+                
+        Returns:
+            Dictionary of evaluation results with optimized hyperparameters
+        """
+        if hyperparameter_space:
+            self.hyperparameter_space = hyperparameter_space
+            
+        # Run hyperparameter optimization
+        cv_results = self.optimize_hyperparameters()
+        
+        # Get the best hyperparameters
+        best_hyperparams = cv_results['final_hyperparams']
+        
+        # Update the model's hyperparameters for future evaluations
+        self.best_hyperparams = best_hyperparams
+        
+        # Evaluate the model with the best hyperparameters using the standard evaluate_model method
+        logger.info(f"Evaluating model {self.model_name} with optimized hyperparameters: {best_hyperparams}")
+        
+        # Save optimized hyperparameters for reference
+        hp_path = self.tuning_dir / f"{self.model_name}_best_hyperparams.json"
+        with open(hp_path, 'w') as f:
+            json.dump(best_hyperparams, f, indent=2)
+            
+        # Return the cross-validation results
+        return cv_results
+
+
 def main():
     """Main function to run the evaluator from the command line."""
     parser = argparse.ArgumentParser(description='Evaluate affinity scoring models')
@@ -922,8 +1332,8 @@ def main():
                         help='Directory to save evaluation results')
     parser.add_argument('--model_name', type=str, required=True,
                         help='Name of the model being evaluated')
-    parser.add_argument('--mode', type=str, choices=['openreview', 'external'], required=True,
-                        help='Evaluation mode: openreview (run model) or external (use precomputed predictions)')
+    parser.add_argument('--mode', type=str, choices=['openreview', 'external', 'cv'], required=True,
+                        help='Evaluation mode: openreview (run model), external (use precomputed predictions), or cv (cross-validation)')
     
     # Arguments specific to OpenReview mode
     parser.add_argument('--model_type', type=str, 
@@ -936,6 +1346,14 @@ def main():
     parser.add_argument('--predictions_dir', type=str,
                         help='Directory containing precomputed predictions (required for external mode)')
     
+    # Arguments specific to CV mode
+    parser.add_argument('--hyperparameter_space', type=str,
+                        help='Path to JSON file defining hyperparameter space (required for cv mode)')
+    parser.add_argument('--inner_cv_splits', type=int, default=3,
+                        help='Number of inner CV splits (default: 3)')
+    parser.add_argument('--random_state', type=int, default=42,
+                        help='Random seed for cross-validation (default: 42)')
+    
     args = parser.parse_args()
     
     # Validate arguments based on mode
@@ -943,6 +1361,11 @@ def main():
         parser.error("--model_type is required for openreview mode")
     elif args.mode == 'external' and not args.predictions_dir:
         parser.error("--predictions_dir is required for external mode")
+    elif args.mode == 'cv':
+        if not args.model_type:
+            parser.error("--model_type is required for cv mode")
+        if not args.hyperparameter_space:
+            parser.error("--hyperparameter_space is required for cv mode")
     
     # Create and run the appropriate evaluator
     if args.mode == 'openreview':
@@ -953,6 +1376,34 @@ def main():
             model_type=args.model_type
         )
         results = evaluator.run_evaluation(args.config_path)
+    elif args.mode == 'cv':
+        # Load hyperparameter space from JSON file
+        try:
+            with open(args.hyperparameter_space, 'r') as f:
+                hyperparameter_space = json.load(f)
+        except Exception as e:
+            print(f"Error loading hyperparameter space from {args.hyperparameter_space}: {e}")
+            return
+        
+        evaluator = CrossValidatedModelEvaluator(
+            goldstandard_dir=args.goldstandard_dir,
+            output_dir=args.output_dir,
+            model_name=args.model_name,
+            model_type=args.model_type,
+            hyperparameter_space=hyperparameter_space,
+            inner_cv_splits=args.inner_cv_splits,
+            random_state=args.random_state
+        )
+        results = evaluator.evaluate_model_with_cv()
+        
+        # Print cross-validation summary
+        print("\nCross-Validation Summary:")
+        print(f"Model: {results['model']}")
+        print(f"Final generalization score: {results['final_generalization_score']} ± {results['final_std_dev']}")
+        print(f"Best hyperparameters: {json.dumps(results['final_hyperparams'], indent=2)}")
+        
+        # Return without printing standard summary
+        return
     else:  # external mode
         evaluator = ExternalModelEvaluator(
             goldstandard_dir=args.goldstandard_dir,
