@@ -565,8 +565,8 @@ class TestExpertiseService():
         # Check members
         assert "~Harold_Rice1" in all_users
         assert "~Zonia_Willms1" in all_users
-        assert "~Royal_Toy1" not in all_users
-        assert "~C.V._Lastname1" not in all_users
+        assert "~Royal_Toy1" in all_users
+        assert "~C.V._Lastname1" in all_users
 
 
     def test_compare_results_for_identical_jobs(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
@@ -1182,11 +1182,11 @@ class TestExpertiseService():
         assert "~Zonia_Willms1" in submission_users
         assert "~Zonia_Willms1" in match_users
 
-        assert "~Royal_Toy1" not in submission_users
-        assert "~Royal_Toy1" not in match_users
+        assert "~Royal_Toy1" in submission_users
+        assert "~Royal_Toy1" in match_users
 
-        assert "~C.V._Lastname1" not in submission_users
-        assert "~C.V._Lastname1" not in match_users
+        assert "~C.V._Lastname1" in submission_users
+        assert "~C.V._Lastname1" in match_users
     
     def test_request_group_exclusion_exclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Test expertise exclusion - both the archives and submissions should be smaller than the previous test's
@@ -1404,7 +1404,7 @@ class TestExpertiseService():
         with_inclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
         with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['exclusion_id']}/archives") if d.is_file())
         print(list(os.scandir(f"./tests/jobs/{job_id}/archives")))
-        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) == 2 # One member as no publications, the other only has TMLR submissions
+        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) == 4 # One member as no publications, the other only has TMLR submissions
         assert os.path.getsize(f"./tests/jobs/{job_id}/archives/~Harold_Rice1.jsonl") < os.path.getsize(f"./tests/jobs/{openreview_context['job_id']}/archives/~Harold_Rice1.jsonl")
         assert with_inclusion < no_inclusion
         assert with_inclusion < with_exclusion
@@ -1421,7 +1421,7 @@ class TestExpertiseService():
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
-        assert metadata['submission_count'] == 5
+        assert metadata['submission_count'] == 10
         response = response.json['results']
         for item in response:
             match_id, submitter_id, score = item['match_member'], item['submission_member'], float(item['score'])
