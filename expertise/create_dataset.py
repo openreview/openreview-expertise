@@ -68,9 +68,9 @@ class OpenReviewExpertise(object):
             return [n for n in self.openreview_client.get_notes_by_ids(ids=note_ids) if n.invitation == paper_invitation]
 
         notes_v1 = list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id}))
-        notes_v1 = [note for note in notes_v1 if note.readers == ['everyone'] and  getattr(note, 'pdate', None)]
+        notes_v1 = [note for note in notes_v1 if note.readers == ['everyone']]
         notes_v2 = list(openreview.tools.iterget_notes(self.openreview_client_v2, content={'authorids': author_id}))
-        notes_v2 = [note for note in notes_v2 if note.readers == ['everyone'] and getattr(note, 'pdate', None)]
+        notes_v2 = [note for note in notes_v2 if note.readers == ['everyone']]
         return notes_v1 + notes_v2
 
     def deduplicate_publications(self, publications):
