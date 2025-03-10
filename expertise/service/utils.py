@@ -698,7 +698,7 @@ class GCPInterface(object):
         elif 'id' in note_entity:
             return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
 
-    def create_job(self, json_request: dict):
+    def create_job(self, json_request: dict, user_id: str = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -750,7 +750,7 @@ class GCPInterface(object):
         #data['dump_archives'] = True
 
         # Deleted metadata fields before hitting the pipeline
-        data['user_id'] = get_user_id(self.client)
+        data['user_id'] = user_id if user_id else get_user_id(self.client)
         data['cdate'] = int(time.time() * 1000)
 
         write_json_to_gcs(self.bucket_name, folder_path, self.request_fname, data)

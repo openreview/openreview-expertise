@@ -792,7 +792,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         request = job.data['request']
         redis_id = job.data['redis_id']
 
-        cloud_id = self.cloud.create_job(deepcopy(request))
+        cloud_id = self.cloud.create_job(deepcopy(request), user_id = user_id)
         config = self.redis.load_job(redis_id, user_id)
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
