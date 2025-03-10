@@ -80,7 +80,11 @@ def execute_expertise(config):
             max_score=config['model_params'].get('max_score', True),
             specter_batch_size=config['model_params'].get('batch_size', 16),
             use_cuda=config['model_params'].get('use_cuda', False),
-            sparse_value=config['model_params'].get('sparse_value')
+            sparse_value=config['model_params'].get('sparse_value'),
+            merge_alpha=config['model_params'].get('merge_alpha', 0.5),
+            top_k=config['model_params'].get('top_k', 1),
+            attn_clustering=config['model_params'].get('attn_clustering', False),
+            cross_attention=config['model_params'].get('cross_attention', False)
         )
         ens_predictor.set_archives_dataset(archives_dataset)
         ens_predictor.set_submissions_dataset(submissions_dataset)
@@ -117,7 +121,10 @@ def execute_expertise(config):
             batch_size=config['model_params'].get('batch_size', 16),
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
-            dump_p2p=config['model_params'].get('dump_p2p', False)
+            dump_p2p=config['model_params'].get('dump_p2p', False),
+            top_k=config['model_params'].get('top_k', 1),
+            attn_clustering=config['model_params'].get('attn_clustering', False),
+            cross_attention=config['model_params'].get('cross_attention', False)
         )
         scincl_predictor.set_archives_dataset(archives_dataset)
         scincl_predictor.set_submissions_dataset(submissions_dataset)
@@ -150,7 +157,10 @@ def execute_expertise(config):
             batch_size=config['model_params'].get('batch_size', 16),
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
-            dump_p2p=config['model_params'].get('dump_p2p', False)
+            dump_p2p=config['model_params'].get('dump_p2p', False),
+            top_k=config['model_params'].get('top_k', 1),
+            attn_clustering=config['model_params'].get('attn_clustering', False),
+            cross_attention=config['model_params'].get('cross_attention', False)
         )
         spec2_predictor.set_archives_dataset(archives_dataset)
         spec2_predictor.set_submissions_dataset(submissions_dataset)
