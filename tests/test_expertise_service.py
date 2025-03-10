@@ -1403,7 +1403,8 @@ class TestExpertiseService():
         no_inclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['job_id']}/archives") if d.is_file())
         with_inclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
         with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['exclusion_id']}/archives") if d.is_file())
-        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) == 4
+        print(list(os.scandir(f"./tests/jobs/{job_id}/archives")))
+        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) == 4 # One member as no publications, the other only has TMLR submissions
         assert os.path.getsize(f"./tests/jobs/{job_id}/archives/~Harold_Rice1.jsonl") < os.path.getsize(f"./tests/jobs/{openreview_context['job_id']}/archives/~Harold_Rice1.jsonl")
         assert with_inclusion < no_inclusion
         assert with_inclusion < with_exclusion
