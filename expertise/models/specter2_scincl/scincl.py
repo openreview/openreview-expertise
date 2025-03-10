@@ -318,7 +318,10 @@ class SciNCLPredictor(Predictor):
                 if self.top_k <= 0:
                     all_paper_aff = train_paper_aff_j.mean(dim=1)
                 else:
-                    all_paper_aff = torch.topk(train_paper_aff_j, self.top_k, dim=1).values.mean(dim=1)
+                    num_items = train_paper_aff_j.size(1)  # Get the number of items in the second dimension
+                    # Ensure top_k does not exceed the number of items
+                    top_k = min(self.top_k, num_items)
+                    all_paper_aff = torch.topk(train_paper_aff_j, top_k, dim=1).values.mean(dim=1)
             elif self.average_score:
                 all_paper_aff = train_paper_aff_j.mean(dim=1)
             elif self.max_score:

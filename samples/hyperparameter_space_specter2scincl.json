@@ -1,7 +1,7 @@
 {
-    "attn_clustering": [true],
-    "top_k": [1, 2],
-    "batch_size": [8],
+    "attn_clustering": [true, false],
+    "cross_attention": [true, false],
     "use_cuda": [true],
-    "cross_attention": [true]
+    "batch_size": [128],
+    "top_k": [1, 5]
 } 
