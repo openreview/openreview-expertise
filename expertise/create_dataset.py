@@ -68,7 +68,9 @@ class OpenReviewExpertise(object):
             return [n for n in self.openreview_client.get_notes_by_ids(ids=note_ids) if n.invitation == paper_invitation]
 
         notes_v1 = list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id}))
+        notes_v1 = [note for note in notes_v1 if note.readers == ['everyone']]
         notes_v2 = list(openreview.tools.iterget_notes(self.openreview_client_v2, content={'authorids': author_id}))
+        notes_v2 = [note for note in notes_v2 if note.readers == ['everyone']]
         return notes_v1 + notes_v2
 
     def deduplicate_publications(self, publications):
@@ -286,13 +288,17 @@ class OpenReviewExpertise(object):
         self.pbar.update(1)
         member_papers = self.get_publications(member)
 
+        include_all_papers = False
+        if 'inclusion_inv' in self.config and len(self.included_ids_by_user[member]) > 0 and not any(paper['id'] in self.included_ids_by_user[member] for paper in member_papers):
+            include_all_papers = True
+
         seen_keys = set()
         filtered_papers = []
         for n in member_papers:
             paper_title = openreview.tools.get_paperhash('', n['content']['title'])
             if 'inclusion_inv' in self.config:
                 # The paper must be included or the user has included no papers
-                if paper_title and (n['id'] in self.included_ids_by_user[member] or len(self.included_ids_by_user[member]) == 0):
+                if paper_title and ((n['id'] in self.included_ids_by_user[member] or len(self.included_ids_by_user[member]) == 0) or include_all_papers):
                     filtered_papers.append(n)
             else:
                 if paper_title and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys:
