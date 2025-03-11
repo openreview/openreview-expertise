@@ -49,7 +49,7 @@ silent
 
 class SpecterPredictor:
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False):
+                 sparse_value=None, use_redis=False, compute_paper_paper=False):
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
@@ -72,6 +72,7 @@ class SpecterPredictor:
             self.redis = redisai.Client(connection_pool=redis_embeddings_pool)
         else:
             self.redis = None
+        self.compute_paper_paper = compute_paper_paper
 
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter')
         #load base model
@@ -241,24 +242,33 @@ class SpecterPredictor:
 
         csv_scores = []
         self.preliminary_scores = []
-        for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
-            if len(train_note_id_list) == 0:
-                continue
-            train_paper_idx = []
-            for paper_id in train_note_id_list:
-                if paper_id not in train_bad_id_set:
-                    train_paper_idx.append(paper_id2train_idx[paper_id])
-            train_paper_aff_j = p2p_aff[:, train_paper_idx]
 
-            if self.average_score:
-                all_paper_aff = train_paper_aff_j.mean(dim=1)
-            elif self.max_score:
-                all_paper_aff = train_paper_aff_j.max(dim=1)[0]
-            for j in range(paper_num_test):
-                csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[j], reviewer=reviewer_id,
-                                                                 score=all_paper_aff[j].item())
-                csv_scores.append(csv_line)
-                self.preliminary_scores.append((test_id_list[j], reviewer_id, all_paper_aff[j].item()))
+        if self.compute_paper_paper:
+            for i in range(paper_num_train):
+                for j in range(paper_num_test):
+                    csv_line = '{match_id},{submission_id},{score}'.format(match_id=test_id_list[j], submission_id=train_id_list[i],
+                                                                    score=p2p_aff[j, i].item())
+                    csv_scores.append(csv_line)
+                    self.preliminary_scores.append((test_id_list[j], train_id_list[i], p2p_aff[j, i].item()))
+        else:
+            for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
+                if len(train_note_id_list) == 0:
+                    continue
+                train_paper_idx = []
+                for paper_id in train_note_id_list:
+                    if paper_id not in train_bad_id_set:
+                        train_paper_idx.append(paper_id2train_idx[paper_id])
+                train_paper_aff_j = p2p_aff[:, train_paper_idx]
+
+                if self.average_score:
+                    all_paper_aff = train_paper_aff_j.mean(dim=1)
+                elif self.max_score:
+                    all_paper_aff = train_paper_aff_j.max(dim=1)[0]
+                for j in range(paper_num_test):
+                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[j], reviewer=reviewer_id,
+                                                                    score=all_paper_aff[j].item())
+                    csv_scores.append(csv_line)
+                    self.preliminary_scores.append((test_id_list[j], reviewer_id, all_paper_aff[j].item()))
 
         if scores_path:
             with open(scores_path, 'w') as f:
