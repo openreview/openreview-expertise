@@ -309,7 +309,7 @@ class BaseExpertiseService:
         running_config.baseurl_v2 = None
         running_config.user_id = None
 
-    def _prepare_config(self, request, job_id=None) -> dict:
+    def _prepare_config(self, request, job_id=None, client_v1=None, client=None) -> dict:
         """
         Overwrites/add specific key-value pairs in the submitted job config
         :param request: Contains the initial request from the user
@@ -333,14 +333,17 @@ class BaseExpertiseService:
                     raise e
 
         # Validate fields
+        or_client_v1 = client_v1 if client_v1 else self.client
+        or_client = client if client else self.client_v2
+
         self.logger.info(f"Incoming request - {request}")
         validated_request = APIRequest(request)
         config = JobConfig.from_request(
             api_request = validated_request,
             job_id=job_id,
             starting_config = self.default_expertise_config,
-            openreview_client= self.client,
-            openreview_client_v2= self.client_v2,
+            openreview_client= or_client_v1,
+            openreview_client_v2= or_client,
             server_config = self.server_config,
             working_dir = self.working_dir
         )
@@ -355,7 +358,7 @@ class BaseExpertiseService:
             self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
             self.redis.save_job(config)
 
-        return config, self.client.token
+        return config, or_client.token
 
     def _get_subdirs(self, user_id):
         """
@@ -555,7 +558,7 @@ class ExpertiseService(BaseExpertiseService):
             torch.cuda.empty_cache()
             gc.collect()
 
-    def start_expertise(self, request):
+    def start_expertise(self, request, client_v1, client):
         descriptions = JobDescription.VALS.value
 
         job_name = self._get_job_name(request)
@@ -583,7 +586,7 @@ class ExpertiseService(BaseExpertiseService):
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
-        config, token = self._prepare_config(request)
+        config, token = self._prepare_config(request, client_v1=client_v1, client=client)
         job_id = config.job_id
 
         config_log = self._get_log_from_config(config)
@@ -791,9 +794,15 @@ class ExpertiseCloudService(BaseExpertiseService):
         user_id = job.data['user_id']
         request = job.data['request']
         redis_id = job.data['redis_id']
+        or_token = job.data['token']
 
-        cloud_id = self.cloud.create_job(deepcopy(request), user_id = user_id)
         config = self.redis.load_job(redis_id, user_id)
+        openreview_client_v2 = openreview.api.OpenReviewClient(
+            token=or_token,
+            baseurl=config.baseurl_v2
+        )
+
+        cloud_id = self.cloud.create_job(deepcopy(request), client=openreview_client_v2, user_id = user_id)
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
@@ -836,7 +845,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             # Re-raise exception to appear in the queue
             raise e.with_traceback(e.__traceback__)
 
-    def start_expertise(self, request):
+    def start_expertise(self, request, client_v1, client):
         descriptions = JobDescription.VALS.value
 
         job_name = self._get_job_name(request)
@@ -864,7 +873,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
-        config, _ = self._prepare_config(deepcopy(request))
+        config, _ = self._prepare_config(deepcopy(request), client_v1=client_v1, client=client)
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
@@ -880,7 +889,8 @@ class ExpertiseCloudService(BaseExpertiseService):
                     "request": request,
                     "request_key": request_key,
                     "user_id": config.user_id,
-                    "redis_id": config.job_id
+                    "redis_id": config.job_id,
+                    "token": client.token
                 },
                 {
                     'jobId': config.job_id,

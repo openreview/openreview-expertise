@@ -125,7 +125,7 @@ def expertise():
             raise openreview.OpenReviewException("Request already in process")
 
         try:
-            job_id = expertise_service.start_expertise(user_request)
+            job_id = expertise_service.start_expertise(user_request, openreview_client, openreview_client_v2)
             expertise_service.redis.db.delete(request_key)
         except Exception as error_handle:
             expertise_service.redis.db.delete(request_key)
