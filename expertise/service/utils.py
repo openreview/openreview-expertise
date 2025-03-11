@@ -698,7 +698,7 @@ class GCPInterface(object):
         elif 'id' in note_entity:
             return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
 
-    def create_job(self, json_request: dict):
+    def create_job(self, json_request: dict, user_id: str = None, client = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -731,6 +731,7 @@ class GCPInterface(object):
             )
             self.logger.info(f"JSON file '{file_name}' written to '{folder_path}' in bucket '{bucket_name}'.")
 
+        or_client = client if client else self.client
         api_request = APIRequest(json_request)
         job_id = GCPInterface._generate_vertex_prefix(api_request) + '-' + datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
         valid_vertex_id = job_id.replace('/','-').replace(':','-').replace('_','-').replace('.', '-').lower()
@@ -742,15 +743,15 @@ class GCPInterface(object):
         data['name'] = valid_vertex_id
 
         # Popped fields
-        data['token'] = self.client.token
-        data['baseurl_v1'] = openreview.tools.get_base_urls(self.client)[0]
-        data['baseurl_v2'] = openreview.tools.get_base_urls(self.client)[1]
+        data['token'] = or_client.token
+        data['baseurl_v1'] = openreview.tools.get_base_urls(or_client)[0]
+        data['baseurl_v2'] = openreview.tools.get_base_urls(or_client)[1]
         data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
         #data['dump_embs'] = True
         #data['dump_archives'] = True
 
         # Deleted metadata fields before hitting the pipeline
-        data['user_id'] = get_user_id(self.client)
+        data['user_id'] = user_id if user_id else get_user_id(or_client)
         data['cdate'] = int(time.time() * 1000)
 
         write_json_to_gcs(self.bucket_name, folder_path, self.request_fname, data)
