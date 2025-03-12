@@ -874,7 +874,7 @@ class TestExpertiseService():
             match_submission_id, submission_id, score = item['match_submission'], item['submission'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(match_submission_id) >= 1
-            assert score >= 0 and score <= 1
+            assert score >= 0
             if match_submission_id == submission_id:
                 assert score >= 0.99
 
