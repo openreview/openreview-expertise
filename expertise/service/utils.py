@@ -515,11 +515,6 @@ class JobConfig(object):
         config.model_params['use_cuda'] = model_params.get('use_cuda', False)
         config.model_params['use_redis'] = model_params.get('use_redis', False)
 
-        # Infer compute_paper_paper from two Note entities
-        config.model_params['compute_paper_paper'] = False
-        if api_request.entityA['type'] == 'Note' and api_request.entityB['type'] == 'Note':
-            config.model_params['compute_paper_paper'] = True
-
         # Attempt to load any API request model params
         api_model = api_request.model
         if api_model:
@@ -550,6 +545,14 @@ class JobConfig(object):
         # Set server-side path fields
         for field in path_fields:
             config.model_params[field] = root_dir
+
+        # Infer compute_paper_paper from two Note entities
+        valid_paper_paper_models = ['specter', 'specter2', 'scincl', 'specter2+scincl']
+        config.model_params['compute_paper_paper'] = False
+        if api_request.entityA['type'] == 'Note' and api_request.entityB['type'] == 'Note':
+            if config.model not in valid_paper_paper_models:
+                raise openreview.OpenReviewException(f"Bad request: model {config.model} does not support paper-paper scoring")
+            config.model_params['compute_paper_paper'] = True
 
         if 'specter' in config.model:
             config.model_params['specter_dir'] = server_config['SPECTER_DIR']

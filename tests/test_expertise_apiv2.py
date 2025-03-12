@@ -477,9 +477,10 @@ class TestExpertiseV2():
         assert len(results) == 15 # 3 editors x 5 submissions/publications from Raia/Kyunghyun
 
     def test_paperpaper_submission_content_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
+
+        # Make a request that is not supported
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -496,6 +497,38 @@ class TestExpertiseV2():
                     },
                     "model": {
                             "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 400, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == "Bad request: model specter+mfr does not support paper-paper scoring"
+
+        # Make a request that is supported by the model
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": { 
+                        'type': "Note",
+                        'withVenueid': "TMLR/Submitted",
+                        'withContent': { 'human_subjects_reporting': 'Not applicable' }
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'withVenueid': "TMLR/Submitted",
+                        'withContent': { 'human_subjects_reporting': 'Not applicable' }
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
                             'useTitle': False, 
                             'useAbstract': True, 
                             'skipSpecter': False,
