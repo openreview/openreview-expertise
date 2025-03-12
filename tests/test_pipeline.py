@@ -128,7 +128,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_gcs_client, mock_exe
             'memberOf': "ABC.cc/Reviewers"
         },
         "model": {
-            "name": "specter2+scincl",
+            "name": "specter+mfr",
             'useTitle': False,
             'useAbstract': True,
             'skipSpecter': False,
@@ -223,7 +223,7 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_gcs_client, mo
             'invitation': "ABC.cc/-/Submission"
         },
         "model": {
-            "name": "specter+mfr",
+            "name": "specter2+scincl",
             'useTitle': False,
             'useAbstract': True,
             'skipSpecter': False,
