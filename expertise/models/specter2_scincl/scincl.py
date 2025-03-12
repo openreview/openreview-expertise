@@ -251,9 +251,9 @@ class SciNCLPredictor(Predictor):
             for i in range(paper_num_train):
                 for j in range(paper_num_test):
                     csv_line = '{match_id},{submission_id},{score}'.format(match_id=test_id_list[j], submission_id=train_id_list[i],
-                                                                    score=p2p_aff_norm[j, i].item())
+                                                                    score=p2p_aff[j, i].item())
                     csv_scores.append(csv_line)
-                    self.preliminary_scores.append((test_id_list[j], train_id_list[i], p2p_aff_norm[j, i].item()))
+                    self.preliminary_scores.append((test_id_list[j], train_id_list[i], p2p_aff[j, i].item()))
         else:
             for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
                 if len(train_note_id_list) == 0:
