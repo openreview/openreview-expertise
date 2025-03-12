@@ -247,6 +247,9 @@ class JobConfig(object):
         status=None,
         description=None,
         match_group=None,
+        match_paper_invitation=None,
+        match_paper_venueid=None,
+        match_paper_id=None,
         alternate_match_group=None,
         reviewer_ids=None,
         dataset=None,
@@ -273,6 +276,9 @@ class JobConfig(object):
         self.status = status
         self.description = description
         self.match_group = match_group
+        self.match_paper_invitation = match_paper_invitation
+        self.match_paper_venueid = match_paper_venueid
+        self.match_paper_id = match_paper_id
         self.alternate_match_group = alternate_match_group
         self.reviewer_ids = reviewer_ids
         self.dataset = dataset
@@ -303,6 +309,9 @@ class JobConfig(object):
             'status': self.status,
             'description': self.description,
             'match_group': self.match_group,
+            'match_paper_invitation': self.match_paper_invitation,
+            'match_paper_venueid': self.match_paper_venueid,
+            'match_paper_id': self.match_paper_id,
             'alternate_match_group': self.alternate_match_group,
             'reviewer_ids': self.reviewer_ids,
             'dataset': self.dataset,
@@ -441,11 +450,11 @@ class JobConfig(object):
             inv, id, venueid, content = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None), api_request.entityB.get('withVenueid', None), api_request.entityB.get('withContent', None)
 
             if inv:
-                config.paper_invitation = inv
+                config.match_paper_invitation = inv
             if id:
-                config.paper_id = id
+                config.match_paper_id = id
             if venueid:
-                config.paper_venueid = venueid
+                config.match_paper_venueid = venueid
             if content:
                 config.paper_content = content                
 
@@ -548,6 +557,9 @@ class JobConfig(object):
             status = job_config.get('status'),
             description = job_config.get('description'),
             match_group = job_config.get('match_group'),
+            match_paper_invitation = job_config.get('match_paper_invitation'),
+            match_paper_venueid = job_config.get('match_paper_venueid'),
+            match_paper_id = job_config.get('match_paper_id'),
             alternate_match_group=job_config.get('alternate_match_group'),
             reviewer_ids=job_config.get('reviewer_ids'),
             dataset = job_config.get('dataset'),
