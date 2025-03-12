@@ -250,6 +250,7 @@ class JobConfig(object):
         match_paper_invitation=None,
         match_paper_venueid=None,
         match_paper_id=None,
+        match_paper_content=None,
         alternate_match_group=None,
         reviewer_ids=None,
         dataset=None,
@@ -279,6 +280,7 @@ class JobConfig(object):
         self.match_paper_invitation = match_paper_invitation
         self.match_paper_venueid = match_paper_venueid
         self.match_paper_id = match_paper_id
+        self.match_paper_content = match_paper_content
         self.alternate_match_group = alternate_match_group
         self.reviewer_ids = reviewer_ids
         self.dataset = dataset
@@ -312,6 +314,7 @@ class JobConfig(object):
             'match_paper_invitation': self.match_paper_invitation,
             'match_paper_venueid': self.match_paper_venueid,
             'match_paper_id': self.match_paper_id,
+            'match_paper_content': self.match_paper_content,
             'alternate_match_group': self.alternate_match_group,
             'reviewer_ids': self.reviewer_ids,
             'dataset': self.dataset,
