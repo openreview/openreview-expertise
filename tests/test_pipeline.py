@@ -128,7 +128,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_gcs_client, mock_exe
             'memberOf': "ABC.cc/Reviewers"
         },
         "model": {
-            "name": "specter+mfr",
+            "name": "specter2+scincl",
             'useTitle': False,
             'useAbstract': True,
             'skipSpecter': False,
