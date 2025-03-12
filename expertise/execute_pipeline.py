@@ -91,6 +91,8 @@ def run_pipeline(api_request_str, working_dir=None):
     print('Fetching and writing to storage')
     group_group_matching = validated_request.entityA.get('type', '') == 'Group' and \
         validated_request.entityB.get('type', '') == 'Group'
+    paper_paper_matching = validated_request.entityA.get('type', '') == 'Note' and \
+        validated_request.entityB.get('type', '') == 'Note'
 
     bucket_name = destination_prefix.split('/')[2]
     blob_prefix = '/'.join(destination_prefix.split('/')[3:])
@@ -102,18 +104,25 @@ def run_pipeline(api_request_str, working_dir=None):
         with open(os.path.join(config.job_dir, csv_file), 'r') as f:
             reader = csv.reader(f)
             for row in reader:
-                if not group_group_matching:
-                    result.append({
-                        'submission': row[0],
-                        'user': row[1],
-                        'score': float(row[2])
-                    })
-                else:
+                if group_group_matching:
                     result.append({
                         'match_member': row[0],
                         'submission_member': row[1],
                         'score': float(row[2])
                     })
+                elif paper_paper_matching:
+                    result.append({
+                        'match_submission': row[0],
+                        'submission': row[1],
+                        'score': float(row[2])
+                    })
+                else:
+                    result.append({
+                        'submission': row[0],
+                        'user': row[1],
+                        'score': float(row[2])
+                    })
+                    
         blob = bucket.blob(destination_blob)
         contents = '\n'.join([json.dumps(r) for r in result])
         blob.upload_from_string(contents)

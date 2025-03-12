@@ -487,6 +487,8 @@ class OpenReviewExpertise(object):
                     }
                 }
 
+        return reduced_submissions
+
     def get_match_submissions(self):
         invitation_ids = self.convert_to_list(self.config.get('match_paper_invitation', []))
         paper_id = self.config.get('match_paper_id')
@@ -499,6 +501,8 @@ class OpenReviewExpertise(object):
             paper_venueid=paper_venueid,
             paper_content=paper_content
         )
+
+        return reduced_submissions
     
 
     def get_submissions(self):
@@ -569,9 +573,9 @@ class OpenReviewExpertise(object):
             if not self.archive_dir.is_dir():
                 self.archive_dir.mkdir()
             papers = self.get_match_submissions()
-                with open(self.archive_dir.joinpath('match_submissions.jsonl'), 'w') as f:
-                    for paper in pubs:
-                        f.write(json.dumps(paper) + '\n')
+            with open(self.archive_dir.joinpath('match_submissions.jsonl'), 'w') as f:
+                for paper in papers.values():
+                    f.write(json.dumps(paper) + '\n')
 
         # Retrieve match groups to detect group-group matching
         group_group_matching = 'alternate_match_group' in self.config.keys()
