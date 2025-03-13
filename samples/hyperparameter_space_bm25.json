@@ -1,0 +1,5 @@
+{
+    "use_title": [true, false],
+    "use_abstract": [true, false],
+    "workers": [1, 2, 4, 8]
+} 

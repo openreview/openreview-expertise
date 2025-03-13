@@ -1,0 +1,7 @@
+{
+    "attn_clustering": [true, false],
+    "cross_attention": [true, false],
+    "use_cuda": [true],
+    "batch_size": [128],
+    "top_k": [1, 5]
+} 

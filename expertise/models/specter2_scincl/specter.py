@@ -14,6 +14,7 @@ import numpy as np
 from transformers import AutoTokenizer, AutoModel
 from adapters import AutoAdapterModel
 from .predictor import Predictor
+from .attention_clustering import SelfAttentionClusteringPredictor
 
 from expertise.service.server import redis_embeddings_pool
 
@@ -41,7 +42,7 @@ silent
 """
 class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, dump_p2p=False):
+                 sparse_value=None, use_redis=False, dump_p2p=False, top_k=None, attn_clustering=False, cross_attention=False):
         self.model_name = 'specter2'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -63,6 +64,9 @@ class Specter2Predictor(Predictor):
         self.use_redis = use_redis
         self.redis = None
         self.dump_p2p = dump_p2p
+        self.top_k = top_k
+        self.attn_clustering = attn_clustering
+        self.cross_attention = cross_attention
 
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load base model
@@ -229,6 +233,62 @@ class Specter2Predictor(Predictor):
             paper_num_test = len(test_id_list)
 
         print('Computing all scores...')
+        csv_scores = []
+        self.preliminary_scores = []
+
+        if self.attn_clustering:
+            print('Computing clustered reviewer embeddings...')
+            # Use attention clustering
+            attn_module = SelfAttentionClusteringPredictor(
+                top_k=self.top_k,
+                batch_size=self.batch_size,
+                device=self.cuda_device,
+                cross_attention=self.cross_attention
+            )
+            attn_ret_val = attn_module.compute_embeddings(
+                paper_emb_train,
+                self.pub_author_ids_to_note_id,
+                paper_id2train_idx,
+                submission_embeddings_matrix = paper_emb_test if self.cross_attention else None,
+                submission_ids = test_id_list if self.cross_attention else None
+            )
+            if self.cross_attention:
+                reviewer_submission_scores = attn_ret_val
+                for reviewer_id, reviewer_scores in reviewer_submission_scores.items():
+                    for submission_id, score in reviewer_scores.items():
+                        csv_line = '{note_id},{reviewer},{score}'.format(note_id=submission_id, reviewer=reviewer_id,
+                                                                    score=score)
+                        csv_scores.append(csv_line)
+                        self.preliminary_scores.append((submission_id, reviewer_id, score))
+            else:
+                reviewer_embeddings = attn_ret_val
+                # Stack reviewer embeddings and map reviewer_id to reviewer_embedding index
+                reviewer_embeddings_matrix = torch.stack(list(reviewer_embeddings.values()))
+                reviewer_id_to_embedding_idx = {reviewer_id: i for i, reviewer_id in enumerate(reviewer_embeddings.keys())}
+
+                # Make sure reviewer_embeddings_matrix is on the same device as paper_emb_test
+                reviewer_embeddings_matrix = reviewer_embeddings_matrix.to(self.cuda_device)
+                paper_emb_test = paper_emb_test.to(self.cuda_device)
+
+                # Compute scores between submissions and reviewer embeddings with mm
+                reviewer_sub_scores_matrix = torch.mm(reviewer_embeddings_matrix, paper_emb_test.t())
+                # Extract scores for each reviewer
+                reviewer_sub_scores = {}
+                for reviewer_id, reviewer_embedding_idx in reviewer_id_to_embedding_idx.items():
+                    reviewer_sub_scores[reviewer_id] = {}
+                    for i in range(paper_num_test):
+                        csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[i], reviewer=reviewer_id,
+                                                                    score=reviewer_sub_scores_matrix[reviewer_embedding_idx, i])
+                        csv_scores.append(csv_line)
+                        self.preliminary_scores.append((test_id_list[i], reviewer_id, reviewer_sub_scores_matrix[reviewer_embedding_idx, i]))
+
+            if scores_path:
+                with open(scores_path, 'w') as f:
+                    for csv_line in csv_scores:
+                        f.write(csv_line + '\n')
+
+            return self.preliminary_scores
+        
         p2p_aff = torch.empty((paper_num_test, paper_num_train), device=torch.device('cpu'))
         for i in range(paper_num_test):
             p2p_aff[i, :] = torch.sum(paper_emb_test[i, :].unsqueeze(dim=0) * paper_emb_train, dim=1)
@@ -247,8 +307,6 @@ class Specter2Predictor(Predictor):
         max_val = p2p_aff.max()
         p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
 
-        csv_scores = []
-        self.preliminary_scores = []
         for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
             if len(train_note_id_list) == 0:
                 continue
@@ -258,7 +316,17 @@ class Specter2Predictor(Predictor):
                     train_paper_idx.append(paper_id2train_idx[paper_id])
             train_paper_aff_j = p2p_aff_norm[:, train_paper_idx]
 
-            if self.average_score:
+            if self.top_k is not None:
+                # Average the top k scores
+                # If top k is <= 0, then use all scores
+                if self.top_k <= 0:
+                    all_paper_aff = train_paper_aff_j.mean(dim=1)
+                else:
+                    num_items = train_paper_aff_j.size(1)  # Get the number of items in the second dimension
+                    # Ensure top_k does not exceed the number of items
+                    top_k = min(self.top_k, num_items)
+                    all_paper_aff = torch.topk(train_paper_aff_j, top_k, dim=1).values.mean(dim=1)
+            elif self.average_score:
                 all_paper_aff = train_paper_aff_j.mean(dim=1)
             elif self.max_score:
                 all_paper_aff = train_paper_aff_j.max(dim=1)[0]
