@@ -166,14 +166,23 @@ class BaseExpertiseService:
         descriptions = JobDescription.VALS.value
         config.status = new_status
 
+        # Check for paper-paper-scoring
+        paper_scoring = config.api_request.entityA.get('type') == 'Note' and config.api_request.entityB.get('type') == 'Note'
+
         if desc is None:
             config.description = descriptions[new_status]
         else:
             # Example: special text for certain known exceptions
             if 'num_samples=0' in desc:
-                desc += '. Please check that there is at least 1 member of the match group with some publication.'
+                if paper_scoring:
+                    desc += '. Please check that you have access to the papers that you are querying for.'
+                else:
+                    desc += '. Please check that there is at least 1 member of the match group with some publication.'
             if 'Dimension out of range' in desc:
-                desc += '. Please check that you have at least 1 submission submitted and that you have run the Post Submission stage.'
+                if paper_scoring:
+                    desc += '. Please check that you have access to the papers that you are querying for.'
+                else:
+                    desc += '. Please check that you have at least 1 submission submitted and that you have run the Post Submission stage.'
             config.description = desc
 
         config.mdate = int(time.time() * 1000)
