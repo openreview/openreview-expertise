@@ -41,7 +41,7 @@ silent
 """
 class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, dump_p2p=False):
+                 sparse_value=None, use_redis=False, dump_p2p=False, emb_checkpoint=False ):
         self.model_name = 'specter2'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -63,6 +63,7 @@ class Specter2Predictor(Predictor):
         self.use_redis = use_redis
         self.redis = None
         self.dump_p2p = dump_p2p
+        self.emb_checkpoint = emb_checkpoint
 
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load base model

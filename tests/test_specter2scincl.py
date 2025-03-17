@@ -1,6 +1,7 @@
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
+import time
 import numpy
 import openreview
 import json
@@ -53,6 +54,7 @@ def test_specncl_scores(tmp_path, create_specncl):
     publications_path.mkdir()
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
+    start = time.time()
     specnclModel.embed_publications(
         specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
         scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl')
@@ -71,6 +73,45 @@ def test_specncl_scores(tmp_path, create_specncl):
         scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
+    from_scratch = time.time() - start
+    print(f"From scratch: {from_scratch}")
+
+    config = {
+        'name': 'test_specncl_chk',
+        'model_params': {
+            'use_title': True,
+            'use_abstract': True,
+            'use_cuda': False,
+            'batch_size': 1,
+            'average_score': True,
+            'max_score': False,
+            'work_dir': tmp_path,
+            'emb_checkpoint': True
+        }
+    }
+
+    specnclModel = create_specncl(config)
+
+    start = time.time()
+    specnclModel.embed_publications(
+        specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
+        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl')
+    )
+    specnclModel.embed_submissions(
+        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
+        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
+    )
+    all_scores = specnclModel.all_scores(
+        specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
+        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl'),
+        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
+        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
+        scores_path=scores_path.joinpath(config['name'] + '.csv')
+    )
+    from_checkpoint = time.time() - start
+    print(f"From checkpoint: {from_checkpoint}")
+
+    assert from_scratch > from_checkpoint
 
 
 def test_sparse_scores(tmp_path, create_specncl):

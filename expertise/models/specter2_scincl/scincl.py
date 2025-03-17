@@ -40,7 +40,7 @@ silent
 """
 class SciNCLPredictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, dump_p2p=False):
+                 sparse_value=None, use_redis=False, dump_p2p=False, emb_checkpoint=False):
         self.model_name = 'scincl'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -62,6 +62,7 @@ class SciNCLPredictor(Predictor):
         self.use_redis = use_redis
         self.redis = None
         self.dump_p2p = dump_p2p
+        self.emb_checkpoint = emb_checkpoint
 
         self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
         #load base model
@@ -163,6 +164,15 @@ class SciNCLPredictor(Predictor):
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
 
+        # If checkpointed, only embed new papers
+        if self.emb_checkpoint:
+            print('Skipping cached submissions...')
+            with open(submissions_path) as f_in:
+                for line in emb_file:
+                    paper_data = json.loads(line.rstrip())
+                    paper_id = paper_data['paper_id']
+                    del paper_data[paper_id]
+
         sub_jsonl = []
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             sub_jsonl.extend(self._batch_predict(batch_data))
@@ -179,6 +189,15 @@ class SciNCLPredictor(Predictor):
 
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
+
+        # If checkpointed, only embed new papers
+        if self.emb_checkpoint:
+            print('Skipping cached publications...')
+            with open(publications_path) as f_in:
+                for line in emb_file:
+                    paper_data = json.loads(line.rstrip())
+                    paper_id = paper_data['paper_id']
+                    del paper_data[paper_id]
 
         pub_jsonl = []
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
