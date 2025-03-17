@@ -238,15 +238,13 @@ jobs:
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            # Generate token and store it in a file
-            python -c '
-import openreview
-import os
-client = openreview.api.OpenReviewClient("http://localhost:3001", username="openreview.net", password="Or$3cur3P@ssw0rd")
-with open("api_token.txt", "w") as f:
-  f.write(client.token)
-print("Token generated successfully")
-'
+            # Execute the token generation script
+            python ~/openreview-expertise/tests/generate_token.py
+            # Verify token was generated
+            if [ ! -s api_token.txt ]; then
+              echo "Failed to generate token"
+              exit 1
+            fi
       
       # 7. Prepare test input
       - run:
