@@ -164,20 +164,24 @@ class SciNCLPredictor(Predictor):
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
 
-        # If checkpointed, only embed new papers
-        if self.emb_checkpoint:
+        # If checkpointing is enabled, filter out papers that have already been embedded.
+        if self.emb_checkpoint and os.path.exists(submissions_path):
             print('Skipping cached submissions...')
-            with open(submissions_path) as f_in:
-                for line in emb_file:
-                    paper_data = json.loads(line.rstrip())
-                    paper_id = paper_data['paper_id']
-                    del paper_data[paper_id]
+            existing_ids = set()
+            with open(submissions_path, 'r') as f_in:
+                for line in f_in:
+                    # Assuming each line is a JSON object containing a "paper_id" key.
+                    data = json.loads(line.rstrip())
+                    existing_ids.add(data['paper_id'])
+            
+            # Remove already embedded papers from paper_data.
+            paper_data = {paper_id: data for paper_id, data in paper_data.items() if paper_id not in existing_ids}
 
         sub_jsonl = []
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             sub_jsonl.extend(self._batch_predict(batch_data))
 
-        with open(submissions_path, 'w') as f:
+        with open(submissions_path, 'a') as f:
             f.writelines(sub_jsonl)
 
     def embed_publications(self, publications_path=None):
@@ -190,20 +194,24 @@ class SciNCLPredictor(Predictor):
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
 
-        # If checkpointed, only embed new papers
-        if self.emb_checkpoint:
+        # If checkpointing is enabled, filter out papers that have already been embedded.
+        if self.emb_checkpoint and os.path.exists(publications_path):
             print('Skipping cached publications...')
-            with open(publications_path) as f_in:
-                for line in emb_file:
-                    paper_data = json.loads(line.rstrip())
-                    paper_id = paper_data['paper_id']
-                    del paper_data[paper_id]
+            existing_ids = set()
+            with open(publications_path, 'r') as f_in:
+                for line in f_in:
+                    # Assuming each line is a JSON object containing a "paper_id" key.
+                    data = json.loads(line.rstrip())
+                    existing_ids.add(data['paper_id'])
+            
+            # Remove already embedded papers from paper_data.
+            paper_data = {paper_id: data for paper_id, data in paper_data.items() if paper_id not in existing_ids}
 
         pub_jsonl = []
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             pub_jsonl.extend(self._batch_predict(batch_data))
 
-        with open(publications_path, 'w') as f:
+        with open(publications_path, 'a') as f:
             f.writelines(pub_jsonl)
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None, p2p_path=None):

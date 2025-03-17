@@ -76,6 +76,34 @@ def test_specncl_scores(tmp_path, create_specncl):
     from_scratch = time.time() - start
     print(f"From scratch: {from_scratch}")
 
+    # Cache scores
+    with open(scores_path.joinpath(config['name'] + '.csv'), 'r') as f:
+        scores_cache = [line for line in f.readlines()]
+
+    # Cache sub2vec_specter.jsonl and pub2vec_scincl.jsonl
+    with open(submissions_path.joinpath('sub2vec_specter.jsonl'), 'r') as f:
+        submissions_cache = [line for line in f.readlines()]
+    with open(publications_path.joinpath('pub2vec_scincl.jsonl'), 'r') as f:
+        publications_cache = [line for line in f.readlines()]
+
+    # Delete some submissions
+    with open(submissions_path.joinpath('sub2vec_specter.jsonl'), 'r') as f:
+        # Filter out the first 2 embeddings
+        submissions = [json.loads(line) for line in f.readlines()]
+        submissions = submissions[2:]
+    with open(submissions_path.joinpath('sub2vec_specter.jsonl'), 'w') as f:
+        for submission in submissions:
+            f.write(json.dumps(submission) + '\n')
+
+    # Delete some publications
+    with open(publications_path.joinpath('pub2vec_scincl.jsonl'), 'r') as f:
+        # Filter out the first 2 embeddings
+        publications = [json.loads(line) for line in f.readlines()]
+        publications = publications[2:]
+    with open(publications_path.joinpath('pub2vec_scincl.jsonl'), 'w') as f:
+        for publication in publications:
+            f.write(json.dumps(publication) + '\n')
+
     config = {
         'name': 'test_specncl_chk',
         'model_params': {
@@ -112,6 +140,21 @@ def test_specncl_scores(tmp_path, create_specncl):
     print(f"From checkpoint: {from_checkpoint}")
 
     assert from_scratch > from_checkpoint
+    # Check all embeddings are the same
+    ## Publications
+    with open(publications_path.joinpath('pub2vec_scincl.jsonl'), 'r') as f:
+        publications = [line for line in f.readlines()]
+        assert set(publications) == set(publications_cache)
+
+    ## Submissions  
+    with open(submissions_path.joinpath('sub2vec_specter.jsonl'), 'r') as f:
+        submissions = [line for line in f.readlines()]
+        assert set(submissions) == set(submissions_cache)
+
+    # Check all score
+    with open(scores_path.joinpath(config['name'] + '.csv'), 'r') as f:
+        scores = [line for line in f.readlines()]
+        assert set(scores) == set(scores_cache)
 
 
 def test_sparse_scores(tmp_path, create_specncl):
