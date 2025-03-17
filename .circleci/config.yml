@@ -172,6 +172,7 @@ jobs:
     machine:
       image: ubuntu-2204:2022.10.2
     resource_class: medium
+    working_directory: ~/openreview-expertise
     steps:
       - checkout
       - attach_workspace:
@@ -232,56 +233,20 @@ jobs:
           command: |
             docker build -t expertise-test:latest .
 
-      # 6. Generate valid API token
+      # 6. Generate valid API token and prepare input
       - run:
-          name: Generate valid API token
+          name: Generate valid API token and prepare input
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
+            # Print working directory for debugging
+            pwd
             # Execute the token generation script
-            python ~/openreview-expertise/tests/generate_token.py
-            # Verify token was generated
-            if [ ! -s api_token.txt ]; then
-              echo "Failed to generate token"
-              exit 1
-            fi
+            python ~/openreview-expertise/tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_paper_group.json
+            # Verify file exists
+            ls -la test_input.json
       
-      # 7. Prepare test input
-      - run:
-          name: Prepare test input
-          command: |
-            # Read token from file
-            TOKEN=$(cat api_token.txt)
-            # Create a test JSON input using heredoc
-            cat > test_input.json << EOF
-{
-  "user_id": "openreview.net",
-  "token": "$TOKEN",
-  "baseurl_v1": "http://localhost:3000",
-  "baseurl_v2": "http://localhost:3001",
-  "gcs_folder": "gs://test-bucket/test-folder",
-  "dump_embs": true,
-  "dump_archives": true,
-  "name": "test_container",
-  "entityA": {
-    "type": "Group",
-    "memberOf": "ABC.cc/Reviewers"
-  },
-  "entityB": {
-    "type": "Note",
-    "invitation": "ABC.cc/-/Submission"
-  },
-  "model": {
-    "name": "specter2+scincl",
-    "useTitle": false,
-    "useAbstract": true,
-    "skipSpecter": false,
-    "scoreComputation": "avg"
-  }
-}
-EOF
-      
-      # 8. Run the container with test input
+      # 7. Run the container with test input
       - run:
           name: Run container
           command: |
@@ -296,7 +261,7 @@ EOF
               expertise-test:latest \
               python -m expertise.execute_pipeline "$(cat test_input.json)"
       
-      # 9. Verify the output
+      # 8. Verify the output
       - run:
           name: Verify container output
           command: |
