@@ -247,6 +247,10 @@ class JobConfig(object):
         status=None,
         description=None,
         match_group=None,
+        match_paper_invitation=None,
+        match_paper_venueid=None,
+        match_paper_id=None,
+        match_paper_content=None,
         alternate_match_group=None,
         reviewer_ids=None,
         dataset=None,
@@ -273,6 +277,10 @@ class JobConfig(object):
         self.status = status
         self.description = description
         self.match_group = match_group
+        self.match_paper_invitation = match_paper_invitation
+        self.match_paper_venueid = match_paper_venueid
+        self.match_paper_id = match_paper_id
+        self.match_paper_content = match_paper_content
         self.alternate_match_group = alternate_match_group
         self.reviewer_ids = reviewer_ids
         self.dataset = dataset
@@ -303,6 +311,10 @@ class JobConfig(object):
             'status': self.status,
             'description': self.description,
             'match_group': self.match_group,
+            'match_paper_invitation': self.match_paper_invitation,
+            'match_paper_venueid': self.match_paper_venueid,
+            'match_paper_id': self.match_paper_id,
+            'match_paper_content': self.match_paper_content,
             'alternate_match_group': self.alternate_match_group,
             'reviewer_ids': self.reviewer_ids,
             'dataset': self.dataset,
@@ -341,6 +353,28 @@ class JobConfig(object):
         def _camel_to_snake(camel_str):
             camel_str = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', camel_str)
             return re.sub('([a-z0-9])([A-Z])', r'\1_\2', camel_str).lower()
+
+        def _populate_note_fields(entity, config, paper_paper_scoring=False):
+            inv, id, venueid, content = entity.get('invitation', None), entity.get('id', None), entity.get('withVenueid', None), entity.get('withContent', None)
+
+            if paper_paper_scoring:
+                if inv:
+                    config.match_paper_invitation = inv
+                if id:
+                    config.match_paper_id = id
+                if venueid:
+                    config.match_paper_venueid = venueid
+                if content:
+                    config.match_paper_content = content
+            else:
+                if inv:
+                    config.paper_invitation = inv
+                if id:
+                    config.paper_id = id
+                if venueid:
+                    config.paper_venueid = venueid
+                if content:
+                    config.paper_content = content
 
         descriptions = JobDescription.VALS.value
         config = JobConfig()
@@ -426,28 +460,13 @@ class JobConfig(object):
         config.paper_id = None
 
         if api_request.entityA['type'] == 'Note':
-            inv, id, venueid, content = api_request.entityA.get('invitation', None), api_request.entityA.get('id', None), api_request.entityA.get('withVenueid', None), api_request.entityA.get('withContent', None)
+            _populate_note_fields(api_request.entityA, config)
 
-            if inv:
-                config.paper_invitation = inv
-            if id:
-                config.paper_id = id
-            if venueid:
-                config.paper_venueid = venueid
-            if content:
-                config.paper_content = content
-
-        elif api_request.entityB['type'] == 'Note':
-            inv, id, venueid, content = api_request.entityB.get('invitation', None), api_request.entityB.get('id', None), api_request.entityB.get('withVenueid', None), api_request.entityB.get('withContent', None)
-
-            if inv:
-                config.paper_invitation = inv
-            if id:
-                config.paper_id = id
-            if venueid:
-                config.paper_venueid = venueid
-            if content:
-                config.paper_content = content                
+        if api_request.entityB['type'] == 'Note':
+            if api_request.entityA['type'] == 'Note':
+                _populate_note_fields(api_request.entityB, config, paper_paper_scoring=True)
+            else:
+                _populate_note_fields(api_request.entityB, config)
 
         # Validate that other paper fields are none if an alternate match group is present
         if config.alternate_match_group is not None and (config.paper_id is not None or config.paper_invitation is not None):
@@ -527,6 +546,14 @@ class JobConfig(object):
         for field in path_fields:
             config.model_params[field] = root_dir
 
+        # Infer compute_paper_paper from two Note entities
+        valid_paper_paper_models = ['specter', 'specter2', 'scincl', 'specter2+scincl']
+        config.model_params['compute_paper_paper'] = False
+        if api_request.entityA['type'] == 'Note' and api_request.entityB['type'] == 'Note':
+            if config.model not in valid_paper_paper_models:
+                raise openreview.OpenReviewException(f"Bad request: model {config.model} does not support paper-paper scoring")
+            config.model_params['compute_paper_paper'] = True
+
         if 'specter' in config.model:
             config.model_params['specter_dir'] = server_config['SPECTER_DIR']
         if 'mfr' in config.model:
@@ -548,6 +575,9 @@ class JobConfig(object):
             status = job_config.get('status'),
             description = job_config.get('description'),
             match_group = job_config.get('match_group'),
+            match_paper_invitation = job_config.get('match_paper_invitation'),
+            match_paper_venueid = job_config.get('match_paper_venueid'),
+            match_paper_id = job_config.get('match_paper_id'),
             alternate_match_group=job_config.get('alternate_match_group'),
             reviewer_ids=job_config.get('reviewer_ids'),
             dataset = job_config.get('dataset'),
@@ -974,7 +1004,7 @@ class GCPInterface(object):
 
     def get_job_results(self, user_id, job_id, delete_on_get=False):
 
-        def _get_scores_and_metadata(all_blobs, job_id, group_scoring=False):
+        def _get_scores_and_metadata(all_blobs, job_id, group_scoring=False, paper_scoring=False):
             """
             Extracts the scores and metadata from the GCS bucket
 
@@ -984,6 +1014,8 @@ class GCPInterface(object):
             :type job_id: str
             :param group_scoring: Indicator for scores between groups
             :type group_scoring: bool
+            :param paper_scoring: Indicator for scores between papers
+            :type paper_scoring: bool
 
             :returns scores: The scores as a list of JSONs
             :returns metadata: The metadata as a dictionary
@@ -994,13 +1026,14 @@ class GCPInterface(object):
             score_files = [
                 blob for blob in all_blobs if '.jsonl' in blob.name and job_id in blob.name
             ]
+            skip_sparse = group_scoring or paper_scoring
 
             if len(metadata_files) != 1:
                 raise openreview.OpenReviewException(f"Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}")
             if len(score_files) < 1 or len(score_files) > 2:
                 raise openreview.OpenReviewException(f"Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}")
 
-            if not group_scoring:
+            if not skip_sparse:
                 sparse_score_files = [
                     blob for blob in score_files if 'sparse' in blob.name
                 ]
@@ -1014,7 +1047,8 @@ class GCPInterface(object):
                     blob for blob in score_files if 'sparse' not in blob.name
                 ]
                 if len(non_sparse_score_files) != 1:
-                    raise openreview.OpenReviewException(f"Internal Error: incorrect group score files found expected [1] found {len(non_sparse_score_files)}")
+                    scoring_type_string = 'group' if group_scoring else 'paper'
+                    raise openreview.OpenReviewException(f"Internal Error: incorrect {scoring_type_string} score files found expected [1] found {len(non_sparse_score_files)}")
                 scores_str = non_sparse_score_files[0].download_as_string()
                 if isinstance(scores_str, bytes):
                     scores_str = scores_str.decode('utf-8')
@@ -1047,6 +1081,7 @@ class GCPInterface(object):
         ret_list = []
         request = authenticated_requests[0]
         group_group_matching = request.get('entityA', {}).get('type', '') == 'Group' and request.get('entityB', {}).get('type', '') == 'Group'
+        paper_paper_matching = request.get('entityA', {}).get('type', '') == 'Note' and request.get('entityB', {}).get('type', '') == 'Note'
 
         return _get_scores_and_metadata(job_blobs, job_id, group_scoring=group_group_matching)
 

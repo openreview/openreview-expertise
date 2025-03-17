@@ -476,6 +476,189 @@ class TestExpertiseV2():
         results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']       
         assert len(results) == 15 # 3 editors x 5 submissions/publications from Raia/Kyunghyun
 
+    def test_paperpaper_submission_content_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+
+        # Make a request that is not supported
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": { 
+                        'type': "Note",
+                        'withVenueid': "TMLR/Submitted",
+                        'withContent': { 'human_subjects_reporting': 'Not applicable' }
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'withVenueid': "TMLR/Submitted",
+                        'withContent': { 'human_subjects_reporting': 'Not applicable' }
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 400, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == "Bad request: model specter+mfr does not support paper-paper scoring"
+
+        abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
+        abc_client.impersonate('ABC.cc/Program_Chairs')
+        # Get a no publications error
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": { 
+                        'type': "Note",
+                        'withVenueid': "TMLR/Submitted",
+                        'withContent': { 'human_subjects_reporting': 'Not applicable' }
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission",
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+            print(f"resp: {response}")
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+            try_time = time.time() - start_time
+
+        assert response['status'] == 'Error'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Dimension out of range (expected to be in range of [-1, 0], but got 1). Please check that you have access to the papers that you are querying for.'
+
+        # Get a no submissions error
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'withVenueid': "TMLR/Submitted",
+                        'withContent': { 'human_subjects_reporting': 'Not applicable' }
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+            print(f"resp: {response}")
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+            try_time = time.time() - start_time
+
+        assert response['status'] == 'Error'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Dimension out of range (expected to be in range of [-1, 0], but got 1). Please check that you have access to the papers that you are querying for.'
+
+        # Make a request that is supported by the model
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": { 
+                        'type': "Note",
+                        'withVenueid': "TMLR/Submitted",
+                        'withContent': { 'human_subjects_reporting': 'Not applicable' }
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'withVenueid': "TMLR/Submitted",
+                        'withContent': { 'human_subjects_reporting': 'Not applicable' }
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response[0]['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']       
+        assert len(results) == 25 # 5 submissions x 5 submissions/publications from Raia/Kyunghyun
+
     def test_specter2_scincl(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes

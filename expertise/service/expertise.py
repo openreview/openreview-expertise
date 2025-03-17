@@ -166,14 +166,23 @@ class BaseExpertiseService:
         descriptions = JobDescription.VALS.value
         config.status = new_status
 
+        # Check for paper-paper-scoring
+        paper_scoring = config.api_request.entityA.get('type') == 'Note' and config.api_request.entityB.get('type') == 'Note'
+
         if desc is None:
             config.description = descriptions[new_status]
         else:
             # Example: special text for certain known exceptions
             if 'num_samples=0' in desc:
-                desc += '. Please check that there is at least 1 member of the match group with some publication.'
+                if paper_scoring:
+                    desc += '. Please check that you have access to the papers that you are querying for.'
+                else:
+                    desc += '. Please check that there is at least 1 member of the match group with some publication.'
             if 'Dimension out of range' in desc:
-                desc += '. Please check that you have at least 1 submission submitted and that you have run the Post Submission stage.'
+                if paper_scoring:
+                    desc += '. Please check that you have access to the papers that you are querying for.'
+                else:
+                    desc += '. Please check that you have at least 1 submission submitted and that you have run the Post Submission stage.'
             config.description = desc
 
         config.mdate = int(time.time() * 1000)
@@ -380,7 +389,7 @@ class BaseExpertiseService:
 
         return filtered_dirs
 
-    def _get_score_and_metadata_dir(self, search_dir, group_scoring=False):
+    def _get_score_and_metadata_dir(self, search_dir, group_scoring=False, paper_scoring=False):
         """
         Searches the given directory for a possible score file and the metadata file
 
@@ -390,18 +399,22 @@ class BaseExpertiseService:
         :param group_scoring: Indicate if scoring between groups, if so skip sparse scores
         :type group_scoring: bool
 
+        :param paper_scoring: Indicate if scoring between papers, if so skip sparse scores
+        :type paper_scoring: bool
+
         :returns file_dir: The directory of the score file, if it exists, starting from the given directory
         :returns metadata_dir: The directory of the metadata file, if it exists, starting from the given directory
         """
         # Search for scores files (if sparse scores exist, retrieve by default)
         file_dir, metadata_dir = None, None
+        skip_sparse = group_scoring or paper_scoring
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
             config = JobConfig.from_json(json.load(f))
 
         # Look for files
         if os.path.isfile(os.path.join(search_dir, f"{config.name}.csv")):
             file_dir = os.path.join(search_dir, f"{config.name}.csv")
-            if not group_scoring:
+            if not skip_sparse:
                 if 'sparse_value' in config.model_params.keys() and os.path.isfile(os.path.join(search_dir, f"{config.name}_sparse.csv")):
                     file_dir = os.path.join(search_dir, f"{config.name}_sparse.csv")
                 else:
@@ -697,9 +710,34 @@ class ExpertiseService(BaseExpertiseService):
 
             # Check for output format
             group_group_matching = config.alternate_match_group is not None
+            paper_paper_matching = config.api_request.entityA.get('type') == 'Note' and config.api_request.entityB.get('type') == 'Note'
 
             self.logger.info(f"Retrieving scores from {config.job_dir}")
-            if not group_group_matching:
+            if group_group_matching:
+                # If group-group matching, report results using "*_member" keys
+                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir, group_scoring=True)
+                with open(file_dir, 'r') as csv_file:
+                    data_reader = reader(csv_file)
+                    for row in data_reader:
+                        ret_list.append({
+                            'match_member': row[0],
+                            'submission_member': row[1],
+                            'score': float(row[2])
+                        })
+                result['results'] = ret_list
+            elif paper_paper_matching:
+                # If paper-paper matching, report results using submission keywords
+                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir, paper_scoring=True)
+                with open(file_dir, 'r') as csv_file:
+                    data_reader = reader(csv_file)
+                    for row in data_reader:
+                        ret_list.append({
+                            'match_submission': row[0],
+                            'submission': row[1],
+                            'score': float(row[2])
+                        })
+                result['results'] = ret_list
+            else:
                 # If reviewer-paper matching, use standard 'user' and 'score' keys
                 file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
                 with open(file_dir, 'r') as csv_file:
@@ -712,18 +750,6 @@ class ExpertiseService(BaseExpertiseService):
                         ret_list.append({
                             'submission': row[0],
                             'user': row[1],
-                            'score': float(row[2])
-                        })
-                result['results'] = ret_list
-            else:
-                # If group-group matching, report results using "*_member" keys
-                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir, group_scoring=True)
-                with open(file_dir, 'r') as csv_file:
-                    data_reader = reader(csv_file)
-                    for row in data_reader:
-                        ret_list.append({
-                            'match_member': row[0],
-                            'submission_member': row[1],
                             'score': float(row[2])
                         })
                 result['results'] = ret_list

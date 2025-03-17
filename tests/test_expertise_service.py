@@ -797,6 +797,87 @@ class TestExpertiseService():
 
         ## Assert the next expertise results should return empty result
 
+    def test_paper_paper_request(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID, DEF has a single exclude edge
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+        # Make a request
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                        "name": "specter2+scincl",
+                        'useTitle': False, 
+                        'useAbstract': True, 
+                        'skipSpecter': False,
+                        'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        # Check for API request
+        req = response['request']
+        assert req['name'] == 'test_run'
+        assert req['entityA']['type'] == 'Note'
+        assert req['entityA']['invitation'] == 'ABC.cc/-/Submission'
+        assert req['entityB']['type'] == 'Note'
+        assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
+        assert response['cdate'] <= response['mdate']
+
+        # Check archives folder
+        assert os.path.isdir(f"./tests/jobs/{job_id}/archives")
+        assert os.path.isfile(f"./tests/jobs/{job_id}/archives/match_submissions.jsonl")
+        with open(f"./tests/jobs/{job_id}/archives/match_submissions.jsonl", 'r') as f:
+            assert len(f.readlines()) == 2
+
+        # Check scores matrix
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{job_id}", 'deleteOnGet': True})
+        metadata = response.json['metadata']
+        #assert metadata['submission_count'] == 1
+        response = response.json['results']
+        assert len(response) == 4 ## 2 papers x 2 papers = 4 entries in the score matrix
+        for item in response:
+            match_submission_id, submission_id, score = item['match_submission'], item['submission'], float(item['score'])
+            assert len(submission_id) >= 1
+            assert len(match_submission_id) >= 1
+            assert score >= 0
+            if match_submission_id == submission_id:
+                assert score >= 0.99
+
     def test_request_expertise_with_model_errors(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a config with an error in the model field and return the job_id
         test_client = openreview_context['test_client']

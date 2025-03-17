@@ -412,14 +412,14 @@ class OpenReviewExpertise(object):
         
         return all_papers
 
-    def get_submissions(self):
-        invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
-        paper_id = self.config.get('paper_id')
-        paper_venueid = self.config.get('paper_venueid', None)
-        paper_content = self.config.get('paper_content', None)
-        submission_groups = self.convert_to_list(self.config.get('alternate_match_group', []))
+    def get_submissions_helper(self, 
+        invitation_ids=None,
+        paper_id=None,
+        paper_venueid=None,
+        paper_content=None,
+        submission_groups=None,
+    ):
         submissions = []
-
         # Fetch papers from alternate match group
         # If no alternate match group provided, aggregate papers from all other sources
         if submission_groups:
@@ -487,6 +487,39 @@ class OpenReviewExpertise(object):
                     }
                 }
 
+        return reduced_submissions
+
+    def get_match_submissions(self):
+        invitation_ids = self.convert_to_list(self.config.get('match_paper_invitation', []))
+        paper_id = self.config.get('match_paper_id')
+        paper_venueid = self.config.get('match_paper_venueid', None)
+        paper_content = self.config.get('match_paper_content', None)
+
+        reduced_submissions = self.get_submissions_helper(
+            invitation_ids=invitation_ids,
+            paper_id=paper_id,
+            paper_venueid=paper_venueid,
+            paper_content=paper_content
+        )
+
+        return reduced_submissions
+    
+
+    def get_submissions(self):
+        invitation_ids = self.convert_to_list(self.config.get('paper_invitation', []))
+        paper_id = self.config.get('paper_id')
+        paper_venueid = self.config.get('paper_venueid', None)
+        paper_content = self.config.get('paper_content', None)
+        submission_groups = self.convert_to_list(self.config.get('alternate_match_group', []))
+
+        reduced_submissions = self.get_submissions_helper(
+            invitation_ids=invitation_ids,
+            paper_id=paper_id,
+            paper_venueid=paper_venueid,
+            paper_content=paper_content,
+            submission_groups=submission_groups
+        )
+
         csv_submissions = self.config.get('csv_submissions')
         if csv_submissions:
             print('adding records from csv file ')
@@ -534,6 +567,15 @@ class OpenReviewExpertise(object):
                 with open(self.archive_dir.joinpath(reviewer_id + '.jsonl'), 'w') as f:
                     for paper in pubs:
                         f.write(json.dumps(paper) + '\n')
+
+        if 'match_paper_invitation' in self.config or 'match_paper_id' in self.config or 'match_paper_venueid' in self.config:
+            self.archive_dir = self.dataset_dir.joinpath('archives')
+            if not self.archive_dir.is_dir():
+                self.archive_dir.mkdir()
+            papers = self.get_match_submissions()
+            with open(self.archive_dir.joinpath('match_submissions.jsonl'), 'w') as f:
+                for paper in papers.values():
+                    f.write(json.dumps(paper) + '\n')
 
         # Retrieve match groups to detect group-group matching
         group_group_matching = 'alternate_match_group' in self.config.keys()
