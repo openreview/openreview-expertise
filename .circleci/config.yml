@@ -178,14 +178,6 @@ jobs:
       - attach_workspace:
           at: ~/
       
-      # 1. Setup test environment
-      - run:
-          name: Setup test environment
-          command: |
-            # Install Docker and dependencies
-            sudo apt-get update
-            sudo apt-get install -y docker.io
-      
       # 2. Start mock GCS server
       - run:
           name: Start GCS emulator
