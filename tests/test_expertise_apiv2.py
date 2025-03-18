@@ -13,6 +13,7 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
+from expertise.service.utils import JobConfig, RedisDatabase
 
 class TestExpertiseV2():
 
@@ -61,6 +62,9 @@ class TestExpertiseV2():
             "MFR_VOCAB_DIR": '../expertise-utils/multifacet_recommender/feature_vocab_file',
             "MFR_CHECKPOINT_DIR": '../expertise-utils/multifacet_recommender/mfr_model_checkpoint/',
             "WORKING_DIR": './tests/jobs',
+            "REDIS_ADDR": 'localhost',
+            "REDIS_PORT": 6379,
+            "REDIS_CONFIG_DB": 10,
             "CHECK_EVERY": 3600,
             "DELETE_AFTER": 3600,
             "IN_TEST": True
@@ -146,6 +150,14 @@ class TestExpertiseV2():
     
     def test_journal_request_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
+
+        redis = RedisDatabase(
+            host=openreview_context['config']['REDIS_ADDR'],
+            port=openreview_context['config']['REDIS_PORT'],
+            db=openreview_context['config']['REDIS_CONFIG_DB'],
+            sync_on_disk=False
+        )
+
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
 
@@ -262,6 +274,12 @@ class TestExpertiseV2():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        # Load RedisJob and delete match_paper_invitation
+        ## simulates legacy configs
+        job = redis.load_job(job_id, 'openreview.net')
+        delattr(job, 'match_paper_invitation')
+        redis.save_job(job)
 
         # Test for paper id query
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'id': target_id}).json['results']
