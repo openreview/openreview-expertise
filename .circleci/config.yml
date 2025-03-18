@@ -171,8 +171,22 @@ jobs:
   container-test:
     machine:
       image: ubuntu-2204:2022.10.2
-    resource_class: medium
+    # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
+    resource_class: large
+    parallelism: 1
     working_directory: ~/openreview-expertise
+    docker:
+      - image: ubuntu:22.04
+      - image: redislabs/redisai
+      - image: mongo:6.0
+        command: [ --replSet, rs0 ]
+      - image: docker.elastic.co/elasticsearch/elasticsearch:7.7.0
+        environment:
+          xpack.security.enabled: false
+          transport.host: localhost
+          TZ: "Etc/UTC"
+    environment:
+      PYTHON_VERSION: 3.11
     steps:
       - checkout
       
