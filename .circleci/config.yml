@@ -201,7 +201,12 @@ jobs:
             cd ~/
             curl -Lk https://raw.githubusercontent.com/tj/n/master/bin/n -o n
             sudo bash n 18.15.0
-            hash -r
+            # Make sure to use the newly installed Node version
+            export PATH="/usr/local/bin:$PATH"
+            # Verify we're using Node 18
+            node -v
+            npm -v
+            # Then install n globally
             sudo npm install -g n
       # Setup environment
       - run:
