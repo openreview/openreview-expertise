@@ -206,6 +206,8 @@ jobs:
             # Verify we're using Node 18
             node -v
             npm -v
+            # Save the PATH to a file that can be sourced in other steps
+            echo 'export PATH="/usr/local/bin:$PATH"' >> $BASH_ENV
             # Then install n globally
             sudo npm install -g n
       # Setup environment
@@ -313,6 +315,7 @@ jobs:
       - run:
           name: Start API v1
           command: |
+            node -v
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview
@@ -322,6 +325,7 @@ jobs:
       - run:
           name: Start API v2
           command: |
+            node -v
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-v2
