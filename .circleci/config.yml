@@ -175,31 +175,68 @@ jobs:
     working_directory: ~/openreview-expertise
     steps:
       - checkout
-      - attach_workspace:
-          at: ~/
       
-      # Fix permissions for all persisted directories
+      # Setup Miniconda (duplicated from build job)
       - run:
-          name: Fix permissions for persisted directories
+          name: Setup Miniconda
           command: |
-            echo "Fixing permissions for all persisted directories..."
+            apt update
+            apt install -y wget curl build-essential git sudo
+            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
+            cd $HOME
+            wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
+            printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
+            bash miniconda.sh -b -p $HOME/miniconda
             
-            # Fix Miniconda permissions
-            echo "Fixing Miniconda permissions..."
-            sudo chown -R circleci:circleci ~/miniconda
-            ls -la ~/miniconda/bin
-            
-            # Fix permissions for other persisted directories
-            echo "Fixing OpenReview and related directories permissions..."
-            sudo chown -R circleci:circleci ~/openreview
-            sudo chown -R circleci:circleci ~/openreview-v2
-            sudo chown -R circleci:circleci ~/openreview-py
-            sudo chown -R circleci:circleci ~/expertise-utils
-            
-            # Test conda activation directly
-            echo "Testing conda activation..."
+      # Setup environment
+      - run:
+          name: Setup environment
+          command: |
             export PATH="$HOME/miniconda/bin:$PATH"
-            conda info
+            conda update -y conda
+            python -m ensurepip --upgrade
+            python -m pip install --upgrade pip setuptools wheel setuptools_rust
+            conda create -n expertise python=3.11 -c conda-forge
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            python --version
+      
+      # Initialize MongoDB
+      - run:
+          name: Initialize MongoDB
+          command: |
+            sudo apt-get install gnupg curl
+            curl -fsSL https://pgp.mongodb.com/server-6.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor
+            echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+            sudo apt-get update
+            sudo apt-get install -y mongodb-org=6.0.7
+            sudo systemctl start mongod
+            mongosh mongodb://localhost:27017 --eval "rs.initiate()"
+            
+      # Clone OpenReview repositories
+      - run:
+          name: Clone OpenReview repositories
+          command: |
+            git clone https://github.com/openreview/openreview-api-v1.git ~/openreview
+            cd ~/openreview && git checkout master
+            git clone https://github.com/openreview/openreview-api.git ~/openreview-v2
+            cd ~/openreview-v2 && git checkout main
+            git clone https://github.com/openreview/openreview-py.git ~/openreview-py
+            cd ~/openreview-py
+            pip install --force-reinstall -e ~/openreview-py
+            
+      # Create API directories
+      - run:
+          name: Create API directories
+          command: |
+            mkdir -p ~/openreview/logs
+            mkdir -p ~/openreview/files/attachments
+            mkdir -p ~/openreview/files/pdfs
+            mkdir -p ~/openreview/files/temp
+            mkdir -p ~/openreview-v2/logs
+            mkdir -p ~/openreview-v2/files/attachments
+            mkdir -p ~/openreview-v2/files/pdfs
+            mkdir -p ~/openreview-v2/files/temp
       
       # 2. Start mock GCS server
       - run:
@@ -239,14 +276,14 @@ jobs:
             docker run --rm --network gcs-network appropriate/curl -s \
               "http://gcs-emulator:4443/storage/v1/b?project=test-project"
       
-      # 3. Start OpenReview APIs (reuse from build job)
+      # 3. Start OpenReview APIs 
       - run:
           name: Start API v1
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview
-            npm run start
+            npm run cleanStart
           background: true
       
       - run:
@@ -255,7 +292,7 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-v2
-            npm run start
+            npm run cleanStart
           background: true
       
       # 4. Wait for APIs to start
@@ -264,6 +301,14 @@ jobs:
           command: |
             wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3000
             wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3001
+
+      - run:
+          name: Run tests
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview-expertise
+            python -m pytest tests/test_create_conference.py tests/test_create_dataset.py
       
       # 5. Build the container
       - run:
@@ -306,12 +351,10 @@ jobs:
             # Check if the expected files exist and have correct format
             python ~/openreview-expertise/tests/verify_container_results.py ./test_output
 
-# Add a workflow to run jobs in sequence
+# Update workflow to run jobs in parallel
 workflows:
   version: 2
   build-and-test:
     jobs:
       - build
-      - container-test:
-          requires:
-            - build
+      - container-test  # Remove the "requires" dependency
