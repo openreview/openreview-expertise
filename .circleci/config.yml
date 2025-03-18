@@ -178,6 +178,13 @@ jobs:
       - attach_workspace:
           at: ~/
       
+      # Fix permissions for conda
+      - run:
+          name: Fix conda permissions
+          command: |
+            # Make conda directories accessible to circleci user
+            sudo chown -R circleci:circleci ~/miniconda
+      
       # 2. Start mock GCS server
       - run:
           name: Create Docker network and start GCS emulator
