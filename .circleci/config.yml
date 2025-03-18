@@ -182,16 +182,46 @@ jobs:
       - run:
           name: Start GCS emulator
           command: |
-            docker run -d -p 8080:8080 fsouza/fake-gcs-server -scheme http
+            docker run -d --name gcs-emulator -p 8080:8080 fsouza/fake-gcs-server -scheme http
           background: true
       - run:
           name: Create test bucket in GCS emulator
           command: |
-            # Wait for GCS emulator to be ready
-            sleep 3
-            curl -X POST "http://localhost:8080/storage/v1/b?project=test-project" \
-              -H "Content-Type: application/json" \
-              -d '{"name": "test-bucket"}'
+            # Wait longer for GCS emulator to be ready
+            echo "Waiting for GCS emulator to start..."
+            sleep 10
+            
+            # Add retry logic for creating bucket
+            MAX_RETRIES=5
+            RETRY_COUNT=0
+            SUCCESS=false
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$SUCCESS" = false ]; do
+              echo "Attempt $(($RETRY_COUNT + 1)) to create bucket..."
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8080/storage/v1/b?project=test-project" \
+                -H "Content-Type: application/json" \
+                -d '{"name": "test-bucket"}')
+              
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "Successfully created bucket!"
+                SUCCESS=true
+              else
+                echo "Failed to create bucket (HTTP code: $HTTP_CODE). Retrying..."
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                sleep 5
+              fi
+            done
+            
+            # Check if bucket was created successfully
+            if [ "$SUCCESS" = false ]; then
+              echo "Failed to create bucket after $MAX_RETRIES attempts."
+              docker logs gcs-emulator
+              exit 1
+            fi
+            
+            # Verify bucket exists
+            echo "Verifying bucket exists..."
+            curl -s "http://localhost:8080/storage/v1/b?project=test-project" | grep "test-bucket"
       
       # 3. Start OpenReview APIs (reuse from build job)
       - run:
