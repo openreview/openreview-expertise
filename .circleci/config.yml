@@ -186,7 +186,7 @@ jobs:
             docker network create gcs-network
             
             # Run the GCS emulator in the network
-            docker run -d --name gcs-emulator --network gcs-network -p 8080:8080 fsouza/fake-gcs-server -scheme http
+            docker run -d --name gcs-emulator --network gcs-network -p 4443:4443 fsouza/fake-gcs-server -scheme http
           background: true
       - run:
           name: Create test bucket in GCS emulator
@@ -199,8 +199,15 @@ jobs:
             docker ps
             docker logs gcs-emulator || echo "Could not get logs"
             
-            # Try to access using Docker network DNS
-            docker run --rm --network gcs-network appropriate/curl -s -v "http://gcs-emulator:8080/storage/v1/b"
+            # Check what ports are actually listening
+            docker exec gcs-emulator netstat -tuln || echo "netstat not available"
+
+            echo "Trying port 4443..."
+            docker run --rm --network gcs-network appropriate/curl -s -v "http://gcs-emulator:4443/storage/v1/b" || echo "Port 4443 failed"
+
+            # Try both ports with curl
+            echo "Trying port 8080..."
+            docker run --rm --network gcs-network appropriate/curl -s -v "http://gcs-emulator:8080/storage/v1/b" || echo "Port 8080 failed"
             
             # Create the bucket using Docker network
             docker run --rm --network gcs-network appropriate/curl -X POST \
