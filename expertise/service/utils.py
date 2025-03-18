@@ -333,7 +333,7 @@ class JobConfig(object):
 
         # Build the JSON dictionary using getattr to fetch values.
         body = {}
-        for key in keys:
+        for key in json_keys:
             value = getattr(self, key, None)
             if value is not None:
                 body[key] = value
