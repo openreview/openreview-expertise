@@ -236,19 +236,26 @@ jobs:
             sudo apt-get upgrade -y
             sudo apt-get install -y mongodb-org=6.0.7
             mongosh mongodb://localhost:27017 --eval "rs.initiate()"
-            
-      # Clone OpenReview repositories
       - run:
-          name: Clone OpenReview repositories
+          name: Clone OpenReview API V1 branch << pipeline.parameters.openreview-api-v1-branch >>
           command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api-v1.git ~/openreview
+            cd ~/openreview && git checkout << pipeline.parameters.openreview-api-v1-branch >>
+      - run:
+          name: Clone OpenReview API V2 branch << pipeline.parameters.openreview-api-v2-branch >>
+          command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api.git ~/openreview-v2
+            cd ~/openreview-v2 && git checkout << pipeline.parameters.openreview-api-v2-branch >>
+      - run:
+          name: Clone openreview-py 
+          command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
+      - run:
+          name: Install openreview-py
+          command: |
+            mkdir ~/openreview-py/coverage
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            git clone https://github.com/openreview/openreview-api-v1.git ~/openreview
-            cd ~/openreview && git checkout master
-            git clone https://github.com/openreview/openreview-api.git ~/openreview-v2
-            cd ~/openreview-v2 && git checkout main
-            git clone https://github.com/openreview/openreview-py.git ~/openreview-py
-            cd ~/openreview-py
             pip install --force-reinstall -e ~/openreview-py
             
       # Create API directories
