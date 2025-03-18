@@ -204,21 +204,17 @@ jobs:
 
             echo "Trying port 4443..."
             docker run --rm --network gcs-network appropriate/curl -s -v "http://gcs-emulator:4443/storage/v1/b" || echo "Port 4443 failed"
-
-            # Try both ports with curl
-            echo "Trying port 8080..."
-            docker run --rm --network gcs-network appropriate/curl -s -v "http://gcs-emulator:8080/storage/v1/b" || echo "Port 8080 failed"
             
-            # Create the bucket using Docker network
+            # Create the bucket using Docker network with correct port 4443
             docker run --rm --network gcs-network appropriate/curl -X POST \
-              "http://gcs-emulator:8080/storage/v1/b?project=test-project" \
+              "http://gcs-emulator:4443/storage/v1/b?project=test-project" \
               -H "Content-Type: application/json" \
               -d '{"name": "test-bucket"}'
             
             # Verify bucket exists
             echo "Verifying bucket exists..."
             docker run --rm --network gcs-network appropriate/curl -s \
-              "http://gcs-emulator:8080/storage/v1/b?project=test-project"
+              "http://gcs-emulator:4443/storage/v1/b?project=test-project"
       
       # 3. Start OpenReview APIs (reuse from build job)
       - run:
@@ -275,7 +271,7 @@ jobs:
             # Override GCS with emulator and run
             docker run --network gcs-network \
               -e GOOGLE_CLOUD_PROJECT=test-project \
-              -e STORAGE_EMULATOR_HOST=http://gcs-emulator:8080 \
+              -e STORAGE_EMULATOR_HOST=http://gcs-emulator:4443 \
               -v $(pwd)/test_output:/app/output \
               expertise-test:latest \
               python -m expertise.execute_pipeline "$(cat test_input.json)"
