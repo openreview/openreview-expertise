@@ -178,12 +178,28 @@ jobs:
       - attach_workspace:
           at: ~/
       
-      # Fix permissions for conda
+      # Fix permissions for all persisted directories
       - run:
-          name: Fix conda permissions
+          name: Fix permissions for persisted directories
           command: |
-            # Make conda directories accessible to circleci user
+            echo "Fixing permissions for all persisted directories..."
+            
+            # Fix Miniconda permissions
+            echo "Fixing Miniconda permissions..."
             sudo chown -R circleci:circleci ~/miniconda
+            ls -la ~/miniconda/bin
+            
+            # Fix permissions for other persisted directories
+            echo "Fixing OpenReview and related directories permissions..."
+            sudo chown -R circleci:circleci ~/openreview
+            sudo chown -R circleci:circleci ~/openreview-v2
+            sudo chown -R circleci:circleci ~/openreview-py
+            sudo chown -R circleci:circleci ~/expertise-utils
+            
+            # Test conda activation directly
+            echo "Testing conda activation..."
+            export PATH="$HOME/miniconda/bin:$PATH"
+            conda info
       
       # 2. Start mock GCS server
       - run:
