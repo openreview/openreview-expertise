@@ -179,19 +179,18 @@ jobs:
       PYTHON_VERSION: 3.11
     steps:
       - checkout
-      
       # Setup Miniconda (duplicated from build job)
       - run:
           name: Setup Miniconda
           command: |
-            apt update
-            apt install -y wget
-            apt install -y make gcc
-            apt install -y curl
-            apt install -y build-essential
-            apt install -y git
-            apt install -y sudo
-            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
+            sudo apt update
+            sudo apt install -y wget
+            sudo apt install -y make gcc
+            sudo apt install -y curl
+            sudo apt install -y build-essential
+            sudo apt install -y git
+            sudo apt install -y sudo
+            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC sudo apt install -y tzdata
             cd $HOME
             wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
             printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
@@ -225,13 +224,13 @@ jobs:
             sleep 5
             docker exec mongodb mongosh mongodb://localhost:27017 --eval "rs.initiate()"
       - run:
-        name: Start Elasticsearch
-        command: |
-          docker run -d --name elasticsearch -p 9200:9200 -p 9300:9300 -e "xpack.security.enabled=false" -e "discovery.type=single-node" docker.elastic.co/elasticsearch/elasticsearch:7.7.0
+          name: Start Elasticsearch
+          command: |
+            docker run -d --name elasticsearch -p 9200:9200 -p 9300:9300 -e "xpack.security.enabled=false" -e "discovery.type=single-node" docker.elastic.co/elasticsearch/elasticsearch:7.7.0
       - run:
-        name: Start Redis
-        command: |
-          docker run -d --name redis -p 6379:6379 redislabs/redisai
+          name: Start Redis
+          command: |
+            docker run -d --name redis -p 6379:6379 redislabs/redisai
       - run:
           name: Clone OpenReview API V1 branch << pipeline.parameters.openreview-api-v1-branch >>
           command: |
