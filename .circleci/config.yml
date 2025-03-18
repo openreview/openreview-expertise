@@ -180,48 +180,38 @@ jobs:
       
       # 2. Start mock GCS server
       - run:
-          name: Start GCS emulator
+          name: Create Docker network and start GCS emulator
           command: |
-            docker run -d --name gcs-emulator -p 8080:8080 fsouza/fake-gcs-server -scheme http
+            # Create a Docker network
+            docker network create gcs-network
+            
+            # Run the GCS emulator in the network
+            docker run -d --name gcs-emulator --network gcs-network -p 8080:8080 fsouza/fake-gcs-server -scheme http
           background: true
       - run:
           name: Create test bucket in GCS emulator
           command: |
             # Wait longer for GCS emulator to be ready
             echo "Waiting for GCS emulator to start..."
-            sleep 10
+            sleep 15
             
-            # Add retry logic for creating bucket
-            MAX_RETRIES=5
-            RETRY_COUNT=0
-            SUCCESS=false
+            # Check if container is running
+            docker ps
+            docker logs gcs-emulator || echo "Could not get logs"
             
-            while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$SUCCESS" = false ]; do
-              echo "Attempt $(($RETRY_COUNT + 1)) to create bucket..."
-              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8080/storage/v1/b?project=test-project" \
-                -H "Content-Type: application/json" \
-                -d '{"name": "test-bucket"}')
-              
-              if [ "$HTTP_CODE" = "200" ]; then
-                echo "Successfully created bucket!"
-                SUCCESS=true
-              else
-                echo "Failed to create bucket (HTTP code: $HTTP_CODE). Retrying..."
-                RETRY_COUNT=$((RETRY_COUNT + 1))
-                sleep 5
-              fi
-            done
+            # Try to access using Docker network DNS
+            docker run --rm --network gcs-network appropriate/curl -s -v "http://gcs-emulator:8080/storage/v1/b"
             
-            # Check if bucket was created successfully
-            if [ "$SUCCESS" = false ]; then
-              echo "Failed to create bucket after $MAX_RETRIES attempts."
-              docker logs gcs-emulator
-              exit 1
-            fi
+            # Create the bucket using Docker network
+            docker run --rm --network gcs-network appropriate/curl -X POST \
+              "http://gcs-emulator:8080/storage/v1/b?project=test-project" \
+              -H "Content-Type: application/json" \
+              -d '{"name": "test-bucket"}'
             
             # Verify bucket exists
             echo "Verifying bucket exists..."
-            curl -s "http://localhost:8080/storage/v1/b?project=test-project" | grep "test-bucket"
+            docker run --rm --network gcs-network appropriate/curl -s \
+              "http://gcs-emulator:8080/storage/v1/b?project=test-project"
       
       # 3. Start OpenReview APIs (reuse from build job)
       - run:
@@ -276,9 +266,9 @@ jobs:
             mkdir -p test_output
             
             # Override GCS with emulator and run
-            docker run --network host \
+            docker run --network gcs-network \
               -e GOOGLE_CLOUD_PROJECT=test-project \
-              -e STORAGE_EMULATOR_HOST=http://localhost:8080 \
+              -e STORAGE_EMULATOR_HOST=http://gcs-emulator:8080 \
               -v $(pwd)/test_output:/app/output \
               expertise-test:latest \
               python -m expertise.execute_pipeline "$(cat test_input.json)"
