@@ -180,9 +180,9 @@ jobs:
       - run:
           name: Setup Miniconda
           command: |
-            apt update
-            apt install -y wget curl build-essential git sudo
-            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
+            sudo apt update
+            sudo apt install -y wget curl build-essential git sudo
+            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC sudo apt install -y tzdata
             cd $HOME
             wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
             printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
@@ -303,7 +303,7 @@ jobs:
             wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3001
 
       - run:
-          name: Run tests
+          name: Setup test data
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
