@@ -169,8 +169,6 @@ jobs:
             - openreview-py
             - expertise-utils
   container-test:
-    machine:
-      image: ubuntu-2204:2022.10.2
     # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     resource_class: large
     parallelism: 1
