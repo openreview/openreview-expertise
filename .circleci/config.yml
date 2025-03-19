@@ -385,6 +385,7 @@ jobs:
               -e GOOGLE_CLOUD_PROJECT=test-project \
               -e STORAGE_EMULATOR_HOST=http://gcs-emulator:4443 \
               -v $(pwd)/test_output:/app/output \
+              --entrypoint="" \
               expertise-test:latest \
               python -m expertise.execute_pipeline "$(cat test_input.json)"
       
