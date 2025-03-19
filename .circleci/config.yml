@@ -282,9 +282,11 @@ jobs:
             /usr/local/bin/npm run cleanStart
           background: true
       - run:
-          name: Wait for API v1 to start
+          name: Wait for API V1 to start
+          shell: /bin/sh
           command: |
-            wget --retry-connrefused --waitretry=10 --tries=30 --timeout=10 http://localhost:3000
+            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3000
+            :
       - run:
           name: Start API v2
           command: |
@@ -300,10 +302,11 @@ jobs:
             /usr/local/bin/npm run cleanStart
           background: true
       - run:
-          name: Wait for API v2 to start
+          name: Wait for API V2 to start
+          shell: /bin/sh
           command: |
-            wget --retry-connrefused --waitretry=10 --tries=30 --timeout=10 http://localhost:3001
-      
+            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3001
+            :
       # 2. Start mock GCS server
       - run:
           name: Create Docker network and start GCS emulator
