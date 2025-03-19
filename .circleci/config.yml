@@ -196,20 +196,17 @@ jobs:
             printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
       - run:
-          name: Install Node
+          name: Install Node 18
           command: |
             cd ~/
             curl -Lk https://raw.githubusercontent.com/tj/n/master/bin/n -o n
             sudo bash n 18.15.0
-            # Make sure to use the newly installed Node version
-            export PATH="/usr/local/bin:$PATH"
+            # Force use of Node 18 by replacing the system Node
+            sudo ln -sf /usr/local/bin/node /usr/bin/node
+            sudo ln -sf /usr/local/bin/npm /usr/bin/npm
             # Verify we're using Node 18
             node -v
             npm -v
-            # Save the PATH to a file that can be sourced in other steps
-            echo 'export PATH="/usr/local/bin:$PATH"' >> $BASH_ENV
-            # Then install n globally
-            sudo npm install -g n
       # Setup environment
       - run:
           name: Setup environment
@@ -316,20 +313,22 @@ jobs:
           name: Start API v1
           command: |
             node -v
+            which node
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview
-            npm run cleanStart
+            /usr/local/bin/npm run cleanStart
           background: true
       
       - run:
           name: Start API v2
           command: |
             node -v
+            which node
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-v2
-            npm run cleanStart
+            /usr/local/bin/npm run cleanStart
           background: true
       
       # 4. Wait for APIs to start
