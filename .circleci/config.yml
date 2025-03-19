@@ -265,6 +265,44 @@ jobs:
             mkdir -p ~/openreview-v2/files/attachments
             mkdir -p ~/openreview-v2/files/pdfs
             mkdir -p ~/openreview-v2/files/temp
+
+      # 3. Start OpenReview APIs 
+      - run:
+          name: Start API v1
+          command: |
+            export PATH=/usr/bin:$PATH
+            node -v
+            which node
+            whereis node
+            which npm
+            whereis npm
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview
+            /usr/local/bin/npm run cleanStart
+          background: true
+      - run:
+          name: Wait for API v1 to start
+          command: |
+            wget --retry-connrefused --waitretry=10 --tries=30 --timeout=10 http://localhost:3000
+      - run:
+          name: Start API v2
+          command: |
+            export PATH=/usr/bin:$PATH
+            node -v
+            which node
+            whereis node
+            which npm
+            whereis npm
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview-v2
+            /usr/local/bin/npm run cleanStart
+          background: true
+      - run:
+          name: Wait for API v2 to start
+          command: |
+            wget --retry-connrefused --waitretry=10 --tries=30 --timeout=10 http://localhost:3001
       
       # 2. Start mock GCS server
       - run:
@@ -303,44 +341,6 @@ jobs:
             echo "Verifying bucket exists..."
             docker run --rm --network gcs-network appropriate/curl -s \
               "http://gcs-emulator:4443/storage/v1/b?project=test-project"
-      
-      # 3. Start OpenReview APIs 
-      - run:
-          name: Start API v1
-          command: |
-            export PATH=/usr/bin:$PATH
-            node -v
-            which node
-            whereis node
-            which npm
-            whereis npm
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            cd ~/openreview
-            /usr/local/bin/npm run cleanStart
-          background: true
-      
-      - run:
-          name: Start API v2
-          command: |
-            export PATH=/usr/bin:$PATH
-            node -v
-            which node
-            whereis node
-            which npm
-            whereis npm
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            cd ~/openreview-v2
-            /usr/local/bin/npm run cleanStart
-          background: true
-      
-      # 4. Wait for APIs to start
-      - run:
-          name: Wait for APIs to start
-          command: |
-            wget --retry-connrefused --waitretry=10 --tries=30 --timeout=10 http://localhost:3000
-            wget --retry-connrefused --waitretry=10 --tries=30 --timeout=10 http://localhost:3001
 
       - run:
           name: Setup test data
