@@ -418,6 +418,7 @@ jobs:
             echo "Container execution finished"
             echo "Contents of test_output directory:"
             ls -la test_output
+            ls test_output
             
             # Look for any error logs in the container output
             echo "Any error logs from container:"
@@ -429,7 +430,7 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             # Run the test
-            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python test_gcs_emulator.py
+            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/test_gcs_emulator.py
 
       # 9. Verify the output
       - run:
