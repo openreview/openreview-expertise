@@ -199,6 +199,7 @@ jobs:
           name: Install Node 18
           command: |
             sudo apt-get remove -y nodejs
+            sudo rm -f /usr/local/bin/node /usr/local/bin/npm
             curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
             sudo apt-get install -y nodejs
             node -v
