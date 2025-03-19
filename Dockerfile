@@ -32,8 +32,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     \
     && . $HOME/miniconda/etc/profile.d/conda.sh \
     && conda activate expertise \
-    && conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia \
     && conda install -y filelock intel-openmp faiss-cpu -c pytorch \
+    && conda remove -y pytorch \
+    && conda install --force-reinstall pytorch pytorch-cuda=12.4 -c pytorch -c nvidia \
     && python -m pip install --no-cache-dir -e $HOME/openreview-expertise \
     && python -m pip install --no-cache-dir -I protobuf==3.20.1 \
     && python -m pip install --no-cache-dir numpy==1.26.4 --force-reinstall \

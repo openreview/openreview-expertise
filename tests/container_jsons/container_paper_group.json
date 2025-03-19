@@ -19,7 +19,8 @@
       "useTitle": false,
       "useAbstract": true,
       "skipSpecter": false,
-      "scoreComputation": "avg"
+      "scoreComputation": "avg",
+      "useCuda": false
     },
     "skip_artifacts": true
   }

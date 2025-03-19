@@ -370,8 +370,17 @@ jobs:
             python ~/openreview-expertise/tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_paper_group.json
             # Verify file exists
             ls -la test_input.json
+
+      # 7. Verify CUDA exists
+      - run:
+          name: Verify CUDA
+          command: |
+            # Check if the expected files exist and have correct format
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            python ~/openreview-expertise/tests/verify_cuda_support.py
       
-      # 7. Run the container with test input
+      # 8. Run the container with test input
       - run:
           name: Run container
           command: |
@@ -387,11 +396,13 @@ jobs:
               expertise-test:latest \
               python -m expertise.execute_pipeline "$(cat test_input.json)"
       
-      # 8. Verify the output
+      # 9. Verify the output
       - run:
           name: Verify container output
           command: |
             # Check if the expected files exist and have correct format
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
             python ~/openreview-expertise/tests/verify_container_results.py ./test_output
 
 # Update workflow to run jobs in parallel
