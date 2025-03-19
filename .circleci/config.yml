@@ -347,8 +347,8 @@ jobs:
       - run:
           name: Wait for APIs to start
           command: |
-            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3000
-            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3001
+            wget --retry-connrefused --waitretry=10 --tries=30 --timeout=10 http://localhost:3000
+            wget --retry-connrefused --waitretry=10 --tries=30 --timeout=10 http://localhost:3001
 
       - run:
           name: Setup test data
