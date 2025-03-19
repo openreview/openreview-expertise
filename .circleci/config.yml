@@ -410,7 +410,7 @@ jobs:
               -v $(pwd)/test_output:/app/output \
               --entrypoint="" \
               expertise-test:latest \
-              bash -c "set -x && echo 'TESTING OUTPUT DIR:' && mkdir -p /app/output && ls -la /app/ && ls -la /app/output && echo 'WRITING TEST FILE:' && echo 'test' > /app/output/test_file.txt && echo 'RUNNING PIPELINE:' && python -m expertise.execute_pipeline \"$(cat test_input.json)\" || (echo 'CONTAINER FAILED' && exit 1)" 2>&1 | tee logs/container_output.log
+              bash -c "set -x && echo 'TESTING OUTPUT DIR:' && mkdir -p /app/output && ls -la /app/ && ls -la /app/output && echo 'WRITING TEST FILE:' && echo 'test' > /app/output/test_file.txt && echo 'RUNNING PIPELINE:' && python -m expertise.execute_pipeline $(cat test_input.json) || (echo 'CONTAINER FAILED' && exit 1)" 2>&1 | tee logs/container_output.log
             
             # Check output directory again
             echo "Contents of test_output directory after container run:"
