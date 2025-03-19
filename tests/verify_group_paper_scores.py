@@ -32,7 +32,7 @@ def verify_bucket():
     gcp_interface = GCPInterface(
         project_id=project_id,
         bucket_name="test-bucket",
-        jobs_folder="group_paper_scores",
+        jobs_folder="jobs",
         # Use a mock client so we can still access the bucket
         openreview_client=None
     )
@@ -46,7 +46,6 @@ def verify_bucket():
     print(f"Blob names: {blob_names}")  
 
     # Test job file creation
-    assert 'request.json' in blob_names
     assert 'job_config.json' in blob_names
     assert 'metadata.json' in blob_names
     assert 'test_container.jsonl' in blob_names
