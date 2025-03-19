@@ -196,11 +196,11 @@ jobs:
             printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
       - run:
-          name: Install Node 18
+          name: Install Node 20
           command: |
             sudo apt-get remove -y nodejs
             sudo rm -f /usr/local/bin/node /usr/local/bin/npm
-            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
             sudo apt-get install -y nodejs
             export PATH=/usr/bin:$PATH
             node -v
