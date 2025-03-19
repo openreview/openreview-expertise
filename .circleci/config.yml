@@ -411,14 +411,6 @@ jobs:
               --entrypoint="" \
               expertise-test:latest \
               python -m expertise.execute_pipeline "$(cat test_input.json)"
-            
-            # Check output directory again
-            echo "Contents of test_output directory after container run:"
-            ls -la test_output
-            
-            # Parse and display input file
-            echo "Contents of test_input.json:"
-            cat test_input.json | grep -v token
 
       - run:
           name: Test GCS emulator directly
