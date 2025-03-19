@@ -198,13 +198,9 @@ jobs:
       - run:
           name: Install Node 18
           command: |
-            cd ~/
-            curl -Lk https://raw.githubusercontent.com/tj/n/master/bin/n -o n
-            sudo bash n 18.15.0
-            # Force use of Node 18 by replacing the system Node
-            sudo ln -sf /usr/local/bin/node /usr/bin/node
-            sudo ln -sf /usr/local/bin/npm /usr/bin/npm
-            # Verify we're using Node 18
+            sudo apt-get remove -y nodejs
+            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+            sudo apt-get install -y nodejs
             node -v
             npm -v
       # Setup environment
