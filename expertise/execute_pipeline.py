@@ -96,137 +96,87 @@ def run_pipeline(api_request_str, working_dir=None):
     paper_paper_matching = validated_request.entityA.get('type', '') == 'Note' and \
         validated_request.entityB.get('type', '') == 'Note'
 
-    # GCS Debug: Print environment variables
-    print(f"GCS Debug: STORAGE_EMULATOR_HOST: {os.environ.get('STORAGE_EMULATOR_HOST')}")
-    print(f"GCS Debug: GOOGLE_CLOUD_PROJECT: {os.environ.get('GOOGLE_CLOUD_PROJECT')}")
-    
-    # GCS Debug: Verify destination path
     bucket_name = destination_prefix.split('/')[2]
     blob_prefix = '/'.join(destination_prefix.split('/')[3:])
-    print(f"GCS Debug: Parsed bucket name: {bucket_name}")
-    print(f"GCS Debug: Parsed blob prefix: {blob_prefix}")
-    
-    # Create a test file in the output directory
-    try:
-        with open(os.path.join(config.job_dir, "request.json"), "w") as f:
-            json.dump({"test": "data"}, f)
-        print(f"GCS Debug: Created test file in output dir: {os.path.join(config.job_dir, 'request.json')}")
-    except Exception as e:
-        print(f"GCS Debug: Failed to create test file: {str(e)}")
-    
-    # GCS Debug: List directory contents before upload
-    print(f"GCS Debug: Working directory: {config.job_dir}")
-    try:
-        print(f"GCS Debug: Files in working directory: {os.listdir(config.job_dir)}")
-    except Exception as e:
-        print(f"GCS Debug: Failed to list directory: {str(e)}")
-    
-    # Initialize GCS client with debug info
-    try:
-        print("GCS Debug: Initializing storage client")
-        gcs_client = storage.Client()
-        print("GCS Debug: Storage client initialized successfully")
-        
-        # Try a simple operation to verify connection
-        print("GCS Debug: Listing buckets to test connection")
-        buckets = list(gcs_client.list_buckets())
-        print(f"GCS Debug: Found {len(buckets)} buckets")
-        
-        print(f"GCS Debug: Getting bucket: {bucket_name}")
-        bucket = gcs_client.bucket(bucket_name)
-        print(f"GCS Debug: Got bucket: {bucket}")
-        
-        # Try to upload a simple test blob
-        test_blob = bucket.blob(f"{blob_prefix}/test_connection.txt")
-        print(f"GCS Debug: Uploading test blob: {test_blob.name}")
-        test_blob.upload_from_string("Test connection successful")
-        print("GCS Debug: Test blob uploaded successfully")
-        
-        # CSV File upload
-        csv_files = [d for d in os.listdir(config.job_dir) if '.csv' in d]
-        print(f"GCS Debug: Found {len(csv_files)} CSV files to upload")
-        
-        for csv_file in csv_files:
-            print(f"GCS Debug: Processing CSV file: {csv_file}")
+    gcs_client = storage.Client()
+    bucket = gcs_client.bucket(bucket_name)
+    for csv_file in [d for d in os.listdir(config.job_dir) if '.csv' in d]:
+        result = []
+        destination_blob = f"{blob_prefix}/{csv_file.replace('.csv', '.jsonl')}"
+        with open(os.path.join(config.job_dir, csv_file), 'r') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if group_group_matching:
+                    result.append({
+                        'match_member': row[0],
+                        'submission_member': row[1],
+                        'score': float(row[2])
+                    })
+                elif paper_paper_matching:
+                    result.append({
+                        'match_submission': row[0],
+                        'submission': row[1],
+                        'score': float(row[2])
+                    })
+                else:
+                    result.append({
+                        'submission': row[0],
+                        'user': row[1],
+                        'score': float(row[2])
+                    })
+                    
+        blob = bucket.blob(destination_blob)
+        contents = '\n'.join([json.dumps(r) for r in result])
+        blob.upload_from_string(contents)
+
+    # Dump config
+    destination_blob = f"{blob_prefix}/job_config.json"
+    blob = bucket.blob(destination_blob)
+    blob.upload_from_string(json.dumps(config.to_json()))
+
+    # Dump metadata file
+    for json_file in [d for d in os.listdir(config.job_dir) if 'metadata' in d]:
+        destination_blob = f"{blob_prefix}/{json_file}"
+        with open(os.path.join(config.job_dir, json_file), 'r') as f:
+            blob = bucket.blob(destination_blob)
+            contents = json.dumps(json.load(f))
+            blob.upload_from_string(contents)
+
+    # Dump archives
+    if dump_archives:
+        for jsonl_file in os.listdir(os.path.join(config.job_dir, 'archives')):
             result = []
-            destination_blob = f"{blob_prefix}/{csv_file.replace('.csv', '.jsonl')}"
-            print(f"GCS Debug: Destination blob: {destination_blob}")
-            
-            with open(os.path.join(config.job_dir, csv_file), 'r') as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    if group_group_matching:
-                        result.append({
-                            'match_member': row[0],
-                            'submission_member': row[1],
-                            'score': float(row[2])
-                        })
-                    elif paper_paper_matching:
-                        result.append({
-                            'match_submission': row[0],
-                            'submission': row[1],
-                            'score': float(row[2])
-                        })
-                    else:
-                        result.append({
-                            'submission': row[0],
-                            'user': row[1],
-                            'score': float(row[2])
-                        })
-            
-            print(f"GCS Debug: Processed {len(result)} rows from CSV")
+            destination_blob = f"{blob_prefix}/archives/{jsonl_file}"
+            with open(os.path.join(config.job_dir, 'archives' ,jsonl_file), 'r') as f:
+                for line in f:
+                    data = json.loads(line)
+                    result.append({
+                        'id': data['id'],
+                        'content': data['content']
+                    })
             blob = bucket.blob(destination_blob)
             contents = '\n'.join([json.dumps(r) for r in result])
-            print(f"GCS Debug: Uploading {len(contents)} bytes to blob: {blob.name}")
-            
-            try:
-                blob.upload_from_string(contents)
-                print(f"GCS Debug: Successfully uploaded blob: {blob.name}")
-            except Exception as e:
-                print(f"GCS Debug: Failed to upload blob {blob.name}: {str(e)}")
-        
-        # Dump config
-        print("GCS Debug: Uploading job config")
-        destination_blob = f"{blob_prefix}/job_config.json"
-        blob = bucket.blob(destination_blob)
-        try:
-            blob.upload_from_string(json.dumps(config.to_json()))
-            print(f"GCS Debug: Successfully uploaded job config")
-        except Exception as e:
-            print(f"GCS Debug: Failed to upload job config: {str(e)}")
+            blob.upload_from_string(contents)
 
-        # Dump metadata files
-        metadata_files = [d for d in os.listdir(config.job_dir) if 'metadata' in d]
-        print(f"GCS Debug: Found {len(metadata_files)} metadata files to upload")
-        
-        for json_file in metadata_files:
-            destination_blob = f"{blob_prefix}/{json_file}"
-            print(f"GCS Debug: Processing metadata file: {json_file} -> {destination_blob}")
-            try:
-                with open(os.path.join(config.job_dir, json_file), 'r') as f:
-                    blob = bucket.blob(destination_blob)
-                    contents = json.dumps(json.load(f))
-                    blob.upload_from_string(contents)
-                    print(f"GCS Debug: Successfully uploaded metadata file: {json_file}")
-            except Exception as e:
-                print(f"GCS Debug: Failed to upload metadata file {json_file}: {str(e)}")
-        
-        # List uploaded files to verify
-        print("GCS Debug: Listing blobs in bucket to verify uploads")
-        blobs = list(bucket.list_blobs(prefix=blob_prefix))
-        print(f"GCS Debug: Found {len(blobs)} blobs with prefix {blob_prefix}:")
-        for blob in blobs:
-            print(f"  - {blob.name}")
-            
-    except Exception as e:
-        print(f"GCS Debug: Error during GCS operations: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+    # Dump embeddings
+    if dump_embs:
+        for emb_file in [d for d in os.listdir(config.job_dir) if '.jsonl' in d]:
+            result = []
+            destination_blob = f"{blob_prefix}/{emb_file}"
+            with open(os.path.join(config.job_dir, emb_file), 'r') as f:
+                for line in f:
+                    data = json.loads(line)
+                    result.append({
+                        'paper_id': data['paper_id'],
+                        'embedding': data['embedding']
+                    })
+            blob = bucket.blob(destination_blob)
+            contents = '\n'.join([json.dumps(r) for r in result])
+            blob.upload_from_string(contents)
 
 if __name__ == '__main__':
     print('Starting pipeline')
     parser = argparse.ArgumentParser()
     parser.add_argument('api_request_str', help='a JSON file containing all other arguments')
     args = parser.parse_args()
-    
     run_pipeline(args.api_request_str)
