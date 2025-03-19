@@ -20,5 +20,6 @@
       "useAbstract": true,
       "skipSpecter": false,
       "scoreComputation": "avg"
-    }
+    },
+    "skip_artifacts": true
   }
