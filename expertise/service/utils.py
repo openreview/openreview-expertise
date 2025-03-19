@@ -1084,6 +1084,6 @@ class GCPInterface(object):
         group_group_matching = request.get('entityA', {}).get('type', '') == 'Group' and request.get('entityB', {}).get('type', '') == 'Group'
         paper_paper_matching = request.get('entityA', {}).get('type', '') == 'Note' and request.get('entityB', {}).get('type', '') == 'Note'
 
-        return _get_scores_and_metadata(job_blobs, job_id, group_scoring=group_group_matching)
+        return _get_scores_and_metadata(job_blobs, job_id, group_scoring=group_group_matching, paper_scoring=paper_paper_matching)
 
         
