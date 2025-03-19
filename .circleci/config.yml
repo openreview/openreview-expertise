@@ -160,49 +160,47 @@ jobs:
       - store_artifacts:
           path: reports
   container-test:
-    machine:
-      image: ubuntu-2204:2022.10.2
-    # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     resource_class: large
     parallelism: 1
     working_directory: ~/openreview-expertise
+    docker:
+      - image: ubuntu:22.04
+      - image: redislabs/redisai
+      - image: mongo:6.0
+        command: [ --replSet, rs0 ]
+      - image: docker.elastic.co/elasticsearch/elasticsearch:7.7.0
+      - image: fsouza/fake-gcs-server
+        environment:
+          xpack.security.enabled: false
+          transport.host: localhost
+          TZ: "Etc/UTC"
     environment:
       PYTHON_VERSION: 3.11
     steps:
       - checkout
-      # Setup Miniconda (duplicated from build job)
       - run:
           name: Setup Miniconda
           command: |
-            sudo apt update
-            sudo apt install -y wget
-            sudo apt install -y make gcc
-            sudo apt install -y curl
-            sudo apt install -y build-essential
-            sudo apt install -y git
-            sudo apt install -y sudo
-            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC sudo apt install -y tzdata
+            apt update
+            apt install -y wget
+            apt install -y make gcc
+            apt install -y curl
+            apt install -y build-essential
+            apt install -y git
+            apt install -y sudo
+            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
             cd $HOME
             wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
             printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
       - run:
-          name: Install Node 20
+          name: Install Node
           command: |
-            sudo apt-get remove -y nodejs
-            sudo rm -f /usr/local/bin/node /usr/local/bin/npm
-            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-            sudo apt-get install -y nodejs
-            export PATH=/usr/bin:$PATH
-            node -v
-            npm -v
-            sudo ln -sf /usr/bin/node /usr/local/bin/node
-            sudo ln -sf /usr/bin/npm /usr/local/bin/npm
-            which node
-            whereis node
-            which npm
-            whereis npm
-      # Setup environment
+            cd ~/
+            curl -Lk https://raw.githubusercontent.com/tj/n/master/bin/n -o n
+            sudo bash n 20.19.0
+            hash -r
+            sudo npm install -g n
       - run:
           name: Setup environment
           command: |
@@ -210,27 +208,17 @@ jobs:
             conda update -y conda
             python -m ensurepip --upgrade
             python -m pip install --upgrade pip setuptools wheel setuptools_rust
-            conda create -n expertise python=3.11 -c conda-forge
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            python --version
-      
-      # Initialize MongoDB
+            conda create -n expertise python=$PYTHON_VERSION -c conda-forge
       - run:
-          name: Initialize MongoDB
+          name: Initialize replica set
           command: |
-            docker network create app-network
-            docker run -d --name mongodb -p 27017:27017 --network host mongo:6.0 --replSet rs0
-            sleep 5
-            docker exec mongodb mongosh mongodb://localhost:27017 --eval "rs.initiate()"
-      - run:
-          name: Start Elasticsearch
-          command: |
-            docker run -d --name elasticsearch -p 9200:9200 -p 9300:9300 -e "xpack.security.enabled=false" -e "discovery.type=single-node" docker.elastic.co/elasticsearch/elasticsearch:7.7.0
-      - run:
-          name: Start Redis
-          command: |
-            docker run -d --name redis -p 6379:6379 redislabs/redisai
+            sudo apt-get install gnupg curl
+            curl -fsSL https://pgp.mongodb.com/server-6.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor
+            echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+            sudo apt-get update
+            sudo apt-get upgrade -y
+            sudo apt-get install -y mongodb-org=6.0.7
+            mongosh mongodb://localhost:27017 --eval "rs.initiate()"
       - run:
           name: Clone OpenReview API V1 branch << pipeline.parameters.openreview-api-v1-branch >>
           command: |
@@ -246,15 +234,6 @@ jobs:
           command: |
             git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
       - run:
-          name: Install openreview-py
-          command: |
-            mkdir ~/openreview-py/coverage
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            pip install --force-reinstall -e ~/openreview-py
-            
-      # Create API directories
-      - run:
           name: Create API directories
           command: |
             mkdir -p ~/openreview/logs
@@ -265,17 +244,41 @@ jobs:
             mkdir -p ~/openreview-v2/files/attachments
             mkdir -p ~/openreview-v2/files/pdfs
             mkdir -p ~/openreview-v2/files/temp
-      
-      # 2. Start mock GCS server
       - run:
-          name: Create Docker network and start GCS emulator
+          name: Install openreview-py
           command: |
-            # Create a Docker network
-            docker network create gcs-network
-            
-            # Run the GCS emulator in the network
-            docker run -d --name gcs-emulator --network gcs-network -p 4443:4443 fsouza/fake-gcs-server -scheme http
+            mkdir ~/openreview-py/coverage
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            pip install --force-reinstall -e ~/openreview-py
+      - run:
+          name: Start API V1
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview
+            npm run cleanStart
           background: true
+      - run:
+          name: Wait for API V1 to start
+          shell: /bin/sh
+          command: |
+            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3000
+            :
+      - run:
+          name: Start API V2
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview-v2
+            npm run cleanStart
+          background: true
+      - run:
+          name: Wait for API V2 to start
+          shell: /bin/sh
+          command: |
+            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3001
+            :
       - run:
           name: Create test bucket in GCS emulator
           command: |
@@ -303,45 +306,6 @@ jobs:
             echo "Verifying bucket exists..."
             docker run --rm --network gcs-network appropriate/curl -s \
               "http://gcs-emulator:4443/storage/v1/b?project=test-project"
-      
-      # 3. Start OpenReview APIs 
-      - run:
-          name: Start API v1
-          command: |
-            export PATH=/usr/bin:$PATH
-            node -v
-            which node
-            whereis node
-            which npm
-            whereis npm
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            cd ~/openreview
-            /usr/local/bin/npm run cleanStart
-          background: true
-      
-      - run:
-          name: Start API v2
-          command: |
-            export PATH=/usr/bin:$PATH
-            node -v
-            which node
-            whereis node
-            which npm
-            whereis npm
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            cd ~/openreview-v2
-            /usr/local/bin/npm run cleanStart
-          background: true
-      
-      # 4. Wait for APIs to start
-      - run:
-          name: Wait for APIs to start
-          command: |
-            wget --retry-connrefused --waitretry=10 --tries=30 --timeout=10 http://localhost:3000
-            wget --retry-connrefused --waitretry=10 --tries=30 --timeout=10 http://localhost:3001
-
       - run:
           name: Setup test data
           command: |
