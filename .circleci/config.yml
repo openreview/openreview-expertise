@@ -159,15 +159,6 @@ jobs:
           path: reports
       - store_artifacts:
           path: reports
-      # Add this to the end of your build job steps
-      - persist_to_workspace:
-          root: ~/
-          paths:
-            - miniconda
-            - openreview
-            - openreview-v2
-            - openreview-py
-            - expertise-utils
   container-test:
     machine:
       image: ubuntu-2204:2022.10.2
@@ -228,7 +219,8 @@ jobs:
       - run:
           name: Initialize MongoDB
           command: |
-            docker run -d --name mongodb -p 27017:27017 mongo:6.0 --replSet rs0
+            docker network create app-network
+            docker run -d --name mongodb -p 27017:27017 --network host mongo:6.0 --replSet rs0
             sleep 5
             docker exec mongodb mongosh mongodb://localhost:27017 --eval "rs.initiate()"
       - run:
