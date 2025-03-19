@@ -205,10 +205,12 @@ jobs:
             export PATH=/usr/bin:$PATH
             node -v
             npm -v
-            sudo cp /usr/bin/node /usr/local/bin/node
-            sudo cp /usr/bin/npm /usr/local/bin/npm
+            sudo ln -sf /usr/bin/node /usr/local/bin/node
+            sudo ln -sf /usr/bin/npm /usr/local/bin/npm
             which node
             whereis node
+            which npm
+            whereis npm
       # Setup environment
       - run:
           name: Setup environment
@@ -317,6 +319,9 @@ jobs:
             export PATH=/usr/bin:$PATH
             node -v
             which node
+            whereis node
+            which npm
+            whereis npm
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview
@@ -329,6 +334,9 @@ jobs:
             export PATH=/usr/bin:$PATH
             node -v
             which node
+            whereis node
+            which npm
+            whereis npm
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-v2
