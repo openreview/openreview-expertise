@@ -412,7 +412,7 @@ jobs:
               -v $(pwd)/test_output:/app/output \
               --entrypoint="" \
               expertise-test:latest \
-              /bin/bash -c "export && ls -la /app && ls -la /app/output && python -m expertise.execute_pipeline \"$(cat test_input.json)\" || (echo 'CONTAINER FAILED' && exit 1)"
+              python -m expertise.execute_pipeline "$(cat test_input.json)"
             
             # Immediately check output after container finishes
             echo "Container execution finished"
