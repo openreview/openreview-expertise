@@ -41,6 +41,16 @@ def verify_bucket():
     # Search for all jobs in the bucket
     storage_client = gcp_interface.gcs_client
     bucket = storage_client.bucket("test-bucket")
+
+    # Simulate writing request.json to the bucket
+    with open('tests/container_jsons/container_paper_group.json', 'r') as f:
+        request = json.load(f)
+    blob = bucket.blob(f"{gcp_interface.jobs_folder}/{job_id}/request.json")
+    blob.upload_from_string(
+        data=json.dumps(request),
+        content_type="application/json"
+    )
+
     job_blobs = list(bucket.list_blobs(prefix=f"{gcp_interface.jobs_folder}/{job_id}/"))
     blob_names = [blob.name for blob in job_blobs]
     print(f"Blob names: {blob_names}")  
