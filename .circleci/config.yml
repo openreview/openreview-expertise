@@ -423,13 +423,13 @@ jobs:
             echo "Any error logs from container:"
             docker logs $(docker ps -lq) 2>&1 | grep -i error || echo "No error logs found"
       
-    - run:
-        name: Test GCS emulator directly
-        command: |
-          source ~/miniconda/etc/profile.d/conda.sh
-          conda activate expertise
-          # Run the test
-          STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python test_gcs_emulator.py
+      - run:
+          name: Test GCS emulator directly
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            # Run the test
+            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python test_gcs_emulator.py
 
       # 9. Verify the output
       - run:
