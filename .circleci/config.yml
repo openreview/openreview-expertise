@@ -202,8 +202,11 @@ jobs:
             sudo rm -f /usr/local/bin/node /usr/local/bin/npm
             curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
             sudo apt-get install -y nodejs
+            export PATH=/usr/bin:$PATH
             node -v
             npm -v
+            which node
+            whereis node
       # Setup environment
       - run:
           name: Setup environment
@@ -309,6 +312,7 @@ jobs:
       - run:
           name: Start API v1
           command: |
+            export PATH=/usr/bin:$PATH
             node -v
             which node
             source ~/miniconda/etc/profile.d/conda.sh
@@ -320,6 +324,7 @@ jobs:
       - run:
           name: Start API v2
           command: |
+            export PATH=/usr/bin:$PATH
             node -v
             which node
             source ~/miniconda/etc/profile.d/conda.sh
