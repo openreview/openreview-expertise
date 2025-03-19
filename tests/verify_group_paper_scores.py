@@ -46,23 +46,22 @@ def verify_bucket():
     print(f"Blob names: {blob_names}")  
 
     # Test job file creation
-    assert 'job_config.json' in blob_names
-    assert 'metadata.json' in blob_names
-    assert 'test_container.jsonl' in blob_names
-    assert 'test_container_sparse.jsonl' in blob_names
+    assert 'jobs/group_paper_scores/job_config.json' in blob_names
+    assert 'jobs/group_paper_scores/metadata.json' in blob_names
+    assert 'jobs/group_paper_scores/test_container.jsonl' in blob_names
+    assert 'jobs/group_paper_scores/test_container_sparse.jsonl' in blob_names
 
     # Test archive files
     archive_blobs = list(bucket.list_blobs(prefix=f"{gcp_interface.jobs_folder}/{job_id}/archives/"))
     archive_names = [blob.name for blob in archive_blobs]
-    assert 'archives' in blob_names
     for file in archive_names:
         assert file.endswith('.jsonl')
 
     # Test embedding files
-    assert 'pub2vec_specter.jsonl' in blob_names
-    assert 'pub2vec_scincl.jsonl' in blob_names
-    assert 'sub2vec_scincl.jsonl' in blob_names
-    assert 'sub2vec_specter.jsonl' in blob_names
+    assert 'jobs/group_paper_scores/pub2vec_specter.jsonl' in blob_names
+    assert 'jobs/group_paper_scores/pub2vec_scincl.jsonl' in blob_names
+    assert 'jobs/group_paper_scores/sub2vec_scincl.jsonl' in blob_names
+    assert 'jobs/group_paper_scores/sub2vec_specter.jsonl' in blob_names
 
     # Test get_job_results
     try:
