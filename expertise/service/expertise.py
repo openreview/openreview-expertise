@@ -30,6 +30,8 @@ class BaseExpertiseService:
         logger,
         containerized=False,
         sync_on_disk=True,
+        worker_attempts=3,
+        worker_backoff_delay=60000,
         worker_concurrency=None,
         worker_lock_duration=None,
         worker_autorun=False,
@@ -39,6 +41,8 @@ class BaseExpertiseService:
         :param logger:         Logger instance for logging
         :param containerized:  Whether your service is running in containerized mode
         :param sync_on_disk:   Whether RedisDatabase writes files to disk or purely memory
+        :param worker_attempts: (Optional) number of attempts for the BullMQ worker
+        :param worker_backoff_delay: (Optional) backoff delay 2 ^ attempts * delay (ms) for the BullMQ worker
         :param worker_concurrency: (Optional) concurrency for the BullMQ worker
         :param worker_lock_duration: (Optional) lock duration (ms) for the BullMQ worker
         :param worker_autorun: (Optional) whether the worker should start automatically
@@ -525,6 +529,8 @@ class ExpertiseService(BaseExpertiseService):
             logger=logger,
             containerized=containerized,
             sync_on_disk=True,            # We want to store jobs on disk
+            worker_attempts=config['WORKER_ATTEMPTS'],
+            worker_backoff_delay=config['WORKER_BACKOFF_DELAY'],
             worker_concurrency=config['ACTIVE_JOBS'],
             worker_lock_duration=config['LOCK_DURATION'],
             worker_autorun=False         # If that is what you originally had
@@ -625,6 +631,11 @@ class ExpertiseService(BaseExpertiseService):
                 },
                 {
                     'jobId': job_id,
+                    'attempts': self.worker_attempts,
+                    'backoff': {
+                        'delay': self.worker_backoff_delay,
+                        'type': 'exponential', # Exponential backoff: 2 ^ attempts * delay milliseconds
+                    },
                     'removeOnComplete': {
                         'count': 100,
                     },
@@ -800,6 +811,8 @@ class ExpertiseCloudService(BaseExpertiseService):
             logger=logger,
             containerized=containerized,
             sync_on_disk=True,            # We want to store jobs on disk
+            worker_attempts=config['WORKER_ATTEMPTS'],
+            worker_backoff_delay=config['WORKER_BACKOFF_DELAY'],
             worker_concurrency=config['ACTIVE_JOBS'],
             worker_lock_duration=config['LOCK_DURATION'],
             worker_autorun=False         # If that is what you originally had
@@ -920,6 +933,11 @@ class ExpertiseCloudService(BaseExpertiseService):
                 },
                 {
                     'jobId': config.job_id,
+                    'attempts': self.worker_attempts,
+                    'backoff': {
+                        'delay': self.worker_backoff_delay,
+                        'type': 'exponential', # Exponential backoff: 2 ^ attempts * delay milliseconds
+                    },
                     'removeOnComplete': {
                         'count': 100,
                     },
