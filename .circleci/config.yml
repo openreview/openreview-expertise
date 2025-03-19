@@ -387,15 +387,50 @@ jobs:
             # Mount a volume for output verification 
             mkdir -p test_output
             
-            # Override GCS with emulator and run
+            # Check directories before the container runs
+            echo "Current directory: $(pwd)"
+            echo "Contents of current directory:"
+            ls -la
+            
+            # Check if GCS emulator is running
+            echo "GCS emulator status:"
+            docker ps | grep gcs-emulator
+            docker logs gcs-emulator || echo "Could not get logs"
+            
+            # Test a direct API call to the GCS emulator
+            echo "Testing GCS emulator API:"
+            curl -v http://localhost:4443/storage/v1/b/test-bucket || echo "Failed to connect to GCS emulator"
+            
+            # Add more debug environment variables
+            echo "Running container with verbose logging..."
             docker run --network host \
               -e GOOGLE_CLOUD_PROJECT=test-project \
               -e STORAGE_EMULATOR_HOST=http://localhost:4443 \
+              -e PYTHONUNBUFFERED=1 \
+              -e DEBUG=1 \
+              -e LOG_LEVEL=DEBUG \
               -v $(pwd)/test_output:/app/output \
               --entrypoint="" \
               expertise-test:latest \
-              python -m expertise.execute_pipeline "$(cat test_input.json)"
+              /bin/bash -c "export && ls -la /app && ls -la /app/output && python -m expertise.execute_pipeline \"$(cat test_input.json)\" || (echo 'CONTAINER FAILED' && exit 1)"
+            
+            # Immediately check output after container finishes
+            echo "Container execution finished"
+            echo "Contents of test_output directory:"
+            ls -la test_output
+            
+            # Look for any error logs in the container output
+            echo "Any error logs from container:"
+            docker logs $(docker ps -lq) 2>&1 | grep -i error || echo "No error logs found"
       
+    - run:
+        name: Test GCS emulator directly
+        command: |
+          source ~/miniconda/etc/profile.d/conda.sh
+          conda activate expertise
+          # Run the test
+          STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python test_gcs_emulator.py
+
       # 9. Verify the output
       - run:
           name: Verify container output
