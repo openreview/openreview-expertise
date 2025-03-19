@@ -213,7 +213,7 @@ jobs:
             conda create -n expertise python=3.11 -c conda-forge
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            python -m pip install pytest==7.3.0
+            python -m pip install -e ~/openreview-expertise
             python --version
       
       # Initialize MongoDB
