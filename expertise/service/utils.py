@@ -693,31 +693,53 @@ class GCPInterface(object):
         self.client = client
 
     def _generate_vertex_prefix(api_request):
-        # Precondition: api_request there is at least 1 group entity containing a memberOf field
         group_entity = None
         if api_request.entityA['type'] == 'Group':
             group_entity = api_request.entityA
         elif api_request.entityB['type'] == 'Group':
             group_entity = api_request.entityB
 
-        if group_entity is None:
-            raise openreview.OpenReviewException('Bad request: No group entity found')
-        if 'memberOf' not in group_entity:
-            raise openreview.OpenReviewException('Bad request: No memberOf field in group entity')
-
         # Handle group-group request
         if api_request.entityA['type'] == 'Group' and api_request.entityB['type'] == 'Group':
             return f"group-{api_request.entityA['memberOf']}"
 
-        # Handle group-note requests
-        note_entity = None
+        # Handle X-note requests
+        match_note_entity, note_entity = None, None
         if api_request.entityA['type'] == 'Note':
             note_entity = api_request.entityA
-        elif api_request.entityB['type'] == 'Note':
-            note_entity = api_request.entityB
+        if api_request.entityB['type'] == 'Note':
+            if note_entity is None:
+                note_entity = api_request.entityB
+            else:
+                match_note_entity = api_request.entityB
 
         if note_entity is None:
             raise openreview.OpenReviewException('Bad request: No note entity found')
+        
+        # Handle note-note request
+        if match_note_entity is not None:
+            note_fields = ['invitation', 'withVenueid', 'id']
+            match_prefix, submission_prefix = None, None
+            for field in note_fields:
+                if field in match_note_entity:
+                    match_prefix = match_note_entity[field]
+                if field in note_entity:
+                    submission_prefix = note_entity[field]
+
+            if match_prefix is None or submission_prefix is None:
+                raise openreview.OpenReviewException('Bad request: No match or submission prefix found')
+
+            return f"{match_prefix}-{submission_prefix}"
+                    
+        # Handle group-invitation request
+        if 'invitation' in note_entity:
+            return f"inv-{group_entity['memberOf']}"
+        # Handle group-withVenueid request
+        elif 'withVenueid' in note_entity:
+            return f"venueid-{group_entity['memberOf']}"
+        # Handle group-noteId request
+        elif 'id' in note_entity:
+            return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
 
         # Handle group-invitation request
         if 'invitation' in note_entity:
