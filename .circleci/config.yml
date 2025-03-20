@@ -343,7 +343,6 @@ jobs:
             echo "Verifying bucket exists..."
             docker run --rm --network host appropriate/curl -s \
               "http://localhost:4443/storage/v1/b?project=test-project"
-
       - run:
           name: Setup test data
           command: |
@@ -364,7 +363,7 @@ jobs:
             # Check if the expected files exist and have correct format
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            python ~/openreview-expertise/tests/verify_cuda_support.py
+            python ~/openreview-expertise/tests/container_tests/verify_cuda_support.py
       
       # 8. Run group-paper pipeline
       - run:
@@ -375,7 +374,7 @@ jobs:
             # Print working directory for debugging
             pwd
             # Execute the token generation script
-            python ~/openreview-expertise/tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_paper_group.json
+            python ~/openreview-expertise/tests/container_tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_paper_group.json
             # Verify file exists
             ls -la test_input.json
       - run:
@@ -401,7 +400,7 @@ jobs:
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/verify_group_paper_scores.py
+            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/container_tests/verify_group_paper_scores.py
       # 8. Run group-group pipeline
       - run:
           name: Generate Token for Group-Group Pipeline
@@ -411,7 +410,7 @@ jobs:
             # Print working directory for debugging
             pwd
             # Execute the token generation script
-            python ~/openreview-expertise/tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_group_group.json
+            python ~/openreview-expertise/tests/container_tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_group_group.json
             # Verify file exists
             ls -la test_input.json
       - run:
@@ -437,7 +436,7 @@ jobs:
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/verify_group_group_scores.py
+            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/container_tests/verify_group_group_scores.py
       # 8. Run group-paper pipeline
       - run:
           name: Generate Token for Paper-Paper Pipeline
@@ -447,7 +446,7 @@ jobs:
             # Print working directory for debugging
             pwd
             # Execute the token generation script
-            python ~/openreview-expertise/tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_paper_paper.json
+            python ~/openreview-expertise/tests/container_tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_paper_paper.json
             # Verify file exists
             ls -la test_input.json
       - run:
@@ -473,7 +472,7 @@ jobs:
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/verify_paper_paper_scores.py
+            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/container_tests/verify_paper_paper_scores.py
 
       # Use to debug GCS emulator
       #- run:
