@@ -159,3 +159,334 @@ jobs:
           path: reports
       - store_artifacts:
           path: reports
+  container-test:
+    machine:
+      image: ubuntu-2204:2022.10.2
+    # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
+    resource_class: large
+    parallelism: 1
+    working_directory: ~/openreview-expertise
+    environment:
+      PYTHON_VERSION: 3.11
+    steps:
+      - checkout
+      # Setup Miniconda (duplicated from build job)
+      - run:
+          name: Setup Miniconda
+          command: |
+            sudo apt update
+            sudo apt install -y wget
+            sudo apt install -y make gcc
+            sudo apt install -y curl
+            sudo apt install -y build-essential
+            sudo apt install -y git
+            sudo apt install -y sudo
+            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC sudo apt install -y tzdata
+            cd $HOME
+            wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
+            printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
+            bash miniconda.sh -b -p $HOME/miniconda
+      - run:
+          name: Install Node 20
+          command: |
+            sudo apt-get remove -y nodejs
+            sudo rm -f /usr/local/bin/node /usr/local/bin/npm
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            export PATH=/usr/bin:$PATH
+            node -v
+            npm -v
+            sudo ln -sf /usr/bin/node /usr/local/bin/node
+            sudo ln -sf /usr/bin/npm /usr/local/bin/npm
+            which node
+            whereis node
+            which npm
+            whereis npm
+      # Setup environment
+      - run:
+          name: Setup environment
+          command: |
+            export PATH="$HOME/miniconda/bin:$PATH"
+            conda update -y conda
+            python -m ensurepip --upgrade
+            python -m pip install --upgrade pip setuptools wheel setuptools_rust
+            conda create -n expertise python=3.11 -c conda-forge
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            python -m pip install -e ~/openreview-expertise
+            python --version
+      
+      # Initialize MongoDB
+      - run:
+          name: Initialize MongoDB
+          command: |
+            docker network create app-network
+            docker run -d --name mongodb -p 27017:27017 --network host mongo:6.0 --replSet rs0
+            sleep 5
+            docker exec mongodb mongosh mongodb://localhost:27017 --eval "rs.initiate()"
+      - run:
+          name: Start Elasticsearch
+          command: |
+            docker run -d --name elasticsearch -p 9200:9200 -p 9300:9300 -e "xpack.security.enabled=false" -e "discovery.type=single-node" docker.elastic.co/elasticsearch/elasticsearch:7.7.0
+      - run:
+          name: Start Redis
+          command: |
+            docker run -d --name redis -p 6379:6379 redislabs/redisai
+      - run:
+          name: Clone OpenReview API V1 branch << pipeline.parameters.openreview-api-v1-branch >>
+          command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api-v1.git ~/openreview
+            cd ~/openreview && git checkout << pipeline.parameters.openreview-api-v1-branch >>
+      - run:
+          name: Clone OpenReview API V2 branch << pipeline.parameters.openreview-api-v2-branch >>
+          command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api.git ~/openreview-v2
+            cd ~/openreview-v2 && git checkout << pipeline.parameters.openreview-api-v2-branch >>
+      - run:
+          name: Clone openreview-py 
+          command: |
+            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
+      - run:
+          name: Install openreview-py
+          command: |
+            mkdir ~/openreview-py/coverage
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            pip install --force-reinstall -e ~/openreview-py
+            
+      # Create API directories
+      - run:
+          name: Create API directories
+          command: |
+            mkdir -p ~/openreview/logs
+            mkdir -p ~/openreview/files/attachments
+            mkdir -p ~/openreview/files/pdfs
+            mkdir -p ~/openreview/files/temp
+            mkdir -p ~/openreview-v2/logs
+            mkdir -p ~/openreview-v2/files/attachments
+            mkdir -p ~/openreview-v2/files/pdfs
+            mkdir -p ~/openreview-v2/files/temp
+
+      # 3. Start OpenReview APIs 
+      - run:
+          name: Start API v1
+          command: |
+            export PATH=/usr/bin:$PATH
+            node -v
+            which node
+            whereis node
+            which npm
+            whereis npm
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview
+            /usr/local/bin/npm run cleanStart
+          background: true
+      - run:
+          name: Wait for API V1 to start
+          shell: /bin/sh
+          command: |
+            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3000
+            :
+      - run:
+          name: Start API v2
+          command: |
+            export PATH=/usr/bin:$PATH
+            node -v
+            which node
+            whereis node
+            which npm
+            whereis npm
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview-v2
+            /usr/local/bin/npm run cleanStart
+          background: true
+      - run:
+          name: Wait for API V2 to start
+          shell: /bin/sh
+          command: |
+            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3001
+            :
+      # 2. Start mock GCS server
+      - run:
+          name: Start GCS emulator
+          command: |
+            
+            # Run the GCS emulator in the network
+            docker run -d --name gcs-emulator --network host -p 4443:4443 fsouza/fake-gcs-server -scheme http
+          background: true
+      - run:
+          name: Create test bucket in GCS emulator
+          command: |
+            # Wait longer for GCS emulator to be ready
+            echo "Waiting for GCS emulator to start..."
+            sleep 15
+            
+            # Check if container is running
+            docker ps
+            docker logs gcs-emulator || echo "Could not get logs"
+            
+            # Check what ports are actually listening
+            docker exec gcs-emulator netstat -tuln || echo "netstat not available"
+
+            echo "Trying port 4443..."
+            docker run --rm --network host appropriate/curl -s -v "http://localhost:4443/storage/v1/b" || echo "Port 4443 failed"
+            
+            # Create the bucket using Docker network with correct port 4443
+            docker run --rm --network host appropriate/curl -X POST \
+              "http://localhost:4443/storage/v1/b?project=test-project" \
+              -H "Content-Type: application/json" \
+              -d '{"name": "test-bucket"}'
+            
+            # Verify bucket exists
+            echo "Verifying bucket exists..."
+            docker run --rm --network host appropriate/curl -s \
+              "http://localhost:4443/storage/v1/b?project=test-project"
+      - run:
+          name: Setup test data
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview-expertise
+            python -m pytest tests/test_create_conference.py tests/test_create_dataset.py
+      
+      # 5. Build the container
+      - run:
+          name: Build container
+          command: |
+            docker build -t expertise-test:latest .
+      # 7. Verify CUDA exists
+      - run:
+          name: Verify CUDA
+          command: |
+            # Check if the expected files exist and have correct format
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            python ~/openreview-expertise/tests/container_tests/verify_cuda_support.py
+      
+      # 8. Run group-paper pipeline
+      - run:
+          name: Generate Token for Group-Paper Pipeline
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            # Print working directory for debugging
+            pwd
+            # Execute the token generation script
+            python ~/openreview-expertise/tests/container_tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_paper_group.json
+            # Verify file exists
+            ls -la test_input.json
+      - run:
+          name: Run Group-Paper Pipeline
+          command: |
+            # Capture container output to a log file
+            echo "Running expertise container with output captured to log..."
+            mkdir -p logs
+            
+            # Run with tee to capture output while still displaying it
+            docker run --network host \
+              -e GOOGLE_CLOUD_PROJECT=test-project \
+              -e STORAGE_EMULATOR_HOST=http://localhost:4443 \
+              -e PYTHONUNBUFFERED=1 \
+              -e DEBUG=1 \
+              -e LOG_LEVEL=DEBUG \
+              -v $(pwd)/test_output:/app/output \
+              --entrypoint="" \
+              expertise-test:latest \
+              python -m expertise.execute_pipeline "$(cat test_input.json)"
+      - run:
+          name: Check Group-Paper Scores
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/container_tests/verify_group_paper_scores.py
+      # 8. Run group-group pipeline
+      - run:
+          name: Generate Token for Group-Group Pipeline
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            # Print working directory for debugging
+            pwd
+            # Execute the token generation script
+            python ~/openreview-expertise/tests/container_tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_group_group.json
+            # Verify file exists
+            ls -la test_input.json
+      - run:
+          name: Run Group-Group Pipeline
+          command: |
+            # Capture container output to a log file
+            echo "Running expertise container with output captured to log..."
+            mkdir -p logs
+            
+            # Run with tee to capture output while still displaying it
+            docker run --network host \
+              -e GOOGLE_CLOUD_PROJECT=test-project \
+              -e STORAGE_EMULATOR_HOST=http://localhost:4443 \
+              -e PYTHONUNBUFFERED=1 \
+              -e DEBUG=1 \
+              -e LOG_LEVEL=DEBUG \
+              -v $(pwd)/test_output:/app/output \
+              --entrypoint="" \
+              expertise-test:latest \
+              python -m expertise.execute_pipeline "$(cat test_input.json)"
+      - run:
+          name: Check Group-Group Scores
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/container_tests/verify_group_group_scores.py
+      # 8. Run group-paper pipeline
+      - run:
+          name: Generate Token for Paper-Paper Pipeline
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            # Print working directory for debugging
+            pwd
+            # Execute the token generation script
+            python ~/openreview-expertise/tests/container_tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_paper_paper.json
+            # Verify file exists
+            ls -la test_input.json
+      - run:
+          name: Run Paper-Paper Pipeline
+          command: |
+            # Capture container output to a log file
+            echo "Running expertise container with output captured to log..."
+            mkdir -p logs
+            
+            # Run with tee to capture output while still displaying it
+            docker run --network host \
+              -e GOOGLE_CLOUD_PROJECT=test-project \
+              -e STORAGE_EMULATOR_HOST=http://localhost:4443 \
+              -e PYTHONUNBUFFERED=1 \
+              -e DEBUG=1 \
+              -e LOG_LEVEL=DEBUG \
+              -v $(pwd)/test_output:/app/output \
+              --entrypoint="" \
+              expertise-test:latest \
+              python -m expertise.execute_pipeline "$(cat test_input.json)"
+      - run:
+          name: Check Paper-Paper Scores
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/container_tests/verify_paper_paper_scores.py
+
+      # Use to debug GCS emulator
+      #- run:
+      #    name: Test GCS emulator directly
+      #    command: |
+      #      source ~/miniconda/etc/profile.d/conda.sh
+      #      conda activate expertise
+      #      # Run the test
+      #      STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/verify_gcs_bucket.py
+
+# Update workflow to run jobs in parallel
+workflows:
+  version: 2
+  build-and-test:
+    jobs:
+      - build
+      - container-test  # Remove the "requires" dependency
