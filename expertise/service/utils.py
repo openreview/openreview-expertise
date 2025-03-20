@@ -692,41 +692,40 @@ class GCPInterface(object):
         self.client = client
 
     def _generate_vertex_prefix(api_request):
-        # Precondition: api_request there is at least 1 group entity containing a memberOf field
         group_entity = None
+        key = f"{api_request.entityA['type']}-{api_request.entityB['type']}"
         if api_request.entityA['type'] == 'Group':
             group_entity = api_request.entityA
         elif api_request.entityB['type'] == 'Group':
             group_entity = api_request.entityB
 
-        if group_entity is None:
-            raise openreview.OpenReviewException('Bad request: No group entity found')
-        if 'memberOf' not in group_entity:
-            raise openreview.OpenReviewException('Bad request: No memberOf field in group entity')
-
         # Handle group-group request
-        if api_request.entityA['type'] == 'Group' and api_request.entityB['type'] == 'Group':
+        if key == 'Group-Group':
             return f"group-{api_request.entityA['memberOf']}"
+        
+        elif key == 'Group-Note' or key == 'Note-Group':
+            note_entity = api_request.entityA if api_request.entityA['type'] == 'Note' else api_request.entityB
+            group_entity = api_request.entityA if api_request.entityA['type'] == 'Group' else api_request.entityB
+            if 'invitation' in note_entity:
+                return f"inv-{group_entity['memberOf']}"
+            elif 'withVenueid' in note_entity:
+                return f"venueid-{group_entity['memberOf']}"
+            elif 'id' in note_entity:
+                return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
+            
+        elif key == 'Note-Note':
+            match_note_entity = api_request.entityA
+            submission_note_entity = api_request.entityB
+            note_fields = ['invitation', 'withVenueid', 'id']
 
-        # Handle group-note requests
-        note_entity = None
-        if api_request.entityA['type'] == 'Note':
-            note_entity = api_request.entityA
-        elif api_request.entityB['type'] == 'Note':
-            note_entity = api_request.entityB
+            match_prefix, submission_prefix = None, None
+            for field in note_fields:
+                if field in match_note_entity:
+                    match_prefix = match_note_entity[field]
+                if field in submission_note_entity:
+                    submission_prefix = submission_note_entity[field]
 
-        if note_entity is None:
-            raise openreview.OpenReviewException('Bad request: No note entity found')
-
-        # Handle group-invitation request
-        if 'invitation' in note_entity:
-            return f"inv-{group_entity['memberOf']}"
-        # Handle group-withVenueid request
-        elif 'withVenueid' in note_entity:
-            return f"venueid-{group_entity['memberOf']}"
-        # Handle group-noteId request
-        elif 'id' in note_entity:
-            return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
+            return f"{match_prefix}-{submission_prefix}"
 
     def create_job(self, json_request: dict, user_id: str = None, client = None):
         def create_folder(bucket_name, folder_path):
@@ -1083,6 +1082,6 @@ class GCPInterface(object):
         group_group_matching = request.get('entityA', {}).get('type', '') == 'Group' and request.get('entityB', {}).get('type', '') == 'Group'
         paper_paper_matching = request.get('entityA', {}).get('type', '') == 'Note' and request.get('entityB', {}).get('type', '') == 'Note'
 
-        return _get_scores_and_metadata(job_blobs, job_id, group_scoring=group_group_matching)
+        return _get_scores_and_metadata(job_blobs, job_id, group_scoring=group_group_matching, paper_scoring=paper_paper_matching)
 
         
