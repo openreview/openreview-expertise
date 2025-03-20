@@ -877,9 +877,7 @@ class TestExpertiseService():
             assert score >= 0
             if match_submission_id == submission_id:
                 assert score >= 0.99
-        
-        print(response)
-        assert False
+
 
     def test_request_expertise_with_model_errors(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a config with an error in the model field and return the job_id
@@ -1271,9 +1269,6 @@ class TestExpertiseService():
 
         assert "~C.V._Lastname1" in submission_users
         assert "~C.V._Lastname1" in match_users
-
-        print(response)
-        assert False
     
     def test_request_group_exclusion_exclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Test expertise exclusion - both the archives and submissions should be smaller than the previous test's
