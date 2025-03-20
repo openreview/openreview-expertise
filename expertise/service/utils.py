@@ -9,7 +9,6 @@ import redis, pickle
 import logging
 from unittest.mock import MagicMock
 from enum import Enum
-from copy import deepcopy
 import google.cloud.aiplatform as aip
 from google.cloud import storage
 from google.cloud.aiplatform_v1.types import PipelineState
