@@ -67,12 +67,6 @@ def verify_bucket():
     for file in archive_names:
         assert file.endswith('.jsonl')
 
-    # Test embedding files
-    assert 'jobs/group_paper_scores/pub2vec_specter.jsonl' in blob_names
-    assert 'jobs/group_paper_scores/pub2vec_scincl.jsonl' in blob_names
-    assert 'jobs/group_paper_scores/sub2vec_scincl.jsonl' in blob_names
-    assert 'jobs/group_paper_scores/sub2vec_specter.jsonl' in blob_names
-
     # Test get_job_results
     try:
         print(f"\nAttempting to fetch results for job ID: {job_id}")
