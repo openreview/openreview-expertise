@@ -71,15 +71,15 @@ def verify_bucket():
             assert len(scores) == len(EXPECTED_ROWS), f"Expected {len(EXPECTED_ROWS)} scores, got {len(scores)}"
             
             for expected_row in EXPECTED_ROWS:
-                match_submission_id, submission_id, expected_score = expected_row
+                match_submission, submission, expected_score = expected_row
                 for score in scores:
                     # Special case for self-self score
-                    if score['match_submission_id'] == score['submission_id']:
+                    if score['match_submission'] == score['submission']:
                         assert score['score'] >= 0.99, \
-                            f"Expected score for {match_submission_id}/{submission_id} to start with {expected_score}, got {score['score']}"
-                    elif score['match_submission_id'] == match_submission_id and score['submission_id'] == submission_id:
+                            f"Expected score for {match_submission}/{submission} to be near 1, got {score['score']}"
+                    elif score['match_submission'] == match_submission and score['submission'] == submission:
                         assert str(score['score']).startswith(expected_score), \
-                            f"Expected score for {match_submission_id}/{submission_id} to start with {expected_score}, got {score['score']}"
+                            f"Expected score for {match_submission}/{submission} to start with {expected_score}, got {score['score']}"
             return True  # Successfully fetched at least one job's results
         except Exception as e:
             print(f"Error retrieving results for job {job_id}: {e}")
