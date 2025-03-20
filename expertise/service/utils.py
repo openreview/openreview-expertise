@@ -298,45 +298,45 @@ class JobConfig(object):
         self.api_request = None
 
     def to_json(self):
-        pre_body = {
-            'name': self.name,
-            'user_id': self.user_id,
-            'job_id': self.job_id,
-            'cloud_id': self.cloud_id,
-            'baseurl': self.baseurl,
-            'baseurl_v2': self.baseurl_v2,
-            'job_dir': self.job_dir,
-            'cdate': self.cdate,
-            'mdate': self.mdate,
-            'status': self.status,
-            'description': self.description,
-            'match_group': self.match_group,
-            'match_paper_invitation': self.match_paper_invitation,
-            'match_paper_venueid': self.match_paper_venueid,
-            'match_paper_id': self.match_paper_id,
-            'match_paper_content': self.match_paper_content,
-            'alternate_match_group': self.alternate_match_group,
-            'reviewer_ids': self.reviewer_ids,
-            'dataset': self.dataset,
-            'model': self.model,
-            'exclusion_inv': self.exclusion_inv,
-            'inclusion_inv': self.inclusion_inv,
-            'alternate_exclusion_inv': self.alternate_exclusion_inv,
-            'alternate_inclusion_inv': self.alternate_inclusion_inv,
-            'paper_invitation': self.paper_invitation,
-            'paper_venueid': self.paper_venueid,
-            'paper_content': self.paper_content,
-            'paper_id': self.paper_id,
-            'model_params': self.model_params
-        }
+        json_keys = [
+            'name',
+            'user_id',
+            'job_id',
+            'cloud_id',
+            'baseurl',
+            'baseurl_v2',
+            'job_dir',
+            'cdate',
+            'mdate',
+            'status',
+            'description',
+            'match_group',
+            'match_paper_invitation',
+            'match_paper_venueid',
+            'match_paper_id',
+            'match_paper_content',
+            'alternate_match_group',
+            'reviewer_ids',
+            'dataset',
+            'model',
+            'exclusion_inv',
+            'inclusion_inv',
+            'alternate_exclusion_inv',
+            'alternate_inclusion_inv',
+            'paper_invitation',
+            'paper_venueid',
+            'paper_content',
+            'paper_id',
+            'model_params'
+        ]
 
-        # Remove objects that are none
+
+        # Build the JSON dictionary using getattr to fetch values.
         body = {}
-        body_items = pre_body.items()
-        for key, val in body_items:
-            # Allow a None token
-            if val is not None or key == 'token':
-                body[key] = val
+        for key in json_keys:
+            value = getattr(self, key, None)
+            if value is not None:
+                body[key] = value
 
         return body
 
