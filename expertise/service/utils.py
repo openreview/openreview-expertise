@@ -693,46 +693,39 @@ class GCPInterface(object):
 
     def _generate_vertex_prefix(api_request):
         group_entity = None
+        key = f"{api_request.entityA['type']}-{api_request.entityB['type']}"
         if api_request.entityA['type'] == 'Group':
             group_entity = api_request.entityA
         elif api_request.entityB['type'] == 'Group':
             group_entity = api_request.entityB
 
         # Handle group-group request
-        if api_request.entityA['type'] == 'Group' and api_request.entityB['type'] == 'Group':
+        if key == 'Group-Group':
             return f"group-{api_request.entityA['memberOf']}"
-
-        # Handle X-note requests
-        match_note_entity, note_entity = None, None
-        if api_request.entityA['type'] == 'Note':
-            note_entity = api_request.entityA
-        if api_request.entityB['type'] == 'Note':
-            if note_entity is None:
-                note_entity = api_request.entityB
-            else:
-                match_note_entity = api_request.entityB
         
-        # Handle note-note request
-        if match_note_entity is not None:
+        elif key == 'Group-Note' or key == 'Note-Group':
+            note_entity = api_request.entityA if api_request.entityA['type'] == 'Note' else api_request.entityB
+            group_entity = api_request.entityA if api_request.entityA['type'] == 'Group' else api_request.entityB
+            if 'invitation' in note_entity:
+                return f"inv-{group_entity['memberOf']}"
+            elif 'withVenueid' in note_entity:
+                return f"venueid-{group_entity['memberOf']}"
+            elif 'id' in note_entity:
+                return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
+            
+        elif key == 'Note-Note':
+            match_note_entity = api_request.entityA
+            submission_note_entity = api_request.entityB
             note_fields = ['invitation', 'withVenueid', 'id']
+
             match_prefix, submission_prefix = None, None
             for field in note_fields:
                 if field in match_note_entity:
                     match_prefix = match_note_entity[field]
-                if field in note_entity:
-                    submission_prefix = note_entity[field]
+                if field in submission_note_entity:
+                    submission_prefix = submission_note_entity[field]
 
             return f"{match_prefix}-{submission_prefix}"
-
-        # Handle group-invitation request
-        if 'invitation' in note_entity:
-            return f"inv-{group_entity['memberOf']}"
-        # Handle group-withVenueid request
-        elif 'withVenueid' in note_entity:
-            return f"venueid-{group_entity['memberOf']}"
-        # Handle group-noteId request
-        elif 'id' in note_entity:
-            return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
 
     def create_job(self, json_request: dict, user_id: str = None, client = None):
         def create_folder(bucket_name, folder_path):
