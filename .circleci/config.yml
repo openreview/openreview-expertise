@@ -357,20 +357,6 @@ jobs:
           name: Build container
           command: |
             docker build -t expertise-test:latest .
-
-      # 6. Generate valid API token and prepare input
-      - run:
-          name: Generate valid API token and prepare input
-          command: |
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            # Print working directory for debugging
-            pwd
-            # Execute the token generation script
-            python ~/openreview-expertise/tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_paper_group.json
-            # Verify file exists
-            ls -la test_input.json
-
       # 7. Verify CUDA exists
       - run:
           name: Verify CUDA
@@ -380,22 +366,21 @@ jobs:
             conda activate expertise
             python ~/openreview-expertise/tests/verify_cuda_support.py
       
-      # 8. Run the container with test input
+      # 8. Run group-paper pipeline
       - run:
-          name: Run container with comprehensive debugging
+          name: Generate Token for Group-Paper Pipeline
           command: |
-            # Mount a volume for output verification 
-            mkdir -p test_output
-            chmod 777 test_output  # Ensure directory is writable by anyone
-            
-            # First test if volume mounting works with a simple container
-            echo "Testing volume mount with simple container..."
-            docker run --rm -v $(pwd)/test_output:/test_dir ubuntu:22.04 bash -c "echo 'Volume test successful' > /test_dir/volume_test.txt && ls -la /test_dir"
-            
-            echo "Checking if test file was created:"
-            ls -la test_output
-            cat test_output/volume_test.txt || echo "Volume test file not found!"
-            
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            # Print working directory for debugging
+            pwd
+            # Execute the token generation script
+            python ~/openreview-expertise/tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_paper_group.json
+            # Verify file exists
+            ls -la test_input.json
+      - run:
+          name: Run Group-Paper Pipeline
+          command: |
             # Capture container output to a log file
             echo "Running expertise container with output captured to log..."
             mkdir -p logs
@@ -411,22 +396,93 @@ jobs:
               --entrypoint="" \
               expertise-test:latest \
               python -m expertise.execute_pipeline "$(cat test_input.json)"
-
       - run:
-          name: Test GCS emulator directly
-          command: |
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            # Run the test
-            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/verify_gcs_bucket.py
-
-      # 9. Verify the output
-      - run:
-          name: Verify bucket using production interface
+          name: Check Group-Paper Scores
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/verify_group_paper_scores.py
+      # 8. Run group-group pipeline
+      - run:
+          name: Generate Token for Group-Group Pipeline
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            # Print working directory for debugging
+            pwd
+            # Execute the token generation script
+            python ~/openreview-expertise/tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_group_group.json
+            # Verify file exists
+            ls -la test_input.json
+      - run:
+          name: Run Group-Group Pipeline
+          command: |
+            # Capture container output to a log file
+            echo "Running expertise container with output captured to log..."
+            mkdir -p logs
+            
+            # Run with tee to capture output while still displaying it
+            docker run --network host \
+              -e GOOGLE_CLOUD_PROJECT=test-project \
+              -e STORAGE_EMULATOR_HOST=http://localhost:4443 \
+              -e PYTHONUNBUFFERED=1 \
+              -e DEBUG=1 \
+              -e LOG_LEVEL=DEBUG \
+              -v $(pwd)/test_output:/app/output \
+              --entrypoint="" \
+              expertise-test:latest \
+              python -m expertise.execute_pipeline "$(cat test_input.json)"
+      - run:
+          name: Check Group-Group Scores
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/verify_group_group_scores.py
+      # 8. Run group-paper pipeline
+      - run:
+          name: Generate Token for Paper-Paper Pipeline
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            # Print working directory for debugging
+            pwd
+            # Execute the token generation script
+            python ~/openreview-expertise/tests/generate_token.py ~/openreview-expertise/tests/container_jsons/container_paper_paper.json
+            # Verify file exists
+            ls -la test_input.json
+      - run:
+          name: Run Paper-Paper Pipeline
+          command: |
+            # Capture container output to a log file
+            echo "Running expertise container with output captured to log..."
+            mkdir -p logs
+            
+            # Run with tee to capture output while still displaying it
+            docker run --network host \
+              -e GOOGLE_CLOUD_PROJECT=test-project \
+              -e STORAGE_EMULATOR_HOST=http://localhost:4443 \
+              -e PYTHONUNBUFFERED=1 \
+              -e DEBUG=1 \
+              -e LOG_LEVEL=DEBUG \
+              -v $(pwd)/test_output:/app/output \
+              --entrypoint="" \
+              expertise-test:latest \
+              python -m expertise.execute_pipeline "$(cat test_input.json)"
+      - run:
+          name: Check Paper-Paper Scores
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/verify_paper_paper_scores.py
+
+      # Use to debug GCS emulator
+      #- run:
+      #    name: Test GCS emulator directly
+      #    command: |
+      #      source ~/miniconda/etc/profile.d/conda.sh
+      #      conda activate expertise
+      #      # Run the test
+      #      STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/verify_gcs_bucket.py
 
 # Update workflow to run jobs in parallel
 workflows:

@@ -18,6 +18,10 @@ EXPECTED_ROWS = [
     ('HgbgymMI21e', '~Royal_Toy1', '0.56')
 ]
 
+[{'match_member': '~Harold_Rice1', 'score': 0.59, 'submission_member': '~Harold_Rice1'}, {'match_member': '~C.V._Lastname1', 'score': 0.56, 'submission_member': '~Harold_Rice1'}, {'match_member': '~Zonia_Willms1', 'score': 0.53, 'submission_member': '~Harold_Rice1'}, {'match_member': '~Royal_Toy1', 'score': 0.51, 'submission_member': '~Harold_Rice1'}, {'match_member': '~Harold_Rice1', 'score': 0.51, 'submission_member': '~Royal_Toy1'}, {'match_member': '~C.V._Lastname1', 'score': 0.5, 'submission_member': '~Royal_Toy1'}, {'match_member': '~Zonia_Willms1', 'score': 0.6, 'submission_member': '~Royal_Toy1'}, {'match_member': '~Royal_Toy1', 'score': 0.8, 'submission_member': '~Royal_Toy1'}, {'match_member': '~Harold_Rice1', 'score': 0.56, 'submission_member': '~C.V._Lastname1'}, {'match_member': '~C.V._Lastname1', 'score': 0.8, 'submission_member': '~C.V._Lastname1'}, {'match_member': '~Zonia_Willms1', 'score': 0.58, 'submission_member': '~C.V._Lastname1'}, {'match_member': '~Royal_Toy1', 'score': 0.5, 'submission_member': '~C.V._Lastname1'}, {'match_member': '~Harold_Rice1', 'score': 0.54, 'submission_member': '~Zonia_Willms1'}, {'match_member': '~C.V._Lastname1', 'score': 0.59, 'submission_member': '~Zonia_Willms1'}, {'match_member': '~Zonia_Willms1', 'score': 0.68, 'submission_member': '~Zonia_Willms1'}, {'match_member': '~Royal_Toy1', 'score': 0.6, 'submission_member': '~Zonia_Willms1'}]
+
+[{'match_submission': 'SlmLlyHt31x', 'score': 0.9999999105930328, 'submission': 'SlmLlyHt31x'}, {'match_submission': 'SelIx1SK31x', 'score': 0.8732473254203796, 'submission': 'SlmLlyHt31x'}, {'match_submission': 'SlmLlyHt31x', 'score': 0.8732473254203796, 'submission': 'SelIx1SK31x'}, {'match_submission': 'SelIx1SK31x', 'score': 1.0, 'submission': 'SelIx1SK31x'}]
+
 def verify_bucket():
     print("Verifying GCS bucket using production interface")
     
