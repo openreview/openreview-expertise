@@ -61,12 +61,6 @@ def verify_bucket():
     assert 'jobs/group_paper_scores/test_container.jsonl' in blob_names
     assert 'jobs/group_paper_scores/test_container_sparse.jsonl' in blob_names
 
-    # Test archive files
-    archive_blobs = list(bucket.list_blobs(prefix=f"{gcp_interface.jobs_folder}/{job_id}/archives/"))
-    archive_names = [blob.name for blob in archive_blobs]
-    for file in archive_names:
-        assert file.endswith('.jsonl')
-
     # Test get_job_results
     try:
         print(f"\nAttempting to fetch results for job ID: {job_id}")

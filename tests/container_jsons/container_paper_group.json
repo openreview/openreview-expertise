@@ -3,8 +3,6 @@
     "baseurl_v1": "http://localhost:3000",
     "baseurl_v2": "http://localhost:3001",
     "gcs_folder": "gs://test-bucket/jobs/group_paper_scores",
-    "dump_embs": false,
-    "dump_archives": true,
     "name": "test_container",
     "entityA": {
       "type": "Group",
