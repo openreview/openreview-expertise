@@ -8,9 +8,9 @@ from expertise.service.utils import GCPInterface, RedisDatabase
 
 # Define expected rows
 EXPECTED_ROWS = [
-    ("SlmLlyHt31x","SlmLlyHt31x","0.9999999105930328")
-    ("SelIx1SK31x","SlmLlyHt31x","0.87")
-    ("SlmLlyHt31x","SelIx1SK31x","0.87")
+    ("SlmLlyHt31x","SlmLlyHt31x","0.9999999105930328"),
+    ("SelIx1SK31x","SlmLlyHt31x","0.87"),
+    ("SlmLlyHt31x","SelIx1SK31x","0.87"),
     ("SelIx1SK31x","SelIx1SK31x","1.0")
 ]
 

@@ -8,21 +8,21 @@ from expertise.service.utils import GCPInterface, RedisDatabase
 
 # Define expected rows
 EXPECTED_ROWS = [
-    ("~Harold_Rice1","~Harold_Rice1","0.5")
-    ("~C.V._Lastname1","~Harold_Rice1","0.5")
-    ("~Zonia_Willms1","~Harold_Rice1","0.5")
-    ("~Royal_Toy1","~Harold_Rice1","0.5")
-    ("~Harold_Rice1","~Royal_Toy1","0.5")
-    ("~C.V._Lastname1","~Royal_Toy1","0.5")
-    ("~Zonia_Willms1","~Royal_Toy1","0.6")
-    ("~Royal_Toy1","~Royal_Toy1","0.8")
-    ("~Harold_Rice1","~C.V._Lastname1","0.5")
-    ("~C.V._Lastname1","~C.V._Lastname1","0.8")
-    ("~Zonia_Willms1","~C.V._Lastname1","0.5")
-    ("~Royal_Toy1","~C.V._Lastname1","0.5")
-    ("~Harold_Rice1","~Zonia_Willms1","0.5")
-    ("~C.V._Lastname1","~Zonia_Willms1","0.5")
-    ("~Zonia_Willms1","~Zonia_Willms1","0.6")
+    ("~Harold_Rice1","~Harold_Rice1","0.5"),
+    ("~C.V._Lastname1","~Harold_Rice1","0.5"),
+    ("~Zonia_Willms1","~Harold_Rice1","0.5"),
+    ("~Royal_Toy1","~Harold_Rice1","0.5"),
+    ("~Harold_Rice1","~Royal_Toy1","0.5"),
+    ("~C.V._Lastname1","~Royal_Toy1","0.5"),
+    ("~Zonia_Willms1","~Royal_Toy1","0.6"),
+    ("~Royal_Toy1","~Royal_Toy1","0.8"),
+    ("~Harold_Rice1","~C.V._Lastname1","0.5"),
+    ("~C.V._Lastname1","~C.V._Lastname1","0.8"),
+    ("~Zonia_Willms1","~C.V._Lastname1","0.5"),
+    ("~Royal_Toy1","~C.V._Lastname1","0.5"),
+    ("~Harold_Rice1","~Zonia_Willms1","0.5"),
+    ("~C.V._Lastname1","~Zonia_Willms1","0.5"),
+    ("~Zonia_Willms1","~Zonia_Willms1","0.6"),
     ("~Royal_Toy1","~Zonia_Willms1","0.6")
 ]
 
