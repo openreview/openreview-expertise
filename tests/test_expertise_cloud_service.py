@@ -330,6 +330,280 @@ class TestExpertiseCloudService():
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
+    def test_group_group_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
+        def setup_job_mocks():
+            # Setup mock PipelineJob
+            mock_pipeline_instance = MagicMock()
+            mock_pipeline_job.return_value = mock_pipeline_instance
+
+            # Mock PipelineJob.get()
+            mock_pipeline_running = MagicMock()
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
+            mock_pipeline_running.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_succeeded = MagicMock()
+            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
+            mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+
+            return mock_pipeline_instance
+
+        MAX_TIMEOUT = 300
+        redis = RedisDatabase(
+            host=openreview_context_cloud['config']['REDIS_ADDR'],
+            port=openreview_context_cloud['config']['REDIS_PORT'],
+            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
+            sync_on_disk=False
+        )
+
+        # Submit first job as ABC.cc/Program_Chairs
+        abc_client = openreview.api.OpenReviewClient(
+            token=openreview_client.token
+        )
+        abc_client.impersonate('ABC.cc/Program_Chairs')
+
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context_cloud['test_client']
+
+        tmp_dir = Path('tests/gcp')
+        if not os.path.exists(tmp_dir):
+            os.makedirs(tmp_dir)
+
+        # Make a request
+        # Patch storage.Client to return our local mock client that uses the filesystem
+        with patch("google.cloud.storage.Client", new=lambda project=None: LocalMockClient(project=project, root_dir=tmp_dir)):
+            setup_job_mocks()
+            response = test_client.post(
+                '/expertise',
+                data = json.dumps({
+                        "name": "test_run",
+                        "entityA": {
+                            'type': "Group",
+                            'memberOf': "ABC.cc/Area_Chairs",
+                        },
+                        "entityB": { 
+                            'type': "Group",
+                            'memberOf': "ABC.cc/Area_Chairs",
+                        },
+                        "model": {
+                                "name": "specter2+scincl",
+                                'useTitle': False, 
+                                'useAbstract': True, 
+                                'skipSpecter': False,
+                                'scoreComputation': 'avg'
+                        },
+                        "dataset": {
+                            'minimumPubDate': 0
+                        }
+                    }
+                ),
+                content_type='application/json',
+                headers=abc_client.headers
+            )
+            assert response.status_code == 200, f'{response.json}'
+            job_id = response.json['jobId']
+
+            # Let request process
+            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+            assert response['status'] == 'Completed', f"Job status: {response['status']}"
+
+            ## Expect 1*5 calls from the worker thread, 1*1 call from /expertise/status and 0 calls from /expertise/status/all
+            assert len(mock_pipeline_job.get.call_args_list) == 6
+
+            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+            assert response['status'] == 'Completed', f"Job status: {response['status']}"
+
+            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={'status': 'Completed'}).json['results']
+            assert any([r['jobId'] == job_id for r in responses])
+            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
+                "entityA.memberOf": "ABC.cc/Area_Chairs",
+                "entityB.memberOf": "ABC.cc/Area_Chairs"
+            }).json['results']
+            assert any([r['jobId'] == job_id for r in responses])
+            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
+                "entityA.memberOf": "ABC.cc/Area_Chairs",
+                "entityB.memberOf": "ABC.cc/Area_Chairs",
+                'status': 'Completed'
+            }).json['results']
+            assert any([r['jobId'] == job_id for r in responses])
+
+            job = [r for r in responses if r['jobId'] == job_id][0]
+            assert job['status'] == 'Completed'
+            assert job['name'] == 'test_run'
+            assert job['description'] == 'Job is complete and the computed scores are ready'
+
+            # Build mock scores
+
+            # Fetch the job config
+            ## Convert current mocking to using file system
+            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+            
+            # Check proper user ID
+            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/request.json"), 'r') as f:
+                request = json.load(f)
+                assert request['user_id'] == 'ABC.cc/Program_Chairs'
+
+            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/metadata.json"), 'w') as f:
+                f.write(json.dumps({"meta": "data"}))
+
+            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/scores.jsonl"), 'w') as f:
+                f.write('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
+
+            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/scores_sparse.jsonl"), 'w') as f:
+                f.write('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
+
+            # Searches for journal results from the given job_id assuming the job has completed
+            response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
+            assert response.json["metadata"] == {"meta": "data"}
+            assert response.json["results"] == [
+                {"match_member": "user_user2","submission_member": "user_user1","score": 0.987},
+                {"match_member": "user_user3","submission_member": "user_user2","score": 0.987}
+            ]
+
+            # Teardown tmp_dir
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
+    def test_paper_paper_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
+        def setup_job_mocks():
+            # Setup mock PipelineJob
+            mock_pipeline_instance = MagicMock()
+            mock_pipeline_job.return_value = mock_pipeline_instance
+
+            # Mock PipelineJob.get()
+            mock_pipeline_running = MagicMock()
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
+            mock_pipeline_running.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_succeeded = MagicMock()
+            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
+            mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+
+            return mock_pipeline_instance
+
+        MAX_TIMEOUT = 300
+        redis = RedisDatabase(
+            host=openreview_context_cloud['config']['REDIS_ADDR'],
+            port=openreview_context_cloud['config']['REDIS_PORT'],
+            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
+            sync_on_disk=False
+        )
+
+        # Submit first job as ABC.cc/Program_Chairs
+        abc_client = openreview.api.OpenReviewClient(
+            token=openreview_client.token
+        )
+        abc_client.impersonate('ABC.cc/Program_Chairs')
+
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context_cloud['test_client']
+
+        tmp_dir = Path('tests/gcp')
+        if not os.path.exists(tmp_dir):
+            os.makedirs(tmp_dir)
+
+        # Make a request
+        # Patch storage.Client to return our local mock client that uses the filesystem
+        with patch("google.cloud.storage.Client", new=lambda project=None: LocalMockClient(project=project, root_dir=tmp_dir)):
+            setup_job_mocks()
+            response = test_client.post(
+                '/expertise',
+                data = json.dumps({
+                        "name": "test_run",
+                        "entityA": {
+                            'type': "Note",
+                            'invitation': "ABC.cc/-/Submission" 
+                        },
+                        "entityB": { 
+                            'type': "Note",
+                            'invitation': "ABC.cc/-/Submission" 
+                        },
+                        "model": {
+                                "name": "specter2+scincl",
+                                'useTitle': False, 
+                                'useAbstract': True, 
+                                'skipSpecter': False,
+                                'scoreComputation': 'avg'
+                        },
+                        "dataset": {
+                            'minimumPubDate': 0
+                        }
+                    }
+                ),
+                content_type='application/json',
+                headers=abc_client.headers
+            )
+            assert response.status_code == 200, f'{response.json}'
+            job_id = response.json['jobId']
+
+            # Let request process
+            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+            assert response['status'] == 'Completed', f"Job status: {response['status']}"
+
+            ## Expect 1*5 calls from the worker thread, 1*1 call from /expertise/status and 0 calls from /expertise/status/all
+            assert len(mock_pipeline_job.get.call_args_list) == 6
+
+            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+            assert response['status'] == 'Completed', f"Job status: {response['status']}"
+
+            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={'status': 'Completed'}).json['results']
+            assert any([r['jobId'] == job_id for r in responses])
+            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
+                "entityA.invitation": "ABC.cc/-/Submission",
+                "entityB.invitation": "ABC.cc/-/Submission"
+            }).json['results']
+            assert any([r['jobId'] == job_id for r in responses])
+            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
+                "entityA.invitation": "ABC.cc/-/Submission",
+                "entityB.invitation": "ABC.cc/-/Submission",
+                'status': 'Completed'
+            }).json['results']
+            assert any([r['jobId'] == job_id for r in responses])
+
+            job = [r for r in responses if r['jobId'] == job_id][0]
+            assert job['status'] == 'Completed'
+            assert job['name'] == 'test_run'
+            assert job['description'] == 'Job is complete and the computed scores are ready'
+
+            # Build mock scores
+
+            # Fetch the job config
+            ## Convert current mocking to using file system
+            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+            
+            # Check proper user ID
+            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/request.json"), 'r') as f:
+                request = json.load(f)
+                assert request['user_id'] == 'ABC.cc/Program_Chairs'
+
+            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/metadata.json"), 'w') as f:
+                f.write(json.dumps({"meta": "data"}))
+
+            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/scores.jsonl"), 'w') as f:
+                f.write('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
+
+            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/scores_sparse.jsonl"), 'w') as f:
+                f.write('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
+
+            # Searches for journal results from the given job_id assuming the job has completed
+            response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
+            assert response.json["metadata"] == {"meta": "data"}
+            assert response.json["results"] == [
+                {"match_submission": "abcd","submission": "edfg","score": 0.987},
+                {"match_submission": "hijk","submission": "lmno","score": 0.987}
+            ]
+
+            # Teardown tmp_dir
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_client_isolation(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
         """
         This test ensures that the user_id polling the job and the user_id written to GCP storage are the same
