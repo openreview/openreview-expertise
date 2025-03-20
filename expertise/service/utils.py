@@ -9,6 +9,7 @@ import redis, pickle
 import logging
 from unittest.mock import MagicMock
 from enum import Enum
+from copy import deepcopy
 import google.cloud.aiplatform as aip
 from google.cloud import storage
 from google.cloud.aiplatform_v1.types import PipelineState
@@ -711,9 +712,6 @@ class GCPInterface(object):
                 note_entity = api_request.entityB
             else:
                 match_note_entity = api_request.entityB
-
-        if note_entity is None:
-            raise openreview.OpenReviewException('Bad request: No note entity found')
         
         # Handle note-note request
         if match_note_entity is not None:
@@ -725,20 +723,7 @@ class GCPInterface(object):
                 if field in note_entity:
                     submission_prefix = note_entity[field]
 
-            if match_prefix is None or submission_prefix is None:
-                raise openreview.OpenReviewException('Bad request: No match or submission prefix found')
-
             return f"{match_prefix}-{submission_prefix}"
-                    
-        # Handle group-invitation request
-        if 'invitation' in note_entity:
-            return f"inv-{group_entity['memberOf']}"
-        # Handle group-withVenueid request
-        elif 'withVenueid' in note_entity:
-            return f"venueid-{group_entity['memberOf']}"
-        # Handle group-noteId request
-        elif 'id' in note_entity:
-            return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
 
         # Handle group-invitation request
         if 'invitation' in note_entity:
