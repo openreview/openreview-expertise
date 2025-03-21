@@ -159,8 +159,8 @@ jobs:
           name: Copy API logs to artifacts
           when: on_fail
           command: |
-            cp ~/openreview/logs/* ~/openreview-py/reports/
-            cp ~/openreview-v2/logs/* ~/openreview-py/reports/
+            cp ~/openreview/logs/* ~/openreview-expertise/reports/
+            cp ~/openreview-v2/logs/* ~/openreview-expertise/reports/
       - store_test_results:
           path: reports
       - store_artifacts:
