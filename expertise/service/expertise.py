@@ -52,6 +52,8 @@ class BaseExpertiseService:
         self.containerized = containerized
         self.sync_on_disk = sync_on_disk  # Whether to actually save jobs on disk (for Redis usage)
         self.default_expertise_config = config.get('DEFAULT_CONFIG')
+        self.worker_attempts = worker_attempts
+        self.worker_backoff_delay = worker_backoff_delay
         self.working_dir = config.get('WORKING_DIR')
         self.specter_dir = config.get('SPECTER_DIR')
         self.mfr_feature_vocab_file = config.get('MFR_VOCAB_DIR')
