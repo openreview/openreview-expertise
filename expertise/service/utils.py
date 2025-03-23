@@ -499,7 +499,8 @@ class JobConfig(object):
             'useTitle',
             'useAbstract',
             'scoreComputation',
-            'skipSpecter'
+            'skipSpecter',
+            'useCuda'
         ]
         config.model = starting_config.get('model', None)
         model_params = starting_config.get('model_params', {})
