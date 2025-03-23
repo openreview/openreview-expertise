@@ -6,6 +6,13 @@ name: push-workflow-image
 on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      openreview_py_version:
+        description: 'openreview-py version to install (use "latest" for the latest version)'
+        required: false
+        default: 'latest'
+        type: string
+
 env:
   REGION: us
   KFP_REGION: us-central1
@@ -60,6 +67,8 @@ jobs:
           context: .
           push: true
           tags: ${{ env.IMAGE_TAG }}
+          build-args: |
+            OPENREVIEW_PY_VERSION=${{ github.event.inputs.openreview_py_version }}
       #- name: Run pipeline script
       #  run: |
       #    python expertise/build_pipeline.py \

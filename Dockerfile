@@ -1,5 +1,7 @@
 FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
 
+ARG OPENREVIEW_PY_VERSION=latest
+
 WORKDIR /app
 
 ENV PYTHON_VERSION=3.11 \
@@ -37,11 +39,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && python -m pip install --no-cache-dir -e $HOME/openreview-expertise \
     && python -m pip install --no-cache-dir -I protobuf==3.20.1 \
     && python -m pip install --no-cache-dir numpy==1.26.4 --force-reinstall \
-    && python -m pip install openreview-py --force-reinstall \
     && conda clean --all -y \
     && apt-get purge -y build-essential wget curl git \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
+
+RUN if [ "$OPENREVIEW_PY_VERSION" != "latest" ]; then \
+    python -m pip install --force-reinstall openreview-py==${OPENREVIEW_PY_VERSION}; \
+  else \
+    python -m pip install --force-reinstall openreview-py; \
+  fi
 
 # Add conda environment bin to PATH so that 'python' uses the environment by default
 ENV PATH="/app/miniconda/envs/expertise/bin:${PATH}"
