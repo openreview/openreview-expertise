@@ -30,7 +30,7 @@ class BaseExpertiseService:
         logger,
         containerized=False,
         sync_on_disk=True,
-        worker_attempts=3,
+        worker_attempts=1,
         worker_backoff_delay=60000,
         worker_concurrency=None,
         worker_lock_duration=None,
