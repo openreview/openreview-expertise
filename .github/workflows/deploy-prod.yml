@@ -6,6 +6,12 @@ name: prod-deployment
 on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      version:
+        description: "openreview-expertise Release Version"
+        required: false
+        default: "latest"
+        type: string
 jobs:
   deploy:
     # Allow the job to fetch a GitHub ID token
@@ -33,7 +39,10 @@ jobs:
           export_environment_variables: true
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v1
+      - name: Set Environment Variables
+        run: |
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
       - name: Run deploy script
         run: |
           gcloud config set compute/zone us-central1-c
-          gcloud compute ssh openreview@instance-matching-server-gpu --command '/bin/expertise_build.sh' --quiet
+          gcloud compute ssh openreview@instance-matching-server-gpu --command "GCP_PIPELINE_TAG=${{ env.VERSION }} /bin/expertise_build.sh" --quiet
