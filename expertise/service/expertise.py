@@ -30,6 +30,8 @@ class BaseExpertiseService:
         logger,
         containerized=False,
         sync_on_disk=True,
+        worker_attempts=1,
+        worker_backoff_delay=60000,
         worker_concurrency=None,
         worker_lock_duration=None,
         worker_autorun=False,
@@ -39,6 +41,8 @@ class BaseExpertiseService:
         :param logger:         Logger instance for logging
         :param containerized:  Whether your service is running in containerized mode
         :param sync_on_disk:   Whether RedisDatabase writes files to disk or purely memory
+        :param worker_attempts: (Optional) number of attempts for the BullMQ worker
+        :param worker_backoff_delay: (Optional) backoff delay 2 ^ attempts * delay (ms) for the BullMQ worker
         :param worker_concurrency: (Optional) concurrency for the BullMQ worker
         :param worker_lock_duration: (Optional) lock duration (ms) for the BullMQ worker
         :param worker_autorun: (Optional) whether the worker should start automatically
@@ -48,6 +52,8 @@ class BaseExpertiseService:
         self.containerized = containerized
         self.sync_on_disk = sync_on_disk  # Whether to actually save jobs on disk (for Redis usage)
         self.default_expertise_config = config.get('DEFAULT_CONFIG')
+        self.worker_attempts = worker_attempts
+        self.worker_backoff_delay = worker_backoff_delay
         self.working_dir = config.get('WORKING_DIR')
         self.specter_dir = config.get('SPECTER_DIR')
         self.mfr_feature_vocab_file = config.get('MFR_VOCAB_DIR')
@@ -505,12 +511,13 @@ class BaseExpertiseService:
             elif entity['type'] == 'Note':
                 if entity.get('id'):
                     key_parts.append(entity['id'])
-                elif entity.get('invitation'):
+                if entity.get('invitation'):
                     key_parts.append(entity['invitation'])
-                elif entity.get('withVenueid'):
+                if entity.get('withVenueid'):
                     key_parts.append(entity['withVenueid'])
-                else:
-                    key_parts.append('NoNoteInformation')
+                if entity.get('withContent'):
+                    for key, value in entity['withContent'].items():
+                        key_parts.append(f"{key}:{value}")
 
         if request.get('model', {}).get('name'):
             key_parts.append(request['model']['name'])
@@ -525,6 +532,8 @@ class ExpertiseService(BaseExpertiseService):
             logger=logger,
             containerized=containerized,
             sync_on_disk=True,            # We want to store jobs on disk
+            worker_attempts=config['WORKER_ATTEMPTS'],
+            worker_backoff_delay=config['WORKER_BACKOFF_DELAY'],
             worker_concurrency=config['ACTIVE_JOBS'],
             worker_lock_duration=config['LOCK_DURATION'],
             worker_autorun=False         # If that is what you originally had
@@ -625,6 +634,11 @@ class ExpertiseService(BaseExpertiseService):
                 },
                 {
                     'jobId': job_id,
+                    'attempts': self.worker_attempts,
+                    'backoff': {
+                        'delay': self.worker_backoff_delay,
+                        'type': 'exponential', # Exponential backoff: 2 ^ attempts * delay milliseconds
+                    },
                     'removeOnComplete': {
                         'count': 100,
                     },
@@ -800,6 +814,8 @@ class ExpertiseCloudService(BaseExpertiseService):
             logger=logger,
             containerized=containerized,
             sync_on_disk=True,            # We want to store jobs on disk
+            worker_attempts=config['WORKER_ATTEMPTS'],
+            worker_backoff_delay=config['WORKER_BACKOFF_DELAY'],
             worker_concurrency=config['ACTIVE_JOBS'],
             worker_lock_duration=config['LOCK_DURATION'],
             worker_autorun=False         # If that is what you originally had
@@ -920,6 +936,11 @@ class ExpertiseCloudService(BaseExpertiseService):
                 },
                 {
                     'jobId': config.job_id,
+                    'attempts': self.worker_attempts,
+                    'backoff': {
+                        'delay': self.worker_backoff_delay,
+                        'type': 'exponential', # Exponential backoff: 2 ^ attempts * delay milliseconds
+                    },
                     'removeOnComplete': {
                         'count': 100,
                     },
