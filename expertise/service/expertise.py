@@ -515,6 +515,9 @@ class BaseExpertiseService:
                     key_parts.append(entity['invitation'])
                 elif entity.get('withVenueid'):
                     key_parts.append(entity['withVenueid'])
+                elif entity.get('withContent'):
+                    for key, value in entity['withContent'].items():
+                        key_parts.append(f"{key}:{value}")
                 else:
                     key_parts.append('NoNoteInformation')
 
