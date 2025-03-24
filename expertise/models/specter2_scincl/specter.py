@@ -198,10 +198,6 @@ class Specter2Predictor(Predictor):
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
 
-        pub_jsonl = []
-        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
-            pub_jsonl.extend(self._batch_predict(batch_data))
-
         # If checkpointing is enabled, filter out papers that have already been embedded.
         if self.emb_checkpoint and os.path.exists(publications_path):
             print('Skipping cached publications...')
@@ -214,6 +210,10 @@ class Specter2Predictor(Predictor):
             
             # Remove already embedded papers from paper_data.
             paper_data = {paper_id: data for paper_id, data in paper_data.items() if paper_id not in existing_ids}
+
+        pub_jsonl = []
+        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
+            pub_jsonl.extend(self._batch_predict(batch_data))
 
         with open(publications_path, 'a') as f:
             f.writelines(pub_jsonl)
