@@ -511,15 +511,13 @@ class BaseExpertiseService:
             elif entity['type'] == 'Note':
                 if entity.get('id'):
                     key_parts.append(entity['id'])
-                elif entity.get('invitation'):
+                if entity.get('invitation'):
                     key_parts.append(entity['invitation'])
-                elif entity.get('withVenueid'):
+                if entity.get('withVenueid'):
                     key_parts.append(entity['withVenueid'])
-                elif entity.get('withContent'):
+                if entity.get('withContent'):
                     for key, value in entity['withContent'].items():
                         key_parts.append(f"{key}:{value}")
-                else:
-                    key_parts.append('NoNoteInformation')
 
         if request.get('model', {}).get('name'):
             key_parts.append(request['model']['name'])
