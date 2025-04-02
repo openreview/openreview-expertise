@@ -168,7 +168,7 @@ class BaseExpertiseService:
         """
         Common logic for updating a job's status in Redis (if not containerized).
         """
-        # from .utils import JobDescription, JobStatus  # Typically you'd import these at top
+        # from .utils import JobDescription, JobStatus  # Typically you’d import these at top
         descriptions = JobDescription.VALS.value
         config.status = new_status
 
@@ -854,9 +854,9 @@ class ExpertiseCloudService(BaseExpertiseService):
         try:
             self.logger.info(f"In polling worker...")
             for attempt in range(self.max_attempts):
-                self.logger.info(f"Polling attempt {attempt + 1}/{self.max_attempts} for job {redis_id}...")
+                self.logger.info(f"{redis_id} - attempt {attempt + 1} of {self.max_attempts}...")
                 status = self.cloud.get_job_status_by_job_id(user_id, cloud_id)
-                self.logger.info(f"Received status for {redis_id}: {status}")
+                self.logger.info(f"Invoked get_job_status_by_job_id for {redis_id} - status: {status}")
 
                 # Check status validity
                 self.logger.info(f"INFO: before status check")
@@ -986,7 +986,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         :param job_id: ID of the specific job to look up
         :type job_id: str
 
-        :returns: A dictionary with the key 'results' contain ing a list of job statuses
+        :returns: A dictionary with the key 'results' containing a list of job statuses
         """
         redis_job = self.redis.load_job(job_id, user_id)
         if redis_job.cloud_id is None:
