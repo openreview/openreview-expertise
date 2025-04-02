@@ -96,7 +96,7 @@ def run_pipeline(api_request_str, working_dir=None):
         error_message = {
             'error': str(e)
         }
-        destination_blob = f"{blob_prefix}/error.jsonl"
+        destination_blob = f"{blob_prefix}/error.json"
         blob = bucket.blob(destination_blob)
         blob.upload_from_string(json.dumps(error_message))
 

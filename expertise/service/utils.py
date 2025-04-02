@@ -821,9 +821,9 @@ class GCPInterface(object):
         
         # Read the error message from the GCS bucket if status is ERROR
         if status == JobStatus.ERROR:
-            error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.jsonl").download_as_string()
+            error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
             if error_message:
-                description = error_message
+                description = json.loads(error_message)['error']
             else:
                 description = descriptions[status]
         else:

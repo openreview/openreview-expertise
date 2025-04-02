@@ -733,3 +733,102 @@ class TestExpertiseCloudService():
             pass
             if os.path.exists(tmp_dir):
                 shutil.rmtree(tmp_dir)
+
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
+    def test_read_error_json(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
+        def setup_job_mocks():
+            # Setup mock PipelineJob
+            mock_pipeline_instance = MagicMock()
+            mock_pipeline_job.return_value = mock_pipeline_instance
+
+            # Mock PipelineJob.get()
+            mock_pipeline_running = MagicMock()
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
+            mock_pipeline_running.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_failed = MagicMock()
+            mock_pipeline_failed.state = PipelineState.PIPELINE_STATE_FAILED
+            mock_pipeline_failed.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_failed] * 10
+
+            return mock_pipeline_instance
+
+        MAX_TIMEOUT = 300
+        redis = RedisDatabase(
+            host=openreview_context_cloud['config']['REDIS_ADDR'],
+            port=openreview_context_cloud['config']['REDIS_PORT'],
+            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
+            sync_on_disk=False
+        )
+        # Use TMLR client to test permissions
+        tmlr_client = openreview.api.OpenReviewClient(
+            token=openreview_client.token
+        )
+        tmlr_client.impersonate('TMLR/Editors_In_Chief')
+
+        abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
+        abc_client.impersonate('ABC.cc/Program_Chairs')
+
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context_cloud['test_client']
+
+        tmp_dir = Path('tests/gcp')
+        if not os.path.exists(tmp_dir):
+            os.makedirs(tmp_dir)
+
+        # Make a request with no submissions
+        # Patch storage.Client to return our local mock client that uses the filesystem
+        with patch("google.cloud.storage.Client", new=lambda project=None: LocalMockClient(project=project, root_dir=tmp_dir)):
+            setup_job_mocks()
+            response = test_client.post(
+                '/expertise',
+                data = json.dumps({
+                        "name": "test_run",
+                        "entityA": {
+                            'type': "Group",
+                            'memberOf': "ABC.cc/Area_Chairs",
+                        },
+                        "entityB": { 
+                            'type': "Note",
+                            'invitation': "HIJ.cc/-/Submission" 
+                        },
+                        "model": {
+                                "name": "specter+mfr",
+                                'useTitle': False, 
+                                'useAbstract': True, 
+                                'skipSpecter': False,
+                                'scoreComputation': 'avg'
+                        },
+                        "dataset": {
+                            'minimumPubDate': 0
+                        }
+                    }
+                ),
+                content_type='application/json',
+                headers=abc_client.headers
+            )
+            assert response.status_code == 200, f'{response.json}'
+            job_id = response.json['jobId']
+
+            # Fetch the job config
+            ## Wait for config to have a cloud_id
+            while redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME']).cloud_id is None:
+                time.sleep(0.25)
+            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+
+            ## Prewrite the error.json file
+            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/error.json"), 'w') as f:
+                f.write('{"error": "Not Found Error: No papers found for: invitation_ids: [\'HIJ.cc/-/Submission\']"}')
+
+            ## Wait for the job to finish
+            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+
+            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+            assert response['name'] == 'test_run'
+            assert response['status'] == 'Error'
+            assert response['description'] == "Not Found Error: No papers found for: invitation_ids: ['HIJ.cc/-/Submission']"
+
+            # Teardown tmp_dir
+            shutil.rmtree(tmp_dir, ignore_errors=True)
