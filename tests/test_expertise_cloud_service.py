@@ -155,7 +155,7 @@ class TestExpertiseCloudService():
             mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 5 + [mock_pipeline_succeeded] * 10
+            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
 
             return mock_pipeline_instance
 
@@ -220,6 +220,11 @@ class TestExpertiseCloudService():
             )
             assert response.status_code == 200, f'{response.json}'
             job_id = response.json['jobId']
+            time.sleep(0.5)
+
+            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+            assert response['name'] == 'test_run'
+            assert response['status'] != 'Error'
 
             # Let request process
             time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
@@ -272,8 +277,11 @@ class TestExpertiseCloudService():
 
             # Perform single query after waiting max time
             time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+            response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
+            assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-            ## Expect 2*5 calls from the worker thread, 2*1 call from /expertise/status and 0 calls from /expertise/status/all
+            ## Expect 2*4 calls from the worker thread, 2*2 call from /expertise/status and 0 calls from /expertise/status/all
+            print(mock_pipeline_job.get.call_args_list)
             assert len(mock_pipeline_job.get.call_args_list) == 12
 
             response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json

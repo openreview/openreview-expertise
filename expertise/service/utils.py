@@ -818,7 +818,16 @@ class GCPInterface(object):
 
         descriptions = JobDescription.VALS.value
         status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
-        description = descriptions[status]
+        
+        # Read the error message from the GCS bucket if status is ERROR
+        if status == JobStatus.ERROR:
+            error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.jsonl").download_as_string()
+            if error_message:
+                description = error_message
+            else:
+                description = descriptions[status]
+        else:
+            description = descriptions[status]
 
         return {
                 'name': job_id,

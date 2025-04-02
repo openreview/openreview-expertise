@@ -168,7 +168,7 @@ class BaseExpertiseService:
         """
         Common logic for updating a job's status in Redis (if not containerized).
         """
-        # from .utils import JobDescription, JobStatus  # Typically you’d import these at top
+        # from .utils import JobDescription, JobStatus  # Typically you'd import these at top
         descriptions = JobDescription.VALS.value
         config.status = new_status
 
@@ -853,35 +853,48 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         try:
             self.logger.info(f"In polling worker...")
-            job_completed, job_error = False, False
-
             for attempt in range(self.max_attempts):
-                self.logger.info(f"In attempt {attempt + 1} of {self.max_attempts}...")
+                self.logger.info(f"Polling attempt {attempt + 1}/{self.max_attempts} for job {redis_id}...")
                 status = self.cloud.get_job_status_by_job_id(user_id, cloud_id)
-                self.logger.info(f"Invoked get_job_status_by_job_id for {redis_id} - status: {status}")
+                self.logger.info(f"Received status for {redis_id}: {status}")
 
-                # Set status in Redis
-                config = self.redis.load_job(redis_id, user_id)
-                self.update_status(config, status['status'], status['description'])
+                # Check status validity
+                self.logger.info(f"INFO: before status check")
+                if status and isinstance(status, dict) and 'status' in status and 'description' in status:
+                    self.logger.info(f"INFO: after status check")
+                    config = self.redis.load_job(redis_id, user_id)
+                    self.logger.info(f"INFO: after load job")
+                    # Only update non-stale status
+                    if config.status != status['status'] or config.description != status['description']:
+                        self.logger.info(f"INFO: before update status")
+                        self.update_status(config, status['status'], status['description'])
+                        self.logger.info(f"INFO: after update status")
 
-                if status['status'] == JobStatus.COMPLETED:
-                    self.logger.info(f"Job {redis_id} completed.")
-                    job_completed = True
-                    break
-                elif status['status'] == JobStatus.ERROR:
-                    self.logger.info(f"Job {redis_id} encountered an error.")
-                    job_completed = False
-                    job_error = True
-                    break
+                    if status['status'] == JobStatus.COMPLETED:
+                        self.logger.info(f"Job {redis_id} completed successfully.")
+                        break # Exit the loop on successful completion
 
-                self.logger.info(f"Job {redis_id} status: {status['status']}. Retrying in {self.poll_interval} seconds...")
+                    elif status['status'] == JobStatus.ERROR:
+                        self.logger.error(f"Job {redis_id} encountered an error: {status['description']}")
+                        raise Exception(f"Job {redis_id} failed: {status['description']}")
+                    self.logger.info(f"Job {redis_id} status: {status['status']}. Waiting {self.poll_interval} seconds before next poll...")
+
+                else:
+                    self.logger.warning(f"Invalid or missing status received for job {redis_id}. Retrying...")
+
+                self.logger.info(f"INFO: before sleep")
                 await asyncio.sleep(self.poll_interval)
+                self.logger.info(f"INFO: after sleep")
 
-            if not job_completed and not job_error:
-                self.logger.info(f"Polling exceeded maximum attempts for job {redis_id}.")
-            elif not job_completed and job_error:
-                self.logger.info(f"Job {redis_id} encountered an error.")
-                raise Exception(f"Job {redis_id} encountered an error - {status['description']}")
+            # If the loop completes without a break, raise timeout
+            else:
+                self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {redis_id}.")
+                config = self.redis.load_job(redis_id, user_id)
+                if config.get('status') != JobStatus.ERROR:
+                    self.update_status(config, JobStatus.ERROR, f"Polling timed out after {self.max_attempts} attempts.")
+                raise TimeoutError(f"Polling timed out for job {redis_id} after {self.max_attempts} attempts.")
+
+            self.logger.info(f"Polling loop finished for job {redis_id}.")
 
         except Exception as e:
             # Re-raise exception to appear in the queue
@@ -973,20 +986,11 @@ class ExpertiseCloudService(BaseExpertiseService):
         :param job_id: ID of the specific job to look up
         :type job_id: str
 
-        :returns: A dictionary with the key 'results' containing a list of job statuses
+        :returns: A dictionary with the key 'results' contain ing a list of job statuses
         """
         redis_job = self.redis.load_job(job_id, user_id)
         if redis_job.cloud_id is None:
-            return {
-                'name': config.name,
-                'tauthor': config.user_id,
-                'jobId': config.job_id,
-                'status': config.status,
-                'description': config.description,
-                'cdate': config.cdate,
-                'mdate': config.mdate,
-                'request': config.api_request.to_json()
-            }
+            raise openreview.OpenReviewException(f"Not Found error: Job {job_id} has not requested resources")
         cloud_return = self.cloud.get_job_status_by_job_id(user_id, redis_job.cloud_id)
         cloud_return['name'] = redis_job.name
         cloud_return['jobId'] = redis_job.job_id

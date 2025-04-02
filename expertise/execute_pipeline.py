@@ -28,64 +28,77 @@ DEFAULT_CONFIG = {
 DELETED_FIELDS = ['user_id', 'cdate']
 
 def run_pipeline(api_request_str, working_dir=None):
-    raw_request: dict = json.loads(api_request_str)
 
     # Pop token, base URLs and other expected variable
-    print('Popping variables')
-    for field in DELETED_FIELDS:
-        raw_request.pop(field, None)
-    token = raw_request.pop('token')
-    baseurl_v1 = raw_request.pop('baseurl_v1')
-    baseurl_v2 = raw_request.pop('baseurl_v2')
-    destination_prefix = raw_request.pop('gcs_folder')
-    dump_embs = False if 'dump_embs' not in raw_request else raw_request.pop('dump_embs')
-    dump_archives = False if 'dump_archives' not in raw_request else raw_request.pop('dump_archives')
-    specter_dir = os.getenv('SPECTER_DIR')
-    mfr_vocab_dir = os.getenv('MFR_VOCAB_DIR')
-    mfr_checkpoint_dir = os.getenv('MFR_CHECKPOINT_DIR')
-    server_config ={
-        'OPENREVIEW_BASEURL': baseurl_v1,
-        'OPENREVIEW_BASEURL_V2': baseurl_v2,
-        'SPECTER_DIR': specter_dir,
-        'MFR_VOCAB_DIR': mfr_vocab_dir,
-        'MFR_CHECKPOINT_DIR': mfr_checkpoint_dir,
-    }
+    try:
+        raw_request: dict = json.loads(api_request_str)
+        print('Popping variables')
+        for field in DELETED_FIELDS:
+            raw_request.pop(field, None)
+        token = raw_request.pop('token')
+        baseurl_v1 = raw_request.pop('baseurl_v1')
+        baseurl_v2 = raw_request.pop('baseurl_v2')
+        destination_prefix = raw_request.pop('gcs_folder')
+        dump_embs = False if 'dump_embs' not in raw_request else raw_request.pop('dump_embs')
+        dump_archives = False if 'dump_archives' not in raw_request else raw_request.pop('dump_archives')
+        specter_dir = os.getenv('SPECTER_DIR')
+        mfr_vocab_dir = os.getenv('MFR_VOCAB_DIR')
+        mfr_checkpoint_dir = os.getenv('MFR_CHECKPOINT_DIR')
+        server_config ={
+            'OPENREVIEW_BASEURL': baseurl_v1,
+            'OPENREVIEW_BASEURL_V2': baseurl_v2,
+            'SPECTER_DIR': specter_dir,
+            'MFR_VOCAB_DIR': mfr_vocab_dir,
+            'MFR_CHECKPOINT_DIR': mfr_checkpoint_dir,
+        }
+        bucket_name = destination_prefix.split('/')[2]
+        blob_prefix = '/'.join(destination_prefix.split('/')[3:])
+        gcs_client = storage.Client()
+        bucket = gcs_client.bucket(bucket_name)
 
-    print('Loading model artifacts')
-    load_model_artifacts()
+        print('Loading model artifacts')
+        load_model_artifacts()
 
-    print('Logging into OpenReview')
-    client_v1 = openreview.Client(baseurl=baseurl_v1, token=token)
-    client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
+        print('Logging into OpenReview')
+        client_v1 = openreview.Client(baseurl=baseurl_v1, token=token)
+        client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
 
-    print('Creating job ID')
-    job_id = shortuuid.ShortUUID().random(length=5)
-    if working_dir is None:
-        working_dir = f"/app/{job_id}"
-    os.makedirs(working_dir, exist_ok=True)
+        print('Creating job ID')
+        job_id = shortuuid.ShortUUID().random(length=5)
+        if working_dir is None:
+            working_dir = f"/app/{job_id}"
+        os.makedirs(working_dir, exist_ok=True)
 
-    print('Creating job config')
-    validated_request = APIRequest(raw_request)
-    config = JobConfig.from_request(
-        api_request = validated_request,
-        starting_config = DEFAULT_CONFIG,
-        openreview_client= client_v1,
-        openreview_client_v2= client_v2,
-        server_config = server_config,
-        working_dir = working_dir
-    )
+        print('Creating job config')
+        validated_request = APIRequest(raw_request)
+        config = JobConfig.from_request(
+            api_request = validated_request,
+            starting_config = DEFAULT_CONFIG,
+            openreview_client= client_v1,
+            openreview_client_v2= client_v2,
+            server_config = server_config,
+            working_dir = working_dir
+        )
 
-    if working_dir is not None:
-        path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
-        config.job_dir = working_dir
-        config.dataset['directory'] = working_dir
-        for field in path_fields:
-            config.model_params[field] = working_dir
+        if working_dir is not None:
+            path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
+            config.job_dir = working_dir
+            config.dataset['directory'] = working_dir
+            for field in path_fields:
+                config.model_params[field] = working_dir
 
-    # Create Dataset and Execute Expertise
-    print('Creating dataset and executing expertise')
-    execute_create_dataset(client_v1, client_v2, config.to_json())
-    execute_expertise(config.to_json())
+        # Create Dataset and Execute Expertise
+        print('Creating dataset and executing expertise')
+        execute_create_dataset(client_v1, client_v2, config.to_json())
+        execute_expertise(config.to_json())
+    except Exception as e:
+        # Write error to single JSONL line in GCS
+        error_message = {
+            'error': str(e)
+        }
+        destination_blob = f"{blob_prefix}/error.jsonl"
+        blob = bucket.blob(destination_blob)
+        blob.upload_from_string(json.dumps(error_message))
 
     # Fetch and write to storage
     print('Fetching and writing to storage')
@@ -94,10 +107,6 @@ def run_pipeline(api_request_str, working_dir=None):
     paper_paper_matching = validated_request.entityA.get('type', '') == 'Note' and \
         validated_request.entityB.get('type', '') == 'Note'
 
-    bucket_name = destination_prefix.split('/')[2]
-    blob_prefix = '/'.join(destination_prefix.split('/')[3:])
-    gcs_client = storage.Client()
-    bucket = gcs_client.bucket(bucket_name)
     for csv_file in [d for d in os.listdir(config.job_dir) if '.csv' in d]:
         result = []
         destination_blob = f"{blob_prefix}/{csv_file.replace('.csv', '.jsonl')}"
