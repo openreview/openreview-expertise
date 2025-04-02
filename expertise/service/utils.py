@@ -821,10 +821,14 @@ class GCPInterface(object):
         
         # Read the error message from the GCS bucket if status is ERROR
         if status == JobStatus.ERROR:
-            error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
-            if error_message:
-                description = json.loads(error_message)['error']
-            else:
+            try:
+                error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
+                if error_message:
+                    description = json.loads(error_message)['error']
+                else:
+                    description = descriptions[status]
+            except Exception as e:
+                ## If the error message is not found, use the default description
                 description = descriptions[status]
         else:
             description = descriptions[status]
