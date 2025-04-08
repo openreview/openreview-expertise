@@ -338,12 +338,14 @@ def test_runtime_errors(mock_load_model_artifacts, mock_gcs_client, mock_execute
 
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
-    run_pipeline(api_request_str, working_dir)
+    try:
+        run_pipeline(api_request_str, working_dir)
+    except Exception as e:
+        assert str(e) == 'Not Found Error: No papers found for: invitation_ids: [\'HIJ.cc/-/Submission\']'
 
     # Assertions
     # Check that blobs were created and data was uploaded to GCS
     mock_gcs_client.assert_called_once()
-    mock_bucket.blob.assert_any_call("test_prefix/job_config.json")
     mock_blob.upload_from_string.assert_called()  # Ensure upload_from_string was called
 
     mock_blob.upload_from_string.assert_any_call(

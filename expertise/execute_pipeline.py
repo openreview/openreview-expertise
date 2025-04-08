@@ -100,6 +100,9 @@ def run_pipeline(api_request_str, working_dir=None):
         blob = bucket.blob(destination_blob)
         blob.upload_from_string(json.dumps(error_message))
 
+        exception = e.with_traceback(e.__traceback__)
+        raise exception
+
     # Fetch and write to storage
     print('Fetching and writing to storage')
     group_group_matching = validated_request.entityA.get('type', '') == 'Group' and \
