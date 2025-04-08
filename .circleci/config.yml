@@ -154,7 +154,7 @@ jobs:
             TEST_FILES=$(circleci tests glob "tests/test_*.py")
             mkdir reports
             mkdir reports/pytest
-            echo "$TEST_FILES" | circleci tests run --command="python -m pytest -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise" --verbose --split-by=timings
+            echo "$TEST_FILES" | circleci tests run --command="xargs python -m pytest -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise" --verbose --split-by=timings
       - run:
           name: Copy API logs to artifacts
           when: on_fail
