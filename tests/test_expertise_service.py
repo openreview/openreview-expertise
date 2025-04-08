@@ -46,6 +46,20 @@ def _setup_abc_cc(clean_start_conference, client, openreview_client):
         post_publications=DEFAULT_POST_PUBLICATIONS
     )
 
+@pytest.fixture(scope="module", autouse=True)
+def _setup_hij_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
+        'HIJ.cc',
+        fake_data_source_id=DEFAULT_CONF_ID,
+        exclude_expertise=False,
+        post_reviewers=True,
+        post_area_chairs=False,
+        post_senior_area_chairs=False,
+        post_submissions=False,
+        post_publications=True
+    )
+
 EXCLUSION_CONF_ID = 'EXCLUSION.cc'
 EXPERTISE_SELECTION_POSTING = False
 @pytest.fixture(scope="module", autouse=True)
