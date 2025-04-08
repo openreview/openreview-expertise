@@ -4,6 +4,7 @@ import pytest
 import requests
 import time
 import json
+from tests.conference_locks import conference_lock
 
 from openreview.api import OpenReviewClient
 from openreview.api import Note
@@ -360,68 +361,72 @@ def clean_start_journal(client, openreview_client, test_google_user, test_client
         post_publications=False,
         post_editor_data=False
     ):
-        
-        def _post_submissions():
-            with open('tests/data/fakeData.json') as json_file:
-                data = json.load(json_file)
-            Helpers.post_submissions(data, f'{journal_id}/-/Submission', api_version=2)
+        # Use the conference lock to ensure only one thread can write to this journal at a time
+        with conference_lock(journal_id, timeout=60) as acquired:
+            if not acquired:
+                raise TimeoutError(f"Could not acquire lock for journal {journal_id} within 60 seconds")
+            
+            def _post_submissions():
+                with open('tests/data/fakeData.json') as json_file:
+                    data = json.load(json_file)
+                Helpers.post_submissions(data, f'{journal_id}/-/Submission', api_version=2)
 
-        def _post_publications(committee_name):
-            with open('tests/data/fakeData.json') as json_file:
-                data = json.load(json_file)
-            group = openreview.tools.get_group(client, f'{journal_id}/{committee_name}')
-            Helpers.post_publications(client, openreview_client, data, group.members)
-        
-        def _post_profiles():
-            with open('tests/data/fakeData.json') as json_file:
-                data = json.load(json_file)
-            Helpers.post_profiles(client, data)
+            def _post_publications(committee_name):
+                with open('tests/data/fakeData.json') as json_file:
+                    data = json.load(json_file)
+                group = openreview.tools.get_group(client, f'{journal_id}/{committee_name}')
+                Helpers.post_publications(client, openreview_client, data, group.members)
+            
+            def _post_profiles():
+                with open('tests/data/fakeData.json') as json_file:
+                    data = json.load(json_file)
+                Helpers.post_profiles(client, data)
 
-        def _handle_editor_data():
-            with open('tests/data/fakeData.json') as json_file:
-                data = json.load(json_file)
-            Helpers.post_editor_data(openreview_client, data, editors)
+            def _handle_editor_data():
+                with open('tests/data/fakeData.json') as json_file:
+                    data = json.load(json_file)
+                Helpers.post_editor_data(openreview_client, data, editors)
 
-        _post_profiles()
-        
-        first_element = journal_id.split('/')[0]
-        conf_prefix = first_element.split('.')[0]
+            _post_profiles()
+            
+            first_element = journal_id.split('/')[0]
+            conf_prefix = first_element.split('.')[0]
 
-        eic_email = f'eic@{first_element.lower()}.org'
-        eic_name = f'{conf_prefix.upper()}Chair'
-        eic_id = f'~Editor_{eic_name}1'
+            eic_email = f'eic@{first_element.lower()}.org'
+            eic_name = f'{conf_prefix.upper()}Chair'
+            eic_id = f'~Editor_{eic_name}1'
 
-        eic_client=Helpers.create_user(
-            eic_email,
-            'Editor',
-            eic_name
-        )
-        journal=Journal(
-            openreview_client,
-            journal_id,
-            '1234',
-            contact_info=f'{eic_email}',
-            full_name=f'{conf_prefix.upper()} Journal',
-            short_name=f'{conf_prefix.lower()}',
-            submission_name='Submission'
-        )
+            eic_client=Helpers.create_user(
+                eic_email,
+                'Editor',
+                eic_name
+            )
+            journal=Journal(
+                openreview_client,
+                journal_id,
+                '1234',
+                contact_info=f'{eic_email}',
+                full_name=f'{conf_prefix.upper()} Journal',
+                short_name=f'{conf_prefix.lower()}',
+                submission_name='Submission'
+            )
 
-        journal.setup(support_role=eic_id, editors=editors)
+            journal.setup(support_role=eic_id, editors=editors)
 
-        openreview_client.add_members_to_group(f'{journal_id}/Action_Editors', editors + additional_editors)
-        openreview_client.add_members_to_group(f'{journal_id}/Reviewers', editors + additional_editors)
+            openreview_client.add_members_to_group(f'{journal_id}/Action_Editors', editors + additional_editors)
+            openreview_client.add_members_to_group(f'{journal_id}/Reviewers', editors + additional_editors)
 
-        if post_submissions:
-            _post_submissions()
+            if post_submissions:
+                _post_submissions()
 
-        if post_publications:
-            _post_publications('Action_Editors')
-            _post_publications('Reviewers')
+            if post_publications:
+                _post_publications('Action_Editors')
+                _post_publications('Reviewers')
 
-        if post_editor_data:
-            _handle_editor_data()
+            if post_editor_data:
+                _handle_editor_data()
 
-        return journal
+            return journal
     return _start_journal
 
 @pytest.fixture(scope="session")
@@ -438,225 +443,229 @@ def clean_start_conference(client, openreview_client, test_google_user):
         post_publications = False,
         post_expertise_selection = None ## Posts a new publication and an edge to it
     ):
-        
-        # Post expertise selection
-        # { '~Harold_Rice1': 'Include' }
-        
-        def _populate_groups(committee_name):
-            with open('tests/data/fakeData.json') as json_file:
-                data = json.load(json_file)
-            group = openreview.tools.get_group(client, f'{conference_id}/{committee_name}')
-            if len(group.members) == 0:
-                Helpers.post_profiles(client, data)
-                members = data['groups'][f'{fake_data_source_id}/{committee_name}']['members']
-                client.add_members_to_group(f'{conference_id}/{committee_name}', members)
-        
-        def _post_publications(group_members):
-            with open('tests/data/fakeData.json') as json_file:
-                data = json.load(json_file)
-            Helpers.post_publications(client, client_v2, data, group_members)
+        # Use the conference lock to ensure only one thread can write to this conference at a time
+        with conference_lock(conference_id, timeout=60) as acquired:
+            if not acquired:
+                raise TimeoutError(f"Could not acquire lock for conference {conference_id} within 60 seconds")
+            
+            # Post expertise selection
+            # { '~Harold_Rice1': 'Include' }
+            
+            def _populate_groups(committee_name):
+                with open('tests/data/fakeData.json') as json_file:
+                    data = json.load(json_file)
+                group = openreview.tools.get_group(client, f'{conference_id}/{committee_name}')
+                if len(group.members) == 0:
+                    Helpers.post_profiles(client, data)
+                    members = data['groups'][f'{fake_data_source_id}/{committee_name}']['members']
+                    client.add_members_to_group(f'{conference_id}/{committee_name}', members)
+            
+            def _post_publications(group_members):
+                with open('tests/data/fakeData.json') as json_file:
+                    data = json.load(json_file)
+                Helpers.post_publications(client, client_v2, data, group_members)
 
-        def _post_submissions():
-            with open('tests/data/fakeData.json') as json_file:
-                data = json.load(json_file)
-            Helpers.post_submissions(data, f'{conference_id}/-/Submission', datasource_invitation=f'{fake_data_source_id}/-/Submission')
+            def _post_submissions():
+                with open('tests/data/fakeData.json') as json_file:
+                    data = json.load(json_file)
+                Helpers.post_submissions(data, f'{conference_id}/-/Submission', datasource_invitation=f'{fake_data_source_id}/-/Submission')
 
-        def _post_expertise_selection():
-            for user, label in post_expertise_selection.items():
-                Helpers.post_expertise_publication(
-                    client,
-                    user,
-                    conference_id,
-                    edge_label=label,
-                    api_version=1
-                )
+            def _post_expertise_selection():
+                for user, label in post_expertise_selection.items():
+                    Helpers.post_expertise_publication(
+                        client,
+                        user,
+                        conference_id,
+                        edge_label=label,
+                        api_version=1
+                    )
 
-        client_v2 = openreview.api.OpenReviewClient(
-            baseurl = 'http://localhost:3001', username='openreview.net', password=Helpers.strong_password
-        )
+            client_v2 = openreview.api.OpenReviewClient(
+                baseurl = 'http://localhost:3001', username='openreview.net', password=Helpers.strong_password
+            )
 
-        if openreview.tools.get_invitation(client, f'openreview.net/-/paper') is None:
-            # Archival/publication invitation
-            invitation = openreview.Invitation(
-                id = 'openreview.net/-/paper',
-                writers = ['openreview.net'],
-                signatures = ['openreview.net'],
-                readers = ['everyone'],
-                invitees = ['everyone'],
-                reply={
-                    "forum": None,
-                    "replyto": None,
-                    "writers": {
-                        "values": [
-                            "~SomeTest_User1"
-                        ]
-                    },
-                    "signatures": {
-                        "description": "How your identity will be displayed with the above content.",
-                        "values": [
-                            "~SomeTest_User1"
-                        ]
-                    },
-                    "readers": {
-                        "description": "The users who will be allowed to read the above content.",
-                        "values": [
-                            "everyone"
-                        ]
-                    },
-                    "content": {
-                        "title": {
-                            "required": False,
-                            "order": 1,
-                            "description": "Title of paper.",
-                            "value-regex": ".{0,100}"
+            if openreview.tools.get_invitation(client, f'openreview.net/-/paper') is None:
+                # Archival/publication invitation
+                invitation = openreview.Invitation(
+                    id = 'openreview.net/-/paper',
+                    writers = ['openreview.net'],
+                    signatures = ['openreview.net'],
+                    readers = ['everyone'],
+                    invitees = ['everyone'],
+                    reply={
+                        "forum": None,
+                        "replyto": None,
+                        "writers": {
+                            "values": [
+                                "~SomeTest_User1"
+                            ]
                         },
-                        "abstract": {
-                            "required": False,
-                            "order": 2,
-                            "description": "Abstract of paper.",
-                            "value-regex": "[\\S\\s]{0,5000}"
+                        "signatures": {
+                            "description": "How your identity will be displayed with the above content.",
+                            "values": [
+                                "~SomeTest_User1"
+                            ]
                         },
-                        "authors": {
-                            "required": False,
-                            "order": 3,
-                            "description": "Comma separated list of author names, as they appear in the paper.",
-                            "values-regex": "[^,\\n]*(,[^,\\n]+)*"
+                        "readers": {
+                            "description": "The users who will be allowed to read the above content.",
+                            "values": [
+                                "everyone"
+                            ]
                         },
-                        "authorids": {
-                            "required": False,
-                            "order": 4,
-                            "description": "Comma separated list of author email addresses, in the same order as above.",
-                            "values-regex": "[^,\\n]*(,[^,\\n]+)*"
+                        "content": {
+                            "title": {
+                                "required": False,
+                                "order": 1,
+                                "description": "Title of paper.",
+                                "value-regex": ".{0,100}"
+                            },
+                            "abstract": {
+                                "required": False,
+                                "order": 2,
+                                "description": "Abstract of paper.",
+                                "value-regex": "[\\S\\s]{0,5000}"
+                            },
+                            "authors": {
+                                "required": False,
+                                "order": 3,
+                                "description": "Comma separated list of author names, as they appear in the paper.",
+                                "values-regex": "[^,\\n]*(,[^,\\n]+)*"
+                            },
+                            "authorids": {
+                                "required": False,
+                                "order": 4,
+                                "description": "Comma separated list of author email addresses, in the same order as above.",
+                                "values-regex": "[^,\\n]*(,[^,\\n]+)*"
+                            }
                         }
                     }
-                }
+                )
+                client.post_invitation(invitation)
+
+            # If no fake data source id is provided, use the conference id
+            if fake_data_source_id is None:
+                fake_data_source_id = conference_id
+
+            # If conference exists, select it
+            conference, request_form_note = None, None
+            if openreview.tools.get_group(client, conference_id) is not None:
+                request_forms = client.get_all_notes(invitation='openreview.net/Support/-/Request_Form')
+                for note in request_forms:
+                    if note.content['venue_id'] == conference_id:
+                        conference = openreview.conference.helpers.get_conference(client, note.id, support_user='openreview.net/Support')
+                        request_form_note = note
+
+            first_element = conference_id.split('/')[0]
+            conf_prefix = first_element.split('.')[0]
+
+            pc_email = f'pc@{first_element.lower()}'
+            pc_name = f'{conf_prefix.upper()}Chair'
+            pc_id = f'~Program_{pc_name}1'
+            
+            if conference is None:
+                now = datetime.datetime.utcnow()
+                due_date = now + datetime.timedelta(days=3)
+                first_date = now + datetime.timedelta(days=1)
+
+                pc_client=Helpers.create_user(
+                    pc_email,
+                    'Program',
+                    pc_name
+                )
+
+                request_form_note = pc_client.post_note(openreview.Note(
+                    invitation='openreview.net/Support/-/Request_Form',
+                    signatures=[pc_id],
+                    readers=[
+                        'openreview.net/Support',
+                        pc_id
+                    ],
+                    writers=[],
+                    content={
+                        'title': conference_id.split('/')[0].replace('/', ' '),
+                        'Official Venue Name': conference_id.split('/')[0].replace('/', ' '),
+                        'Abbreviated Venue Name': conference_id.split('/')[0].replace('/', ' '),
+                        'Official Website URL': 'https://neurips.cc',
+                        'program_chair_emails': [pc_email],
+                        'contact_email': pc_email,
+                        'Area Chairs (Metareviewers)': 'Yes, our venue has Area Chairs',
+                        'senior_area_chairs': 'Yes, our venue has Senior Area Chairs',
+                        'publication_chairs':'No, our venue does not have Publication Chairs',
+                        'Venue Start Date': '2021/12/01',
+                        'Submission Deadline': due_date.strftime('%Y/%m/%d'),
+                        'abstract_registration_deadline': first_date.strftime('%Y/%m/%d'),
+                        'Location': 'Virtual',
+                        'Author and Reviewer Anonymity': 'Double-blind',
+                        'reviewer_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
+                        'area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
+                        'senior_area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
+                        'Open Reviewing Policy': 'Submissions and reviews should both be private.',
+                        'submission_readers': 'Program chairs and paper authors only',
+                        'How did you hear about us?': 'ML conferences',
+                        'Expected Submissions': '100',
+                        'include_expertise_selection': 'No' if exclude_expertise else 'Yes',
+                        'submission_reviewer_assignment': 'Automatic',
+                        'submission_license': ['CC BY-SA 4.0']
+                    }))
+
+                Helpers.await_queue()
+
+                # Post a deploy note
+                client.post_note(openreview.Note(
+                    content={'venue_id': conference_id},
+                    forum=request_form_note.forum,
+                    invitation='openreview.net/Support/-/Request{}/Deploy'.format(request_form_note.number),
+                    readers=['openreview.net/Support'],
+                    referent=request_form_note.forum,
+                    replyto=request_form_note.forum,
+                    signatures=['openreview.net/Support'],
+                    writers=['openreview.net/Support']
+                ))
+                Helpers.await_queue()
+
+                print(request_form_note)
+
+            pc_client = openreview.Client(
+                baseurl = 'http://localhost:3000', username=pc_email, password=Helpers.strong_password
             )
-            client.post_invitation(invitation)
 
-        # If no fake data source id is provided, use the conference id
-        if fake_data_source_id is None:
-            fake_data_source_id = conference_id
+            if post_reviewers:
+                _populate_groups('Reviewers')
+                reviewers = pc_client.get_group(f'{conference_id}/Reviewers')
+                if post_publications:
+                    _post_publications(reviewers.members)
+            if post_area_chairs:
+                _populate_groups('Area_Chairs')
+                area_chairs = pc_client.get_group(f'{conference_id}/Area_Chairs')
+                if post_publications:
+                    _post_publications(area_chairs.members)
+            if post_senior_area_chairs:
+                _populate_groups('Senior_Area_Chairs')
+                senior_area_chairs = pc_client.get_group(f'{conference_id}/Senior_Area_Chairs')
+                if post_publications:
+                    _post_publications(senior_area_chairs.members)
 
-        # If conference exists, select it
-        conference, request_form_note = None, None
-        if openreview.tools.get_group(client, conference_id) is not None:
-            request_forms = client.get_all_notes(invitation='openreview.net/Support/-/Request_Form')
-            for note in request_forms:
-                if note.content['venue_id'] == conference_id:
-                    conference = openreview.conference.helpers.get_conference(client, note.id, support_user='openreview.net/Support')
-                    request_form_note = note
+            if post_submissions:
+                _post_submissions()
+                post_submission_note=pc_client.post_note(openreview.Note(
+                    content= {
+                        'force': 'Yes',
+                        'hide_fields': ['keywords'],
+                        'submission_readers': 'All program committee (all reviewers, all area chairs, all senior area chairs if applicable)'
+                    },
+                    forum= request_form_note.id,
+                    invitation= f'openreview.net/Support/-/Request{request_form_note.number}/Post_Submission',
+                    readers= [f'{conference_id}/Program_Chairs', 'openreview.net/Support'],
+                    referent= request_form_note.id,
+                    replyto= request_form_note.id,
+                    signatures= [pc_id],
+                    writers= [],
+                ))
+                Helpers.await_queue()
 
-        first_element = conference_id.split('/')[0]
-        conf_prefix = first_element.split('.')[0]
-
-        pc_email = f'pc@{first_element.lower()}'
-        pc_name = f'{conf_prefix.upper()}Chair'
-        pc_id = f'~Program_{pc_name}1'
+            if post_expertise_selection:
+                _post_expertise_selection()
         
-        if conference is None:
-            now = datetime.datetime.utcnow()
-            due_date = now + datetime.timedelta(days=3)
-            first_date = now + datetime.timedelta(days=1)
-
-            pc_client=Helpers.create_user(
-                pc_email,
-                'Program',
-                pc_name
-            )
-
-            request_form_note = pc_client.post_note(openreview.Note(
-                invitation='openreview.net/Support/-/Request_Form',
-                signatures=[pc_id],
-                readers=[
-                    'openreview.net/Support',
-                    pc_id
-                ],
-                writers=[],
-                content={
-                    'title': conference_id.split('/')[0].replace('/', ' '),
-                    'Official Venue Name': conference_id.split('/')[0].replace('/', ' '),
-                    'Abbreviated Venue Name': conference_id.split('/')[0].replace('/', ' '),
-                    'Official Website URL': 'https://neurips.cc',
-                    'program_chair_emails': [pc_email],
-                    'contact_email': pc_email,
-                    'Area Chairs (Metareviewers)': 'Yes, our venue has Area Chairs',
-                    'senior_area_chairs': 'Yes, our venue has Senior Area Chairs',
-                    'publication_chairs':'No, our venue does not have Publication Chairs',
-                    'Venue Start Date': '2021/12/01',
-                    'Submission Deadline': due_date.strftime('%Y/%m/%d'),
-                    'abstract_registration_deadline': first_date.strftime('%Y/%m/%d'),
-                    'Location': 'Virtual',
-                    'Author and Reviewer Anonymity': 'Double-blind',
-                    'reviewer_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
-                    'area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
-                    'senior_area_chair_identity': ['Program Chairs', 'Assigned Senior Area Chair', 'Assigned Area Chair', 'Assigned Reviewers'],
-                    'Open Reviewing Policy': 'Submissions and reviews should both be private.',
-                    'submission_readers': 'Program chairs and paper authors only',
-                    'How did you hear about us?': 'ML conferences',
-                    'Expected Submissions': '100',
-                    'include_expertise_selection': 'No' if exclude_expertise else 'Yes',
-                    'submission_reviewer_assignment': 'Automatic',
-                    'submission_license': ['CC BY-SA 4.0']
-                }))
-
-            Helpers.await_queue()
-
-            # Post a deploy note
-            client.post_note(openreview.Note(
-                content={'venue_id': conference_id},
-                forum=request_form_note.forum,
-                invitation='openreview.net/Support/-/Request{}/Deploy'.format(request_form_note.number),
-                readers=['openreview.net/Support'],
-                referent=request_form_note.forum,
-                replyto=request_form_note.forum,
-                signatures=['openreview.net/Support'],
-                writers=['openreview.net/Support']
-            ))
-            Helpers.await_queue()
-
-            print(request_form_note)
-
-        pc_client = openreview.Client(
-            baseurl = 'http://localhost:3000', username=pc_email, password=Helpers.strong_password
-        )
-
-        if post_reviewers:
-            _populate_groups('Reviewers')
-            reviewers = pc_client.get_group(f'{conference_id}/Reviewers')
-            if post_publications:
-                _post_publications(reviewers.members)
-        if post_area_chairs:
-            _populate_groups('Area_Chairs')
-            area_chairs = pc_client.get_group(f'{conference_id}/Area_Chairs')
-            if post_publications:
-                _post_publications(area_chairs.members)
-        if post_senior_area_chairs:
-            _populate_groups('Senior_Area_Chairs')
-            senior_area_chairs = pc_client.get_group(f'{conference_id}/Senior_Area_Chairs')
-            if post_publications:
-                _post_publications(senior_area_chairs.members)
-
-        if post_submissions:
-            _post_submissions()
-            post_submission_note=pc_client.post_note(openreview.Note(
-                content= {
-                    'force': 'Yes',
-                    'hide_fields': ['keywords'],
-                    'submission_readers': 'All program committee (all reviewers, all area chairs, all senior area chairs if applicable)'
-                },
-                forum= request_form_note.id,
-                invitation= f'openreview.net/Support/-/Request{request_form_note.number}/Post_Submission',
-                readers= [f'{conference_id}/Program_Chairs', 'openreview.net/Support'],
-                referent= request_form_note.id,
-                replyto= request_form_note.id,
-                signatures= [pc_id],
-                writers= [],
-            ))
-            Helpers.await_queue()
-
-        if post_expertise_selection:
-            _post_expertise_selection()
-    
     return _start_conference
 
 
@@ -673,116 +682,117 @@ def clean_start_conference_v2(client, openreview_client, test_google_user):
         post_publications = False,
         post_expertise_selection = None ## Posts a new publication and an edge to it
     ):
-        
-        # Post expertise selection
-        # { '~Harold_Rice1': 'Include' }
-        
-        def _populate_groups(committee_name):
-            with open('tests/data/fakeData.json') as json_file:
-                data = json.load(json_file)
-            group = openreview.tools.get_group(openreview_client, f'{conference_id}/{committee_name}')
-            if len(group.members) == 0:
-                Helpers.post_profiles(client_v1, data)
-                members = data['groups'][f'{fake_data_source_id}/{committee_name}']['members']
-                openreview_client.add_members_to_group(f'{conference_id}/{committee_name}', members)
-        
-        def _post_publications(group_members):
-            with open('tests/data/fakeData.json') as json_file:
-                data = json.load(json_file)
-            Helpers.post_publications(client_v1, openreview_client, data, group_members)
+        # Use the conference lock to ensure only one thread can write to this conference at a time
+        with conference_lock(conference_id, timeout=60) as acquired:
+            if not acquired:
+                raise TimeoutError(f"Could not acquire lock for conference {conference_id} within 60 seconds")
+            
+            def _populate_groups(committee_name):
+                with open('tests/data/fakeData.json') as json_file:
+                    data = json.load(json_file)
+                group = openreview.tools.get_group(openreview_client, f'{conference_id}/{committee_name}')
+                if len(group.members) == 0:
+                    Helpers.post_profiles(client_v1, data)
+                    members = data['groups'][f'{fake_data_source_id}/{committee_name}']['members']
+                    openreview_client.add_members_to_group(f'{conference_id}/{committee_name}', members)
+            
+            def _post_publications(group_members):
+                with open('tests/data/fakeData.json') as json_file:
+                    data = json.load(json_file)
+                Helpers.post_publications(client_v1, openreview_client, data, group_members)
 
-        def _post_submissions():
-            with open('tests/data/fakeData.json') as json_file:
-                data = json.load(json_file)
-            Helpers.post_submissions(data, f'{conference_id}/-/Submission', datasource_invitation=f'{fake_data_source_id}/-/Submission')
+            def _post_submissions():
+                with open('tests/data/fakeData.json') as json_file:
+                    data = json.load(json_file)
+                Helpers.post_submissions(data, f'{conference_id}/-/Submission', datasource_invitation=f'{fake_data_source_id}/-/Submission')
 
-        def _post_expertise_selection():
-            for user, label in post_expertise_selection.items():
-                Helpers.post_expertise_publication(
-                    client_v1,
-                    user,
-                    conference_id,
-                    label,
-                    api_version=1
-                )
+            def _post_expertise_selection():
+                for user, label in post_expertise_selection.items():
+                    Helpers.post_expertise_publication(
+                        client_v1,
+                        user,
+                        conference_id,
+                        label,
+                        api_version=1
+                    )
 
-        client_v1 = openreview.Client(
-            baseurl = 'http://localhost:3000', username='openreview.net', password=Helpers.strong_password
-        )
-
-        root_invitation = openreview.tools.get_invitation(
-            openreview_client,
-            'openreview.net/-/Edit'
-        )
-        if root_invitation is None:
-            openreview_client.post_invitation_edit(invitations=None,
-                readers=['openreview.net'],
-                writers=['openreview.net'],
-                signatures=['~Super_User1'],
-                invitation=openreview.api.Invitation(id='openreview.net/-/Edit',
-                    invitees=['openreview.net'],
-                    readers=['openreview.net'],
-                    signatures=['~Super_User1'],
-                    edit=True
-                )
+            client_v1 = openreview.Client(
+                baseurl = 'http://localhost:3000', username='openreview.net', password=Helpers.strong_password
             )
 
-        # If conference exists, select it
-        request_form_note = None
-        if openreview.tools.get_group(openreview_client, conference_id) is not None:
-            request_forms = client_v1.get_all_notes(invitation='openreview.net/Support/-/Request_Form')
-            for note in request_forms:
-                if note.content['venue_id'] == conference_id:
-                    conference = openreview.conference.helpers.get_conference(client, note.id, support_user='openreview.net/Support')
-                    request_form_note = note
+            root_invitation = openreview.tools.get_invitation(
+                openreview_client,
+                'openreview.net/-/Edit'
+            )
+            if root_invitation is None:
+                openreview_client.post_invitation_edit(invitations=None,
+                    readers=['openreview.net'],
+                    writers=['openreview.net'],
+                    signatures=['~Super_User1'],
+                    invitation=openreview.api.Invitation(id='openreview.net/-/Edit',
+                        invitees=['openreview.net'],
+                        readers=['openreview.net'],
+                        signatures=['~Super_User1'],
+                        edit=True
+                    )
+                )
 
-        venue = Venue(openreview_client, conference_id, support_user='openreview.net/Support')
-        venue.use_area_chairs = True
-        venue.automatic_reviewer_assignment = True
-        
-        now = datetime.datetime.utcnow()
+            # If conference exists, select it
+            request_form_note = None
+            if openreview.tools.get_group(openreview_client, conference_id) is not None:
+                request_forms = client_v1.get_all_notes(invitation='openreview.net/Support/-/Request_Form')
+                for note in request_forms:
+                    if note.content['venue_id'] == conference_id:
+                        conference = openreview.conference.helpers.get_conference(client, note.id, support_user='openreview.net/Support')
+                        request_form_note = note
 
-        venue.submission_stage = openreview.stages.SubmissionStage(
-            double_blind=True,
-            readers=[
-                openreview.builder.SubmissionStage.Readers.REVIEWERS_ASSIGNED
-            ],
-            due_date=now + datetime.timedelta(minutes=10),
-            withdrawn_submission_reveal_authors=True,
-            desk_rejected_submission_reveal_authors=True,
-        )
-        if request_form_note is None:
-            venue.setup()
-        venue.expertise_selection_stage = openreview.stages.ExpertiseSelectionStage()
-        venue.create_submission_stage()
+            venue = Venue(openreview_client, conference_id, support_user='openreview.net/Support')
+            venue.use_area_chairs = True
+            venue.automatic_reviewer_assignment = True
+            
+            now = datetime.datetime.utcnow()
 
-        pc_client = openreview.api.OpenReviewClient(
-            baseurl = 'http://localhost:3001', username='openreview.net', password=Helpers.strong_password
-        )
-        pc_client.impersonate(conference_id)
+            venue.submission_stage = openreview.stages.SubmissionStage(
+                double_blind=True,
+                readers=[
+                    openreview.builder.SubmissionStage.Readers.REVIEWERS_ASSIGNED
+                ],
+                due_date=now + datetime.timedelta(minutes=10),
+                withdrawn_submission_reveal_authors=True,
+                desk_rejected_submission_reveal_authors=True,
+            )
+            if request_form_note is None:
+                venue.setup()
+            venue.expertise_selection_stage = openreview.stages.ExpertiseSelectionStage()
+            venue.create_submission_stage()
 
-        if post_reviewers:
-            _populate_groups('Reviewers')
-            reviewers = pc_client.get_group(f'{conference_id}/Reviewers')
-            if post_publications:
-                _post_publications(reviewers.members)
-        if post_area_chairs:
-            _populate_groups('Area_Chairs')
-            area_chairs = pc_client.get_group(f'{conference_id}/Area_Chairs')
-            if post_publications:
-                _post_publications(area_chairs.members)
-        if post_senior_area_chairs:
-            _populate_groups('Senior_Area_Chairs')
-            senior_area_chairs = pc_client.get_group(f'{conference_id}/Senior_Area_Chairs')
-            if post_publications:
-                _post_publications(senior_area_chairs.members)
+            pc_client = openreview.api.OpenReviewClient(
+                baseurl = 'http://localhost:3001', username='openreview.net', password=Helpers.strong_password
+            )
+            pc_client.impersonate(conference_id)
 
-        if post_submissions:
-            _post_submissions()
-            Helpers.await_queue()
+            if post_reviewers:
+                _populate_groups('Reviewers')
+                reviewers = pc_client.get_group(f'{conference_id}/Reviewers')
+                if post_publications:
+                    _post_publications(reviewers.members)
+            if post_area_chairs:
+                _populate_groups('Area_Chairs')
+                area_chairs = pc_client.get_group(f'{conference_id}/Area_Chairs')
+                if post_publications:
+                    _post_publications(area_chairs.members)
+            if post_senior_area_chairs:
+                _populate_groups('Senior_Area_Chairs')
+                senior_area_chairs = pc_client.get_group(f'{conference_id}/Senior_Area_Chairs')
+                if post_publications:
+                    _post_publications(senior_area_chairs.members)
 
-        if post_expertise_selection:
-            _post_expertise_selection()
+            if post_submissions:
+                _post_submissions()
+                Helpers.await_queue()
 
-        return venue
+            if post_expertise_selection:
+                _post_expertise_selection()
+
+            return venue
     return _start_conference_v2

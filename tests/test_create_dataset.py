@@ -172,6 +172,7 @@ def test_retrieve_expertise(get_paperhash, client, openreview_client):
         'match_group': 'DEF.cc/Reviewers'
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    members = client.get_group('DEF.cc/Reviewers').members
     expertise = or_expertise.retrieve_expertise()
     # Exclude users whose expertise will be posted in API2
     exclude_ids = ['~Kyunghyun_Cho1', '~Raia_Hadsell1']
@@ -180,7 +181,7 @@ def test_retrieve_expertise(get_paperhash, client, openreview_client):
         data = json.load(json_file)
     profiles = data['profiles']
     for profile in profiles:
-        if len(profile['publications']) > 0:
+        if len(profile['publications']) > 0 and profile['id'] in members:
             if profile['id'] == '~Perry_Volkman1':
                 assert len(expertise[profile['id']]) < len(profile['publications'])
             elif profile['id'] in exclude_ids:

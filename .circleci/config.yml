@@ -12,7 +12,7 @@ jobs:
   build:
     # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     resource_class: large
-    parallelism: 1
+    parallelism: 10
     working_directory: ~/openreview-expertise
     docker:
       - image: ubuntu:22.04
@@ -151,10 +151,10 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-expertise
-            TEST_FILES=$(circleci tests glob "tests/test_*.py" | circleci tests split --split-by=timings)
+            TEST_FILES=$(circleci tests glob "tests/test_*.py")
             mkdir reports
             mkdir reports/pytest
-            python -m pytest -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise $TEST_FILES
+            echo "$TEST_FILES" | circleci tests run --command="python -m pytest -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise" --verbose --split-by=timings
       - run:
           name: Copy API logs to artifacts
           when: on_fail

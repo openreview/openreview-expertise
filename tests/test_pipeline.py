@@ -30,7 +30,6 @@ def _setup_pipeline_cc(clean_start_conference, client, openreview_client):
     clean_start_conference(
         client,
         DEFAULT_CONF_ID,
-        fake_data_source_id='ABC.cc',
         post_reviewers=DEFAULT_POST_REVIEWERS,
         post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
         post_senior_area_chairs=DEFAULT_POST_SENIOR_AREA_CHAIRS,
