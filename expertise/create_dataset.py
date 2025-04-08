@@ -424,6 +424,8 @@ class OpenReviewExpertise(object):
         paper_content=None,
         submission_groups=None,
     ):
+        err_string = 'Not Found Error: No papers found for: '
+
         if sum(len(v) for v in reduced_submissions.values()) == 0:
             args_strings = []
             if invitation_ids:
@@ -436,7 +438,11 @@ class OpenReviewExpertise(object):
                 args_strings.append(f'paper_content: {paper_content}')
             if submission_groups:
                 args_strings.append(f'submission_groups: {submission_groups}')
-            raise ValueError('Not Found Error: No papers found for: ' + ', '.join(args_strings))
+                err_string = 'Not Found Error: No publications found for: '
+
+            err_string += ', '.join(args_strings)
+            
+            raise ValueError(err_string)
 
     def get_submissions_helper(self, 
         invitation_ids=None,
