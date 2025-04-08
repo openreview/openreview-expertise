@@ -4,6 +4,40 @@ import json
 import os
 import shutil
 
+# Default parameters for the module's common setup
+DEFAULT_JOURNAL_ID = 'TMLR'
+DEFAULT_CONF_ID = 'PIPELINE.cc'
+DEFAULT_POST_REVIEWERS = True
+DEFAULT_POST_AREA_CHAIRS = False
+DEFAULT_POST_SENIOR_AREA_CHAIRS = False
+DEFAULT_POST_SUBMISSIONS = True
+DEFAULT_POST_PUBLICATIONS = True
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_tmlr(clean_start_journal, client, openreview_client):
+    clean_start_journal(
+        openreview_client,
+        DEFAULT_JOURNAL_ID,
+        editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'],
+        additional_editors=['~Margherita_Hilpert1'],
+        post_submissions=True,
+        post_publications=True,
+        post_editor_data=True
+    )
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_pipeline_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
+        DEFAULT_CONF_ID,
+        fake_data_source_id='ABC.cc',
+        post_reviewers=DEFAULT_POST_REVIEWERS,
+        post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
+        post_senior_area_chairs=DEFAULT_POST_SENIOR_AREA_CHAIRS,
+        post_submissions=DEFAULT_POST_SUBMISSIONS,
+        post_publications=DEFAULT_POST_PUBLICATIONS
+    )
+
 # Test case for the `run_pipeline` function
 @patch("expertise.execute_pipeline.execute_expertise")  # Mock execute_expertise
 @patch("expertise.execute_pipeline.storage.Client")  # Mock GCS Client
@@ -27,11 +61,11 @@ def test_run_pipeline(mock_load_model_artifacts, mock_gcs_client, mock_execute_e
         "name": "test_run2",
         "entityA": {
             'type': "Group",
-            'memberOf': "ABC.cc/Reviewers",
+            'memberOf': "PIPELINE.cc/Reviewers",
         },
         "entityB": {
             'type': "Note",
-            'invitation': "ABC.cc/-/Submission"
+            'invitation': "PIPELINE.cc/-/Submission"
         },
         "model": {
             "name": "specter+mfr",
@@ -121,11 +155,11 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_gcs_client, mock_exe
         "name": "test_run2",
         "entityA": {
             'type': "Group",
-            'memberOf': "ABC.cc/Reviewers",
+            'memberOf': "PIPELINE.cc/Reviewers",
         },
         "entityB": {
             'type': "Group",
-            'memberOf': "ABC.cc/Reviewers"
+            'memberOf': "PIPELINE.cc/Reviewers"
         },
         "model": {
             "name": "specter+mfr",
@@ -183,7 +217,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_gcs_client, mock_exe
         '{"match_member": "test_user", "submission_member": "sub_user", "score": 0.5}\n{"match_member": "test_user", "submission_member": "sub_user", "score": 0.5}'
     )
     mock_blob.upload_from_string.assert_any_call(
-        '{"submission_count": 10, "no_publications_count": 0, "no_publications": [], "no_profile": [], "no_profile_submission": []}'
+        '{"submission_count": 7, "no_publications_count": 0, "no_publications": [], "no_profile": [], "no_profile_submission": []}'
     )
     mock_blob.upload_from_string.assert_any_call(
         json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]})
@@ -216,11 +250,11 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_gcs_client, mo
         "name": "test_run2",
         "entityA": {
             'type': "Note",
-            'invitation': "ABC.cc/-/Submission",
+            'invitation': "PIPELINE.cc/-/Submission",
         },
         "entityB": {
             'type': "Note",
-            'invitation': "ABC.cc/-/Submission"
+            'invitation': "PIPELINE.cc/-/Submission"
         },
         "model": {
             "name": "specter2+scincl",

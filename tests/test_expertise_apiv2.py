@@ -15,6 +15,39 @@ import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.service.utils import JobConfig, RedisDatabase
 
+# Default parameters for the module's common setup
+DEFAULT_JOURNAL_ID = 'TMLR'
+DEFAULT_CONF_ID = 'ABC.cc'
+DEFAULT_POST_REVIEWERS = True
+DEFAULT_POST_AREA_CHAIRS = False
+DEFAULT_POST_SENIOR_AREA_CHAIRS = False
+DEFAULT_POST_SUBMISSIONS = True
+DEFAULT_POST_PUBLICATIONS = True
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_tmlr(clean_start_journal, client, openreview_client):
+    clean_start_journal(
+        openreview_client,
+        DEFAULT_JOURNAL_ID,
+        editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'],
+        additional_editors=['~Margherita_Hilpert1'],
+        post_submissions=True,
+        post_publications=True,
+        post_editor_data=True
+    )
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_abc_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
+        DEFAULT_CONF_ID,
+        post_reviewers=DEFAULT_POST_REVIEWERS,
+        post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
+        post_senior_area_chairs=DEFAULT_POST_SENIOR_AREA_CHAIRS,
+        post_submissions=DEFAULT_POST_SUBMISSIONS,
+        post_publications=DEFAULT_POST_PUBLICATIONS
+    )
+
 class TestExpertiseV2():
 
     job_id = None

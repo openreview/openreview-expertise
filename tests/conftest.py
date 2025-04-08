@@ -165,7 +165,10 @@ class Helpers:
                         ))
 
     @staticmethod
-    def post_submissions(data, invitation, api_version=1):
+    def post_submissions(data, invitation, api_version=1, datasource_invitation=None):
+        if datasource_invitation is None:
+            datasource_invitation = invitation
+
         test_user_client = openreview.Client(username='test@google.com', password=Helpers.strong_password)
 
         notes = test_user_client.get_all_notes(invitation=invitation)
@@ -176,7 +179,7 @@ class Helpers:
 
         ## All mock data is in API1 format
         if api_version == 1:
-            for note_json in data['notes'][invitation]:
+            for note_json in data['notes'][datasource_invitation]:
                 content = note_json['content']
                 content['authors'] = ['SomeTest User']
                 content['authorids'] = ['~SomeTest_User1']
@@ -193,9 +196,9 @@ class Helpers:
                     )
                     note = test_user_client.post_note(note)
         elif api_version == 2:
-            test_client_v2 = openreview.api.OpenReviewClient(token=test_user_client.token)
+            test_client_v2 = openreview.api.OpenReviewClient(username='test@mail.com', password=Helpers.strong_password)
 
-            for note_json in data['notes'][invitation]:
+            for note_json in data['notes'][datasource_invitation]:
                 content = note_json['content']
                 cdate = note_json.get('cdate')
 
@@ -219,11 +222,15 @@ class Helpers:
                     )
                 
     @staticmethod
-    def post_expertise_publication(client, user, conference_id, edge_label='Include', api_version=2):
+    def post_expertise_publication(client, user, conference_id, committee_name=None, edge_label='Include', api_version=2):
+
+        test_title = f"{user} {conference_id}"
+        test_abstract = f"This is a test abstract for {test_title}"
+
         if api_version == 2:
             content = {
-                'title': { 'value': 'Test Title' },
-                'abstract': { 'value': 'Test Abstract' },
+                'title': { 'value': test_title },
+                'abstract': { 'value': test_abstract },
                 'authors': { 'value': [user] },
                 'authorids': { 'value': [user] }
             }
@@ -237,7 +244,7 @@ class Helpers:
                 )
             )
             edge = openreview.api.Edge(
-                invitation=f'{conference_id}/Expertise_Selection',
+                invitation=f'{conference_id}/{committee_name}/-/Expertise_Selection',
                 head=note_edit['note']['id'],
                 tail=user,
                 label=edge_label,
@@ -248,21 +255,23 @@ class Helpers:
             edge = client.post_edge(edge)
         elif api_version == 1:
             content = {
-                'title': 'Test Title',
-                'abstract': 'Test Abstract',
+                'title': test_title,
+                'abstract': test_abstract,
                 'authors': [user],
                 'authorids': [user]
             }
             note = client.post_note(
-                invitation='openreview.net/-/paper',
-                readers = ['everyone'],
-                writers = ['~SomeTest_User1'],
-                signatures = ['~SomeTest_User1'],
-                content = content,
-                cdate = 1554819115
+                openreview.Note(
+                    invitation='openreview.net/-/paper',
+                    readers = ['everyone'],
+                    writers = ['~SomeTest_User1'],
+                    signatures = ['~SomeTest_User1'],
+                    content = content,
+                    cdate = 1554819115
+                )
             )
             edge = openreview.Edge(
-                invitation=f'{conference_id}/Expertise_Selection',
+                invitation=f'{conference_id}/-/Expertise_Selection',
                 head=note.id,
                 tail=user,
                 label=edge_label,
@@ -341,13 +350,14 @@ def openreview_client():
     yield openreview.api.OpenReviewClient(baseurl = 'http://localhost:3001', username='openreview.net', password=Helpers.strong_password)
 
 @pytest.fixture(scope="session")
-def clean_start_journal(client, openreview_client, test_google_user):
+def clean_start_journal(client, openreview_client, test_google_user, test_client):
     def _start_journal(
         openreview_client,
         journal_id,
         editors=[],
         additional_editors=[],
         post_submissions=False,
+        post_publications=False,
         post_editor_data=False
     ):
         
@@ -356,15 +366,28 @@ def clean_start_journal(client, openreview_client, test_google_user):
                 data = json.load(json_file)
             Helpers.post_submissions(data, f'{journal_id}/-/Submission', api_version=2)
 
+        def _post_publications(committee_name):
+            with open('tests/data/fakeData.json') as json_file:
+                data = json.load(json_file)
+            group = openreview.tools.get_group(client, f'{journal_id}/{committee_name}')
+            Helpers.post_publications(client, openreview_client, data, group.members)
+        
+        def _post_profiles():
+            with open('tests/data/fakeData.json') as json_file:
+                data = json.load(json_file)
+            Helpers.post_profiles(client, data)
+
         def _handle_editor_data():
             with open('tests/data/fakeData.json') as json_file:
                 data = json.load(json_file)
             Helpers.post_editor_data(openreview_client, data, editors)
+
+        _post_profiles()
         
         first_element = journal_id.split('/')[0]
         conf_prefix = first_element.split('.')[0]
 
-        eic_email = f'eic@{first_element.lower()}'
+        eic_email = f'eic@{first_element.lower()}.org'
         eic_name = f'{conf_prefix.upper()}Chair'
         eic_id = f'~Editor_{eic_name}1'
 
@@ -373,10 +396,8 @@ def clean_start_journal(client, openreview_client, test_google_user):
             'Editor',
             eic_name
         )
-
-
         journal=Journal(
-            eic_client,
+            openreview_client,
             journal_id,
             '1234',
             contact_info=f'{eic_email}',
@@ -392,6 +413,10 @@ def clean_start_journal(client, openreview_client, test_google_user):
 
         if post_submissions:
             _post_submissions()
+
+        if post_publications:
+            _post_publications('Action_Editors')
+            _post_publications('Reviewers')
 
         if post_editor_data:
             _handle_editor_data()
@@ -434,7 +459,7 @@ def clean_start_conference(client, openreview_client, test_google_user):
         def _post_submissions():
             with open('tests/data/fakeData.json') as json_file:
                 data = json.load(json_file)
-            Helpers.post_submissions(data, f'{conference_id}/-/Submission')
+            Helpers.post_submissions(data, f'{conference_id}/-/Submission', datasource_invitation=f'{fake_data_source_id}/-/Submission')
 
         def _post_expertise_selection():
             for user, label in post_expertise_selection.items():
@@ -442,7 +467,7 @@ def clean_start_conference(client, openreview_client, test_google_user):
                     client,
                     user,
                     conference_id,
-                    label,
+                    edge_label=label,
                     api_version=1
                 )
 
@@ -669,7 +694,7 @@ def clean_start_conference_v2(client, openreview_client, test_google_user):
         def _post_submissions():
             with open('tests/data/fakeData.json') as json_file:
                 data = json.load(json_file)
-            Helpers.post_submissions(data, f'{conference_id}/-/Submission')
+            Helpers.post_submissions(data, f'{conference_id}/-/Submission', datasource_invitation=f'{fake_data_source_id}/-/Submission')
 
         def _post_expertise_selection():
             for user, label in post_expertise_selection.items():
