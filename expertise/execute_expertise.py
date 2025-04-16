@@ -82,7 +82,8 @@ def execute_expertise(config):
             specter_batch_size=config['model_params'].get('batch_size', 16),
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
-            compute_paper_paper=config['model_params'].get('compute_paper_paper', False)
+            compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
+            percentile_select=config['model_params'].get('percentile_select', 100)
         )
         ens_predictor.set_archives_dataset(archives_dataset)
         ens_predictor.set_submissions_dataset(submissions_dataset)
@@ -120,7 +121,8 @@ def execute_expertise(config):
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
             dump_p2p=config['model_params'].get('dump_p2p', False),
-            compute_paper_paper=config['model_params'].get('compute_paper_paper', False)
+            compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
+            percentile_select=config['model_params'].get('percentile_select', 100)
         )
         scincl_predictor.set_archives_dataset(archives_dataset)
         scincl_predictor.set_submissions_dataset(submissions_dataset)
@@ -154,7 +156,8 @@ def execute_expertise(config):
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
             dump_p2p=config['model_params'].get('dump_p2p', False),
-            compute_paper_paper=config['model_params'].get('compute_paper_paper', False)
+            compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
+            percentile_select=config['model_params'].get('percentile_select', 100)
         )
         spec2_predictor.set_archives_dataset(archives_dataset)
         spec2_predictor.set_submissions_dataset(submissions_dataset)

@@ -8,7 +8,7 @@ from tqdm import tqdm
 class EnsembleModel:
     def __init__(self, specter_dir, work_dir,
                  average_score=False, max_score=True, specter_batch_size=16, merge_alpha=0.5,
-                 use_cuda=True, sparse_value=None, use_redis=False, compute_paper_paper=False):
+                 use_cuda=True, sparse_value=None, use_redis=False, compute_paper_paper=False, percentile_select=100):
         self.specter_predictor = Specter2Predictor(
             specter_dir=specter_dir,
             work_dir=os.path.join(work_dir, "specter"),
@@ -18,7 +18,8 @@ class EnsembleModel:
             use_cuda=use_cuda,
             sparse_value=sparse_value,
             use_redis=use_redis,
-            compute_paper_paper=compute_paper_paper
+            compute_paper_paper=compute_paper_paper,
+            percentile_select=percentile_select
         )
 
         self.scincl_predictor = SciNCLPredictor(
@@ -30,7 +31,8 @@ class EnsembleModel:
             use_cuda=use_cuda,
             sparse_value=sparse_value,
             use_redis=use_redis,
-            compute_paper_paper=compute_paper_paper
+            compute_paper_paper=compute_paper_paper,
+            percentile_select=percentile_select
         )
         self.merge_alpha = merge_alpha
         self.sparse_value = sparse_value
