@@ -40,7 +40,7 @@ silent
 """
 class SciNCLPredictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=100):
+                 sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None):
         self.model_name = 'scincl'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
