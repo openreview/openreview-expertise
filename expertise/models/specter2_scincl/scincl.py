@@ -271,7 +271,6 @@ class SciNCLPredictor(Predictor):
                     # q=0.5 (percentile_select=50) -> median score
                     # q=0.0 (percentile_select=0) -> min score
                     q = self.percentile_select / 100.0
-                    # Ensure q is within [0, 1] - should be guaranteed by config validation, but belt-and-suspenders
                     q = max(0.0, min(1.0, q)) 
                     all_paper_aff = torch.quantile(train_paper_aff_j, q, dim=1, interpolation='linear')
                 elif self.average_score:

@@ -275,13 +275,13 @@ class Specter2Predictor(Predictor):
                     # q=0.5 (percentile_select=50) -> median score
                     # q=0.0 (percentile_select=0) -> min score
                     q = self.percentile_select / 100.0
-                    # Ensure q is within [0, 1] - should be guaranteed by config validation, but belt-and-suspenders
-                    q = max(0.0, min(1.0, q)) 
+                    q = max(0.0, min(1.0, q))
                     all_paper_aff = torch.quantile(train_paper_aff_j, q, dim=1, interpolation='linear')
                 elif self.average_score:
                     all_paper_aff = train_paper_aff_j.mean(dim=1)
                 elif self.max_score:
                     all_paper_aff = train_paper_aff_j.max(dim=1)[0]
+                for j in range(paper_num_test):
                     csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[j], reviewer=reviewer_id,
                                                                     score=all_paper_aff[j].item())
                     csv_scores.append(csv_line)
