@@ -475,7 +475,8 @@ class JobConfig(object):
         # Load optional dataset params from default config
         allowed_dataset_params = [
             'minimumPubDate',
-            'topRecentPubs'
+            'topRecentPubs',
+            'weightSpecification'
         ]
         config.dataset = starting_config.get('dataset', {})
         config.dataset['directory'] = root_dir
