@@ -11,6 +11,7 @@ def execute_expertise(config):
     config = ModelConfig(config_dict=config)
 
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
+    venue_specific_weights = 'weight_specification' in config['dataset'].keys()
     if Path(config['dataset']['directory']).joinpath('submissions').exists():
         submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
     elif Path(config['dataset']['directory']).joinpath('submissions.json').exists():
@@ -82,7 +83,8 @@ def execute_expertise(config):
             specter_batch_size=config['model_params'].get('batch_size', 16),
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
-            compute_paper_paper=config['model_params'].get('compute_paper_paper', False)
+            compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
+            venue_specific_weights=venue_specific_weights
         )
         ens_predictor.set_archives_dataset(archives_dataset)
         ens_predictor.set_submissions_dataset(submissions_dataset)
