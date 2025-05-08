@@ -85,16 +85,52 @@ class OpenReviewExpertise(object):
                 deduplicated.append(pub)
 
         return deduplicated
+    
+    def get_pub_weight(self, pub=None, venueid=None, weight_specification=None):
+        if not venueid:
+            return None
+            
+        # Get domain from either domain field or invitation prefix
+        domain = None
+        if getattr(pub, 'domain') is None:
+            domain = pub.invitation.split('/-/')[0] ## API1 fallback to invitation
+        else:
+            domain = pub.domain
+        
+        # Return early on non-accepted pubs
+        if venueid != domain:
+            return None
+            
+        # Find matching weight specification
+        for venue_spec in weight_specification:
+            if 'prefix' in venue_spec and venueid.startswith(venue_spec['prefix']):
+                return venue_spec['weight']
+            if 'value' in venue_spec and venueid == venue_spec['value']:
+                return venue_spec['weight']
 
     def get_publications(self, author_id):
 
         dataset_params = self.config.get('dataset', {})
+        weight_specification = dataset_params.get('weight_specification', None)
         minimum_pub_date = dataset_params.get('minimum_pub_date') or dataset_params.get('or', {}).get('minimum_pub_date', 0)
         top_recent_pubs = dataset_params.get('top_recent_pubs') or dataset_params.get('or', {}).get('top_recent_pubs', False)
-
         publications = self.deduplicate_publications(
             self.get_paper_notes(author_id, dataset_params)
         )
+
+        # Validate weight specification
+        if weight_specification:
+            if not isinstance(weight_specification, list):
+                raise ValueError('weight_specification must be a list')
+            for venue_spec in weight_specification:
+                if not isinstance(venue_spec, dict):
+                    raise ValueError('Objects in weight_specification must be dictionaries')
+                if 'prefix' in venue_spec and 'value' in venue_spec:
+                    raise KeyError('Objects in weight_specification must only have one of [prefix, value]')
+                if 'prefix' not in venue_spec and 'value' not in venue_spec:
+                    raise KeyError('Objects in weight_specification must have a prefix or value key')
+                if 'weight' not in venue_spec:
+                    raise KeyError('Objects in weight_specification must have a weight key')
 
         # Get all publications and assign tcdate to cdate in case cdate is None. If tcdate is also None
         # assign cdate := 0
@@ -122,7 +158,15 @@ class OpenReviewExpertise(object):
             pub_abstr = publication.content.get('abstract', '')
             if isinstance(pub_abstr, dict):
                 pub_abstr = pub_abstr.get('value')
-            
+
+            # Get venueid
+            pub_venueid = publication.content.get('venueid', '')
+            if isinstance(pub_venueid, dict):
+                pub_venueid = pub_venueid.get('value')
+
+            # Compare venueid to domain/invitation prefix to determine acceptance
+            pub_weight = self.get_pub_weight(pub=publication, venueid=pub_venueid, weight_specification=weight_specification)
+
             reduced_publication = {
                 'id': publication.id,
                 'cdate': publication.cdate,
@@ -132,6 +176,8 @@ class OpenReviewExpertise(object):
                     'abstract': pub_abstr
                 }
             }
+            if pub_weight is not None:
+                reduced_publication['content']['weight'] = pub_weight
             unsorted_publications.append(reduced_publication)
 
         # If the author does not have publications, then return early
