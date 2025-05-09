@@ -92,7 +92,7 @@ class SciNCLPredictor(Predictor):
 
         for paper, embedding in zip(batch_data, embeddings):
             paper = paper[1]
-            jsonl_out.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding.detach().cpu().numpy().tolist()}) + '\n')
+            jsonl_out.append(self._build_embedding_jsonl(paper, embedding))
 
         # clean up batch data
         del embeddings
@@ -193,7 +193,7 @@ class SciNCLPredictor(Predictor):
             f.writelines(pub_jsonl)
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None, p2p_path=None):
-        def load_emb_file(emb_file):
+        def load_emb_file(emb_file, load_weight=False):
             paper_emb_size_default = 768
             id_list = []
             emb_list = []
@@ -211,8 +211,8 @@ class SciNCLPredictor(Predictor):
                     paper_emb = paper_data['embedding']
                 id_list.append(paper_id)
                 emb_list.append(paper_emb)
-                if self.venue_specific_weights:
-                    weight_list.append(paper_data.get('weight', 0))
+                if load_weight:
+                    weight_list.append(paper_data['weight'])
             emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
             emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
             weight_tensor = torch.tensor(weight_list, device=torch.device('cpu'), dtype=torch.float32)
@@ -221,7 +221,7 @@ class SciNCLPredictor(Predictor):
 
         print('Loading cached publications...')
         with open(publications_path) as f_in:
-            paper_emb_train, train_id_list, train_bad_id_set, train_weight_tensor = load_emb_file(f_in)
+            paper_emb_train, train_id_list, train_bad_id_set, train_weight_tensor = load_emb_file(f_in, load_weight=self.venue_specific_weights)
         paper_num_train = len(train_id_list)
 
         paper_id2train_idx = {}
@@ -253,8 +253,9 @@ class SciNCLPredictor(Predictor):
                     if paper_id not in train_bad_id_set:
                         train_paper_idx.append(paper_id2train_idx[paper_id])
                 train_weight_j = train_weight_tensor[train_paper_idx]
-                softmax_weight_j = torch.softmax(train_weight_j, dim=0)
-                all_weights[train_paper_idx] = softmax_weight_j
+                mean_w = train_weight_j.mean()
+                train_weight_j_norm = train_weight_j / mean_w
+                all_weights[train_paper_idx] = train_weight_j_norm
 
             # Then broadcast and multiply
             p2p_aff *= all_weights.unsqueeze(0)  # broadcast to match p2p_aff dimensions
