@@ -87,15 +87,13 @@ class OpenReviewExpertise(object):
         return deduplicated
     
     def get_pub_weight(self, pub=None, venueid=None, weight_specification=None):
-        if not venueid:
+        if not venueid or not weight_specification:
             return None
             
         # Get domain from either domain field or invitation prefix
-        domain = None
-        if getattr(pub, 'domain') is None:
-            domain = pub.invitation.split('/-/')[0] ## API1 fallback to invitation
-        else:
-            domain = pub.domain
+        domain = getattr(pub, 'domain', None)
+        if domain is None:
+            domain = pub.invitation.split('/-/')[0]  # API1 fallback to invitation
         
         # Return early on non-accepted pubs
         if venueid != domain:
