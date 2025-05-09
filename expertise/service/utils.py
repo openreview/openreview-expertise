@@ -12,6 +12,7 @@ from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
 from google.cloud.aiplatform_v1.types import PipelineState
+from copy import deepcopy
 
 import re
 SUPERUSER_IDS = ['openreview.net', 'OpenReview.net', '~Super_User1']
@@ -478,7 +479,7 @@ class JobConfig(object):
             'topRecentPubs',
             'weightSpecification'
         ]
-        config.dataset = starting_config.get('dataset', {})
+        config.dataset = deepcopy(starting_config.get('dataset', {}))
         config.dataset['directory'] = root_dir
 
         # Attempt to load any API request dataset params
@@ -502,8 +503,8 @@ class JobConfig(object):
             'scoreComputation',
             'skipSpecter'
         ]
-        config.model = starting_config.get('model', None)
-        model_params = starting_config.get('model_params', {})
+        config.model = deepcopy(starting_config.get('model', None))
+        model_params = deepcopy(starting_config.get('model_params', {}))
         config.model_params = {}
         config.model_params['use_title'] = model_params.get('use_title', None)
         config.model_params['use_abstract'] = model_params.get('use_abstract', None)
