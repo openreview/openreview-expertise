@@ -389,7 +389,13 @@ class TestExpertiseService():
                             'scoreComputation': 'avg'
                     },
                     "dataset": {
-                        'minimumPubDate': 0
+                        'minimumPubDate': 0,
+                        "weightSpecification": [
+                            {
+                                "prefix": "NeurIPS.cc",
+                                "weight": 2
+                            }
+                        ]
                     }
                 }
             ),
@@ -870,6 +876,7 @@ class TestExpertiseService():
         #assert metadata['submission_count'] == 1
         response = response.json['results']
         assert len(response) == 4 ## 2 papers x 2 papers = 4 entries in the score matrix
+        print(response)
         for item in response:
             match_submission_id, submission_id, score = item['match_submission'], item['submission'], float(item['score'])
             assert len(submission_id) >= 1
