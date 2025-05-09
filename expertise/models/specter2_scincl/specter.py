@@ -122,7 +122,7 @@ class Specter2Predictor(Predictor):
                     self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract').strip() if publication['content'].get('abstract').strip() else "."
                     pub_mdate = publication.get('mdate', int(time.time()))
                     pub_cache_key = publication['id'] + "_" + str(pub_mdate)
-                    pub_weight = publication.get('content', {}).get('weight', 0)
+                    pub_weight = publication.get('content', {}).get('weight', 1) ## Mention that default weights are 1
                     self.pub_note_id_to_cache_key[publication['id']] = pub_cache_key
                     if self.redis is None or not self.redis.exists(pub_cache_key):
                         if publication['id'] in output_dict:
@@ -219,7 +219,7 @@ class Specter2Predictor(Predictor):
                     weight_list.append(paper_data.get('weight', 0))
             emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
             emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
-            weight_tensor = torch.tensor(weight_list, device=torch.device('cpu'))
+            weight_tensor = torch.tensor(weight_list, device=torch.device('cpu'), dtype=torch.float32)
             print(len(bad_id_set))
             return emb_tensor, id_list, bad_id_set, weight_tensor
 
@@ -248,7 +248,7 @@ class Specter2Predictor(Predictor):
             # - compute softmax across weights
             # - apply to the scores
             # First create a weight vector for all publications
-            all_weights = torch.zeros(paper_num_train, device=torch.device('cpu'))
+            all_weights = torch.zeros(paper_num_train, device=torch.device('cpu'), dtype=torch.float32)
             for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
                 if len(train_note_id_list) == 0:
                     continue
