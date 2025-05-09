@@ -35,6 +35,8 @@ class OpenReviewExpertise(object):
             'no_publications': []
         }
 
+        self.cached_domain_calls = {}
+
     def convert_to_list(self, config_invitations):
         if (isinstance(config_invitations, str)):
             invitations = [config_invitations]
@@ -88,6 +90,7 @@ class OpenReviewExpertise(object):
     
     def get_pub_weight(self, pub=None, venueid=None, weight_specification=None):
         if not venueid or not weight_specification:
+            print(f"returning None for venueid={venueid}")
             return None
             
         # Get domain from either domain field or invitation prefix
@@ -96,7 +99,10 @@ class OpenReviewExpertise(object):
             domain = pub.invitation.split('/-/')[0]  # API1 fallback to invitation
         
         # Return early on non-accepted pubs
-        if venueid != domain:
+        ## venueids for accepted papers are the same as the domain so the group should exist
+        if venueid not in self.cached_domain_calls:
+            self.cached_domain_calls[venueid] = openreview.tools.get_group(self.openreview_client, venueid)
+        if self.cached_domain_calls[venueid] is None:
             return None
             
         # Find matching weight specification
