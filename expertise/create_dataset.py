@@ -131,7 +131,8 @@ class OpenReviewExpertise(object):
                     raise KeyError('Objects in weight_specification must have a prefix or value key')
                 if 'weight' not in venue_spec:
                     raise KeyError('Objects in weight_specification must have a weight key')
-                if not isinstance(venue_spec['weight'], int):
+                # weight must be an integer or float
+                if not isinstance(venue_spec['weight'], int) and not isinstance(venue_spec['weight'], float):
                     raise ValueError('weight must be an integer')
         # Get all publications and assign tcdate to cdate in case cdate is None. If tcdate is also None
         # assign cdate := 0
