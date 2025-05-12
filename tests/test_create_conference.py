@@ -446,6 +446,43 @@ class TestConference():
         ))
         helpers.await_queue()
 
+        for profile_json in data['profiles']:
+            authorid = profile_json['id']
+            if authorid == '~Royal_Toy1':
+                first_pub = profile_json['publications'][0]
+                content = {
+                    'authors': { 'value': ['Royal Toy'] },
+                    'authorids': { 'value': ['~Royal_Toy1'] },
+                    'title': { 'value': 'Just an API2 Submission (API2 Test)' },
+                    'abstract': { 'value': 'Just an API2 Abstract (API2 Test)' },
+                    'keywords': { 'value': ['API2 Test'] },
+                    'TLDR': { 'value': 'This is a tldr ' },
+                    'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' }
+                }
+
+                edit = openreview_client.post_note_edit(
+                    invitation='API2/-/Submission',
+                    signatures=['~Royal_Toy1'],
+                    note=openreview.api.Note(
+                        content = content
+                    )
+                )
+
+                openreview_client.post_note_edit(
+                    invitation='API2/-/Edit',
+                    readers=['API2'],
+                    writers=['API2'],
+                    signatures=['API2'],
+                    note=openreview.api.Note(
+                        id=edit['note']['id'],
+                        readers=['everyone'],
+                        content={
+                            'venue': { 'value': 'API2' },
+                            'venueid': { 'value': 'API2' }
+                        }
+                    )
+                )
+
     def test_post_publications(self, client, openreview_client):
         tmlr_editors = ['~Raia_Hadsell1', '~Kyunghyun_Cho1']
 
@@ -491,8 +528,3 @@ class TestConference():
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         post_notes(data, 'openreview.net/-/paper')
-
-        
-
-
-

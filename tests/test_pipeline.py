@@ -183,7 +183,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_gcs_client, mock_exe
         '{"match_member": "test_user", "submission_member": "sub_user", "score": 0.5}\n{"match_member": "test_user", "submission_member": "sub_user", "score": 0.5}'
     )
     mock_blob.upload_from_string.assert_any_call(
-        '{"submission_count": 10, "no_publications_count": 0, "no_publications": [], "no_profile": [], "no_profile_submission": []}'
+        '{"submission_count": 11, "no_publications_count": 0, "no_publications": [], "no_profile": [], "no_profile_submission": []}'
     )
     mock_blob.upload_from_string.assert_any_call(
         json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]})

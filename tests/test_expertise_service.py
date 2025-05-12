@@ -393,7 +393,7 @@ class TestExpertiseService():
                         'minimumPubDate': 0,
                         "weightSpecification": [
                             {
-                                "prefix": "ABC.cc",
+                                "prefix": "API2",
                                 "weight": 10
                             }
                         ]
@@ -426,7 +426,8 @@ class TestExpertiseService():
         weighted_harold_scores = {}
         for item in response:
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
-            if profile_id == '~Harold_Rice1':
+            print(item)
+            if profile_id == '~Royal_Toy1':
                 weighted_harold_scores[submission_id] = score
 
         # Make a request
@@ -523,13 +524,14 @@ class TestExpertiseService():
 
         openreview_context['job_id'] = job_id
 
-        # Check that ~Harold_Rice1 has a lower score than in the venue-weighted job - look at full 
+        # Check that ~Royal_Toy1 has a lower score than in the venue-weighted job - look at full 
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
         response = response.json['results']
 
         for item in response:
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
-            if profile_id == '~Harold_Rice1':
+            print(item)
+            if profile_id == '~Royal_Toy1':
                 assert weighted_harold_scores[submission_id] > score
 
         response = test_client.post(
@@ -1575,7 +1577,7 @@ class TestExpertiseService():
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
-        assert metadata['submission_count'] == 10
+        assert metadata['submission_count'] == 11
         response = response.json['results']
         for item in response:
             match_id, submitter_id, score = item['match_member'], item['submission_member'], float(item['score'])
