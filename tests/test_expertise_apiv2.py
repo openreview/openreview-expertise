@@ -588,7 +588,7 @@ class TestExpertiseV2():
 
         assert response['status'] == 'Error'
         assert response['name'] == 'test_run'
-        assert response['description'] == 'Dimension out of range (expected to be in range of [-1, 0], but got 1). Please check that you have at least 1 submission submitted and that you have run the Post Submission stage.'
+        assert response['description'] == "Not Found Error: No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'track': 'no_track'}"
 
         response = test_client.post(
             '/expertise',
@@ -723,7 +723,7 @@ class TestExpertiseV2():
 
         assert response['status'] == 'Error'
         assert response['name'] == 'test_run'
-        assert response['description'] == 'Dimension out of range (expected to be in range of [-1, 0], but got 1). Please check that you have access to the papers that you are querying for.'
+        assert response['description'] == "Not Found Error: No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'human_subjects_reporting': 'Not applicable'}"
 
         # Get a no submissions error
         response = test_client.post(
@@ -769,7 +769,7 @@ class TestExpertiseV2():
 
         assert response['status'] == 'Error'
         assert response['name'] == 'test_run'
-        assert response['description'] == 'Dimension out of range (expected to be in range of [-1, 0], but got 1). Please check that you have access to the papers that you are querying for.'
+        assert response['description'] == "Not Found Error: No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'human_subjects_reporting': 'Not applicable'}"
 
         # Make a request that is supported by the model
         response = test_client.post(
@@ -872,7 +872,7 @@ class TestExpertiseV2():
 
         assert response['status'] == 'Error'
         assert response['name'] == 'test_run'
-        assert response['description'] == 'Dimension out of range (expected to be in range of [-1, 0], but got 1). Please check that you have at least 1 submission submitted and that you have run the Post Submission stage.'
+        assert response['description'] == "Not Found Error: No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'track': 'no_track'}"
 
         response = test_client.post(
             '/expertise',
