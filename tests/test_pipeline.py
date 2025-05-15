@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 import json
 import os
 import shutil
+import openreview
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -302,6 +303,86 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_gcs_client, mo
     )
     mock_blob.upload_from_string.assert_any_call(
         '{"submission_count": 2, "no_publications_count": 0, "no_publications": []}'
+    )
+
+    shutil.rmtree(working_dir)  # Clean up
+
+    # Test case for the `run_pipeline` function
+@patch("expertise.execute_pipeline.execute_expertise")  # Mock execute_expertise
+@patch("expertise.execute_pipeline.storage.Client")  # Mock GCS Client
+@patch("expertise.execute_pipeline.load_model_artifacts")  # Mock load_model_artifacts
+def test_runtime_errors(mock_load_model_artifacts, mock_gcs_client, mock_execute_expertise, openreview_client):
+    # Mock GCS client and bucket
+    mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_gcs_client.return_value.bucket.return_value = mock_bucket
+    mock_bucket.blob.return_value = mock_blob
+
+    # Mock blob.upload_from_string to do nothing
+    mock_blob.upload_from_string.return_value = None
+
+    # Mock other external dependencies
+    mock_load_model_artifacts.return_value = None
+    mock_execute_expertise.return_value = None
+
+    # Use TMLR client to test permissions
+    tmlr_client = openreview.api.OpenReviewClient(
+        token=openreview_client.token
+    )
+    tmlr_client.impersonate('TMLR/Editors_In_Chief')
+
+    # Prepare input API request string
+    api_request_str = json.dumps({
+        "name": "test_run2",
+        "entityA": {
+            'type': "Group",
+            'memberOf': "ABC.cc/Reviewers",
+        },
+        "entityB": { 
+            'type': "Note",
+            'invitation': "HIJ.cc/-/Submission" 
+        },
+        "model": {
+            "name": "specter+mfr",
+            'useTitle': False,
+            'useAbstract': True,
+            'skipSpecter': False,
+            'scoreComputation': 'avg'
+        },
+        "user_id": "openreview.net",
+        "token": openreview_client.token,
+        "baseurl_v1": "http://localhost:3000",
+        "baseurl_v2": "http://localhost:3001",
+        "gcs_folder": "gs://test_bucket/test_prefix",
+        "dump_embs": True,
+        "dump_archives": True,
+    })
+
+    # Prepare environment variables
+    os.environ["SPECTER_DIR"] = "/path/to/specter"
+    os.environ["MFR_VOCAB_DIR"] = "/path/to/mfr_vocab"
+    os.environ["MFR_CHECKPOINT_DIR"] = "/path/to/mfr_checkpoint"
+
+    # Build files
+    working_dir = './test_pipeline'
+    os.makedirs(working_dir, exist_ok=True)
+
+    ## Skip file building - never happens in error
+
+    # Call the function
+    from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
+    try:
+        run_pipeline(api_request_str, working_dir)
+    except Exception as e:
+        assert str(e) == 'Not Found Error: No papers found for: invitation_ids: [\'HIJ.cc/-/Submission\']'
+
+    # Assertions
+    # Check that blobs were created and data was uploaded to GCS
+    mock_gcs_client.assert_called_once()
+    mock_blob.upload_from_string.assert_called()  # Ensure upload_from_string was called
+
+    mock_blob.upload_from_string.assert_any_call(
+        '{"error": "Not Found Error: No papers found for: invitation_ids: [\'HIJ.cc/-/Submission\']"}'
     )
 
     shutil.rmtree(working_dir)  # Clean up
