@@ -13,6 +13,88 @@ import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.service.utils import JobConfig, RedisDatabase
 
+# Default parameters for the module's common setup
+DEFAULT_JOURNAL_ID = 'TMLR'
+DEFAULT_CONF_ID = 'ABC.cc'
+DEFAULT_POST_REVIEWERS = True
+DEFAULT_POST_AREA_CHAIRS = False
+DEFAULT_POST_SENIOR_AREA_CHAIRS = False
+DEFAULT_POST_SUBMISSIONS = True
+DEFAULT_POST_PUBLICATIONS = True
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_tmlr(clean_start_journal, client, openreview_client):
+    clean_start_journal(
+        openreview_client,
+        DEFAULT_JOURNAL_ID,
+        editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'],
+        additional_editors=['~Margherita_Hilpert1'],
+        post_submissions=True,
+        post_publications=True,
+        post_editor_data=True
+    )
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_abc_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
+        DEFAULT_CONF_ID,
+        post_reviewers=DEFAULT_POST_REVIEWERS,
+        post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
+        post_senior_area_chairs=DEFAULT_POST_SENIOR_AREA_CHAIRS,
+        post_submissions=DEFAULT_POST_SUBMISSIONS,
+        post_publications=DEFAULT_POST_PUBLICATIONS
+    )
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_hij_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
+        'HIJ.cc',
+        fake_data_source_id=DEFAULT_CONF_ID,
+        exclude_expertise=False,
+        post_reviewers=True,
+        post_area_chairs=False,
+        post_senior_area_chairs=False,
+        post_submissions=False,
+        post_publications=True
+    )
+
+EXCLUSION_CONF_ID = 'EXCLUSION.cc'
+EXPERTISE_SELECTION_POSTING = False
+@pytest.fixture(scope="module", autouse=True)
+def _setup_exclusion_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
+        EXCLUSION_CONF_ID,
+        fake_data_source_id=DEFAULT_CONF_ID,
+        post_reviewers=DEFAULT_POST_REVIEWERS,
+        post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
+        post_senior_area_chairs=DEFAULT_POST_SENIOR_AREA_CHAIRS,
+        post_submissions=EXPERTISE_SELECTION_POSTING,
+        post_publications=EXPERTISE_SELECTION_POSTING,
+        post_expertise_selection={
+            '~Harold_Rice1': 'Exclude'
+        }
+    )
+
+INCLUSION_CONF_ID = 'INCLUSION.cc'
+@pytest.fixture(scope="module", autouse=True)
+def _setup_include_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
+        INCLUSION_CONF_ID,
+        exclude_expertise=False,
+        fake_data_source_id=DEFAULT_CONF_ID,
+        post_reviewers=DEFAULT_POST_REVIEWERS,
+        post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
+        post_senior_area_chairs=DEFAULT_POST_SENIOR_AREA_CHAIRS,
+        post_submissions=EXPERTISE_SELECTION_POSTING,
+        post_publications=EXPERTISE_SELECTION_POSTING,
+        post_expertise_selection={
+            '~Harold_Rice1': 'Include'
+        }
+    )
 
 class TestExpertiseService():
 
@@ -598,7 +680,7 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'exclusion': {'invitation': 'HIJ.cc/-/Expertise_Selection' } }
+                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Note",
@@ -644,7 +726,7 @@ class TestExpertiseService():
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
-        assert req['entityA']['expertise']['exclusion']['invitation'] == 'HIJ.cc/-/Expertise_Selection'
+        assert req['entityA']['expertise']['invitation'] == 'INCLUSION.cc/-/Expertise_Selection'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
@@ -724,7 +806,7 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'exclusion': { 'invitation': 'DEF.cc/-/Expertise_Selection' } }
+                        'expertise': {  'invitation': 'EXCLUSION.cc/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Note",
@@ -770,7 +852,7 @@ class TestExpertiseService():
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
-        assert req['entityA']['expertise']['exclusion']['invitation'] == 'DEF.cc/-/Expertise_Selection'
+        assert req['entityA']['expertise']['invitation'] == 'EXCLUSION.cc/-/Expertise_Selection'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
@@ -1281,12 +1363,12 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'DEF.cc/-/Expertise_Selection' }
+                        'expertise': {  'invitation': 'EXCLUSION.cc/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'DEF.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'EXCLUSION.cc/-/Expertise_Selection' }
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -1355,12 +1437,12 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'DEF.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'EXCLUSION.cc/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'HIJ.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection' }
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -1430,12 +1512,12 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'HIJ.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection' }
                     },
                     "entityB": { 
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'HIJ.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection' }
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -1502,7 +1584,7 @@ class TestExpertiseService():
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
-        assert metadata['submission_count'] == 10
+        assert metadata['submission_count'] == 9 ## Additional from new conferences
         response = response.json['results']
         for item in response:
             match_id, submitter_id, score = item['match_member'], item['submission_member'], float(item['score'])
