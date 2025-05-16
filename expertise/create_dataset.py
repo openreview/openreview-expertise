@@ -405,6 +405,10 @@ class OpenReviewExpertise(object):
                         }
                     })
 
+        # Raise an error if none of the values in expertise have papers
+        if not any(expertise.values()):
+            raise ValueError('Not Found Error: No publications found, please ensure members have public and published papers attached to their profiles')
+
         return expertise
 
     def get_papers_from_group(self, submission_groups):
@@ -459,6 +463,34 @@ class OpenReviewExpertise(object):
             json.dump(publications_by_profile_id, f, indent=2)
         
         return all_papers
+    
+    def _validate_paper_data(self,
+        reduced_submissions,
+        invitation_ids=None,
+        paper_id=None,
+        paper_venueid=None,
+        paper_content=None,
+        submission_groups=None,
+    ):
+        err_string = 'Not Found Error: No papers found for: '
+
+        if sum(len(v) for v in reduced_submissions.values()) == 0:
+            args_strings = []
+            if invitation_ids:
+                args_strings.append(f'invitation_ids: {invitation_ids}')
+            if paper_id:
+                args_strings.append(f'paper_id: {paper_id}')
+            if paper_venueid:
+                args_strings.append(f'paper_venueid: {paper_venueid}')
+            if paper_content:
+                args_strings.append(f'paper_content: {paper_content}')
+            if submission_groups:
+                args_strings.append(f'submission_groups: {submission_groups}')
+                err_string = 'Not Found Error: No publications found for: '
+
+            err_string += ', '.join(args_strings)
+            
+            raise ValueError(err_string)
 
     def get_submissions_helper(self, 
         invitation_ids=None,
@@ -550,6 +582,14 @@ class OpenReviewExpertise(object):
             paper_content=paper_content
         )
 
+        self._validate_paper_data(
+            reduced_submissions,
+            invitation_ids=invitation_ids,
+            paper_id=paper_id,
+            paper_venueid=paper_venueid,
+            paper_content=paper_content
+        )
+
         return reduced_submissions
     
 
@@ -584,6 +624,14 @@ class OpenReviewExpertise(object):
                             'abstract': abstract
                         }
                     }
+
+        self._validate_paper_data(
+            reduced_submissions,
+            invitation_ids=invitation_ids,
+            paper_id=paper_id,
+            paper_venueid=paper_venueid,
+            paper_content=paper_content,
+        )
 
         return reduced_submissions
 
