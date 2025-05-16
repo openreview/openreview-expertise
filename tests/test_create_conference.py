@@ -86,7 +86,15 @@ class TestConference():
                 'Expected Submissions': '100',
                 'include_expertise_selection': 'Yes',
                 'submission_reviewer_assignment': 'Automatic',
-                'submission_license': ['CC BY-SA 4.0']
+                'submission_license': ['CC BY-SA 4.0'],
+                'venue_organizer_agreement': [
+                    'OpenReview natively supports a wide variety of reviewing workflow configurations. However, if we want significant reviewing process customizations or experiments, we will detail these requests to the OpenReview staff at least three months in advance.',
+                    'We will ask authors and reviewers to create an OpenReview Profile at least two weeks in advance of the paper submission deadlines.',
+                    'When assembling our group of reviewers and meta-reviewers, we will only include email addresses or OpenReview Profile IDs of people we know to have authored publications relevant to our venue.  (We will not solicit new reviewers using an open web form, because unfortunately some malicious actors sometimes try to create "fake ids" aiming to be assigned to review their own paper submissions.)',
+                    'We acknowledge that, if our venue\'s reviewing workflow is non-standard, or if our venue is expecting more than a few hundred submissions for any one deadline, we should designate our own Workflow Chair, who will read the OpenReview documentation and manage our workflow configurations throughout the reviewing process.',
+                    'We acknowledge that OpenReview staff work Monday-Friday during standard business hours US Eastern time, and we cannot expect support responses outside those times.  For this reason, we recommend setting submission and reviewing deadlines Monday through Thursday.',
+                    'We will treat the OpenReview staff with kindness and consideration.'
+                ]
             }))
 
         helpers.await_queue()
@@ -153,7 +161,15 @@ class TestConference():
                 'How did you hear about us?': 'ML conferences',
                 'Expected Submissions': '100',
                 'submission_reviewer_assignment': 'Automatic',
-                'submission_license': ['CC BY-SA 4.0']
+                'submission_license': ['CC BY-SA 4.0'],
+                'venue_organizer_agreement': [
+                    'OpenReview natively supports a wide variety of reviewing workflow configurations. However, if we want significant reviewing process customizations or experiments, we will detail these requests to the OpenReview staff at least three months in advance.',
+                    'We will ask authors and reviewers to create an OpenReview Profile at least two weeks in advance of the paper submission deadlines.',
+                    'When assembling our group of reviewers and meta-reviewers, we will only include email addresses or OpenReview Profile IDs of people we know to have authored publications relevant to our venue.  (We will not solicit new reviewers using an open web form, because unfortunately some malicious actors sometimes try to create "fake ids" aiming to be assigned to review their own paper submissions.)',
+                    'We acknowledge that, if our venue\'s reviewing workflow is non-standard, or if our venue is expecting more than a few hundred submissions for any one deadline, we should designate our own Workflow Chair, who will read the OpenReview documentation and manage our workflow configurations throughout the reviewing process.',
+                    'We acknowledge that OpenReview staff work Monday-Friday during standard business hours US Eastern time, and we cannot expect support responses outside those times.  For this reason, we recommend setting submission and reviewing deadlines Monday through Thursday.',
+                    'We will treat the OpenReview staff with kindness and consideration.'
+                ]
             }))
 
         helpers.await_queue()
@@ -220,7 +236,15 @@ class TestConference():
                 'Expected Submissions': '100',
                 'include_expertise_selection': 'Yes',
                 'submission_reviewer_assignment': 'Automatic',
-                'submission_license': ['CC BY-SA 4.0']
+                'submission_license': ['CC BY-SA 4.0'],
+                'venue_organizer_agreement': [
+                    'OpenReview natively supports a wide variety of reviewing workflow configurations. However, if we want significant reviewing process customizations or experiments, we will detail these requests to the OpenReview staff at least three months in advance.',
+                    'We will ask authors and reviewers to create an OpenReview Profile at least two weeks in advance of the paper submission deadlines.',
+                    'When assembling our group of reviewers and meta-reviewers, we will only include email addresses or OpenReview Profile IDs of people we know to have authored publications relevant to our venue.  (We will not solicit new reviewers using an open web form, because unfortunately some malicious actors sometimes try to create "fake ids" aiming to be assigned to review their own paper submissions.)',
+                    'We acknowledge that, if our venue\'s reviewing workflow is non-standard, or if our venue is expecting more than a few hundred submissions for any one deadline, we should designate our own Workflow Chair, who will read the OpenReview documentation and manage our workflow configurations throughout the reviewing process.',
+                    'We acknowledge that OpenReview staff work Monday-Friday during standard business hours US Eastern time, and we cannot expect support responses outside those times.  For this reason, we recommend setting submission and reviewing deadlines Monday through Thursday.',
+                    'We will treat the OpenReview staff with kindness and consideration.'
+                ]
             }))
 
         helpers.await_queue()
@@ -422,6 +446,43 @@ class TestConference():
         ))
         helpers.await_queue()
 
+        for profile_json in data['profiles']:
+            authorid = profile_json['id']
+            if authorid == '~Royal_Toy1':
+                first_pub = profile_json['publications'][0]
+                content = {
+                    'authors': { 'value': ['Royal Toy'] },
+                    'authorids': { 'value': ['~Royal_Toy1'] },
+                    'title': { 'value': 'Just an API2 Submission (API2 Test)' },
+                    'abstract': { 'value': 'Just an API2 Abstract (API2 Test)' },
+                    'keywords': { 'value': ['API2 Test'] },
+                    'TLDR': { 'value': 'This is a tldr ' },
+                    'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' }
+                }
+
+                edit = openreview_client.post_note_edit(
+                    invitation='API2/-/Submission',
+                    signatures=['~Royal_Toy1'],
+                    note=openreview.api.Note(
+                        content = content
+                    )
+                )
+
+                openreview_client.post_note_edit(
+                    invitation='API2/-/Edit',
+                    readers=['API2'],
+                    writers=['API2'],
+                    signatures=['API2'],
+                    note=openreview.api.Note(
+                        id=edit['note']['id'],
+                        readers=['everyone'],
+                        content={
+                            'venue': { 'value': 'API2' },
+                            'venueid': { 'value': 'API2' }
+                        }
+                    )
+                )
+
     def test_post_publications(self, client, openreview_client):
         tmlr_editors = ['~Raia_Hadsell1', '~Kyunghyun_Cho1']
 
@@ -467,8 +528,3 @@ class TestConference():
         with open('tests/data/fakeData.json') as json_file:
             data = json.load(json_file)
         post_notes(data, 'openreview.net/-/paper')
-
-        
-
-
-
