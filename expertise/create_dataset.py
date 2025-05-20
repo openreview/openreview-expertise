@@ -100,13 +100,19 @@ class OpenReviewExpertise(object):
         # Return early on DBLP papers (venueid =/= domain) and non-accepted papers (domain not in venue_list)
         if not (venueid == domain and domain in self.venue_list):
             return None
+        ## Papers allowed: accepted papers from an OpenReview venue
             
         # Find matching weight specification
+        fallback_weight = None
         for venue_spec in weight_specification:
             if 'prefix' in venue_spec and venueid.startswith(venue_spec['prefix']):
                 return venue_spec['weight']
             if 'value' in venue_spec and venueid == venue_spec['value']:
                 return venue_spec['weight']
+            if 'inOpenReview' in venue_spec:
+                fallback_weight = venue_spec['weight']
+
+        return fallback_weight ## Prioritize venue match, then fallback to geenral OpenReview upweight
 
     def get_publications(self, author_id):
 
@@ -125,10 +131,10 @@ class OpenReviewExpertise(object):
             for venue_spec in weight_specification:
                 if not isinstance(venue_spec, dict):
                     raise ValueError('Objects in weight_specification must be dictionaries')
-                if 'prefix' in venue_spec and 'value' in venue_spec:
-                    raise KeyError('Objects in weight_specification must only have one of [prefix, value]')
-                if 'prefix' not in venue_spec and 'value' not in venue_spec:
-                    raise KeyError('Objects in weight_specification must have a prefix or value key')
+                if 'prefix' in venue_spec and 'value' in venue_spec and 'inOpenReview' in venue_spec:
+                    raise KeyError('Objects in weight_specification must only have one of [prefix, value, inOpenReview]')
+                if 'prefix' not in venue_spec and 'value' not in venue_spec and 'inOpenReview' not in venue_spec:
+                    raise KeyError('Objects in weight_specification must have a prefix, value, or inOpenReview key')
                 if 'weight' not in venue_spec:
                     raise KeyError('Objects in weight_specification must have a weight key')
                 # weight must be an integer or float
