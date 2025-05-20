@@ -35,6 +35,8 @@ class OpenReviewExpertise(object):
             'no_publications': []
         }
 
+        self.venue_list = openreview_client_v2.get_group('venues').members
+
     def convert_to_list(self, config_invitations):
         if (isinstance(config_invitations, str)):
             invitations = [config_invitations]
@@ -85,17 +87,59 @@ class OpenReviewExpertise(object):
                 deduplicated.append(pub)
 
         return deduplicated
+    
+    def get_pub_weight(self, pub=None, venueid=None, weight_specification=None):
+        if not venueid or not weight_specification:
+            return None
+            
+        # Get domain from either domain field or invitation prefix
+        domain = getattr(pub, 'domain', None)
+        if domain is None:
+            domain = pub.invitation.split('/-/')[0]  # API1 fallback to invitation
+        
+        # Return early on DBLP papers (venueid =/= domain) and non-accepted papers (domain not in venue_list)
+        if not (venueid == domain and domain in self.venue_list):
+            return None
+        ## Papers allowed: accepted papers from an OpenReview venue
+            
+        # Find matching weight specification
+        fallback_weight = None
+        for venue_spec in weight_specification:
+            if 'prefix' in venue_spec and venueid.startswith(venue_spec['prefix']):
+                return venue_spec['weight']
+            if 'value' in venue_spec and venueid == venue_spec['value']:
+                return venue_spec['weight']
+            if 'inOpenReview' in venue_spec:
+                fallback_weight = venue_spec['weight']
+
+        return fallback_weight ## Prioritize venue match, then fallback to geenral OpenReview upweight
 
     def get_publications(self, author_id):
 
         dataset_params = self.config.get('dataset', {})
+        weight_specification = dataset_params.get('weight_specification', None)
         minimum_pub_date = dataset_params.get('minimum_pub_date') or dataset_params.get('or', {}).get('minimum_pub_date', 0)
         top_recent_pubs = dataset_params.get('top_recent_pubs') or dataset_params.get('or', {}).get('top_recent_pubs', False)
-
         publications = self.deduplicate_publications(
             self.get_paper_notes(author_id, dataset_params)
         )
 
+        # Validate weight specification
+        if weight_specification:
+            if not isinstance(weight_specification, list):
+                raise ValueError('weight_specification must be a list')
+            for venue_spec in weight_specification:
+                if not isinstance(venue_spec, dict):
+                    raise ValueError('Objects in weight_specification must be dictionaries')
+                if 'prefix' in venue_spec and 'value' in venue_spec and 'inOpenReview' in venue_spec:
+                    raise KeyError('Objects in weight_specification must only have one of [prefix, value, inOpenReview]')
+                if 'prefix' not in venue_spec and 'value' not in venue_spec and 'inOpenReview' not in venue_spec:
+                    raise KeyError('Objects in weight_specification must have a prefix, value, or inOpenReview key')
+                if 'weight' not in venue_spec:
+                    raise KeyError('Objects in weight_specification must have a weight key')
+                # weight must be an integer or float
+                if not isinstance(venue_spec['weight'], int) and not isinstance(venue_spec['weight'], float):
+                    raise ValueError('weight must be an integer')
         # Get all publications and assign tcdate to cdate in case cdate is None. If tcdate is also None
         # assign cdate := 0
         unsorted_publications = []
@@ -122,7 +166,15 @@ class OpenReviewExpertise(object):
             pub_abstr = publication.content.get('abstract', '')
             if isinstance(pub_abstr, dict):
                 pub_abstr = pub_abstr.get('value')
-            
+
+            # Get venueid
+            pub_venueid = publication.content.get('venueid', '')
+            if isinstance(pub_venueid, dict):
+                pub_venueid = pub_venueid.get('value')
+
+            # Compare venueid to domain/invitation prefix to determine acceptance
+            pub_weight = self.get_pub_weight(pub=publication, venueid=pub_venueid, weight_specification=weight_specification)
+
             reduced_publication = {
                 'id': publication.id,
                 'cdate': publication.cdate,
@@ -132,6 +184,8 @@ class OpenReviewExpertise(object):
                     'abstract': pub_abstr
                 }
             }
+            if pub_weight is not None:
+                reduced_publication['content']['weight'] = pub_weight
             unsorted_publications.append(reduced_publication)
 
         # If the author does not have publications, then return early
