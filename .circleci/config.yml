@@ -64,7 +64,7 @@ jobs:
             python --version
             mkdir ~/expertise-utils
             cd ~/expertise-utils
-            conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia
+            conda install "pytorch>=2.0" pytorch-cuda=12.4 -c pytorch -c nvidia
             conda install -y filelock
             python -m pip install numpy==1.26.4 --force-reinstall
             wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
