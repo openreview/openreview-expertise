@@ -243,7 +243,8 @@ class SciNCLPredictor(Predictor):
         # Normalize all scores
         min_val = p2p_aff.min()
         max_val = p2p_aff.max()
-        p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+        p2p_aff.sub_(min_val).div_(max_val - min_val)  # In-place normalization
+        p2p_aff_norm = p2p_aff  # Reference the same tensor
 
         csv_scores = []
         self.preliminary_scores = []
