@@ -48,7 +48,7 @@ jobs:
           command: |
             cd ~/
             curl -Lk https://raw.githubusercontent.com/tj/n/master/bin/n -o n
-            sudo bash n 18.15.0
+            sudo bash n 22.14.0
             hash -r
             sudo npm install -g n
       - run:
