@@ -46,12 +46,12 @@ The following table is partially taken from Stelmakh et al., where SPECTER2, Sci
 
 ## Installation
 
-This repository only supports Python 3.6 and above. Python 3.8 and above is required to run SPECTER2
+This repository only supports Python 3.8 and above (Python 3.11 is recommended). Python 3.8 and above is required to run SPECTER2
 Clone this repository and install the package using pip as follows. You may use the `pip` command in a conda environment as long as you first run all the pip installs and then conda installs. Just follow the order of the commands shown below and it should work. You may read more about this [here](https://www.anaconda.com/using-pip-in-a-conda-environment/).
 
 Run this command only if you are using conda:
 ```
-conda create -n affinity python=3.8
+conda create -n affinity python=3.11
 conda activate affinity
 conda install pip
 ```
@@ -68,19 +68,10 @@ pip install -e <location of this repository>
 
 Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use SPECTER, Multifacet-Recommender (MFR), SPECTER+MFR, SPECTER2+SciNCL with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
 
-If you plan to use SPECTER / SPECTER+MFR, with the conda environment `affinity` active:
+If you plan to use GPU acceleration SPECTER / SPECTER+MFR, with the conda environment `affinity` active:
 ```
-git clone https://github.com/allenai/specter.git
-cd specter
-
-wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
-tar -xzvf archive.tar.gz
-
 conda install pytorch cudatoolkit=10.1 -c pytorch 
 pip install -r requirements.txt
-python setup.py install
-conda install filelock
-cd ..
 pip install -I protobuf==3.20.1
 pip install numpy==1.24.4 --force-reinstall
 ```
@@ -111,24 +102,17 @@ conda create -n expertise python=$PYTHON_VERSION -c conda-forge
 conda activate expertise
 mkdir ../expertise-utils
 cd ../expertise-utils
-git clone https://github.com/allenai/specter.git
-cd specter
-wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
-tar -xzvf archive.tar.gz
-conda install pytorch cudatoolkit=10.1 -c pytorch 
-pip install -r requirements.txt
-python setup.py install
+conda install "pytorch>=2.3" pytorch-cuda=12.4 -c pytorch -c nvidia
 conda install -y filelock
-cd ..
+python -m pip install numpy==1.26.4 --force-reinstall
 wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
 tar -xzvf mfr.tar.gz
 mv ./multifacet_recommender_data ./multifacet_recommender
 cd ~/openreview-expertise
-pip install -e .
+python -m pip install -e .
 conda install -y intel-openmp==2019.4
-conda install -y faiss-cpu==1.7.3 -c pytorch
-pip install -I protobuf==3.20.1
-pip install numpy==1.24.4 --force-reinstall
+conda install -y -c conda-forge faiss-cpu=1.7.4 "pytorch>=2.3"
+python -m pip install -I protobuf==3.20.1
 ```
 ## Affinity Scores
 
@@ -170,11 +154,6 @@ python -m expertise.service --host localhost --port 5000
 ```
 
 By default, the app will run on `http://localhost:5000`. The endpoint `/expertise/test` should show a simple page indicating that Flask is running. Accessing the `/expertise` endpoint to compute affinity scores **requires** valid authentication in the headers of the request (i.e submitted from a logged in Python client)
-
-In order to start the Celery queue worker, use: 
-```
-celery --app expertise.service.server.celery_app worker
-```
 
 By default, if using SPECTER and/or MFR, the server config expects the checkpoints to be placed in the following directories:
 ```
