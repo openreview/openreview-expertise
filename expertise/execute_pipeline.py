@@ -28,6 +28,15 @@ DEFAULT_CONFIG = {
 DELETED_FIELDS = ['user_id', 'cdate']
 
 def run_pipeline(api_request_str, working_dir=None):
+    # Try parsing api_request_str as JSON, otherwise assume its a filepath
+    try:
+        raw_request: dict = json.loads(api_request_str)
+    except:
+        if not os.path.exists(api_request_str):
+            raise FileNotFoundError(f"File {api_request_str} not found")
+        with open(api_request_str, 'r') as f:
+            raw_request = json.load(f)
+        print(f"Loaded request from {api_request_str}")
 
     # Pop token, base URLs and other expected variable
     try:
