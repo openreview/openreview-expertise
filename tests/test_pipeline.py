@@ -340,7 +340,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_gcs_client, mock_execute
         },
         "entityB": { 
             'type': "Note",
-            'invitation': "HIJ.cc/-/Submission" 
+            'invitation': "PIPELINE_ERR.cc/-/Submission" 
         },
         "model": {
             "name": "specter+mfr",
@@ -374,7 +374,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_gcs_client, mock_execute
     try:
         run_pipeline(api_request_str, working_dir)
     except Exception as e:
-        assert str(e) == 'Not Found Error: No papers found for: invitation_ids: [\'HIJ.cc/-/Submission\']'
+        assert str(e) == 'Not Found Error: No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
 
     # Assertions
     # Check that blobs were created and data was uploaded to GCS
@@ -382,7 +382,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_gcs_client, mock_execute
     mock_blob.upload_from_string.assert_called()  # Ensure upload_from_string was called
 
     mock_blob.upload_from_string.assert_any_call(
-        '{"error": "Not Found Error: No papers found for: invitation_ids: [\'HIJ.cc/-/Submission\']"}'
+        '{"error": "Not Found Error: No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']"}'
     )
 
     shutil.rmtree(working_dir)  # Clean up

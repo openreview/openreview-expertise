@@ -17,7 +17,7 @@ from expertise.service.utils import JobConfig, RedisDatabase
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
-DEFAULT_CONF_ID = 'ABC.cc'
+DEFAULT_CONF_ID = 'API.cc'
 DEFAULT_POST_REVIEWERS = True
 DEFAULT_POST_AREA_CHAIRS = False
 DEFAULT_POST_SENIOR_AREA_CHAIRS = False
@@ -41,6 +41,7 @@ def _setup_abc_cc(clean_start_conference, client, openreview_client):
     clean_start_conference(
         client,
         DEFAULT_CONF_ID,
+        fake_data_source_id='ABC.cc',
         post_reviewers=DEFAULT_POST_REVIEWERS,
         post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
         post_senior_area_chairs=DEFAULT_POST_SENIOR_AREA_CHAIRS,
@@ -135,7 +136,7 @@ class TestExpertiseV2():
         # Returns the V2 submissions
         config = {
             'use_email_ids': False,
-            'match_group': 'ABC.cc',
+            'match_group': 'API.cc',
             'paper_invitation': 'TMLR/-/Submission',
         }
         or_expertise = OpenReviewExpertise(client, openreview_client, config)
@@ -711,7 +712,7 @@ class TestExpertiseV2():
         assert response.json['message'] == "Bad request: model specter+mfr does not support paper-paper scoring"
 
         abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
-        abc_client.impersonate('ABC.cc/Program_Chairs')
+        abc_client.impersonate('API.cc/Program_Chairs')
         # Get a no publications error
         response = test_client.post(
             '/expertise',
@@ -724,7 +725,7 @@ class TestExpertiseV2():
                     },
                     "entityB": { 
                         'type': "Note",
-                        'invitation': "ABC.cc/-/Submission",
+                        'invitation': "API.cc/-/Submission",
                     },
                     "model": {
                             "name": "specter2+scincl",
@@ -765,7 +766,7 @@ class TestExpertiseV2():
                     "name": "test_run",
                     "entityA": { 
                         'type': "Note",
-                        'invitation': "ABC.cc/-/Submission",
+                        'invitation': "API.cc/-/Submission",
                     },
                     "entityB": { 
                         'type': "Note",

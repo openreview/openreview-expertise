@@ -357,7 +357,7 @@ def test_expertise_selection_api2(client, openreview_client, helpers, clean_star
 def test_expertise_inclusion(client, openreview_client, helpers, clean_start_conference):
     clean_start_conference(
         client,
-        'HIJ.cc',
+        'CDEXP.cc',
         fake_data_source_id='ABC.cc',
         exclude_expertise=False,
         post_reviewers=True,
@@ -368,8 +368,8 @@ def test_expertise_inclusion(client, openreview_client, helpers, clean_start_con
     )
     config = {
         'use_email_ids': False,
-        'inclusion_inv': 'HIJ.cc/-/Expertise_Selection',
-        'match_group': 'HIJ.cc/Reviewers'
+        'inclusion_inv': 'CDEXP.cc/-/Expertise_Selection',
+        'match_group': 'CDEXP.cc/Reviewers'
     }
     author_id = '~Harold_Rice1'
     original_note = list(openreview.tools.iterget_notes(client, content={'authorids': author_id}))[0]
@@ -415,28 +415,28 @@ def test_expertise_inclusion(client, openreview_client, helpers, clean_start_con
     
     # Post this edge to both ABC and HIJ, ABC will be deleted, HIJ will be used for the API tests
     edge = openreview.Edge(
-                        invitation='HIJ.cc/-/Expertise_Selection',
+                        invitation='CDEXP.cc/-/Expertise_Selection',
                         head=note_edit['note']['id'],
                         tail='~Harold_Rice1',
                         label='Include',
-                        readers=['HIJ.cc', '~Harold_Rice1'],
+                        readers=['CDEXP.cc', '~Harold_Rice1'],
                         writers=['~Harold_Rice1'],
                         signatures=['~Harold_Rice1']
                     )
     edge = client.post_edge(edge)
 
     # Use this edge to test that 'Exclude' label edges are not included
-    inv = client.get_invitation('HIJ.cc/-/Expertise_Selection')
+    inv = client.get_invitation('CDEXP.cc/-/Expertise_Selection')
     inv.reply = {
         "readers": {
             "values-copied": [
-                "HIJ.cc",
+                "CDEXP.cc",
                 "{signatures}"
             ]
         },
         "writers": {
             "values-copied": [
-                "HIJ.cc",
+                "CDEXP.cc",
                 "{signatures}"
             ]
         },
@@ -460,27 +460,27 @@ def test_expertise_inclusion(client, openreview_client, helpers, clean_start_con
     }
     client.post_invitation(inv)
     edge = openreview.Edge(
-                        invitation='HIJ.cc/-/Expertise_Selection',
+                        invitation='CDEXP.cc/-/Expertise_Selection',
                         head=exclude_note_edit['note']['id'],
                         tail='~Harold_Rice1',
                         label='Exclude',
-                        readers=['HIJ.cc', '~Harold_Rice1'],
+                        readers=['CDEXP.cc', '~Harold_Rice1'],
                         writers=['~Harold_Rice1'],
                         signatures=['~Harold_Rice1']
                     )
     edge = client.post_edge(edge)
 
-    inv = client.get_invitation('HIJ.cc/-/Expertise_Selection')
+    inv = client.get_invitation('CDEXP.cc/-/Expertise_Selection')
     inv.reply = {
         "readers": {
             "values-copied": [
-                "HIJ.cc",
+                "CDEXP.cc",
                 "{signatures}"
             ]
         },
         "writers": {
             "values-copied": [
-                "HIJ.cc",
+                "CDEXP.cc",
                 "{signatures}"
             ]
         },
@@ -504,10 +504,32 @@ def test_expertise_inclusion(client, openreview_client, helpers, clean_start_con
     }
     client.post_invitation(inv)
 
-    assert client.get_edges_count(invitation='HIJ.cc/-/Expertise_Selection') == 2
+    assert client.get_edges_count(invitation='CDEXP.cc/-/Expertise_Selection') == 2
 
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     or_expertise.included_ids_by_user = or_expertise.include()
     assert len(or_expertise.included_ids_by_user['~Harold_Rice1']) == 1
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Harold_Rice1']) == 1
+
+    ## Clean up data
+    openreview_client.post_note_edit(
+        invitation='openreview.net/-/Edit',
+        readers=['openreview.net'],
+        writers=['openreview.net'],
+        signatures=['openreview.net'],
+        note=openreview.api.Note(
+            id=note_edit['note']['id'],
+            ddate = 1554819115,
+        )
+    )
+    openreview_client.post_note_edit(
+        invitation='openreview.net/-/Edit',
+        readers=['openreview.net'],
+        writers=['openreview.net'],
+        signatures=['openreview.net'],
+        note=openreview.api.Note(
+            id=exclude_note_edit['note']['id'],
+            ddate = 1554819115,
+        )
+    )
