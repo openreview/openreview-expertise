@@ -1584,7 +1584,7 @@ class TestExpertiseService():
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
-        assert metadata['submission_count'] == 9 ## Additional from new conferences
+        assert metadata['submission_count'] == 11 ## Additional from new conferences
         response = response.json['results']
         for item in response:
             match_id, submitter_id, score = item['match_member'], item['submission_member'], float(item['score'])
