@@ -272,11 +272,11 @@ class TestExpertiseV2():
                         'id': target_id
                     },
                     "model": {
-                            "name": "specter+mfr",
+                            "name": "specter2+scincl",
                             'useTitle': False, 
                             'useAbstract': True, 
                             'skipSpecter': False,
-                            'scoreComputation': 'avg'
+                            'scoreComputation': 'max'
                     }
                 }
             ),
@@ -345,6 +345,7 @@ class TestExpertiseV2():
         assert metadata['submission_count'] == 1
         response = response.json['results']
         medical_score, translation_score = 0, 0
+        target_id = None
         for item in response:
             print(item)
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
@@ -357,12 +358,158 @@ class TestExpertiseV2():
             if profile_id == '~Kyunghyun_Cho1':
                 translation_score = score
 
+            target_id = submission_id
+
         # Check for correctness
         assert medical_score > 0
         assert translation_score > 0
         assert medical_score > 0.5
         assert translation_score < 0.5
-        
+
+        ## This distribution is more spread out since Margherita
+        ## has a 2 papers: 1 with high score and 1 with low score
+        assert medical_score < 0.9
+
+
+        ## Repeat again with percentileSelect to lowest
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        # Make a request for TMLR/Reviewers
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "TMLR/Reviewers",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'id': target_id
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'percentileSelect': 0
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        print(f"second request ret: {response.json}")
+        print(f"setting job_id to {response.json['jobId']}")
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response[0]['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{job_id}"})
+        response = response.json['results']
+        for item in response:
+            print(item)
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            assert len(submission_id) >= 1
+            assert len(profile_id) >= 1
+            assert profile_id.startswith('~')
+            assert score >= 0 and score <= 1
+            if profile_id == '~Raia_Hadsell1':
+                assert score > 0.95
+            if profile_id == '~Margherita_Hilpert1':
+                assert score < 0.05
+                ## This is very low because the user has lorem ipsum papers
+                ## and percentile selects lowest score
+
+                ## This distribution is more spread out since Margherita
+                ## has a 2 papers: 1 with high score and 1 with low score
+
+        ## Repeat again with percentileSelect to 50, should still be low
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        # Make a request for TMLR/Reviewers
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "TMLR/Reviewers",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'id': target_id
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'percentileSelect': 0
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        print(f"second request ret: {response.json}")
+        print(f"setting job_id to {response.json['jobId']}")
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response[0]['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{job_id}"})
+        response = response.json['results']
+        for item in response:
+            print(item)
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            assert len(submission_id) >= 1
+            assert len(profile_id) >= 1
+            assert profile_id.startswith('~')
+            assert score >= 0 and score <= 1
+            if profile_id == '~Raia_Hadsell1':
+                assert score > 0.95
+            if profile_id == '~Margherita_Hilpert1':
+                assert score < 0.05
+                ## This is very low because the user has lorem ipsum papers
+                ## and percentile selects lowest score
+
         # Clean up journal request
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
