@@ -501,6 +501,7 @@ class JobConfig(object):
             'scoreComputation',
             'skipSpecter',
             'useCuda'
+            'percentileSelect'
         ]
         config.model = starting_config.get('model', None)
         model_params = starting_config.get('model_params', {})
@@ -515,7 +516,7 @@ class JobConfig(object):
         config.model_params['sparse_value'] = model_params.get('sparse_value', 300)
         config.model_params['use_cuda'] = model_params.get('use_cuda', False)
         config.model_params['use_redis'] = model_params.get('use_redis', False)
-
+        config.model_params['percentile_select'] = model_params.get('percentile_select', None)
         # Attempt to load any API request model params
         api_model = api_request.model
         if api_model:
@@ -819,7 +820,20 @@ class GCPInterface(object):
 
         descriptions = JobDescription.VALS.value
         status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
-        description = descriptions[status]
+        
+        # Read the error message from the GCS bucket if status is ERROR
+        if status == JobStatus.ERROR:
+            try:
+                error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
+                if error_message:
+                    description = json.loads(error_message)['error']
+                else:
+                    description = descriptions[status]
+            except Exception as e:
+                ## If the error message is not found, use the default description
+                description = descriptions[status]
+        else:
+            description = descriptions[status]
 
         return {
                 'name': job_id,
