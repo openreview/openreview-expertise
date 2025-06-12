@@ -336,7 +336,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_gcs_client, mock_execute
         "name": "test_run2",
         "entityA": {
             'type': "Group",
-            'memberOf': "ABC.cc/Reviewers",
+            'memberOf': "PIPELINE.cc/Reviewers",
         },
         "entityB": { 
             'type': "Note",
