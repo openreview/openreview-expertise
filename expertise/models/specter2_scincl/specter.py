@@ -52,10 +52,18 @@ class Specter2Predictor(Predictor):
         self.max_score = max_score
         assert max_score ^ average_score, "(Only) One of max_score or average_score must be True"
         self.batch_size = batch_size
+        
+        # Device initialization with Apple Silicon support
         if use_cuda:
-            self.cuda_device = torch.device("cuda:0")
+            if torch.cuda.is_available():
+                self.device = torch.device("cuda:0")
+            elif torch.backends.mps.is_available():
+                self.device = torch.device("mps")
+            else:
+                raise RuntimeError("CUDA acceleration requested but neither CUDA nor Apple Silicon (MPS) is available")
         else:
-            self.cuda_device = torch.device("cpu")
+            self.device = torch.device("cpu")
+            
         self.preliminary_scores = None
         self.sparse_value = sparse_value
         if not os.path.exists(self.work_dir) and not os.path.isdir(self.work_dir):
@@ -64,14 +72,14 @@ class Specter2Predictor(Predictor):
         self.redis = None
         self.dump_p2p = dump_p2p
         self.compute_paper_paper = compute_paper_paper
-
         self.percentile_select = percentile_select
+
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load base model
         self.model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load the adapter(s) as per the required task, provide an identifier for the adapter in load_as argument and activate it
         self.model.load_adapter("allenai/specter2_aug2023refresh", source="hf", load_as="proximity", set_active=True)
-        self.model.to(self.cuda_device)
+        self.model.to(self.device)
         self.model.eval()
 
     def _fetch_batches(self, dict_data, batch_size):
@@ -88,7 +96,7 @@ class Specter2Predictor(Predictor):
         # preprocess the input
         inputs = self.tokenizer(text_batch, padding=True, truncation=True,
                                         return_tensors="pt", return_token_type_ids=False, max_length=512)
-        inputs = inputs.to(self.cuda_device)
+        inputs = inputs.to(self.device)
         with torch.no_grad():
             output = self.model(**inputs)
         # take the first token in the batch as the embedding
@@ -102,7 +110,10 @@ class Specter2Predictor(Predictor):
         del embeddings
         del output
         del inputs
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        elif torch.backends.mps.is_available():
+            torch.mps.empty_cache()
         return jsonl_out
 
     def set_archives_dataset(self, archives_dataset):
