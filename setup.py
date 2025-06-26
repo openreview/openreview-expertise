@@ -14,7 +14,7 @@ setup(
     install_requires=[
         'setuptools>=75.6.0',
         'openreview-py>=1.0.1',
-        'numpy==1.26.4',
+        'numpy>=1.26',
         'scipy',
         'adapter-transformers',
         'pandas',
