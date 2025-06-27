@@ -619,8 +619,10 @@ def test_get_job_results_missing_metadata(mock_storage_client, openreview_client
     # Verify exception is raised
     user_id = "test_user"
     job_id = "job_1"
+    result_generator = gcp_interface.get_job_results(user_id, job_id)
+
     with pytest.raises(openreview.OpenReviewException, match="incorrect metadata files found"):
-        gcp_interface.get_job_results(user_id, job_id)
+        collect_generator_results(result_generator)
 
 # Test case for insufficient permissions
 @patch("expertise.service.utils.storage.Client")
@@ -651,9 +653,10 @@ def test_get_job_results_insufficient_permissions(mock_storage_client, openrevie
     # Verify exception is raised
     user_id = "test_user"
     job_id = "job_1"
+    result_generator = gcp_interface.get_job_results(user_id, job_id)
+    
     with pytest.raises(openreview.OpenReviewException, match="Forbidden: Insufficient permissions to access job"):
-        gcp_interface.get_job_results(user_id, job_id)
-
+        collect_generator_results(result_generator)
 # Test case for group scoring
 @patch("expertise.service.utils.storage.Client")
 def test_get_job_results_group_scoring(mock_storage_client):
