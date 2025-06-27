@@ -65,6 +65,23 @@ class LocalMockBlob:
             with open(self._file_path, 'w', encoding='utf-8') as f:
                 f.write(data)
 
+    def open(self, mode='r'):
+        """
+        Opens the blob for reading or writing.
+
+        Args:
+            mode: The mode to open the file with ('r' for reading, 'w' for writing)
+
+        Returns:
+            A file-like object that can be used to read from or write to the blob
+        """
+        # Create parent directories if they don't exist
+        if 'w' in mode:
+            os.makedirs(os.path.dirname(self._file_path), exist_ok=True)
+
+        # Open the file with the specified mode
+        return open(self._file_path, mode)
+
 class LocalMockBucket:
     def __init__(self, base_dir):
         self.base_dir = base_dir
