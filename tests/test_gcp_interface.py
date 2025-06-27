@@ -524,9 +524,19 @@ def test_get_job_results(mock_storage_client, openreview_client):
     mock_score_blob.name = "jobs/job_1/scores.jsonl"
     mock_score_blob.download_as_string.return_value = '{"submission": "abcd","user": "user_user1","score": 0.987}\n{"submission": "abcd","user": "user_user2","score": 0.987}'
 
+    # Create a mock file-like object for sparse score blob
+    mock_file = MagicMock()
+    mock_file.readline.side_effect = [
+        '{"submission": "abcde","user": "user_user1","score": 0.987}',
+        '{"submission": "abcde","user": "user_user2","score": 0.987}',
+        ''  # Empty string to terminate the loop
+    ]
+    mock_file.close.return_value = None
+
     mock_sparse_score_blob = MagicMock()
     mock_sparse_score_blob.name = "jobs/job_1/scores_sparse.jsonl"
     mock_sparse_score_blob.download_as_string.return_value = '{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}'
+    mock_sparse_score_blob.open.return_value = mock_file
 
     mock_request_blob = MagicMock()
     mock_request_blob.name = "jobs/job_1/request.json"
@@ -573,7 +583,7 @@ def test_get_job_results(mock_storage_client, openreview_client):
     # Verify GCS interactions
     mock_storage_client.return_value.bucket.return_value.list_blobs.assert_called_once_with(prefix="jobs/job_1/")
     mock_metadata_blob.download_as_string.assert_called_once()
-    mock_sparse_score_blob.download_as_string.assert_called_once()
+    mock_sparse_score_blob.open.assert_called_once_with('r')
 
 # Test case for missing metadata file
 @patch("expertise.service.utils.storage.Client")
@@ -652,9 +662,19 @@ def test_get_job_results_group_scoring(mock_storage_client):
     mock_metadata_blob.name = "jobs/job_1/metadata.json"
     mock_metadata_blob.download_as_string.return_value = json.dumps({"meta": "data"})
 
+    # Create a mock file-like object for group score blob
+    mock_file = MagicMock()
+    mock_file.readline.side_effect = [
+        '{"match_member": "m_user1","submission_member": "s_user1","score": 0.987}',
+        '{"match_member": "m_user2","submission_member": "s_user2","score": 0.987}',
+        ''  # Empty string to terminate the loop
+    ]
+    mock_file.close.return_value = None
+
     mock_group_score_blob = MagicMock()
     mock_group_score_blob.name = "jobs/job_1/group_scores.jsonl"
     mock_group_score_blob.download_as_string.return_value = '{"match_member": "m_user1","submission_member": "s_user1","score": 0.987}\n{"match_member": "m_user2","submission_member": "s_user2","score": 0.987}'
+    mock_group_score_blob.open.return_value = mock_file
 
     mock_request_blob = MagicMock()
     mock_request_blob.name = "jobs/job_1/request.json"
@@ -695,3 +715,8 @@ def test_get_job_results_group_scoring(mock_storage_client):
         {"match_member": "m_user1","submission_member": "s_user1","score": 0.987},
         {"match_member": "m_user2","submission_member": "s_user2","score": 0.987}
     ]
+
+    # Verify GCS interactions
+    mock_storage_client.return_value.bucket.return_value.list_blobs.assert_called_once_with(prefix="jobs/job_1/")
+    mock_metadata_blob.download_as_string.assert_called_once()
+    mock_group_score_blob.open.assert_called_once_with('r')
