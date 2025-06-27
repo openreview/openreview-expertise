@@ -17,6 +17,35 @@ DEFAULT_POST_SENIOR_AREA_CHAIRS = False
 DEFAULT_POST_SUBMISSIONS = True
 DEFAULT_POST_PUBLICATIONS = True
 
+def collect_generator_results(generator):
+    """
+    Collects results from a generator that yields chunks of data with 'metadata' and 'results'.
+    
+    Args:
+        generator: A generator that yields dictionaries with 'metadata' and/or 'results' keys
+        
+    Returns:
+        A dictionary with combined 'metadata' and 'results' from all chunks
+    """
+    all_results = []
+    metadata = None
+    
+    # Iterate through all chunks
+    for chunk in generator:
+        # Save metadata when encountered
+        if chunk.get('metadata') is not None:
+            metadata = chunk['metadata']
+        
+        # Collect results
+        if chunk.get('results'):
+            all_results.extend(chunk['results'])
+    
+    # Return a dictionary with all results and metadata
+    return {
+        'metadata': metadata or {},
+        'results': all_results
+    }
+
 @pytest.fixture(scope="module", autouse=True)
 def _setup_tmlr(clean_start_journal, client, openreview_client):
     clean_start_journal(
@@ -531,13 +560,14 @@ def test_get_job_results(mock_storage_client, openreview_client):
     # Call the method
     user_id = "test_user"
     job_id = "job_1"
-    result = gcp_interface.get_job_results(user_id, job_id)
+    result_generator = gcp_interface.get_job_results(user_id, job_id)
+    result = collect_generator_results(result_generator)
 
     # Assertions
     assert result["metadata"] == {"meta": "data"}
     assert result["results"] == [
-        {"submission": "abcde","user": "user_user1","score": 0.987},
-        {"submission": "abcde","user": "user_user2","score": 0.987}
+        {"submission": "abcde", "user": "user_user1", "score": 0.987},
+        {"submission": "abcde", "user": "user_user2", "score": 0.987}
     ]
 
     # Verify GCS interactions
@@ -656,7 +686,8 @@ def test_get_job_results_group_scoring(mock_storage_client):
     # Call the method
     user_id = "test_user"
     job_id = "job_1"
-    result = gcp_interface.get_job_results(user_id, job_id)
+    result_generator = gcp_interface.get_job_results(user_id, job_id)
+    result = collect_generator_results(result_generator)
 
     # Assertions
     assert result["metadata"] == {"meta": "data"}
