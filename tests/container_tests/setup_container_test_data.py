@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """
 Standalone script to set up mock data for container tests.
-Uses the shared test utilities from test_utils.py to avoid code duplication.
+Uses the shared test utilities from utils.py to avoid code duplication.
 
 This script sets up the required conferences and test data that the container tests expect:
 - ABC.cc conference with reviewers and submissions
-- DEF.cc conference for dataset tests
-
-Usage:
-    python tests/container_tests/setup_container_test_data.py
 """
 
 import openreview
@@ -24,10 +20,7 @@ sys.path.insert(0, str(tests_dir))
 sys.path.insert(0, str(project_root))
 
 # Import shared test utilities
-from tests.test_utils import TestHelpers, ConferenceBuilder
-
-
-
+from tests.utils import TestHelpers, ConferenceBuilder
 
 def setup_openreview_clients():
     """Initialize OpenReview clients"""
@@ -49,11 +42,6 @@ def setup_openreview_clients():
     
     return client_v1, client_v2
 
-
-
-
-
-
 def setup_abc_conference(client_v1, client_v2):
     """Set up ABC.cc conference with reviewers, submissions, and publications - matches test_expertise_service.py"""
     print(f"Setting up conference: ABC.cc")
@@ -69,23 +57,6 @@ def setup_abc_conference(client_v1, client_v2):
     print(f"Successfully set up conference: ABC.cc")
     return conference
 
-
-def setup_def_conference(client_v1, client_v2):
-    """Set up DEF.cc conference for dataset tests - matches test_create_dataset.py"""
-    print(f"Setting up conference: DEF.cc")
-    builder = ConferenceBuilder(client_v1, client_v2)
-    conference = builder.create_conference(
-        conference_id='DEF.cc',
-        post_reviewers=True,
-        post_area_chairs=False,
-        post_senior_area_chairs=False,
-        post_submissions=True,
-        post_publications=True
-    )
-    print(f"Successfully set up conference: DEF.cc")
-    return conference
-
-
 def main():
     """Main entry point"""
     try:
@@ -98,7 +69,6 @@ def main():
         
         # Set up conferences required by container tests
         setup_abc_conference(client_v1, client_v2)
-        setup_def_conference(client_v1, client_v2)
         
         print("\n" + "=" * 50)
         print("Container test data setup completed successfully!")

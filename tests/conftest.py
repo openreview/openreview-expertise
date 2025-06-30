@@ -5,7 +5,7 @@ import requests
 import time
 import json
 from tests.conference_locks import conference_lock
-from tests.test_utils import TestHelpers, ConferenceBuilder, JournalBuilder
+from tests.utils import TestHelpers, ConferenceBuilder, JournalBuilder
 
 from openreview.api import OpenReviewClient
 from openreview.api import Note
