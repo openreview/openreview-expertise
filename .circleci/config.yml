@@ -358,7 +358,7 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-expertise
-            python -m pytest tests/test_create_conference.py tests/test_create_dataset.py
+            python tests/container_tests/setup_container_test_data.py
       
       # 5. Build the container
       - run:
