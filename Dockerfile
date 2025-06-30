@@ -44,12 +44,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-RUN if [ "$OPENREVIEW_PY_VERSION" != "latest" ]; then \
-    python -m pip install --force-reinstall openreview-py==${OPENREVIEW_PY_VERSION}; \
-  else \
-    python -m pip install --force-reinstall openreview-py; \
-  fi
-
 # Add conda environment bin to PATH so that 'python' uses the environment by default
 ENV PATH="/app/miniconda/envs/expertise/bin:${PATH}"
 
