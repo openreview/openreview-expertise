@@ -13,6 +13,12 @@ import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.service.utils import JobConfig, RedisDatabase, get_user_id
 from google.cloud.aiplatform_v1.types import PipelineState
+from conftest import GCSTestHelper
+
+GCS_TEST_BUCKET = GCSTestHelper.GCS_TEST_BUCKET
+GCS_PROJECT = GCSTestHelper.GCS_PROJECT
+GCS_PROJECT_NUMBER = GCSTestHelper.GCS_NUMBER
+GCS_JOBS_FOLDER = GCSTestHelper.GCS_JOBS_FOLDER
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -48,62 +54,6 @@ def _setup_abc_cc(clean_start_conference, client, openreview_client):
         post_publications=DEFAULT_POST_PUBLICATIONS
     )
 
-class LocalMockBlob:
-    def __init__(self, file_path, base_dir):
-        self._file_path = file_path
-        self._base_dir = base_dir
-        # Blob name relative to the bucket base dir
-        self.name = os.path.relpath(file_path, self._base_dir)
-
-    def download_as_string(self):
-        with open(self._file_path, 'rb') as f:
-            return f.read()
-
-    def upload_from_string(self, data='', content_type=None):
-        os.makedirs(os.path.dirname(self._file_path), exist_ok=True)
-        if not os.path.isdir(self._file_path): ## Only write to file if it's not a directory
-            with open(self._file_path, 'w', encoding='utf-8') as f:
-                f.write(data)
-
-class LocalMockBucket:
-    def __init__(self, base_dir):
-        self.base_dir = base_dir
-
-    def list_blobs(self, prefix=None, max_results=None):
-        prefix = prefix or ''
-        blobs = []
-        
-        for root, dirs, files in os.walk(self.base_dir):
-            for filename in files:
-                rel_dir = os.path.relpath(root, self.base_dir)
-                if rel_dir == '.':
-                    rel_dir = ''
-                object_path = os.path.join(rel_dir, filename)
-                object_path = object_path.replace('\\', '/')
-                
-                if object_path.startswith(prefix):
-                    file_path = os.path.join(root, filename)
-                    blobs.append(LocalMockBlob(file_path, self.base_dir))
-        
-        if max_results:
-            blobs = blobs[:max_results]
-        return blobs
-
-    def blob(self, blob_name):
-        file_path = os.path.join(self.base_dir, blob_name)
-        return LocalMockBlob(file_path, self.base_dir)
-
-class LocalMockClient:
-    def __init__(self, project=None, root_dir=None):
-        self.project = project
-        self.root_dir = root_dir
-        # Simulate a bucket directory inside root_dir
-        self.bucket_dir = os.path.join(self.root_dir, 'test-bucket')
-        os.makedirs(self.bucket_dir, exist_ok=True)
-
-    def bucket(self, bucket_name):
-        # We ignore bucket_name since we have only one test-bucket
-        return LocalMockBucket(self.bucket_dir)
 
 @pytest.fixture(autouse=True)
 def reset_run_once_state():
@@ -146,15 +96,15 @@ class TestExpertiseCloudService():
             "REDIS_CONFIG_DB": 9,
             "REDIS_EMBEDDINGS_DB": 11,
             "USE_GCP": True,
-            "GCP_PROJECT_ID":'test_project',
-            "GCP_PROJECT_NUMBER":'123456',
+            "GCP_PROJECT_ID" : GCS_PROJECT,
+            "GCP_PROJECT_NUMBER" : GCS_PROJECT_NUMBER,
             "GCP_REGION":'us-central1',
             "GCP_PIPELINE_ROOT":'pipeline-root',
             "GCP_PIPELINE_NAME":'test-pipeline',
             "GCP_PIPELINE_REPO":'test-repo',
             "GCP_PIPELINE_TAG":'dev',
-            "GCP_BUCKET_NAME":'test-bucket',
-            "GCP_JOBS_FOLDER":'jobs',
+            "GCP_BUCKET_NAME" : GCS_TEST_BUCKET,
+            "GCP_JOBS_FOLDER" : GCS_JOBS_FOLDER,
             "GCP_SERVICE_LABEL":{'dev': 'expertise'},
             "POLL_INTERVAL": 1,
             "POLL_MAX_ATTEMPTS": 5,
@@ -174,7 +124,7 @@ class TestExpertiseCloudService():
             }
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
-    def test_create_job_filesystem(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
+    def test_create_job_filesystem(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_test_prefix):
         def setup_job_mocks():
             # Setup mock PipelineJob
             mock_pipeline_instance = MagicMock()
@@ -266,10 +216,12 @@ class TestExpertiseCloudService():
             assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
             # Check proper user ID
+            ## Checking live GCS
             config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/request.json"), 'r') as f:
-                request = json.load(f)
-                assert request['user_id'] == 'CLD.cc/Program_Chairs'
+            request_blob = gcs_test_bucket.blob(f"{gcs_test_prefix}/jobs/{config.cloud_id}/request.json")
+            assert request_blob.exists(), "Request file should exist in GCS"
+            request = json.loads(request_blob.download_as_text())
+            assert request['user_id'] == 'CLD.cc/Program_Chairs'
             
             setup_job_mocks()
             response = test_client.post(
@@ -347,18 +299,21 @@ class TestExpertiseCloudService():
             config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
             
             # Check proper user ID
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/request.json"), 'r') as f:
-                request = json.load(f)
-                assert request['user_id'] == 'TMLR/Editors_In_Chief'
+            ## Checking and writing to live GCS
+            request_blob = gcs_test_bucket.blob(f"{gcs_test_prefix}/jobs/{config.cloud_id}/request.json")
+            assert request_blob.exists(), "Request file should exist in GCS"
+            request = json.loads(request_blob.download_as_text())
+            assert request['user_id'] == 'TMLR/Editors_In_Chief'
 
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/metadata.json"), 'w') as f:
-                f.write(json.dumps({"meta": "data"}))
+            # Upload test results to GCS
+            metadata_blob = gcs_test_bucket.blob(f"{gcs_test_prefix}/jobs/{config.cloud_id}/metadata.json")
+            metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/scores.jsonl"), 'w') as f:
-                f.write('{"submission": "abcd","user": "user_user1","score": 0.987}\n{"submission": "abcd","user": "user_user2","score": 0.987}')
+            scores_blob = gcs_test_bucket.blob(f"{gcs_test_prefix}/jobs/{config.cloud_id}/scores.jsonl")
+            scores_blob.upload_from_string('{"submission": "abcd","user": "user_user1","score": 0.987}\n{"submission": "abcd","user": "user_user2","score": 0.987}')
 
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/scores_sparse.jsonl"), 'w') as f:
-                f.write('{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}')
+            scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_test_prefix}/jobs/{config.cloud_id}/scores_sparse.jsonl")
+            scores_sparse_blob.upload_from_string('{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}')
 
             # Searches for journal results from the given job_id assuming the job has completed
             response = test_client.get('/expertise/results', headers=tmlr_client.headers, query_string={'jobId': job_id})
