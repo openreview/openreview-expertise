@@ -335,13 +335,8 @@ class Helpers:
 class GCSTestHelper:
     GCS_PROJECT = 'sunlit-realm-131518'
     GCS_NUMBER = '997553930042'
-    GCS_TEST_BUCKET = 'openreview-test-files'
-    GCS_JOBS_FOLDER = 'jobs_test'
-    
-    @staticmethod
-    def get_test_prefix():
-        """Generate unique test prefix for isolation"""
-        return f"jobs_test/test-{shortuuid.ShortUUID().random(length=5)}"
+    GCS_TEST_BUCKET = 'openreview-expertise'
+    GCS_JOBS_FOLDER = 'jobs-test'
     
     @staticmethod
     def init_test_bucket():
@@ -350,41 +345,37 @@ class GCSTestHelper:
         
         # Test bucket existence and permissions
         if bucket.exists():
-            blobs = list(bucket.list_blobs(prefix=f"{GCSTestHelper.GCS_JOBS_FOLDER}/test-"))
-            for blob in blobs:
-                blob.delete()
+            GCSTestHelper.cleanup_job_files(bucket)
             return bucket
         return None
     
     @staticmethod
-    def cleanup_test_files(bucket, prefix):
-        """Clean up test files from GCS bucket (real or mock)"""
+    def cleanup_job_files(bucket):
+        """Clean up job files from the bucket"""
         if bucket is None:
             return
         
         # Handle both real GCS buckets and mock buckets
-        blobs = list(bucket.list_blobs(prefix=prefix))
+        blobs = list(bucket.list_blobs(prefix=f"{GCSTestHelper.GCS_JOBS_FOLDER}/"))
         for blob in blobs:
             blob.delete()
 
 @pytest.fixture(scope="session")
 def gcs_test_bucket():
-    """Session-scoped fixture for GCS test bucket setup with conditional mocking"""
+    """Session-scoped fixture for GCS test bucket setup"""
     bucket_name = GCSTestHelper.GCS_TEST_BUCKET
-    # Environment variable set - try to use real GCS
     bucket = GCSTestHelper.init_test_bucket(bucket_name)
     if bucket is None:
         raise Exception(f"GCS bucket '{bucket_name}' not available")
     yield bucket
 
 @pytest.fixture(scope="function")
-def gcs_test_prefix(gcs_test_bucket):
-    """Function-scoped fixture for unique test prefix and cleanup"""
-    test_prefix = GCSTestHelper.get_test_prefix()
+def gcs_jobs_prefix(gcs_test_bucket):
+    test_prefix = GCSTestHelper.GCS_JOBS_FOLDER
+    GCSTestHelper.cleanup_job_files(gcs_test_bucket)
     yield test_prefix
     # Cleanup after test
-    GCSTestHelper.cleanup_test_files(gcs_test_bucket, test_prefix)
-
+    GCSTestHelper.cleanup_job_files(gcs_test_bucket)
 
 @pytest.fixture(scope="class")
 def helpers():

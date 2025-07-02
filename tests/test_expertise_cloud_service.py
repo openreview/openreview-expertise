@@ -124,7 +124,7 @@ class TestExpertiseCloudService():
             }
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
-    def test_create_job_filesystem(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_test_prefix):
+    def test_create_job_filesystem(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
             # Setup mock PipelineJob
             mock_pipeline_instance = MagicMock()
@@ -218,7 +218,7 @@ class TestExpertiseCloudService():
             # Check proper user ID
             ## Checking live GCS
             config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
-            request_blob = gcs_test_bucket.blob(f"{gcs_test_prefix}/jobs/{config.cloud_id}/request.json")
+            request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
             assert request_blob.exists(), "Request file should exist in GCS"
             request = json.loads(request_blob.download_as_text())
             assert request['user_id'] == 'CLD.cc/Program_Chairs'
@@ -300,19 +300,19 @@ class TestExpertiseCloudService():
             
             # Check proper user ID
             ## Checking and writing to live GCS
-            request_blob = gcs_test_bucket.blob(f"{gcs_test_prefix}/jobs/{config.cloud_id}/request.json")
+            request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
             assert request_blob.exists(), "Request file should exist in GCS"
             request = json.loads(request_blob.download_as_text())
             assert request['user_id'] == 'TMLR/Editors_In_Chief'
 
             # Upload test results to GCS
-            metadata_blob = gcs_test_bucket.blob(f"{gcs_test_prefix}/jobs/{config.cloud_id}/metadata.json")
+            metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
             metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-            scores_blob = gcs_test_bucket.blob(f"{gcs_test_prefix}/jobs/{config.cloud_id}/scores.jsonl")
+            scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
             scores_blob.upload_from_string('{"submission": "abcd","user": "user_user1","score": 0.987}\n{"submission": "abcd","user": "user_user2","score": 0.987}')
 
-            scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_test_prefix}/jobs/{config.cloud_id}/scores_sparse.jsonl")
+            scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
             scores_sparse_blob.upload_from_string('{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}')
 
             # Searches for journal results from the given job_id assuming the job has completed
