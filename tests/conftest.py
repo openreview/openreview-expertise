@@ -363,10 +363,9 @@ class GCSTestHelper:
 @pytest.fixture(scope="session")
 def gcs_test_bucket():
     """Session-scoped fixture for GCS test bucket setup"""
-    bucket_name = GCSTestHelper.GCS_TEST_BUCKET
-    bucket = GCSTestHelper.init_test_bucket(bucket_name)
+    bucket = GCSTestHelper.init_test_bucket()
     if bucket is None:
-        raise Exception(f"GCS bucket '{bucket_name}' not available")
+        raise Exception(f"GCS bucket not available")
     yield bucket
 
 @pytest.fixture(scope="function")
