@@ -167,10 +167,6 @@ class TestExpertiseCloudService():
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context_cloud['test_client']
 
-        tmp_dir = Path('tests/gcp')
-        if not os.path.exists(tmp_dir):
-            os.makedirs(tmp_dir)
-
         # Make a request
         # Patch storage.Client to return our local mock client that uses the filesystem
         with patch("google.cloud.storage.Client", new=lambda project=None: LocalMockClient(project=project, root_dir=tmp_dir)):
@@ -323,11 +319,8 @@ class TestExpertiseCloudService():
                 {"submission": "abcde","user": "user_user2","score": 0.987}
             ]
 
-            # Teardown tmp_dir
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
-    def test_group_group_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
+    def test_group_group_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
             # Setup mock PipelineJob
             mock_pipeline_instance = MagicMock()
@@ -363,10 +356,6 @@ class TestExpertiseCloudService():
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context_cloud['test_client']
-
-        tmp_dir = Path('tests/gcp')
-        if not os.path.exists(tmp_dir):
-            os.makedirs(tmp_dir)
 
         # Make a request
         # Patch storage.Client to return our local mock client that uses the filesystem
@@ -439,18 +428,19 @@ class TestExpertiseCloudService():
             config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
             
             # Check proper user ID
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/request.json"), 'r') as f:
-                request = json.load(f)
-                assert request['user_id'] == 'CLD.cc/Program_Chairs'
+            request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
+            assert request_blob.exists(), "Request file should exist in GCS"
+            request = json.loads(request_blob.download_as_text())
+            assert request['user_id'] == 'CLD.cc/Program_Chairs'
 
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/metadata.json"), 'w') as f:
-                f.write(json.dumps({"meta": "data"}))
+            metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
+            metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/scores.jsonl"), 'w') as f:
-                f.write('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
+            scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
+            scores_blob.upload_from_string('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
 
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/scores_sparse.jsonl"), 'w') as f:
-                f.write('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
+            scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
+            scores_sparse_blob.upload_from_string('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
 
             # Searches for journal results from the given job_id assuming the job has completed
             response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
@@ -460,11 +450,8 @@ class TestExpertiseCloudService():
                 {"match_member": "user_user3","submission_member": "user_user2","score": 0.987}
             ]
 
-            # Teardown tmp_dir
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
-    def test_paper_paper_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
+    def test_paper_paper_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
             # Setup mock PipelineJob
             mock_pipeline_instance = MagicMock()
@@ -500,10 +487,6 @@ class TestExpertiseCloudService():
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context_cloud['test_client']
-
-        tmp_dir = Path('tests/gcp')
-        if not os.path.exists(tmp_dir):
-            os.makedirs(tmp_dir)
 
         # Make a request
         # Patch storage.Client to return our local mock client that uses the filesystem
@@ -576,18 +559,19 @@ class TestExpertiseCloudService():
             config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
             
             # Check proper user ID
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/request.json"), 'r') as f:
-                request = json.load(f)
-                assert request['user_id'] == 'CLD.cc/Program_Chairs'
+            request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
+            assert request_blob.exists(), "Request file should exist in GCS"
+            request = json.loads(request_blob.download_as_text())
+            assert request['user_id'] == 'CLD.cc/Program_Chairs'
 
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/metadata.json"), 'w') as f:
-                f.write(json.dumps({"meta": "data"}))
+            metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
+            metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/scores.jsonl"), 'w') as f:
-                f.write('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
+            scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
+            scores_blob.upload_from_string('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
 
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/scores_sparse.jsonl"), 'w') as f:
-                f.write('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
+            scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
+            scores_sparse_blob.upload_from_string('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
 
             # Searches for journal results from the given job_id assuming the job has completed
             response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
@@ -597,11 +581,8 @@ class TestExpertiseCloudService():
                 {"match_submission": "hijk","submission": "lmno","score": 0.987}
             ]
 
-            # Teardown tmp_dir
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
-    def test_client_isolation(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
+    def test_client_isolation(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         """
         This test ensures that the user_id polling the job and the user_id written to GCP storage are the same
         and aren't affected by parallel processing and sharing of the ExpertiseCloudService instance.
@@ -626,11 +607,6 @@ class TestExpertiseCloudService():
         mock_pipeline_running.update_time.timestamp.return_value = time.time()
         
         mock_pipeline_job.get.return_value = mock_pipeline_running
-        
-        tmp_dir = Path('tests/gcp_bug_test')
-        if os.path.exists(tmp_dir):
-            shutil.rmtree(tmp_dir)
-        os.makedirs(tmp_dir)
         
         try:
             # Create clients for two different users
@@ -706,11 +682,10 @@ class TestExpertiseCloudService():
                 assert job_a.cloud_id is not None, "Job A cloud_id is None"
                 
                 # Check what was stored in GCP for job A
-                request_json_path = os.path.join(tmp_dir, "test-bucket", "jobs", job_a.cloud_id, "request.json")
-                assert os.path.exists(request_json_path), f"File {request_json_path} doesn't exist"
+                request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{job_a.cloud_id}/request.json")
+                assert request_blob.exists(), "Request file should exist in GCS"
                 
-                with open(request_json_path, 'r') as f:
-                    stored_request = json.load(f)
+                stored_request = json.loads(request_blob.download_as_text())
                 
                 # This check will fail if the bug exists!
                 # Due to the shared service instance, it will store User B's ID for User A's job
@@ -720,11 +695,9 @@ class TestExpertiseCloudService():
         finally:
             # Clean up
             pass
-            if os.path.exists(tmp_dir):
-                shutil.rmtree(tmp_dir)
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
-    def test_read_error_json(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
+    def test_read_error_json(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
             # Setup mock PipelineJob
             mock_pipeline_instance = MagicMock()
@@ -762,10 +735,6 @@ class TestExpertiseCloudService():
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context_cloud['test_client']
-
-        tmp_dir = Path('tests/gcp')
-        if not os.path.exists(tmp_dir):
-            os.makedirs(tmp_dir)
 
         # Make a request with no submissions
         # Patch storage.Client to return our local mock client that uses the filesystem
@@ -808,8 +777,8 @@ class TestExpertiseCloudService():
             config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
 
             ## Prewrite the error.json file
-            with open(os.path.join(tmp_dir, f"test-bucket/jobs/{config.cloud_id}/error.json"), 'w') as f:
-                f.write('{"error": "Not Found Error: No papers found for: invitation_ids: [\'CLD_ERR.cc/-/Submission\']"}')
+            error_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/error.json")
+            error_blob.upload_from_string('{"error": "Not Found Error: No papers found for: invitation_ids: [\'CLD_ERR.cc/-/Submission\']"}')
 
             ## Wait for the job to finish
             time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
@@ -818,6 +787,3 @@ class TestExpertiseCloudService():
             assert response['name'] == 'test_run'
             assert response['status'] == 'Error'
             assert response['description'] == "Not Found Error: No papers found for: invitation_ids: ['CLD_ERR.cc/-/Submission']"
-
-            # Teardown tmp_dir
-            shutil.rmtree(tmp_dir, ignore_errors=True)

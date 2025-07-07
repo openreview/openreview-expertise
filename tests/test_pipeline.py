@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import openreview
+from conftest import GCSTestHelper
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -13,6 +14,8 @@ DEFAULT_POST_AREA_CHAIRS = False
 DEFAULT_POST_SENIOR_AREA_CHAIRS = False
 DEFAULT_POST_SUBMISSIONS = True
 DEFAULT_POST_PUBLICATIONS = True
+
+GCS_TEST_BUCKET = GCSTestHelper.GCS_TEST_BUCKET
 
 @pytest.fixture(scope="module", autouse=True)
 def _setup_tmlr(clean_start_journal, client, openreview_client):
@@ -40,18 +43,8 @@ def _setup_pipeline_cc(clean_start_conference, client, openreview_client):
 
 # Test case for the `run_pipeline` function
 @patch("expertise.execute_pipeline.execute_expertise")  # Mock execute_expertise
-@patch("expertise.execute_pipeline.storage.Client")  # Mock GCS Client
 @patch("expertise.execute_pipeline.load_model_artifacts")  # Mock load_model_artifacts
-def test_run_pipeline(mock_load_model_artifacts, mock_gcs_client, mock_execute_expertise, openreview_client):
-    # Mock GCS client and bucket
-    mock_bucket = MagicMock()
-    mock_blob = MagicMock()
-    mock_gcs_client.return_value.bucket.return_value = mock_bucket
-    mock_bucket.blob.return_value = mock_blob
-
-    # Mock blob.upload_from_string to do nothing
-    mock_blob.upload_from_string.return_value = None
-
+def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
     mock_execute_expertise.return_value = None
@@ -78,7 +71,7 @@ def test_run_pipeline(mock_load_model_artifacts, mock_gcs_client, mock_execute_e
         "token": openreview_client.token,
         "baseurl_v1": "http://localhost:3000",
         "baseurl_v2": "http://localhost:3001",
-        "gcs_folder": "gs://test_bucket/test_prefix",
+        "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix",
         "dump_embs": True,
         "dump_archives": True,
     })
@@ -97,7 +90,7 @@ def test_run_pipeline(mock_load_model_artifacts, mock_gcs_client, mock_execute_e
     with open(scores_file, 'w') as f:
         f.write("test_user,note1,0.5\ntest_user,note2,0.5")
     sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
-    with open(scores_file, 'w') as f:
+    with open(sparse_file, 'w') as f:
         f.write("test_user,note1,0.5\ntest_user,note2,0.5")
 
     ## Build embeddings
@@ -110,42 +103,40 @@ def test_run_pipeline(mock_load_model_artifacts, mock_gcs_client, mock_execute_e
     run_pipeline(api_request_str, working_dir)
 
     # Assertions
-    # Check that blobs were created and data was uploaded to GCS
-    mock_gcs_client.assert_called_once()
-    mock_bucket.blob.assert_any_call("test_prefix/job_config.json")
-    mock_blob.upload_from_string.assert_called()  # Ensure upload_from_string was called
 
     # Ensure execute_create_dataset and execute_expertise were called
-    mock_execute_expertise.assert_called_once()
+    # Use the gcs_test_bucket fixture to get actual 
+    bucket = gcs_test_bucket
+    prefix = f"{gcs_jobs_prefix}/test_prefix/"
 
-    mock_blob.upload_from_string.assert_any_call(
-        '{"submission": "test_user", "user": "note1", "score": 0.5}\n{"submission": "test_user", "user": "note2", "score": 0.5}'
-    )
-    mock_blob.upload_from_string.assert_any_call(
-        '{"submission_count": 2, "no_publications_count": 0, "no_publications": [], "no_profile": []}'
-    )
-    mock_blob.upload_from_string.assert_any_call(
-        json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]})
-    )
-    publication_calls = [call for call in mock_blob.upload_from_string.call_args_list if '"content":' in call.args[0]]
-    assert len(publication_calls) == 4
+    # Check for scores.jsonl file
+    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    assert scores_blob.exists()
+    scores_content = scores_blob.download_as_text()
+    assert '{"submission": "test_user", "user": "note1", "score": 0.5}' in scores_content
+    assert '{"submission": "test_user", "user": "note2", "score": 0.5}' in scores_content
 
-    shutil.rmtree(working_dir)  # Clean up
+    # Check for metadata.json file
+    metadata_blob = bucket.blob(f"{prefix}metadata.json")
+    assert metadata_blob.exists()
+    metadata_content = json.loads(metadata_blob.download_as_text())
+    assert metadata_content["submission_count"] == 2
+    assert metadata_content["no_publications_count"] == 0
+
+    # Check for pub2vec.jsonl file
+    pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
+    assert pub2vec_blob.exists()
+    pub2vec_content = pub2vec_blob.download_as_text()
+    assert '{"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}' in pub2vec_content
+
+    # Check archives subdirectory for 4 files
+    archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
+    assert len(archives_blobs) == 4
 
 # Test case for the `run_pipeline` function
 @patch("expertise.execute_pipeline.execute_expertise")  # Mock execute_expertise
-@patch("expertise.execute_pipeline.storage.Client")  # Mock GCS Client
 @patch("expertise.execute_pipeline.load_model_artifacts")  # Mock load_model_artifacts
-def test_run_pipeline_group(mock_load_model_artifacts, mock_gcs_client, mock_execute_expertise, openreview_client):
-    # Mock GCS client and bucket
-    mock_bucket = MagicMock()
-    mock_blob = MagicMock()
-    mock_gcs_client.return_value.bucket.return_value = mock_bucket
-    mock_bucket.blob.return_value = mock_blob
-
-    # Mock blob.upload_from_string to do nothing
-    mock_blob.upload_from_string.return_value = None
-
+def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
     mock_execute_expertise.return_value = None
@@ -172,7 +163,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_gcs_client, mock_exe
         "token": openreview_client.token,
         "baseurl_v1": "http://localhost:3000",
         "baseurl_v2": "http://localhost:3001",
-        "gcs_folder": "gs://test_bucket/test_prefix",
+        "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_grp",
         "dump_embs": True,
         "dump_archives": True,
     })
@@ -191,7 +182,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_gcs_client, mock_exe
     with open(scores_file, 'w') as f:
         f.write("test_user,sub_user,0.5\ntest_user,sub_user,0.5")
     sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
-    with open(scores_file, 'w') as f:
+    with open(sparse_file, 'w') as f:
         f.write("test_user,sub_user,0.5\ntest_user,sub_user,0.5")
 
     ## Build embeddings
@@ -204,43 +195,41 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_gcs_client, mock_exe
     run_pipeline(api_request_str, working_dir)
 
     # Assertions
-    # Check that blobs were created and data was uploaded to GCS
-    mock_gcs_client.assert_called_once()
-    mock_bucket.blob.assert_any_call("test_prefix/job_config.json")
-    mock_blob.upload_from_string.assert_called()  # Ensure upload_from_string was called
+    bucket = gcs_test_bucket
+    prefix = f"{gcs_jobs_prefix}/test_prefix_grp/"
 
     # Ensure execute_create_dataset and execute_expertise were called
     mock_execute_expertise.assert_called_once()
-    print(mock_blob.upload_from_string.call_args_list)
 
-    mock_blob.upload_from_string.assert_any_call(
-        '{"match_member": "test_user", "submission_member": "sub_user", "score": 0.5}\n{"match_member": "test_user", "submission_member": "sub_user", "score": 0.5}'
-    )
-    mock_blob.upload_from_string.assert_any_call(
-        '{"submission_count": 7, "no_publications_count": 0, "no_publications": [], "no_profile": [], "no_profile_submission": []}'
-    )
-    mock_blob.upload_from_string.assert_any_call(
-        json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]})
-    )
-    publication_calls = [call for call in mock_blob.upload_from_string.call_args_list if '"content":' in call.args[0]]
-    assert len(publication_calls) == 4
+    # Check for scores.jsonl file
+    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    assert scores_blob.exists()
+    scores_content = scores_blob.download_as_text()
+    assert '{"submission": "test_user", "user": "sub_user", "score": 0.5}' in scores_content
+
+    # Check for metadata.json file
+    metadata_blob = bucket.blob(f"{prefix}metadata.json")
+    assert metadata_blob.exists()
+    metadata_content = json.loads(metadata_blob.download_as_text())
+    assert metadata_content["submission_count"] == 7
+    assert metadata_content["no_publications_count"] == 0
+
+    # Check for pub2vec.jsonl file
+    pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
+    assert pub2vec_blob.exists()
+    pub2vec_content = pub2vec_blob.download_as_text()
+    assert '{"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}' in pub2vec_content
+
+    # Check archives subdirectory for 4 files
+    archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
+    assert len(archives_blobs) == 4
 
     shutil.rmtree(working_dir)  # Clean up
 
 # Test case for the `run_pipeline` function for paper-paper matching
 @patch("expertise.execute_pipeline.execute_expertise")  # Mock execute_expertise
-@patch("expertise.execute_pipeline.storage.Client")  # Mock GCS Client
 @patch("expertise.execute_pipeline.load_model_artifacts")  # Mock load_model_artifacts
-def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_gcs_client, mock_execute_expertise, openreview_client):
-    # Mock GCS client and bucket
-    mock_bucket = MagicMock()
-    mock_blob = MagicMock()
-    mock_gcs_client.return_value.bucket.return_value = mock_bucket
-    mock_bucket.blob.return_value = mock_blob
-
-    # Mock blob.upload_from_string to do nothing
-    mock_blob.upload_from_string.return_value = None
-
+def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
     mock_execute_expertise.return_value = None
@@ -267,7 +256,7 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_gcs_client, mo
         "token": openreview_client.token,
         "baseurl_v1": "http://localhost:3000",
         "baseurl_v2": "http://localhost:3001",
-        "gcs_folder": "gs://test_bucket/test_prefix",
+        "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_pap",
         "dump_embs": False,
         "dump_archives": False,
     })
@@ -281,7 +270,7 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_gcs_client, mo
     with open(scores_file, 'w') as f:
         f.write("sub_one,sub_two,0.5\nsub_one,sub_two,0.5")
     sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
-    with open(scores_file, 'w') as f:
+    with open(sparse_file, 'w') as f:
         f.write("sub_one,sub_two,0.5\nsub_one,sub_two,0.5")
 
     # Call the function
@@ -290,37 +279,31 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_gcs_client, mo
 
     # Assertions
     # Check that blobs were created and data was uploaded to GCS
-    mock_gcs_client.assert_called_once()
-    mock_bucket.blob.assert_any_call("test_prefix/job_config.json")
-    mock_blob.upload_from_string.assert_called()  # Ensure upload_from_string was called
+    bucket = gcs_test_bucket
+    prefix = f"{gcs_jobs_prefix}/test_prefix_pap/"
 
     # Ensure execute_create_dataset and execute_expertise were called
     mock_execute_expertise.assert_called_once()
-    print(mock_blob.upload_from_string.call_args_list)
 
-    mock_blob.upload_from_string.assert_any_call(
-        '{"match_submission": "sub_one", "submission": "sub_two", "score": 0.5}\n{"match_submission": "sub_one", "submission": "sub_two", "score": 0.5}'
-    )
-    mock_blob.upload_from_string.assert_any_call(
-        '{"submission_count": 2, "no_publications_count": 0, "no_publications": []}'
-    )
+    # Check for scores.jsonl file
+    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    assert scores_blob.exists()
+    scores_content = scores_blob.download_as_text()
+    assert '{"match_submission": "sub_one", "submission": "sub_two", "score": 0.5}' in scores_content
+
+    # Check for metadata.json file
+    metadata_blob = bucket.blob(f"{prefix}metadata.json")
+    assert metadata_blob.exists()
+    metadata_content = json.loads(metadata_blob.download_as_text())
+    assert metadata_content["submission_count"] == 2
+    assert metadata_content["no_publications_count"] == 0
 
     shutil.rmtree(working_dir)  # Clean up
 
     # Test case for the `run_pipeline` function
 @patch("expertise.execute_pipeline.execute_expertise")  # Mock execute_expertise
-@patch("expertise.execute_pipeline.storage.Client")  # Mock GCS Client
 @patch("expertise.execute_pipeline.load_model_artifacts")  # Mock load_model_artifacts
-def test_runtime_errors(mock_load_model_artifacts, mock_gcs_client, mock_execute_expertise, openreview_client):
-    # Mock GCS client and bucket
-    mock_bucket = MagicMock()
-    mock_blob = MagicMock()
-    mock_gcs_client.return_value.bucket.return_value = mock_bucket
-    mock_bucket.blob.return_value = mock_blob
-
-    # Mock blob.upload_from_string to do nothing
-    mock_blob.upload_from_string.return_value = None
-
+def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
     mock_execute_expertise.return_value = None
@@ -353,7 +336,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_gcs_client, mock_execute
         "token": openreview_client.token,
         "baseurl_v1": "http://localhost:3000",
         "baseurl_v2": "http://localhost:3001",
-        "gcs_folder": "gs://test_bucket/test_prefix",
+        "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_err",
         "dump_embs": True,
         "dump_archives": True,
     })
@@ -378,11 +361,13 @@ def test_runtime_errors(mock_load_model_artifacts, mock_gcs_client, mock_execute
 
     # Assertions
     # Check that blobs were created and data was uploaded to GCS
-    mock_gcs_client.assert_called_once()
-    mock_blob.upload_from_string.assert_called()  # Ensure upload_from_string was called
+    bucket = gcs_test_bucket
+    prefix = f"{gcs_jobs_prefix}/test_prefix_err/"
 
-    mock_blob.upload_from_string.assert_any_call(
-        '{"error": "Not Found Error: No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']"}'
-    )
+    # Check for error.json file
+    error_blob = bucket.blob(f"{prefix}error.json")
+    assert error_blob.exists()
+    error_content = json.loads(error_blob.download_as_text())
+    assert error_content["error"] == 'Not Found Error: No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
 
     shutil.rmtree(working_dir)  # Clean up

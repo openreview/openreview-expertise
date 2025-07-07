@@ -336,7 +336,7 @@ class GCSTestHelper:
     GCS_PROJECT = 'sunlit-realm-131518'
     GCS_NUMBER = '997553930042'
     GCS_TEST_BUCKET = 'openreview-expertise'
-    GCS_JOBS_FOLDER = 'jobs-test'
+    GCS_TEST_ROOT = 'jobs-test'
     
     @staticmethod
     def init_test_bucket():
@@ -368,9 +368,9 @@ def gcs_test_bucket():
         raise Exception(f"GCS bucket not available")
     yield bucket
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def gcs_jobs_prefix(gcs_test_bucket):
-    test_prefix = GCSTestHelper.GCS_JOBS_FOLDER
+    test_prefix = GCSTestHelper.GCS_TEST_ROOT
     GCSTestHelper.cleanup_job_files(gcs_test_bucket)
     yield test_prefix
     # Cleanup after test
