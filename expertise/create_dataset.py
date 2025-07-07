@@ -348,6 +348,11 @@ class OpenReviewExpertise(object):
 
         seen_keys = set()
         filtered_papers = []
+
+        print(f"{member} include/exclude")
+        print(self.included_ids_by_user.get(member))
+        print(self.excluded_ids_by_user.get(member))
+
         for n in member_papers:
             paper_title = openreview.tools.get_paperhash('', n['content']['title'])
             if 'inclusion_inv' in self.config:
