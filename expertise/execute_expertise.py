@@ -84,7 +84,7 @@ def execute_expertise(config):
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
-            venue_specific_weights=venue_specific_weights
+            venue_specific_weights=venue_specific_weights,
             percentile_select=config['model_params'].get('percentile_select', None)
         )
         ens_predictor.set_archives_dataset(archives_dataset)
