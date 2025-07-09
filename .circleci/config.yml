@@ -39,8 +39,8 @@ jobs:
           google_project_number: GOOGLE_PROJECT_NUMBER
           service_account_email: SERVICE_ACCOUNT_EMAIL
           use_oidc: true
-          workload_identity_pool_id: WORKLOAD_IDENTITY_POOL_ID
-          workload_identity_pool_provider_id: WORKLOAD_IDENTITY_PROVIDER_ID
+          workload_identity_pool_id: circleci-identity-pool
+          workload_identity_pool_provider_id: circleci-identity-provider
       - run:
           name: "Verify Authentication"
           command: |
