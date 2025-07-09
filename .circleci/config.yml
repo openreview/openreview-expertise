@@ -29,6 +29,11 @@ jobs:
       PYTHON_VERSION: 3.11
     steps:
       - checkout
+      - run:
+          name: Install curl for GCP CLI
+          command: |
+            apt update
+            apt install -y curl
       - gcp-cli/setup:
           google_project_id: GOOGLE_PROJECT_ID
           google_project_number: GOOGLE_PROJECT_NUMBER
