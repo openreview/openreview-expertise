@@ -168,156 +168,154 @@ class TestExpertiseCloudService():
         test_client = openreview_context_cloud['test_client']
 
         # Make a request
-        # Patch storage.Client to return our local mock client that uses the filesystem
-        with patch("google.cloud.storage.Client", new=lambda project=None: LocalMockClient(project=project, root_dir=tmp_dir)):
-            setup_job_mocks()
-            response = test_client.post(
-                '/expertise',
-                data = json.dumps({
-                        "name": "test_run",
-                        "entityA": {
-                            'type': "Group",
-                            'memberOf': "CLD.cc/Area_Chairs",
-                        },
-                        "entityB": { 
-                            'type': "Note",
-                            'invitation': "CLD.cc/-/Submission" 
-                        },
-                        "model": {
-                                "name": "specter+mfr",
-                                'useTitle': False, 
-                                'useAbstract': True, 
-                                'skipSpecter': False,
-                                'scoreComputation': 'avg'
-                        },
-                        "dataset": {
-                            'minimumPubDate': 0
-                        }
+        setup_job_mocks()
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "CLD.cc/Area_Chairs",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "CLD.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
                     }
-                ),
-                content_type='application/json',
-                headers=abc_client.headers
-            )
-            assert response.status_code == 200, f'{response.json}'
-            job_id = response.json['jobId']
-            time.sleep(0.5)
+                }
+            ),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(0.5)
 
-            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
-            assert response['name'] == 'test_run'
-            assert response['status'] != 'Error'
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
 
-            # Let request process
-            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
-            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
-            assert response['status'] == 'Completed', f"Job status: {response['status']}"
+        # Let request process
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-            # Check proper user ID
-            ## Checking live GCS
-            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
-            request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
-            assert request_blob.exists(), "Request file should exist in GCS"
-            request = json.loads(request_blob.download_as_text())
-            assert request['user_id'] == 'CLD.cc/Program_Chairs'
-            
-            setup_job_mocks()
-            response = test_client.post(
-                '/expertise',
-                data = json.dumps({
-                        "name": "test_run",
-                        "entityA": {
-                            'type': "Group",
-                            'memberOf': "CLD.cc/Reviewers",
-                        },
-                        "entityB": { 
-                            'type': "Note",
-                            'invitation': "CLD.cc/-/Submission" 
-                        },
-                        "model": {
-                                "name": "specter+mfr",
-                                'useTitle': False, 
-                                'useAbstract': True, 
-                                'skipSpecter': False,
-                                'scoreComputation': 'avg'
-                        },
-                        "dataset": {
-                            'minimumPubDate': 0
-                        }
+        # Check proper user ID
+        ## Checking live GCS
+        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
+        assert request_blob.exists(), "Request file should exist in GCS"
+        request = json.loads(request_blob.download_as_text())
+        assert request['user_id'] == 'CLD.cc/Program_Chairs'
+        
+        setup_job_mocks()
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "CLD.cc/Reviewers",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "CLD.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
                     }
-                ),
-                content_type='application/json',
-                headers=tmlr_client.headers
-            )
-            assert response.status_code == 200, f'{response.json}'
-            job_id = response.json['jobId']
-            time.sleep(0.5)
+                }
+            ),
+            content_type='application/json',
+            headers=tmlr_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(0.5)
 
-            response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
-            assert response['name'] == 'test_run'
-            assert response['status'] != 'Error'
-            responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={'status': 'Completed'}).json['results']
-            assert not any([r['jobId'] == job_id for r in responses])
+        response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+        responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={'status': 'Completed'}).json['results']
+        assert not any([r['jobId'] == job_id for r in responses])
 
-            # Perform single query after waiting max time
-            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
-            response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
-            assert response['status'] == 'Completed', f"Job status: {response['status']}"
+        # Perform single query after waiting max time
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+        response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-            ## Expect 2*4 calls from the worker thread, 2*2 call from /expertise/status and 0 calls from /expertise/status/all
-            print(mock_pipeline_job.get.call_args_list)
-            assert len(mock_pipeline_job.get.call_args_list) == 12
+        ## Expect 2*4 calls from the worker thread, 2*2 call from /expertise/status and 0 calls from /expertise/status/all
+        print(mock_pipeline_job.get.call_args_list)
+        assert len(mock_pipeline_job.get.call_args_list) == 12
 
-            response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
-            assert response['status'] == 'Completed', f"Job status: {response['status']}"
+        response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-            responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={'status': 'Completed'}).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
-            responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={
-                "entityA.memberOf": "CLD.cc/Reviewers",
-                "entityB.invitation": "CLD.cc/-/Submission"
-            }).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
-            responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={
-                "entityA.memberOf": "CLD.cc/Reviewers",
-                "entityB.invitation": "CLD.cc/-/Submission",
-                'status': 'Completed'
-            }).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
+        responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={'status': 'Completed'}).json['results']
+        assert any([r['jobId'] == job_id for r in responses])
+        responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={
+            "entityA.memberOf": "CLD.cc/Reviewers",
+            "entityB.invitation": "CLD.cc/-/Submission"
+        }).json['results']
+        assert any([r['jobId'] == job_id for r in responses])
+        responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={
+            "entityA.memberOf": "CLD.cc/Reviewers",
+            "entityB.invitation": "CLD.cc/-/Submission",
+            'status': 'Completed'
+        }).json['results']
+        assert any([r['jobId'] == job_id for r in responses])
 
-            job = [r for r in responses if r['jobId'] == job_id][0]
-            assert job['status'] == 'Completed'
-            assert job['name'] == 'test_run'
-            assert job['description'] == 'Job is complete and the computed scores are ready'
+        job = [r for r in responses if r['jobId'] == job_id][0]
+        assert job['status'] == 'Completed'
+        assert job['name'] == 'test_run'
+        assert job['description'] == 'Job is complete and the computed scores are ready'
 
-            # Build mock scores
+        # Build mock scores
 
-            # Fetch the job config
-            ## Convert current mocking to using file system
-            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
-            
-            # Check proper user ID
-            ## Checking and writing to live GCS
-            request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
-            assert request_blob.exists(), "Request file should exist in GCS"
-            request = json.loads(request_blob.download_as_text())
-            assert request['user_id'] == 'TMLR/Editors_In_Chief'
+        # Fetch the job config
+        ## Convert current mocking to using file system
+        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        
+        # Check proper user ID
+        ## Checking and writing to live GCS
+        request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
+        assert request_blob.exists(), "Request file should exist in GCS"
+        request = json.loads(request_blob.download_as_text())
+        assert request['user_id'] == 'TMLR/Editors_In_Chief'
 
-            # Upload test results to GCS
-            metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
-            metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
+        # Upload test results to GCS
+        metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
+        metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-            scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
-            scores_blob.upload_from_string('{"submission": "abcd","user": "user_user1","score": 0.987}\n{"submission": "abcd","user": "user_user2","score": 0.987}')
+        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
+        scores_blob.upload_from_string('{"submission": "abcd","user": "user_user1","score": 0.987}\n{"submission": "abcd","user": "user_user2","score": 0.987}')
 
-            scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
-            scores_sparse_blob.upload_from_string('{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}')
+        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
+        scores_sparse_blob.upload_from_string('{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}')
 
-            # Searches for journal results from the given job_id assuming the job has completed
-            response = test_client.get('/expertise/results', headers=tmlr_client.headers, query_string={'jobId': job_id})
-            assert response.json["metadata"] == {"meta": "data"}
-            assert response.json["results"] == [
-                {"submission": "abcde","user": "user_user1","score": 0.987},
-                {"submission": "abcde","user": "user_user2","score": 0.987}
-            ]
+        # Searches for journal results from the given job_id assuming the job has completed
+        response = test_client.get('/expertise/results', headers=tmlr_client.headers, query_string={'jobId': job_id})
+        assert response.json["metadata"] == {"meta": "data"}
+        assert response.json["results"] == [
+            {"submission": "abcde","user": "user_user1","score": 0.987},
+            {"submission": "abcde","user": "user_user2","score": 0.987}
+        ]
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_group_group_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
@@ -358,97 +356,95 @@ class TestExpertiseCloudService():
         test_client = openreview_context_cloud['test_client']
 
         # Make a request
-        # Patch storage.Client to return our local mock client that uses the filesystem
-        with patch("google.cloud.storage.Client", new=lambda project=None: LocalMockClient(project=project, root_dir=tmp_dir)):
-            setup_job_mocks()
-            response = test_client.post(
-                '/expertise',
-                data = json.dumps({
-                        "name": "test_run",
-                        "entityA": {
-                            'type': "Group",
-                            'memberOf': "CLD.cc/Area_Chairs",
-                        },
-                        "entityB": { 
-                            'type': "Group",
-                            'memberOf': "CLD.cc/Area_Chairs",
-                        },
-                        "model": {
-                                "name": "specter2+scincl",
-                                'useTitle': False, 
-                                'useAbstract': True, 
-                                'skipSpecter': False,
-                                'scoreComputation': 'avg'
-                        },
-                        "dataset": {
-                            'minimumPubDate': 0
-                        }
+        setup_job_mocks()
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "CLD.cc/Area_Chairs",
+                    },
+                    "entityB": { 
+                        'type': "Group",
+                        'memberOf': "CLD.cc/Area_Chairs",
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
                     }
-                ),
-                content_type='application/json',
-                headers=abc_client.headers
-            )
-            assert response.status_code == 200, f'{response.json}'
-            job_id = response.json['jobId']
+                }
+            ),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
 
-            # Let request process
-            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
-            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
-            assert response['status'] == 'Completed', f"Job status: {response['status']}"
+        # Let request process
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-            ## Expect 1*5 calls from the worker thread, 1*1 call from /expertise/status and 0 calls from /expertise/status/all
-            assert len(mock_pipeline_job.get.call_args_list) == 6
+        ## Expect 1*5 calls from the worker thread, 1*1 call from /expertise/status and 0 calls from /expertise/status/all
+        assert len(mock_pipeline_job.get.call_args_list) == 6
 
-            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
-            assert response['status'] == 'Completed', f"Job status: {response['status']}"
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={'status': 'Completed'}).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
-            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
-                "entityA.memberOf": "CLD.cc/Area_Chairs",
-                "entityB.memberOf": "CLD.cc/Area_Chairs"
-            }).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
-            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
-                "entityA.memberOf": "CLD.cc/Area_Chairs",
-                "entityB.memberOf": "CLD.cc/Area_Chairs",
-                'status': 'Completed'
-            }).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
+        responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={'status': 'Completed'}).json['results']
+        assert any([r['jobId'] == job_id for r in responses])
+        responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
+            "entityA.memberOf": "CLD.cc/Area_Chairs",
+            "entityB.memberOf": "CLD.cc/Area_Chairs"
+        }).json['results']
+        assert any([r['jobId'] == job_id for r in responses])
+        responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
+            "entityA.memberOf": "CLD.cc/Area_Chairs",
+            "entityB.memberOf": "CLD.cc/Area_Chairs",
+            'status': 'Completed'
+        }).json['results']
+        assert any([r['jobId'] == job_id for r in responses])
 
-            job = [r for r in responses if r['jobId'] == job_id][0]
-            assert job['status'] == 'Completed'
-            assert job['name'] == 'test_run'
-            assert job['description'] == 'Job is complete and the computed scores are ready'
+        job = [r for r in responses if r['jobId'] == job_id][0]
+        assert job['status'] == 'Completed'
+        assert job['name'] == 'test_run'
+        assert job['description'] == 'Job is complete and the computed scores are ready'
 
-            # Build mock scores
+        # Build mock scores
 
-            # Fetch the job config
-            ## Convert current mocking to using file system
-            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
-            
-            # Check proper user ID
-            request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
-            assert request_blob.exists(), "Request file should exist in GCS"
-            request = json.loads(request_blob.download_as_text())
-            assert request['user_id'] == 'CLD.cc/Program_Chairs'
+        # Fetch the job config
+        ## Convert current mocking to using file system
+        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        
+        # Check proper user ID
+        request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
+        assert request_blob.exists(), "Request file should exist in GCS"
+        request = json.loads(request_blob.download_as_text())
+        assert request['user_id'] == 'CLD.cc/Program_Chairs'
 
-            metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
-            metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
+        metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
+        metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-            scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
-            scores_blob.upload_from_string('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
+        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
+        scores_blob.upload_from_string('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
 
-            scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
-            scores_sparse_blob.upload_from_string('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
+        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
+        scores_sparse_blob.upload_from_string('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
 
-            # Searches for journal results from the given job_id assuming the job has completed
-            response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
-            assert response.json["metadata"] == {"meta": "data"}
-            assert response.json["results"] == [
-                {"match_member": "user_user2","submission_member": "user_user1","score": 0.987},
-                {"match_member": "user_user3","submission_member": "user_user2","score": 0.987}
-            ]
+        # Searches for journal results from the given job_id assuming the job has completed
+        response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
+        assert response.json["metadata"] == {"meta": "data"}
+        assert response.json["results"] == [
+            {"match_member": "user_user2","submission_member": "user_user1","score": 0.987},
+            {"match_member": "user_user3","submission_member": "user_user2","score": 0.987}
+        ]
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_paper_paper_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
@@ -489,97 +485,95 @@ class TestExpertiseCloudService():
         test_client = openreview_context_cloud['test_client']
 
         # Make a request
-        # Patch storage.Client to return our local mock client that uses the filesystem
-        with patch("google.cloud.storage.Client", new=lambda project=None: LocalMockClient(project=project, root_dir=tmp_dir)):
-            setup_job_mocks()
-            response = test_client.post(
-                '/expertise',
-                data = json.dumps({
-                        "name": "test_run",
-                        "entityA": {
-                            'type': "Note",
-                            'invitation': "CLD.cc/-/Submission" 
-                        },
-                        "entityB": { 
-                            'type': "Note",
-                            'invitation': "CLD.cc/-/Submission" 
-                        },
-                        "model": {
-                                "name": "specter2+scincl",
-                                'useTitle': False, 
-                                'useAbstract': True, 
-                                'skipSpecter': False,
-                                'scoreComputation': 'avg'
-                        },
-                        "dataset": {
-                            'minimumPubDate': 0
-                        }
+        setup_job_mocks()
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Note",
+                        'invitation': "CLD.cc/-/Submission" 
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "CLD.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
                     }
-                ),
-                content_type='application/json',
-                headers=abc_client.headers
-            )
-            assert response.status_code == 200, f'{response.json}'
-            job_id = response.json['jobId']
+                }
+            ),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
 
-            # Let request process
-            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
-            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
-            assert response['status'] == 'Completed', f"Job status: {response['status']}"
+        # Let request process
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-            ## Expect 1*5 calls from the worker thread, 1*1 call from /expertise/status and 0 calls from /expertise/status/all
-            assert len(mock_pipeline_job.get.call_args_list) == 6
+        ## Expect 1*5 calls from the worker thread, 1*1 call from /expertise/status and 0 calls from /expertise/status/all
+        assert len(mock_pipeline_job.get.call_args_list) == 6
 
-            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
-            assert response['status'] == 'Completed', f"Job status: {response['status']}"
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={'status': 'Completed'}).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
-            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
-                "entityA.invitation": "CLD.cc/-/Submission",
-                "entityB.invitation": "CLD.cc/-/Submission"
-            }).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
-            responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
-                "entityA.invitation": "CLD.cc/-/Submission",
-                "entityB.invitation": "CLD.cc/-/Submission",
-                'status': 'Completed'
-            }).json['results']
-            assert any([r['jobId'] == job_id for r in responses])
+        responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={'status': 'Completed'}).json['results']
+        assert any([r['jobId'] == job_id for r in responses])
+        responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
+            "entityA.invitation": "CLD.cc/-/Submission",
+            "entityB.invitation": "CLD.cc/-/Submission"
+        }).json['results']
+        assert any([r['jobId'] == job_id for r in responses])
+        responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
+            "entityA.invitation": "CLD.cc/-/Submission",
+            "entityB.invitation": "CLD.cc/-/Submission",
+            'status': 'Completed'
+        }).json['results']
+        assert any([r['jobId'] == job_id for r in responses])
 
-            job = [r for r in responses if r['jobId'] == job_id][0]
-            assert job['status'] == 'Completed'
-            assert job['name'] == 'test_run'
-            assert job['description'] == 'Job is complete and the computed scores are ready'
+        job = [r for r in responses if r['jobId'] == job_id][0]
+        assert job['status'] == 'Completed'
+        assert job['name'] == 'test_run'
+        assert job['description'] == 'Job is complete and the computed scores are ready'
 
-            # Build mock scores
+        # Build mock scores
 
-            # Fetch the job config
-            ## Convert current mocking to using file system
-            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
-            
-            # Check proper user ID
-            request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
-            assert request_blob.exists(), "Request file should exist in GCS"
-            request = json.loads(request_blob.download_as_text())
-            assert request['user_id'] == 'CLD.cc/Program_Chairs'
+        # Fetch the job config
+        ## Convert current mocking to using file system
+        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        
+        # Check proper user ID
+        request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
+        assert request_blob.exists(), "Request file should exist in GCS"
+        request = json.loads(request_blob.download_as_text())
+        assert request['user_id'] == 'CLD.cc/Program_Chairs'
 
-            metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
-            metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
+        metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
+        metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-            scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
-            scores_blob.upload_from_string('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
+        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
+        scores_blob.upload_from_string('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
 
-            scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
-            scores_sparse_blob.upload_from_string('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
+        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
+        scores_sparse_blob.upload_from_string('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
 
-            # Searches for journal results from the given job_id assuming the job has completed
-            response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
-            assert response.json["metadata"] == {"meta": "data"}
-            assert response.json["results"] == [
-                {"match_submission": "abcd","submission": "edfg","score": 0.987},
-                {"match_submission": "hijk","submission": "lmno","score": 0.987}
-            ]
+        # Searches for journal results from the given job_id assuming the job has completed
+        response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
+        assert response.json["metadata"] == {"meta": "data"}
+        assert response.json["results"] == [
+            {"match_submission": "abcd","submission": "edfg","score": 0.987},
+            {"match_submission": "hijk","submission": "lmno","score": 0.987}
+        ]
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_client_isolation(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
@@ -618,79 +612,77 @@ class TestExpertiseCloudService():
             
             test_client = openreview_context_cloud['test_client']
             
-            # Patch storage client to use local filesystem
-            with patch("google.cloud.storage.Client", new=lambda project=None: LocalMockClient(project=project, root_dir=tmp_dir)):
-                # 1. Submit job as User A
-                response = test_client.post(
-                    '/expertise',
-                    data=json.dumps({
-                        "name": "User_A_Job",
-                        "entityA": {'type': "Group", 'memberOf': "CLD.cc/Area_Chairs"},
-                        "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
-                        "model": {"name": "specter+mfr"}
-                    }),
-                    content_type='application/json',
-                    headers=abc_client.headers
-                )
+            # 1. Submit job as User A
+            response = test_client.post(
+                '/expertise',
+                data=json.dumps({
+                    "name": "User_A_Job",
+                    "entityA": {'type': "Group", 'memberOf': "CLD.cc/Area_Chairs"},
+                    "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
+                    "model": {"name": "specter+mfr"}
+                }),
+                content_type='application/json',
+                headers=abc_client.headers
+            )
+            
+            assert response.status_code == 200, f"Failed to submit job: {response.json}"
+            job_id_a = response.json['jobId']
+            
+            # Wait briefly for job to be queued but not finished
+            time.sleep(1)
+            
+            # 2. Submit another job as User B to overwrite the client
+            response = test_client.post(
+                '/expertise',
+                data=json.dumps({
+                    "name": "User_B_Job",
+                    "entityA": {'type': "Group", 'memberOf': "TMLR/Reviewers"},
+                    "entityB": {'type': "Note", 'invitation': "TMLR/-/Submission"},
+                    "model": {"name": "specter+mfr"}
+                }),
+                content_type='application/json',
+                headers=tmlr_client.headers
+            )
+            
+            assert response.status_code == 200, f"Failed to submit job: {response.json}"
+            job_id_b = response.json['jobId']
+            
+            # Get the service from routes to check its current state
+            from expertise.service.routes import get_expertise_service
+            with openreview_context_cloud['app'].app_context():
+                service = get_expertise_service(openreview_context_cloud['config'], openreview_context_cloud['app'].logger)
                 
-                assert response.status_code == 200, f"Failed to submit job: {response.json}"
-                job_id_a = response.json['jobId']
+                # Check current client's user
+                current_user = get_user_id(service.cloud.client)
+                print(f"Current client user: {current_user}")
                 
-                # Wait briefly for job to be queued but not finished
-                time.sleep(1)
-                
-                # 2. Submit another job as User B to overwrite the client
-                response = test_client.post(
-                    '/expertise',
-                    data=json.dumps({
-                        "name": "User_B_Job",
-                        "entityA": {'type': "Group", 'memberOf': "TMLR/Reviewers"},
-                        "entityB": {'type': "Note", 'invitation': "TMLR/-/Submission"},
-                        "model": {"name": "specter+mfr"}
-                    }),
-                    content_type='application/json',
-                    headers=tmlr_client.headers
-                )
-                
-                assert response.status_code == 200, f"Failed to submit job: {response.json}"
-                job_id_b = response.json['jobId']
-                
-                # Get the service from routes to check its current state
-                from expertise.service.routes import get_expertise_service
-                with openreview_context_cloud['app'].app_context():
-                    service = get_expertise_service(openreview_context_cloud['config'], openreview_context_cloud['app'].logger)
-                    
-                    # Check current client's user
-                    current_user = get_user_id(service.cloud.client)
-                    print(f"Current client user: {current_user}")
-                    
-                    # This should match User B (the last user to submit)
-                    assert current_user == "TMLR/Editors_In_Chief", f"Expected client for TMLR/Editors_In_Chief but got {current_user}"
-                
-                # Wait for both jobs to be processed
-                time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] * 2)
-                
-                # Get User A's job from Redis
-                redis = RedisDatabase(
-                    host=openreview_context_cloud['config']['REDIS_ADDR'],
-                    port=openreview_context_cloud['config']['REDIS_PORT'],
-                    db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-                    sync_on_disk=False
-                )
-                
-                job_a = redis.load_job(job_id_a, "CLD.cc/Program_Chairs")
-                assert job_a.cloud_id is not None, "Job A cloud_id is None"
-                
-                # Check what was stored in GCP for job A
-                request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{job_a.cloud_id}/request.json")
-                assert request_blob.exists(), "Request file should exist in GCS"
-                
-                stored_request = json.loads(request_blob.download_as_text())
-                
-                # This check will fail if the bug exists!
-                # Due to the shared service instance, it will store User B's ID for User A's job
-                assert stored_request.get('user_id') == "CLD.cc/Program_Chairs", \
-                    f"Bug detected! Expected 'CLD.cc/Program_Chairs' but got '{stored_request.get('user_id')}'"
+                # This should match User B (the last user to submit)
+                assert current_user == "TMLR/Editors_In_Chief", f"Expected client for TMLR/Editors_In_Chief but got {current_user}"
+            
+            # Wait for both jobs to be processed
+            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] * 2)
+            
+            # Get User A's job from Redis
+            redis = RedisDatabase(
+                host=openreview_context_cloud['config']['REDIS_ADDR'],
+                port=openreview_context_cloud['config']['REDIS_PORT'],
+                db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
+                sync_on_disk=False
+            )
+            
+            job_a = redis.load_job(job_id_a, "CLD.cc/Program_Chairs")
+            assert job_a.cloud_id is not None, "Job A cloud_id is None"
+            
+            # Check what was stored in GCP for job A
+            request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{job_a.cloud_id}/request.json")
+            assert request_blob.exists(), "Request file should exist in GCS"
+            
+            stored_request = json.loads(request_blob.download_as_text())
+            
+            # This check will fail if the bug exists!
+            # Due to the shared service instance, it will store User B's ID for User A's job
+            assert stored_request.get('user_id') == "CLD.cc/Program_Chairs", \
+                f"Bug detected! Expected 'CLD.cc/Program_Chairs' but got '{stored_request.get('user_id')}'"
                 
         finally:
             # Clean up
@@ -737,53 +729,51 @@ class TestExpertiseCloudService():
         test_client = openreview_context_cloud['test_client']
 
         # Make a request with no submissions
-        # Patch storage.Client to return our local mock client that uses the filesystem
-        with patch("google.cloud.storage.Client", new=lambda project=None: LocalMockClient(project=project, root_dir=tmp_dir)):
-            setup_job_mocks()
-            response = test_client.post(
-                '/expertise',
-                data = json.dumps({
-                        "name": "test_run",
-                        "entityA": {
-                            'type': "Group",
-                            'memberOf': "CLD.cc/Area_Chairs",
-                        },
-                        "entityB": { 
-                            'type': "Note",
-                            'invitation': "CLD_ERR.cc/-/Submission" 
-                        },
-                        "model": {
-                                "name": "specter+mfr",
-                                'useTitle': False, 
-                                'useAbstract': True, 
-                                'skipSpecter': False,
-                                'scoreComputation': 'avg'
-                        },
-                        "dataset": {
-                            'minimumPubDate': 0
-                        }
+        setup_job_mocks()
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "CLD.cc/Area_Chairs",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "CLD_ERR.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
                     }
-                ),
-                content_type='application/json',
-                headers=abc_client.headers
-            )
-            assert response.status_code == 200, f'{response.json}'
-            job_id = response.json['jobId']
+                }
+            ),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
 
-            # Fetch the job config
-            ## Wait for config to have a cloud_id
-            while redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME']).cloud_id is None:
-                time.sleep(0.25)
-            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        # Fetch the job config
+        ## Wait for config to have a cloud_id
+        while redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME']).cloud_id is None:
+            time.sleep(0.25)
+        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
 
-            ## Prewrite the error.json file
-            error_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/error.json")
-            error_blob.upload_from_string('{"error": "Not Found Error: No papers found for: invitation_ids: [\'CLD_ERR.cc/-/Submission\']"}')
+        ## Prewrite the error.json file
+        error_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/error.json")
+        error_blob.upload_from_string('{"error": "Not Found Error: No papers found for: invitation_ids: [\'CLD_ERR.cc/-/Submission\']"}')
 
-            ## Wait for the job to finish
-            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+        ## Wait for the job to finish
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
 
-            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
-            assert response['name'] == 'test_run'
-            assert response['status'] == 'Error'
-            assert response['description'] == "Not Found Error: No papers found for: invitation_ids: ['CLD_ERR.cc/-/Submission']"
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] == 'Error'
+        assert response['description'] == "Not Found Error: No papers found for: invitation_ids: ['CLD_ERR.cc/-/Submission']"
