@@ -27,6 +27,7 @@ jobs:
           TZ: "Etc/UTC"
     environment:
       PYTHON_VERSION: 3.11
+      GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
     steps:
       - checkout
       - run:
