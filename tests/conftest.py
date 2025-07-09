@@ -345,20 +345,8 @@ class GCSTestHelper:
         
         # Test bucket existence and permissions
         if bucket.exists():
-            GCSTestHelper.cleanup_job_files(bucket)
             return bucket
         return None
-    
-    @staticmethod
-    def cleanup_job_files(bucket):
-        """Clean up job files from the bucket"""
-        if bucket is None:
-            return
-        
-        # Handle both real GCS buckets and mock buckets
-        blobs = list(bucket.list_blobs(prefix=f"{GCSTestHelper.GCS_JOBS_FOLDER}/"))
-        for blob in blobs:
-            blob.delete()
 
 @pytest.fixture(scope="session")
 def gcs_test_bucket():
@@ -370,11 +358,8 @@ def gcs_test_bucket():
 
 @pytest.fixture(scope="session")
 def gcs_jobs_prefix(gcs_test_bucket):
-    test_prefix = GCSTestHelper.GCS_TEST_ROOT
-    GCSTestHelper.cleanup_job_files(gcs_test_bucket)
+    test_prefix = f"{GCSTestHelper.GCS_TEST_ROOT}/{int(time.time())}"
     yield test_prefix
-    # Cleanup after test
-    GCSTestHelper.cleanup_job_files(gcs_test_bucket)
 
 @pytest.fixture(scope="class")
 def helpers():

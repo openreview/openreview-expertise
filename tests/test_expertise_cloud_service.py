@@ -18,7 +18,8 @@ from conftest import GCSTestHelper
 GCS_TEST_BUCKET = GCSTestHelper.GCS_TEST_BUCKET
 GCS_PROJECT = GCSTestHelper.GCS_PROJECT
 GCS_PROJECT_NUMBER = GCSTestHelper.GCS_NUMBER
-GCS_JOBS_FOLDER = GCSTestHelper.GCS_JOBS_FOLDER
+GCS_JOBS_FOLDER = GCSTestHelper.GCS_TEST_ROOT
+LATENCY_OFFSET = 3
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -70,7 +71,7 @@ class TestExpertiseCloudService():
     job_id = None
 
     @pytest.fixture(scope='class')
-    def openreview_context_cloud(self):
+    def openreview_context_cloud(self, gcs_jobs_prefix):
         """
         A pytest fixture for setting up a clean expertise-api test instance:
         `scope` argument is set to 'function', so each function will get a clean test instance.
@@ -104,7 +105,7 @@ class TestExpertiseCloudService():
             "GCP_PIPELINE_REPO":'test-repo',
             "GCP_PIPELINE_TAG":'dev',
             "GCP_BUCKET_NAME" : GCS_TEST_BUCKET,
-            "GCP_JOBS_FOLDER" : GCS_JOBS_FOLDER,
+            "GCP_JOBS_FOLDER" : gcs_jobs_prefix,
             "GCP_SERVICE_LABEL":{'dev': 'expertise'},
             "POLL_INTERVAL": 1,
             "POLL_MAX_ATTEMPTS": 5,
@@ -198,14 +199,14 @@ class TestExpertiseCloudService():
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
-        time.sleep(0.5)
+        time.sleep(LATENCY_OFFSET)
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Let request process
-        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
@@ -247,7 +248,7 @@ class TestExpertiseCloudService():
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
-        time.sleep(0.5)
+        time.sleep(LATENCY_OFFSET)
 
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
@@ -256,7 +257,7 @@ class TestExpertiseCloudService():
         assert not any([r['jobId'] == job_id for r in responses])
 
         # Perform single query after waiting max time
-        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
@@ -388,7 +389,7 @@ class TestExpertiseCloudService():
         job_id = response.json['jobId']
 
         # Let request process
-        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
@@ -517,7 +518,7 @@ class TestExpertiseCloudService():
         job_id = response.json['jobId']
 
         # Let request process
-        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
@@ -660,7 +661,7 @@ class TestExpertiseCloudService():
                 assert current_user == "TMLR/Editors_In_Chief", f"Expected client for TMLR/Editors_In_Chief but got {current_user}"
             
             # Wait for both jobs to be processed
-            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] * 2)
+            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] * 2 + LATENCY_OFFSET)
             
             # Get User A's job from Redis
             redis = RedisDatabase(
@@ -771,7 +772,7 @@ class TestExpertiseCloudService():
         error_blob.upload_from_string('{"error": "Not Found Error: No papers found for: invitation_ids: [\'CLD_ERR.cc/-/Submission\']"}')
 
         ## Wait for the job to finish
-        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'])
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
