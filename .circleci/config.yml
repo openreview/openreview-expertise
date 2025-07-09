@@ -8,6 +8,9 @@ parameters:
     type: string
     default: "main"
 
+orbs:
+  gcloud-cli: gcp-cli/gcloud-cli@2.0.0
+
 jobs:
   build:
     # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
@@ -27,6 +30,15 @@ jobs:
       PYTHON_VERSION: 3.11
     steps:
       - checkout
+      - gcloud-cli/install
+      - gcloud-cli/authenticate-with-workload-identity:
+          workload_identity_provider: $WORKLOAD_IDENTITY_PROVIDER
+          service_account_email: $SERVICE_ACCOUNT_EMAIL
+      - run:
+          name: "Verify Authentication"
+          command: |
+            gcloud auth list
+            gcloud projects list
       - run:
           name: Setup Miniconda
           command: |
