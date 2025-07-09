@@ -30,12 +30,12 @@ jobs:
     steps:
       - checkout
       - gcp-cli/setup:
-          google_project_id: $GOOGLE_PROJECT_ID
-          google_project_number: $GOOGLE_PROJECT_NUMBER
-          service_account_email: $SERVICE_ACCOUNT_EMAIL
+          google_project_id: GOOGLE_PROJECT_ID
+          google_project_number: GOOGLE_PROJECT_NUMBER
+          service_account_email: SERVICE_ACCOUNT_EMAIL
           use_oidc: true
-          workload_identity_pool_id: $WORKLOAD_IDENTITY_POOL_ID
-          workload_identity_pool_provider_id: $WORKLOAD_IDENTITY_PROVIDER_ID
+          workload_identity_pool_id: WORKLOAD_IDENTITY_POOL_ID
+          workload_identity_pool_provider_id: WORKLOAD_IDENTITY_PROVIDER_ID
       - run:
           name: "Verify Authentication"
           command: |
