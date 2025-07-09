@@ -9,11 +9,10 @@ parameters:
     default: "main"
 
 orbs:
-  gcloud-cli: gcp-cli/gcloud-cli@2.0.0
+  gcp-cli: circleci/gcp-cli@3.3.1
 
 jobs:
   build:
-    # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     resource_class: large
     working_directory: ~/openreview-expertise
     docker:
@@ -30,10 +29,13 @@ jobs:
       PYTHON_VERSION: 3.11
     steps:
       - checkout
-      - gcloud-cli/install
-      - gcloud-cli/authenticate-with-workload-identity:
-          workload_identity_provider: $WORKLOAD_IDENTITY_PROVIDER
+      - gcp-cli/setup:
+          google_project_id: $GOOGLE_PROJECT_ID
+          google_project_number: $GOOGLE_PROJECT_NUMBER
           service_account_email: $SERVICE_ACCOUNT_EMAIL
+          use_oidc: true
+          workload_identity_pool_id: $WORKLOAD_IDENTITY_POOL_ID
+          workload_identity_pool_provider_id: $WORKLOAD_IDENTITY_PROVIDER_ID
       - run:
           name: "Verify Authentication"
           command: |
