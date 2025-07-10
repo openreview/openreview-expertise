@@ -6,7 +6,9 @@ from kfp.dsl import (
     container_component,
     InputPath,
     OutputPath,
-    ContainerSpec
+    ContainerSpec,
+    If,
+    Else
 )
 from kfp.registry import RegistryClient
 import argparse
@@ -84,6 +86,20 @@ if __name__ == '__main__':
         with open(output_file, 'w') as f:
             f.write(data)
 
+    @component(base_image='python:3.9-slim')
+    def determine_job_size_op(job_config: str) -> str:
+        """Determines job size based on paper count"""
+        import json
+        config = json.loads(job_config)
+
+        paper_count = len(config.get('notes_count', 0))  # Adjust based on your actual config
+
+        ## TODO: Maybe make a file to store this configuration?
+        ## Same with resource specifications
+        if paper_count < 1000:
+            return "small"
+        else:
+            return "large"
 
     @component(
         base_image=f"{args.region}-docker.pkg.dev/{args.project}/{args.repo}/{args.image}:{args.tag}"
@@ -121,27 +137,21 @@ if __name__ == '__main__':
     def expertise_pipeline(
         job_config: str
     ):
-        import json
-        
-        # Parse job size
-        config = json.loads(job_config)
-        paper_count = len(config.get('notes_count', 0))
-        
         # Write the raw JSON string to a file
         write_config_task = write_string_to_file_op(
             data=job_config
         ).set_display_name("Write Job Config to File")
 
+        job_size = determine_job_size_op(job_config=job_config)
+
         # Conditional execution based on job size
-        ## TODO: Maybe make a file to store this configuration?
-        ## Same with resource specifications
-        if paper_count < 1000:
+        with If(job_size.output == "small"):
             run_small = small_expertise_job_from_file_input(
                 project=args.project,
                 location=args.kfp_region,
                 job_config_file=write_config_task.outputs['output_file']
             )
-        else:
+        with Else():  # large
             run_large = large_expertise_job_from_file_input(
                 project=args.project,
                 location=args.kfp_region,
