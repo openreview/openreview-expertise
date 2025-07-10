@@ -6,7 +6,9 @@ from kfp.dsl import (
     container_component,
     InputPath,
     OutputPath,
-    ContainerSpec
+    ContainerSpec,
+    If,
+    Else
 )
 from kfp.registry import RegistryClient
 import argparse
@@ -84,6 +86,21 @@ if __name__ == '__main__':
         with open(output_file, 'w') as f:
             f.write(data)
 
+    @component(base_image='python:3.9-slim')
+    def determine_job_size_op(job_config: str) -> str:
+        """Determines job size based on paper count"""
+        import json
+        config = json.loads(job_config)
+
+        paper_count = len(config.get('notes_count', 0))  # Adjust based on your actual config
+
+        ## TODO: Maybe make a file to store this configuration?
+        ## Same with resource specifications
+        if paper_count < 1000:
+            return "small"
+        else:
+            return "large"
+
     @component(
         base_image=f"{args.region}-docker.pkg.dev/{args.project}/{args.repo}/{args.image}:{args.tag}"
     )
@@ -93,9 +110,19 @@ if __name__ == '__main__':
         from expertise.execute_pipeline import run_pipeline
         run_pipeline(job_config_file)
 
-    custom_expertise_job_from_file_input = create_custom_training_job_from_component(
+    small_expertise_job_from_file_input = create_custom_training_job_from_component(
         execute_expertise_pipeline_op,
-        display_name="expertise-job",
+        display_name="expertise-job-small",
+        machine_type="n1-standard-16",
+        accelerator_type="NVIDIA_TESLA_T4",
+        accelerator_count=1,
+        boot_disk_type="pd-ssd",
+        boot_disk_size_gb=200,
+    )
+
+    large_expertise_job_from_file_input = create_custom_training_job_from_component(
+        execute_expertise_pipeline_op,
+        display_name="expertise-job-large",
         machine_type="n1-highmem-64",
         accelerator_type="NVIDIA_TESLA_T4",
         accelerator_count=4,
@@ -115,12 +142,21 @@ if __name__ == '__main__':
             data=job_config
         ).set_display_name("Write Job Config to File")
 
-        # Pass the path to this file to the custom job
-        run_expertise_task = custom_expertise_job_from_file_input(
-            project=args.project,
-            location=args.kfp_region,
-            job_config_file=write_config_task.outputs['output_file'] # Pass the output file path
-        ).set_display_name("Running Expertise Pipeline")
+        job_size = determine_job_size_op(job_config=job_config)
+
+        # Conditional execution based on job size
+        with If(job_size.output == "small"):
+            run_small = small_expertise_job_from_file_input(
+                project=args.project,
+                location=args.kfp_region,
+                job_config_file=write_config_task.outputs['output_file']
+            )
+        with Else():  # large
+            run_large = large_expertise_job_from_file_input(
+                project=args.project,
+                location=args.kfp_region,
+                job_config_file=write_config_task.outputs['output_file']
+          )
 
     compiler.Compiler().compile(
         pipeline_func=expertise_pipeline,
