@@ -20,6 +20,7 @@ GCS_PROJECT = GCSTestHelper.GCS_PROJECT
 GCS_PROJECT_NUMBER = GCSTestHelper.GCS_NUMBER
 GCS_JOBS_FOLDER = GCSTestHelper.GCS_TEST_ROOT
 LATENCY_OFFSET = 3
+NUM_RETRIES = 3
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -762,17 +763,29 @@ class TestExpertiseCloudService():
         job_id = response.json['jobId']
 
         # Fetch the job config
-        ## Wait for config to have a cloud_id
-        while redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME']).cloud_id is None:
-            time.sleep(0.25)
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
-
-        ## Prewrite the error.json file
-        error_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/error.json")
-        error_blob.upload_from_string('{"error": "Not Found Error: No papers found for: invitation_ids: [\'CLD_ERR.cc/-/Submission\']"}')
-
-        ## Wait for the job to finish
-        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
+        
+        # Monitor for cloud ID changes and write error blob to the active cloud ID
+        ## Simulate retry behavior - job should fail with same error
+        error_content = '{"error": "Not Found Error: No papers found for: invitation_ids: [\'CLD_ERR.cc/-/Submission\']"}'
+        written_cloud_ids = set()
+        
+        # Write error blob initially and monitor for changes
+        start_time = time.time()
+        timeout = openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET
+        timeout *= NUM_RETRIES
+        
+        while time.time() - start_time < timeout:
+            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+            current_cloud_id = config.cloud_id
+            
+            # If we see a new cloud ID (due to retry), write the error blob to it
+            if current_cloud_id and current_cloud_id not in written_cloud_ids:
+                error_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{current_cloud_id}/error.json")
+                error_blob.upload_from_string(error_content)
+                written_cloud_ids.add(current_cloud_id)
+                print(f"Wrote error.json to cloud ID: {current_cloud_id}")
+            
+            time.sleep(0.5)
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
