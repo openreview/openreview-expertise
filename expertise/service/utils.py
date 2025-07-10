@@ -500,6 +500,7 @@ class JobConfig(object):
             'useAbstract',
             'scoreComputation',
             'skipSpecter',
+            'useCuda',
             'percentileSelect'
         ]
         config.model = starting_config.get('model', None)

@@ -1,5 +1,7 @@
 FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
 
+ARG OPENREVIEW_PY_VERSION=latest
+
 WORKDIR /app
 
 ENV PYTHON_VERSION=3.11 \
