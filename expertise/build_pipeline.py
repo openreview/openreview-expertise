@@ -1,9 +1,18 @@
-# pip install kfp
-from kfp import dsl
-from kfp.v2 import compiler
-from kfp.v2.dsl import pipeline
+# pip install kfp google-cloud-pipeline-components
+from kfp import compiler
+from kfp.dsl import (
+    pipeline,
+    component,
+    container_component,
+    InputPath,
+    OutputPath,
+    ContainerSpec
+)
 from kfp.registry import RegistryClient
 import argparse
+from google_cloud_pipeline_components.v1.custom_job import (
+    create_custom_training_job_from_component
+)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Builds and Uploads a Kubeflow Pipeline for the Expertise Model")
@@ -56,34 +65,62 @@ if __name__ == '__main__':
         default='latest',
         help="Tag of the Docker Image"
     )
+    parser.add_argument(
+        "--kfp_description",
+        type=str,
+        required=False,
+        default="Latest Kubeflow Pipeline for OpenReview Expertise",
+        help="Description of the latest Kubeflow Pipeline"
+    )
     args = parser.parse_args()
 
-    @dsl.container_component
-    def execute_expertise_pipeline_op(job_config: str):
-        return dsl.ContainerSpec(
-            image=f'{args.region}-docker.pkg.dev/{args.project}/{args.repo}/{args.image}:{args.tag}',
-            command=['python', '-m', 'expertise.execute_pipeline'],
-            args=[job_config]
-        )
+    # New component to write a string (our JSON config) to a file
+    @component(base_image='python:3.9-slim')
+    def write_string_to_file_op(
+        data: str,
+        output_file: OutputPath(str)
+    ):
+        """Writes string data to a file."""
+        with open(output_file, 'w') as f:
+            f.write(data)
+
+    @component(
+        base_image=f"{args.region}-docker.pkg.dev/{args.project}/{args.repo}/{args.image}:{args.tag}"
+    )
+    def execute_expertise_pipeline_op(
+        job_config_file: str
+    ) -> None:
+        from expertise.execute_pipeline import run_pipeline
+        run_pipeline(job_config_file)
+
+    custom_expertise_job_from_file_input = create_custom_training_job_from_component(
+        execute_expertise_pipeline_op,
+        display_name="expertise-job",
+        machine_type="n1-highmem-64",
+        accelerator_type="NVIDIA_TESLA_T4",
+        accelerator_count=4,
+        boot_disk_type="pd-ssd",
+        boot_disk_size_gb=200,
+    )
 
     @pipeline(
         name=args.kfp_name,
-        description='Processes request for user-paper expertise scores'
+        description='Processes request for user-paper expertise scores using file-based config'
     )
-    def expertise_pipeline(job_config: str):
-        import os
-        # Setting environment variables within the function
-        os.environ["AIP_STORAGE_URI"] = "gs://openreview-expertise/expertise-utils/"
-        os.environ["SPECTER_DIR"] = "/app/expertise-utils/specter/"
-        os.environ["MFR_VOCAB_DIR"] = "/app/expertise-utils/multifacet_recommender/feature_vocab_file"
-        os.environ["MFR_CHECKPOINT_DIR"] = "/app/expertise-utils/multifacet_recommender/mfr_model_checkpoint/"
-        op = (execute_expertise_pipeline_op(job_config=job_config)
-        .set_cpu_limit('4')
-        .set_memory_limit('32G')
-        .add_node_selector_constraint('NVIDIA_TESLA_T4')
-        .set_accelerator_limit('1')
-        )
+    def expertise_pipeline(
+        job_config: str
+    ):
+        # Write the raw JSON string to a file
+        write_config_task = write_string_to_file_op(
+            data=job_config
+        ).set_display_name("Write Job Config to File")
 
+        # Pass the path to this file to the custom job
+        run_expertise_task = custom_expertise_job_from_file_input(
+            project=args.project,
+            location=args.kfp_region,
+            job_config_file=write_config_task.outputs['output_file'] # Pass the output file path
+        ).set_display_name("Running Expertise Pipeline")
 
     compiler.Compiler().compile(
         pipeline_func=expertise_pipeline,
@@ -91,15 +128,25 @@ if __name__ == '__main__':
     )
 
     client = RegistryClient(host=f"https://{args.kfp_region}-kfp.pkg.dev/{args.project}/{args.kfp_repo}")
-    client.delete_tag(
-        args.kfp_name,
-        'latest'
-    )
 
-    tags = [args.tag]
-    if 'latest' not in tags:
-        tags.append('latest')
+    try:
+        client.delete_tag(
+            package_name=args.kfp_name,
+            tag='latest'
+        )
+        print(f"Successfully deleted tag 'latest' for pipeline '{args.kfp_name}'.")
+    except Exception as e:
+        print(f"Could not delete tag 'latest' for pipeline '{args.kfp_name}' (it might not exist): {e}")
+
+    upload_tags = [args.tag]
+    if args.tag != 'latest':
+        upload_tags.append('latest')
+
+    print(f"Uploading pipeline '{args.kfp_name}' with tags: {upload_tags}")
+
     templateName, versionName = client.upload_pipeline(
-        tags=tags,
-        file_name="expertise_pipeline.yaml"
+        file_name="expertise_pipeline.yaml",
+        tags=upload_tags,
+        extra_headers={"description": args.kfp_description}
     )
+    print(f"Pipeline uploaded: templateName='{templateName}', versionName='{versionName}'")

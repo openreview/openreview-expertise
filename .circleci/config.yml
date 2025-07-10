@@ -8,11 +8,13 @@ parameters:
     type: string
     default: "main"
 
+orbs:
+  gcp-cli: circleci/gcp-cli@3.3.1
+
 jobs:
   build:
-    # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     resource_class: large
-    parallelism: 1
+    parallelism: 10
     working_directory: ~/openreview-expertise
     docker:
       - image: ubuntu:22.04
@@ -26,8 +28,26 @@ jobs:
           TZ: "Etc/UTC"
     environment:
       PYTHON_VERSION: 3.11
+      GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
     steps:
       - checkout
+      - run:
+          name: Install curl for GCP CLI
+          command: |
+            apt update
+            apt install -y curl
+      - gcp-cli/setup:
+          google_project_id: GOOGLE_PROJECT_ID
+          google_project_number: GOOGLE_PROJECT_NUMBER
+          service_account_email: SERVICE_ACCOUNT_EMAIL
+          use_oidc: true
+          workload_identity_pool_id: WORKLOAD_IDENTITY_POOL_ID
+          workload_identity_pool_provider_id: WORKLOAD_IDENTITY_POOL_PROVIDER_ID
+      - run:
+          name: "Verify Authentication"
+          command: |
+            gcloud auth list
+            gcloud projects list
       - run:
           name: Setup Miniconda
           command: |
@@ -48,7 +68,7 @@ jobs:
           command: |
             cd ~/
             curl -Lk https://raw.githubusercontent.com/tj/n/master/bin/n -o n
-            sudo bash n 18.15.0
+            sudo bash n 22.14.0
             hash -r
             sudo npm install -g n
       - run:
@@ -64,26 +84,28 @@ jobs:
             python --version
             mkdir ~/expertise-utils
             cd ~/expertise-utils
-            conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia
+            conda install "pytorch>=2.3" pytorch-cuda=12.4 -c pytorch -c nvidia
             conda install -y filelock
-            python -m pip install numpy==1.26.4 --force-reinstall
             wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
             tar -xzvf mfr.tar.gz
             mv ./multifacet_recommender_data ./multifacet_recommender
             cd ~/openreview-expertise
             python -m pip install -e .
             conda install -y intel-openmp==2019.4
-            conda install -y faiss-cpu -c pytorch
+            conda install -y -c conda-forge faiss-cpu=1.7.4 "pytorch>=2.3"
             python -m pip install -I protobuf==3.20.1
       - run:
           name: Initialize replica set
           command: |
-            sudo apt-get install gnupg curl
+            # Source the utility functions  
+            source ~/openreview-expertise/.circleci/ci-utils.sh
+
+            retry sudo apt-get install gnupg curl
             curl -fsSL https://pgp.mongodb.com/server-6.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor
             echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
-            sudo apt-get update
-            sudo apt-get upgrade -y
-            sudo apt-get install -y mongodb-org=6.0.7
+            retry sudo apt-get update
+            retry sudo apt-get upgrade -y
+            retry sudo apt-get install -y mongodb-org=6.0.7
             mongosh mongodb://localhost:27017 --eval "rs.initiate()"
       - run:
           name: Clone OpenReview API V1 branch << pipeline.parameters.openreview-api-v1-branch >>
@@ -116,7 +138,7 @@ jobs:
             mkdir ~/openreview-py/coverage
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            pip install --force-reinstall -e ~/openreview-py
+            pip install -e ~/openreview-py
       - run:
           name: Start API V1
           command: |
@@ -143,7 +165,7 @@ jobs:
           name: Wait for API V2 to start
           shell: /bin/sh
           command: |
-            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3001
+            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 30 http://localhost:3001
             :
       - run:
           name: Run tests
@@ -151,10 +173,10 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-expertise
-            TEST_FILES=$(circleci tests glob "tests/test_*.py" | circleci tests split --split-by=timings)
+            TEST_FILES=$(circleci tests glob "tests/test_*.py")
             mkdir reports
             mkdir reports/pytest
-            python -m pytest -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise $TEST_FILES
+            echo "$TEST_FILES" | circleci tests run --command="xargs python -m pytest -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise" --verbose --split-by=timings
       - run:
           name: Copy API logs to artifacts
           when: on_fail

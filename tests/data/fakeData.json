@@ -61,6 +61,24 @@
           "abstract": { "value": "Thermal ablation is a promising minimally invasive intervention to treat liver tumors. It requires a meticulous planning phase where the electrode trajectory from the skin surface to the tumor inside the liver as well as the ablation protocol are defined to reach a complete tumor ablation while considering multiple clinical constraints such as avoiding too much damage to healthy tissue. The planning is usually done manually based on 2D views of pre-operative CT images and can be extremely challenging for large or irregularly shaped tumors. Conventional optimization methods have been proposed to automate this complex task, but they suffer from high computation time.  To alleviate this drawback, we propose to leverage a deep reinforcement learning (DRL) approach to find the optimal electrode trajectory that satisfies all the clinical constraints and does not require any labels in training. Here, we define a custom environment as the 3D mask with tumor, surrounding organs, skin labels along with an electrode line and ablation zone. An agent, represented by a neural network, interacts with the custom environment by displacing the electrode and therefore can learn an optimal policy. The reward assignment is done based on the clinical constraints. To explore discrete and continuous action-based approaches with double deep Q networks and proximal policy optimization (PPO), respectively. We perform an evaluation on the publicly available liver tumor segmentation (LITs) challenge dataset. We obtain solutions that satisfy all clinical constraints comparable to the conventional method. The DRL method does not need any post-processing steps, allowing a mean inference time of 13.3 seconds per subject compared to the conventional optimization method's mean time of 135 seconds. Moreover, the best DRL method (PPO) yields a valid solution irrespective of the tumor location within the liver that demonstrates its robustness."}
         }
       }
+    ],
+    "PIPELINE.cc/-/Submission": [
+      {
+        "id": "KHnr1r7Hp",
+        "cdate": 1583404916,
+        "content": {
+          "title": "Pipeline: Repair Right Metatarsal, Percutaneous",
+          "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
+        }
+      },
+      {
+        "id": "YQtWeE8Pp",
+        "cdate": 1585679551,
+        "content": {
+          "title": "Pipeline: Bypass L Com Iliac Art to B Com Ilia, Perc",
+          "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
+        }
+      }
     ]
   },
   "groups": {
@@ -71,6 +89,15 @@
         "~Zonia_Willms1",
         "~Royal_Toy1",
         "~C.V._Lastname1"
+      ]
+    },
+    "PIPELINE.cc/Reviewers": {
+      "id": "PIPELINE.cc/Reviewers",
+      "members": [
+        "~Harold_Pipeline1",
+        "~Zonia_Pipeline1",
+        "~Royal_Pipeline1",
+        "~C.V._Pipeline1"
       ]
     },
     "HIJ.cc": {
@@ -346,6 +373,142 @@
         "content": {
           "title": "Dilation of R Colic Art with 4 Drug-elut, Perc Approach",
           "abstract": "In hac habitasse platea dictumst. Etiam faucibus cursus urna. Ut tellus.\n\nNulla ut erat id mauris vulputate elementum. Nullam varius. Nulla facilisi.\n\nCras non velit nec nisi vulputate nonummy. Maecenas tincidunt lacus at velit. Vivamus vel nulla eget eros elementum pellentesque."
+        }
+      }
+    ]
+  }, {
+    "id": "~Harold_Pipeline1",
+    "content": {
+      "preferredEmail": "strevino_pipeline@ox.ac.uk",
+      "emails": [
+        "strevino_pipeline@ox.ac.uk"
+      ]
+    },
+    "submissions": [
+      {
+        "id": "KH0z30CJp",
+        "cdate": 1568797539,
+        "content": {
+          "title": "Pipeline: MRI of R Ovary using ",
+          "abstract": "Quisque porta volutpat erat. Quisque erat eros, viverra eget, congue eget, semper rutrum, nulla. Nunc purus."
+        }
+      }
+    ],
+    "publications": [
+      {
+        "id": "jPWcSSFHp",
+        "cdate": 1584038279,
+        "content": {
+          "title": "Pipeline: Destruction of Thoracic",
+          "abstract": "Mauris enim leo, rhoncus sed, vestibulum sit amet, cursus id, turpis. Integer aliquet, massa id lobortis convallis, tortor risus dapibus augue, vel accumsan tellus nisi eu orci. Mauris lacinia sapien quis libero.\n\nNullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh."
+        }
+      },
+      {
+        "id": "WS4nb2Dzp",
+        "cdate": 1549675495,
+        "content": {
+          "title": "Pipeline: Detachment at",
+          "abstract": "Donec diam neque, vestibulum eget, vulputate ut, ultrices vel, augue. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Donec pharetra, magna vestibulum aliquet ultrices, erat tortor sollicitudin mi, sit amet lobortis sapien sapien non mi. Integer ac neque.\n\nDuis bibendum. Morbi non quam nec dui luctus rutrum. Nulla tellus.\n\nIn sagittis dui vel nisl. Duis ac nibh. Fusce lacus purus, aliquet at, feugiat non, pretium quis, lectus."
+        }
+      },
+      {
+        "id": "4FxWDJHFp",
+        "cdate": 1559339103,
+        "content": {
+          "title": "Pipeline: Alteration of L Wrist",
+          "abstract": "Fusce posuere felis sed lacus. Morbi sem mauris, laoreet ut, rhoncus aliquet, pulvinar sed, nisl. Nunc rhoncus dui vel sem.\n\nSed sagittis. Nam congue, risus semper porta volutpat, quam pede lobortis ligula, sit amet eleifend pede libero quis orci. Nullam molestie nibh in lectus."
+        }
+      }
+    ]
+  }, {
+    "id": "~C.V._Pipeline1",
+    "content": {
+      "preferredEmail": "testdots_pipeline@google.com",
+      "emails": [
+        "testdots_pipeline@google.com"
+      ]
+    },
+    "submissions": [
+      {
+        "id": "khOZ3oCJp",
+        "cdate": 1568797539,
+        "content": {
+          "title": "Pipeline: MRI of R Ovary convallis",
+          "abstract": "Orci varius natoque penatibus et magnis dis parturient montes, nascetur."
+        }
+      }
+    ],
+    "publications": [
+      {
+        "id": "PR1xMCjbp",
+        "cdate": 1564597200,
+        "content": {
+          "title": "Pipeline: Insertion of Radioact Elem into",
+          "abstract": "Mauris nec facilisis velit, vel aliquam elit. Cras vel ipsum pellentesque, efficitur turpis ut, pretium est. Morbi accumsan magna dignissim, tristique neque ac, finibus nisi. In hac habitasse platea dictumst. Proin vitae pellentesque odio. Ut feugiat diam orci, at tincidunt orci malesuada at. Vestibulum iaculis id est in posuere. Nulla ornare nibh ut tincidunt sagittis. Nunc sit amet ante enim. Phasellus quis sem fermentum, sagittis libero eget, auctor odio. Nunc aliquam mi odio, ut imperdiet tortor efficitur non. Maecenas et dictum magna, eu rhoncus metus."
+        }
+      }
+    ]
+  }, {
+    "id": "~Zonia_Pipeline1",
+    "content": {
+      "preferredEmail": "wreolfi_pipeline@squidoo.com",
+      "emails": [
+        "wreolfi_pipeline@squidoo.com"
+      ]
+    },
+    "submissions": [
+      {
+        "id": "KHnr1r7Hp",
+        "cdate": 1583404916,
+        "content": {
+          "title": "Pipeline: Repair Right Metatarsal",
+          "abstract": "Nam ultrices, libero non mattis pulvinar, nulla pede ullamcorper augue, a suscipit nulla elit ac nulla. Sed vel enim sit amet nunc viverra dapibus. Nulla suscipit ligula in lacus.\n\nCurabitur at ipsum ac tellus semper interdum. Mauris ullamcorper purus sit amet nulla. Quisque arcu libero, rutrum ac, lobortis vel, dapibus at, diam."
+        }
+      }
+    ],
+    "publications": [
+      {
+        "id": "YQtWeE8Pp",
+        "cdate": 1585679551,
+        "content": {
+          "title": "Pipeline: Bypass L Com Iliac Art",
+          "abstract": "Nullam sit amet turpis elementum ligula vehicula consequat. Morbi a ipsum. Integer a nibh.\n\nIn quis justo. Maecenas rhoncus aliquam lacus. Morbi quis tortor id nulla ultrices aliquet.\n\nMaecenas leo odio, condimentum id, luctus nec, molestie sed, justo. Pellentesque viverra pede ac diam. Cras pellentesque volutpat dui."
+        }
+      },
+      {
+        "id": "pr1xMcJBp",
+        "cdate": 1564597200,
+        "content": {
+          "title": "Pipeline: Insertion of Radioact",
+          "abstract": "Proin eu mi. Nulla ac enim. In tempor, turpis nec euismod scelerisque, quam turpis adipiscing lorem, vitae mattis nibh ligula nec sem.\n\nDuis aliquam convallis nunc. Proin at turpis a pede posuere nonummy. Integer non velit.\n\nDonec diam neque, vestibulum eget, vulputate ut, ultrices vel, augue. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Donec pharetra, magna vestibulum aliquet ultrices, erat tortor sollicitudin mi, sit amet lobortis sapien sapien non mi. Integer ac neque."
+        }
+      }
+    ]
+  }, {
+    "id": "~Royal_Pipeline1",
+    "content": {
+      "preferredEmail": "chankin_pipeline@booking.com",
+      "emails": [
+        "chankin_pipeline@booking.com"
+      ]
+    },
+    "submissions": [
+      {
+        "id": "LDn3yJ7Fp",
+        "cdate": 1551873568,
+        "content": {
+          "title": "Pipeline: Dressing of Left Lower",
+          "abstract": "Suspendisse potenti. In eleifend quam a odio. In hac habitasse platea dictumst."
+        }
+      }
+    ],
+    "publications": [
+      {
+        "id": "TatxoEkwp",
+        "cdate": 1546837542,
+        "content": {
+          "title": "Pipeline: Bypass L Axilla Art to R Low Leg",
+          "abstract": "Phasellus in felis. Donec semper sapien a libero. Nam dui.\n\nProin leo odio, porttitor id, consequat in, consequat ut, nulla. Sed accumsan felis. Ut at dolor quis odio consequat varius.\n\nInteger ac leo. Pellentesque ultrices mattis odio. Donec vitae nisi."
         }
       }
     ]
@@ -649,7 +812,7 @@
         "id": "yBiJjs5A",
         "cdate": 1545575708,
         "content": {
-          "title": "Insertion of Intralum Dev into L Fem Art, Open Approach",
+          "title": "Hilpert Insertion of Intralum Dev into L Fem Art, Open Approach",
           "abstract": "Fusce consequat. Nulla nisl. Nunc nisl.\n\nDuis bibendum, felis sed interdum venenatis, turpis enim blandit mi, in porttitor pede justo eu massa. Donec dapibus. Duis at velit eu est congue elementum.\n\nIn hac habitasse platea dictumst. Morbi vestibulum, velit id pretium iaculis, diam erat fermentum justo, nec condimentum neque sapien placerat ante. Nulla justo."
         }
       },
@@ -657,8 +820,16 @@
         "id": "r693tLee",
         "cdate": 1575735479,
         "content": {
-          "title": "Phys Rehab & Diag Audiology, Rehab, Vestib Trmt",
+          "title": "Hilpert Phys Rehab & Diag Audiology, Rehab, Vestib Trmt",
           "abstract": "Integer tincidunt ante vel ipsum. Praesent blandit lacinia erat. Vestibulum sed magna at nunc commodo placerat.\n\nPraesent blandit. Nam nulla. Integer pede justo, lacinia eget, tincidunt eget, tempus vel, pede."
+        }
+      },
+      {
+        "id": "jPWcSSFH",
+        "cdate": 1584038279,
+        "content": {
+          "title": "Unsupervised Domain Adaptation through Shape Modeling for Medical Image Segments",
+          "abstract": "Shape information is a strong and valuable prior in segmenting organs in medical images. However, most current deep learning based segmentation algorithms have not taken shape information into consideration, which can lead to bias towards texture. We aim at modeling shape explicitly and using it to help medical image segmentation. Previous methods proposed Variational Autoencoder (VAE) based models to learn the distribution of shape for a particular organ and used it to automatically evaluate the quality of a segmentation prediction by fitting it into the learned shape distribution. Based on which we aim at incorporating VAE into current segmentation pipelines. Specifically, we propose a new unsupervised domain adaptation pipeline based on a pseudo loss and a VAE reconstruction loss under a teacher-student learning paradigm. Both losses are optimized simultaneously and, in return, boost the segmentation task performance. Extensive experiments on three public Pancreas segmentation datasets as well as two in-house Pancreas segmentation datasets show consistent improvements with at least 2.8 points gain in the Dice score, demonstrating the effectiveness of our method in challenging unsupervised domain adaptation scenarios for medical image segmentation. We hope this work will advance shape analysis and geometric learning in medical imaging."
         }
       }
     ]

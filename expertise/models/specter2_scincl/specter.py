@@ -41,7 +41,7 @@ silent
 """
 class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False):
+                 sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None):
         self.model_name = 'specter2'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -65,6 +65,7 @@ class Specter2Predictor(Predictor):
         self.dump_p2p = dump_p2p
         self.compute_paper_paper = compute_paper_paper
 
+        self.percentile_select = percentile_select
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
         #load base model
         self.model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base')
@@ -268,7 +269,15 @@ class Specter2Predictor(Predictor):
                         train_paper_idx.append(paper_id2train_idx[paper_id])
                 train_paper_aff_j = p2p_aff_norm[:, train_paper_idx]
 
-                if self.average_score:
+                if self.percentile_select is not None:
+                    # Select score based on percentile
+                    # q=1.0 (percentile_select=100) -> max score
+                    # q=0.5 (percentile_select=50) -> median score
+                    # q=0.0 (percentile_select=0) -> min score
+                    q = self.percentile_select / 100.0
+                    q = max(0.0, min(1.0, q))
+                    all_paper_aff = torch.quantile(train_paper_aff_j, q, dim=1, interpolation='linear')
+                elif self.average_score:
                     all_paper_aff = train_paper_aff_j.mean(dim=1)
                 elif self.max_score:
                     all_paper_aff = train_paper_aff_j.max(dim=1)[0]
