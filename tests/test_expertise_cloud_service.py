@@ -56,7 +56,6 @@ def _setup_abc_cc(clean_start_conference, client, openreview_client):
         post_publications=DEFAULT_POST_PUBLICATIONS
     )
 
-
 @pytest.fixture(autouse=True)
 def reset_run_once_state():
     import expertise.service.routes as rts
