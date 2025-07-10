@@ -1,4 +1,4 @@
-# Mock imports removed - using live GCS operations
+from unittest.mock import patch, MagicMock
 import pytest
 import json
 import datetime
@@ -98,7 +98,12 @@ def gcp_interface_live(openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     )
 
 # Test case for the `create_job` method
-def test_create_job(gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+@patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
+def test_create_job(mock_pipeline_job, gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+    # Setup mock PipelineJob
+    mock_pipeline_instance = MagicMock()
+    mock_pipeline_job.return_value = mock_pipeline_instance
+    
     # Prepare input request
     json_request = {
         "name": "test_run2",
@@ -147,7 +152,14 @@ def test_create_job(gcp_interface_live, openreview_client, gcs_test_bucket, gcs_
 
 
 # Test case for the `get_job_status_by_job_id` method
-def test_get_job_status_by_job_id(gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+@patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
+def test_get_job_status_by_job_id(mock_pipeline_job_get, gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+    # Mock PipelineJob.get()
+    mock_pipeline_job = MagicMock()
+    mock_pipeline_job.state = PipelineState.PIPELINE_STATE_RUNNING
+    mock_pipeline_job.update_time.timestamp.return_value = time.time()
+    mock_pipeline_job_get.return_value = mock_pipeline_job
+    
     # Setup test data in real GCS
     job_id = "test_job"
     job_time = int(time.time() * 1000)
@@ -173,7 +185,6 @@ def test_get_job_status_by_job_id(gcp_interface_live, openreview_client, gcs_tes
     assert result["description"] == JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
     assert result["cdate"] > 0
     assert result["mdate"] > 0
-)
 
 # Test case for job not found
 def test_get_job_status_by_job_id_job_not_found(gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
@@ -201,7 +212,14 @@ def test_get_job_status_by_job_id_insufficient_permissions(gcp_interface_live, o
         gcp_interface_live.get_job_status_by_job_id("test_user", job_id)
 
 # Test case for multiple requests found
-def test_get_job_status_by_job_id_multiple_requests(gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+@patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
+def test_get_job_status_by_job_id_multiple_requests(mock_pipeline_job_get, gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+    # Mock PipelineJob.get()
+    mock_pipeline_job = MagicMock()
+    mock_pipeline_job.state = PipelineState.PIPELINE_STATE_RUNNING
+    mock_pipeline_job.update_time.timestamp.return_value = time.time()
+    mock_pipeline_job_get.return_value = mock_pipeline_job
+    
     # Setup test data in real GCS with multiple request files for the same job ID
     job_id = "test_job"
     job_time = int(time.time() * 1000)
@@ -264,26 +282,23 @@ def test_get_job_status_by_job_id_multiple_requests(gcp_interface_live, openrevi
     
     # Call the method - this should work with single request
     user_id = "openreview.net"
-    result = gcp_interface_live.get_job_status_by_job_id(user_id, job_id)
-    
-    # The original test expected an exception for multiple requests
-    # Since we can't easily create that scenario with real GCS, 
-    # we'll verify normal operation and add a comment about the limitation
-    assert result["name"] == job_id
-    assert result["tauthor"] == user_id
-    
-    # Note: This test has been adapted for live GCS testing.
-    # The original mock test verified behavior with multiple request.json files
-    # for the same job ID, which is not easily reproducible with real GCS
-    # since GCS doesn't allow true duplicate blob names.
+    with pytest.raises(openreview.OpenReviewException, match="Internal Error: Multiple requests found for job"):
+        result = gcp_interface_live.get_job_status_by_job_id(user_id, job_id)
 
 # Test case for the `get_job_status` method
-def test_get_job_status(gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+@patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
+def test_get_job_status(mock_pipeline_job_get, gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+    # Mock PipelineJob.get()
+    mock_pipeline_job = MagicMock()
+    mock_pipeline_job.state = PipelineState.PIPELINE_STATE_SUCCEEDED
+    mock_pipeline_job.update_time.timestamp.return_value = time.time()
+    mock_pipeline_job_get.return_value = mock_pipeline_job
+    
     # Setup test data in real GCS with multiple jobs for filtering tests
     job_time = int(time.time() * 1000)
     
-    # Create job 1 (test_inv) - Reviewers/Submission
-    job_id_inv = "test_inv"
+    # Create job 1 (inv_reviewers) - Reviewers/Submission
+    job_id_inv = "inv-testgroup-cc-reviewers"
     folder_blob_inv = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{job_id_inv}/")
     folder_blob_inv.upload_from_string("")
     
@@ -296,8 +311,8 @@ def test_get_job_status(gcp_interface_live, openreview_client, gcs_test_bucket, 
         "entityB": {"invitation": "TestGroup.cc/-/Submission"}
     }))
     
-    # Create job 2 (test_id) - Action_Editors/id
-    job_id_id = "test_id"
+    # Create job 2 (pid_paper) - Action_Editors/id
+    job_id_id = "pid-thisisatestid-testgroup-cc-action-editors"
     folder_blob_id = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{job_id_id}/")
     folder_blob_id.upload_from_string("")
     
@@ -310,8 +325,8 @@ def test_get_job_status(gcp_interface_live, openreview_client, gcs_test_bucket, 
         "entityB": {"id": "thisIsATestId"}
     }))
     
-    # Create job 3 (test_grp) - Senior_Area_Chairs/Area_Chairs
-    job_id_grp = "test_grp"
+    # Create job 3 - Senior_Area_Chairs/Area_Chairs  
+    job_id_grp = "group-testgroup-cc-senior-area-chairs"
     folder_blob_grp = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{job_id_grp}/")
     folder_blob_grp.upload_from_string("")
     
@@ -326,7 +341,7 @@ def test_get_job_status(gcp_interface_live, openreview_client, gcs_test_bucket, 
 
     # Test 1: Filter by entityA.memberOf = "TestGroup.cc/Reviewers"
     user_id = "openreview.net"
-    query_params = {"entityA.memberOf": "TestGroup.cc/Reviewers"}
+    query_params = {"entityA.memberOf": "TestGroup.cc/Reviewers", "entityB.invitation": "TestGroup.cc/-/Submission"}
     result = gcp_interface_live.get_job_status(user_id, query_params)
 
     # Assertions for test 1
@@ -361,10 +376,17 @@ def test_get_job_status(gcp_interface_live, openreview_client, gcs_test_bucket, 
 
 
 # Test case for multiple filters
-def test_get_job_status_multiple_filters(gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+@patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
+def test_get_job_status_multiple_filters(mock_pipeline_job_get, gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+    # Mock PipelineJob.get()
+    mock_pipeline_job = MagicMock()
+    mock_pipeline_job.state = PipelineState.PIPELINE_STATE_FAILED
+    mock_pipeline_job.update_time.timestamp.return_value = time.time()
+    mock_pipeline_job_get.return_value = mock_pipeline_job
+    
     # Setup test data in real GCS for multiple filters test
     job_time = int(time.time() * 1000)
-    job_id = "test_job"
+    job_id = "inv-testgroup-cc-senior-area-chairs-002"
     
     # Create the job folder
     folder_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{job_id}/")
@@ -473,7 +495,7 @@ def test_get_job_results(gcp_interface_live, openreview_client, gcs_test_bucket,
 # Test case for missing metadata file
 def test_get_job_results_missing_metadata(gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Setup test data in real GCS without metadata.json to test error handling
-    job_id = "job_1"
+    job_id = "job_missing_metadata"
     user_id = "test_user"
     
     # Create the job folder
@@ -499,7 +521,7 @@ def test_get_job_results_missing_metadata(gcp_interface_live, openreview_client,
 # Test case for insufficient permissions
 def test_get_job_results_insufficient_permissions(gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Setup test data in real GCS with a different user_id to test permissions
-    job_id = "job_1"
+    job_id = "job_missing_permissions"
     user_id = "test_user"
     
     # Create the job folder
@@ -518,7 +540,7 @@ def test_get_job_results_insufficient_permissions(gcp_interface_live, openreview
 # Test case for group scoring
 def test_get_job_results_group_scoring(gcp_interface_live, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Setup test data in real GCS for group scoring scenario
-    job_id = "job_1"
+    job_id = "job_grp"
     user_id = "test_user"
     
     # Create the job folder

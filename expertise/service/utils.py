@@ -926,6 +926,7 @@ class GCPInterface(object):
             paper_id =  params.get('entityA', {}).get('id', '') or params.get('entityB', {}).get('id', '') or params.get('id', '')
             group_id = params.get('entityA', {}).get('memberOf', '') or params.get('entityB', {}).get('memberOf', '') or params.get('memberOf', '')
             inv = params.get('entityA', {}).get('invitation', '') or params.get('entityB', {}).get('invitation', '') or params.get('invitation', '')
+            venue_id = params.get('entityA', {}).get('venueid', '') or params.get('entityB', {}).get('venueid', '') or params.get('venueid', '')
             
             base_prefix = f"{self.jobs_folder}/"
             
@@ -938,7 +939,7 @@ class GCPInterface(object):
                     raw_prefix = f"inv-{group_id}"
                     sanitized = sanitize(raw_prefix)
                     return f"{base_prefix}{sanitized}"
-                else:
+                elif venue_id:
                     raw_prefix = f"venueid-{group_id}"
                     sanitized = sanitize(raw_prefix)
                     return f"{base_prefix}{sanitized}"
