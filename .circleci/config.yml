@@ -8,9 +8,11 @@ parameters:
     type: string
     default: "main"
 
+orbs:
+  gcp-cli: circleci/gcp-cli@3.3.1
+
 jobs:
   build:
-    # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     resource_class: large
     parallelism: 10
     working_directory: ~/openreview-expertise
@@ -26,8 +28,26 @@ jobs:
           TZ: "Etc/UTC"
     environment:
       PYTHON_VERSION: 3.11
+      GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
     steps:
       - checkout
+      - run:
+          name: Install curl for GCP CLI
+          command: |
+            apt update
+            apt install -y curl
+      - gcp-cli/setup:
+          google_project_id: GOOGLE_PROJECT_ID
+          google_project_number: GOOGLE_PROJECT_NUMBER
+          service_account_email: SERVICE_ACCOUNT_EMAIL
+          use_oidc: true
+          workload_identity_pool_id: WORKLOAD_IDENTITY_POOL_ID
+          workload_identity_pool_provider_id: WORKLOAD_IDENTITY_POOL_PROVIDER_ID
+      - run:
+          name: "Verify Authentication"
+          command: |
+            gcloud auth list
+            gcloud projects list
       - run:
           name: Setup Miniconda
           command: |
