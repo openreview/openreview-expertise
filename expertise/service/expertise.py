@@ -65,6 +65,7 @@ class BaseExpertiseService:
                 host=config['REDIS_ADDR'],
                 port=config['REDIS_PORT'],
                 db=config['REDIS_CONFIG_DB'],
+                password=config.get('REDIS_PASSWORD'),
                 sync_on_disk=self.sync_on_disk
             )
 
@@ -77,6 +78,7 @@ class BaseExpertiseService:
                     "host": config['REDIS_ADDR'],
                     "port": config['REDIS_PORT'],
                     "db": config['REDIS_CONFIG_DB'],
+                    "password": config.get('REDIS_PASSWORD')
                 }
             }
         )
@@ -85,10 +87,11 @@ class BaseExpertiseService:
         worker_settings = {
             'prefix': 'bullmq:expertise',
             'connection': {
-                "host": config['REDIS_ADDR'],
-                "port": config['REDIS_PORT'],
-                "db": config['REDIS_CONFIG_DB'],
-            },
+                    "host": config['REDIS_ADDR'],
+                    "port": config['REDIS_PORT'],
+                    "db": config['REDIS_CONFIG_DB'],
+                    "password": config.get('REDIS_PASSWORD')
+                },
             'autorun': worker_autorun
         }
         if worker_concurrency is not None:

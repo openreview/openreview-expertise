@@ -165,13 +165,15 @@ class RedisDatabase(object):
         host=None,
         port=None,
         db=None,
+        password=None,
         connection_pool=None,
         sync_on_disk=True) -> None:
         if not connection_pool:
             self.db = redis.Redis(
                 host = host,
                 port = port,
-                db = db
+                db = db,
+                password = password
             )
         else:
             self.db = redis.Redis(connection_pool=connection_pool)
