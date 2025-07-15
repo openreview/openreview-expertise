@@ -17,6 +17,35 @@ DEFAULT_POST_SENIOR_AREA_CHAIRS = False
 DEFAULT_POST_SUBMISSIONS = True
 DEFAULT_POST_PUBLICATIONS = True
 
+def collect_generator_results(generator):
+    """
+    Collects results from a generator that yields chunks of data with 'metadata' and 'results'.
+    
+    Args:
+        generator: A generator that yields dictionaries with 'metadata' and/or 'results' keys
+        
+    Returns:
+        A dictionary with combined 'metadata' and 'results' from all chunks
+    """
+    all_results = []
+    metadata = None
+    
+    # Iterate through all chunks
+    for chunk in generator:
+        # Save metadata when encountered
+        if chunk.get('metadata') is not None:
+            metadata = chunk['metadata']
+        
+        # Collect results
+        if chunk.get('results'):
+            all_results.extend(chunk['results'])
+    
+    # Return a dictionary with all results and metadata
+    return {
+        'metadata': metadata or {},
+        'results': all_results
+    }
+
 @pytest.fixture(scope="module", autouse=True)
 def _setup_tmlr(clean_start_journal, client, openreview_client):
     clean_start_journal(
@@ -495,9 +524,19 @@ def test_get_job_results(mock_storage_client, openreview_client):
     mock_score_blob.name = "jobs/job_1/scores.jsonl"
     mock_score_blob.download_as_string.return_value = '{"submission": "abcd","user": "user_user1","score": 0.987}\n{"submission": "abcd","user": "user_user2","score": 0.987}'
 
+    # Create a mock file-like object for sparse score blob
+    mock_file = MagicMock()
+    mock_file.readline.side_effect = [
+        '{"submission": "abcde","user": "user_user1","score": 0.987}',
+        '{"submission": "abcde","user": "user_user2","score": 0.987}',
+        ''  # Empty string to terminate the loop
+    ]
+    mock_file.close.return_value = None
+
     mock_sparse_score_blob = MagicMock()
     mock_sparse_score_blob.name = "jobs/job_1/scores_sparse.jsonl"
     mock_sparse_score_blob.download_as_string.return_value = '{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}'
+    mock_sparse_score_blob.open.return_value = mock_file
 
     mock_request_blob = MagicMock()
     mock_request_blob.name = "jobs/job_1/request.json"
@@ -531,19 +570,20 @@ def test_get_job_results(mock_storage_client, openreview_client):
     # Call the method
     user_id = "test_user"
     job_id = "job_1"
-    result = gcp_interface.get_job_results(user_id, job_id)
+    result_generator = gcp_interface.get_job_results(user_id, job_id)
+    result = collect_generator_results(result_generator)
 
     # Assertions
     assert result["metadata"] == {"meta": "data"}
     assert result["results"] == [
-        {"submission": "abcde","user": "user_user1","score": 0.987},
-        {"submission": "abcde","user": "user_user2","score": 0.987}
+        {"submission": "abcde", "user": "user_user1", "score": 0.987},
+        {"submission": "abcde", "user": "user_user2", "score": 0.987}
     ]
 
     # Verify GCS interactions
     mock_storage_client.return_value.bucket.return_value.list_blobs.assert_called_once_with(prefix="jobs/job_1/")
     mock_metadata_blob.download_as_string.assert_called_once()
-    mock_sparse_score_blob.download_as_string.assert_called_once()
+    mock_sparse_score_blob.open.assert_called_once_with('r')
 
 # Test case for missing metadata file
 @patch("expertise.service.utils.storage.Client")
@@ -579,8 +619,10 @@ def test_get_job_results_missing_metadata(mock_storage_client, openreview_client
     # Verify exception is raised
     user_id = "test_user"
     job_id = "job_1"
+
     with pytest.raises(openreview.OpenReviewException, match="incorrect metadata files found"):
-        gcp_interface.get_job_results(user_id, job_id)
+        result_generator = gcp_interface.get_job_results(user_id, job_id)
+        collect_generator_results(result_generator)
 
 # Test case for insufficient permissions
 @patch("expertise.service.utils.storage.Client")
@@ -611,8 +653,10 @@ def test_get_job_results_insufficient_permissions(mock_storage_client, openrevie
     # Verify exception is raised
     user_id = "test_user"
     job_id = "job_1"
+    
     with pytest.raises(openreview.OpenReviewException, match="Forbidden: Insufficient permissions to access job"):
-        gcp_interface.get_job_results(user_id, job_id)
+        result_generator = gcp_interface.get_job_results(user_id, job_id)
+        collect_generator_results(result_generator)
 
 # Test case for group scoring
 @patch("expertise.service.utils.storage.Client")
@@ -622,9 +666,19 @@ def test_get_job_results_group_scoring(mock_storage_client):
     mock_metadata_blob.name = "jobs/job_1/metadata.json"
     mock_metadata_blob.download_as_string.return_value = json.dumps({"meta": "data"})
 
+    # Create a mock file-like object for group score blob
+    mock_file = MagicMock()
+    mock_file.readline.side_effect = [
+        '{"match_member": "m_user1","submission_member": "s_user1","score": 0.987}',
+        '{"match_member": "m_user2","submission_member": "s_user2","score": 0.987}',
+        ''  # Empty string to terminate the loop
+    ]
+    mock_file.close.return_value = None
+
     mock_group_score_blob = MagicMock()
     mock_group_score_blob.name = "jobs/job_1/group_scores.jsonl"
     mock_group_score_blob.download_as_string.return_value = '{"match_member": "m_user1","submission_member": "s_user1","score": 0.987}\n{"match_member": "m_user2","submission_member": "s_user2","score": 0.987}'
+    mock_group_score_blob.open.return_value = mock_file
 
     mock_request_blob = MagicMock()
     mock_request_blob.name = "jobs/job_1/request.json"
@@ -656,7 +710,8 @@ def test_get_job_results_group_scoring(mock_storage_client):
     # Call the method
     user_id = "test_user"
     job_id = "job_1"
-    result = gcp_interface.get_job_results(user_id, job_id)
+    result_generator = gcp_interface.get_job_results(user_id, job_id)
+    result = collect_generator_results(result_generator)
 
     # Assertions
     assert result["metadata"] == {"meta": "data"}
@@ -664,3 +719,8 @@ def test_get_job_results_group_scoring(mock_storage_client):
         {"match_member": "m_user1","submission_member": "s_user1","score": 0.987},
         {"match_member": "m_user2","submission_member": "s_user2","score": 0.987}
     ]
+
+    # Verify GCS interactions
+    mock_storage_client.return_value.bucket.return_value.list_blobs.assert_called_once_with(prefix="jobs/job_1/")
+    mock_metadata_blob.download_as_string.assert_called_once()
+    mock_group_score_blob.open.assert_called_once_with('r')
