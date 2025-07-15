@@ -25,7 +25,7 @@ DEFAULT_CONFIG = {
         "use_redis": False
     }
 }
-DELETED_FIELDS = ['user_id', 'cdate']
+DELETED_FIELDS = ['user_id', 'cdate', 'notes_count']
 
 def run_pipeline(api_request_str, working_dir=None):
     # Try parsing api_request_str as JSON, otherwise assume its a filepath

@@ -15,6 +15,7 @@ import multiprocessing
 from bullmq import Queue, Worker
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from expertise.service.utils import GCPInterface
+from expertise.create_dataset import OpenReviewExpertise
 from copy import deepcopy
 import asyncio
 import threading
@@ -831,6 +832,38 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.client_v2 = client_v2
         self.cloud.set_client(client_v2)
 
+    def get_notes_count(self, client, client_v2, api_request):
+        config, _ = self._prepare_config(deepcopy(api_request), client_v1=client, client=client)
+        expertise = OpenReviewExpertise(
+            client,
+            client_v2,
+            config
+        )
+        note_count = 0
+
+        # Counts submissions (from one venue or both if doing paper-paper scoring)
+        # and/or alternate group publications if doing group-group scoring
+        # TODO: Decide on what count for what threshold
+
+        #if 'match_group' in config or 'reviewer_ids' in self.config:
+        #    expertise = self.retrieve_expertise()
+        #    for pubs in expertise.values():
+        #        note_count += len(pubs)
+
+        if 'match_paper_invitation' in config or 'match_paper_id' in config or 'match_paper_venueid' in config:
+            papers = expertise.get_match_submissions()
+            note_count += len(papers)
+
+        # Retrieve match groups to detect group-group matching
+        group_group_matching = 'alternate_match_group' in self.config.keys()
+
+        # if invitation ID is supplied, collect records for each submission
+        if 'paper_invitation' in config or 'csv_submissions' in config or 'paper_id' in config or 'paper_venueid' in config or group_group_matching:
+            submissions = expertise.get_submissions()
+            note_count += submissions
+
+        return note_count
+
     async def worker_process(self, job, token):
         descriptions = JobDescription.VALS.value
         user_id = job.data['user_id']
@@ -839,12 +872,26 @@ class ExpertiseCloudService(BaseExpertiseService):
         or_token = job.data['token']
 
         config = self.redis.load_job(redis_id, user_id)
+        openreview_client_v1 = openreview.Client(
+            token=or_token,
+            baseurl=config.baseurl_v2
+        )
         openreview_client_v2 = openreview.api.OpenReviewClient(
             token=or_token,
             baseurl=config.baseurl_v2
         )
+        notes_count = self.get_notes_count(
+            openreview_client_v1,
+            openreview_client_v2,
+            deepcopy(request)
+        )
 
-        cloud_id = self.cloud.create_job(deepcopy(request), client=openreview_client_v2, user_id = user_id)
+        cloud_id = self.cloud.create_job(
+            deepcopy(request),
+            client=openreview_client_v2,
+            user_id = user_id,
+            notes_count=notes_count
+        )
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]

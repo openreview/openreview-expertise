@@ -728,7 +728,7 @@ class GCPInterface(object):
 
             return f"{match_prefix}-{submission_prefix}"
 
-    def create_job(self, json_request: dict, user_id: str = None, client = None):
+    def create_job(self, json_request: dict, user_id: str = None, client = None, notes_count = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -781,6 +781,7 @@ class GCPInterface(object):
         #data['dump_archives'] = True
 
         # Deleted metadata fields before hitting the pipeline
+        data['notes_count'] = notes_count
         data['user_id'] = user_id if user_id else get_user_id(or_client)
         data['cdate'] = int(time.time() * 1000)
 
