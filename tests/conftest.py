@@ -4,7 +4,11 @@ import pytest
 import requests
 import time
 import json
+import os
+import shortuuid
 from tests.conference_locks import conference_lock
+from google.cloud import storage
+from google.cloud.exceptions import NotFound
 
 from openreview.api import OpenReviewClient
 from openreview.api import Note
@@ -327,6 +331,35 @@ class Helpers:
                             },
                             license = 'CC BY-SA 4.0'
                         ))
+
+class GCSTestHelper:
+    GCS_PROJECT = 'sunlit-realm-131518'
+    GCS_NUMBER = '997553930042'
+    GCS_TEST_BUCKET = 'openreview-expertise'
+    GCS_TEST_ROOT = 'jobs-test'
+    
+    @staticmethod
+    def init_test_bucket():
+        client = storage.Client()
+        bucket = client.bucket(GCSTestHelper.GCS_TEST_BUCKET)
+        
+        # Test bucket existence and permissions
+        if bucket.exists():
+            return bucket
+        return None
+
+@pytest.fixture(scope="session")
+def gcs_test_bucket():
+    """Session-scoped fixture for GCS test bucket setup"""
+    bucket = GCSTestHelper.init_test_bucket()
+    if bucket is None:
+        raise Exception(f"GCS bucket not available")
+    yield bucket
+
+@pytest.fixture(scope="session")
+def gcs_jobs_prefix(gcs_test_bucket):
+    test_prefix = f"{GCSTestHelper.GCS_TEST_ROOT}/{int(time.time())}"
+    yield test_prefix
 
 @pytest.fixture(scope="class")
 def helpers():
