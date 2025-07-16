@@ -19,7 +19,7 @@ class EnsembleModel:
             sparse_value=sparse_value,
             use_redis=use_redis,
             compute_paper_paper=compute_paper_paper,
-            venue_specific_weights=venue_specific_weights
+            venue_specific_weights=venue_specific_weights,
             percentile_select=percentile_select
         )
 
@@ -33,7 +33,7 @@ class EnsembleModel:
             sparse_value=sparse_value,
             use_redis=use_redis,
             compute_paper_paper=compute_paper_paper,
-            venue_specific_weights=venue_specific_weights
+            venue_specific_weights=venue_specific_weights,
             percentile_select=percentile_select
         )
         self.merge_alpha = merge_alpha
