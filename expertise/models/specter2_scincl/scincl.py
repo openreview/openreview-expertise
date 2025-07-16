@@ -279,14 +279,11 @@ class SciNCLPredictor(Predictor):
                 # Apply venue-specific weights per reviewer
                 if self.venue_specific_weights:
                     train_weight_j = train_weight_tensor[train_paper_idx]
-                    print(f"SciNCL - Reviewer {reviewer_id}: train_weight_j = {train_weight_j}")
-                    mean_w = train_weight_j.mean()
-                    print(f"SciNCL - Reviewer {reviewer_id}: mean_w = {mean_w}")
-                    train_weight_j_norm = train_weight_j / mean_w
-                    print(f"SciNCL - Reviewer {reviewer_id}: train_weight_j_norm = {train_weight_j_norm}")
-                    print(f"SciNCL - Reviewer before {train_paper_aff_j}")
-                    train_paper_aff_j = train_paper_aff_j * train_weight_j_norm.unsqueeze(0)
-                    print(f"SciNCL - Reviewer after {train_paper_aff_j}")
+                    # Logit-space transformation preserves bounds and probability mass
+                    epsilon = 1e-8 ## Numerical stability
+                    logits = torch.logit(train_paper_aff_j, eps=epsilon)
+                    weighted_logits = logits + torch.log(torch.clamp(train_weight_j, min=epsilon)).unsqueeze(0)
+                    train_paper_aff_j = torch.sigmoid(weighted_logits)
 
                 if self.percentile_select is not None:
                     # Select score based on percentile
