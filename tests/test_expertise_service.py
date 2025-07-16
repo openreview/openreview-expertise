@@ -60,6 +60,19 @@ def _setup_hij_cc(clean_start_conference, client, openreview_client):
         post_publications=True
     )
 
+@pytest.fixture(scope="module", autouse=True)
+def _setup_upweight(clean_start_journal, client, openreview_client):
+    clean_start_journal(
+        openreview_client,
+        'UPWEIGHT.cc',
+        editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'],
+        additional_editors=['~Margherita_Hilpert1'],
+        post_submissions=False,
+        post_publications=False,
+        post_editor_data=False
+    )
+
+
 EXCLUSION_CONF_ID = 'EXCLUSION.cc'
 EXPERTISE_SELECTION_POSTING = False
 @pytest.fixture(scope="module", autouse=True)
@@ -450,6 +463,44 @@ class TestExpertiseService():
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
+        
+        # Post a submission and manually make it public and accepted
+        submission = openreview.api.Note(
+            content = {
+                "title": { 'value': "test_weight" },
+                "abstract": { 'value': "abstract weight" },
+                "authors": { 'value': ['Royal Toy'] },
+                "authorids": { 'value': ['~Royal_Toy1'] },
+                'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
+                'competing_interests': {'value': 'aaa'},
+                'human_subjects_reporting': {'value': 'bbb'}
+            }
+        )
+        submission_edit = openreview_client.post_note_edit(
+            invitation="UPWEIGHT.cc/-/Submission",
+            signatures=['~Royal_Toy1'],
+            note=submission
+        )
+        openreview_client.post_note_edit(
+            invitation="UPWEIGHT.cc/-/Edit",
+            readers=["UPWEIGHT.cc"],
+            writers=["UPWEIGHT.cc"],
+            signatures=["UPWEIGHT.cc"],
+            note=openreview.api.Note(
+                id=submission_edit['note']['id'],
+                content={
+                    'venueid': {
+                        'value': 'UPWEIGHT.cc'
+                    },
+                    'venue': {
+                        'value': 'UPWEIGHT Accepted Submission'
+                    }
+                },
+                readers=['everyone'],
+                pdate = 1554819115,
+                license = 'CC BY-SA 4.0'
+            )
+        )
 
         # Make a request with weight specification
         response = test_client.post(
@@ -475,7 +526,7 @@ class TestExpertiseService():
                         'minimumPubDate': 0,
                         "weightSpecification": [
                             {
-                                "prefix": "API2",
+                                "prefix": "UPWEIGHT",
                                 "weight": 10
                             }
                         ]
