@@ -64,6 +64,7 @@ class SciNCLPredictor(Predictor):
         self.dump_p2p = dump_p2p
         self.compute_paper_paper = compute_paper_paper
         self.venue_specific_weights = venue_specific_weights
+        print(f"SciNCL venue_specific_weights: {venue_specific_weights}")
         self.percentile_select = percentile_select
 
         self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
@@ -239,27 +240,7 @@ class SciNCLPredictor(Predictor):
         for i in range(paper_num_test):
             p2p_aff[i, :] = torch.sum(paper_emb_test[i, :].unsqueeze(dim=0) * paper_emb_train, dim=1)
 
-        if self.venue_specific_weights:
-            print('Applying venue specific weights...')
-            # - fetch the weights for each reviewer publication
-            # - compute softmax across weights
-            # - apply to the scores
-            # First create a weight vector for all publications
-            all_weights = torch.zeros(paper_num_train, device=torch.device('cpu'), dtype=torch.float32)
-            for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
-                if len(train_note_id_list) == 0:
-                    continue
-                train_paper_idx = []
-                for paper_id in train_note_id_list:
-                    if paper_id not in train_bad_id_set:
-                        train_paper_idx.append(paper_id2train_idx[paper_id])
-                train_weight_j = train_weight_tensor[train_paper_idx]
-                mean_w = train_weight_j.mean()
-                train_weight_j_norm = train_weight_j / mean_w
-                all_weights[train_paper_idx] = train_weight_j_norm
-
-            # Then broadcast and multiply
-            p2p_aff *= all_weights.unsqueeze(0)  # broadcast to match p2p_aff dimensions
+        # Note: Venue-specific weights are now applied per-reviewer in the scoring loop below
 
         if self.dump_p2p:
             p2p_dict = {}
@@ -294,6 +275,18 @@ class SciNCLPredictor(Predictor):
                     if paper_id not in train_bad_id_set:
                         train_paper_idx.append(paper_id2train_idx[paper_id])
                 train_paper_aff_j = p2p_aff_norm[:, train_paper_idx]
+
+                # Apply venue-specific weights per reviewer
+                if self.venue_specific_weights:
+                    train_weight_j = train_weight_tensor[train_paper_idx]
+                    print(f"SciNCL - Reviewer {reviewer_id}: train_weight_j = {train_weight_j}")
+                    mean_w = train_weight_j.mean()
+                    print(f"SciNCL - Reviewer {reviewer_id}: mean_w = {mean_w}")
+                    train_weight_j_norm = train_weight_j / mean_w
+                    print(f"SciNCL - Reviewer {reviewer_id}: train_weight_j_norm = {train_weight_j_norm}")
+                    print(f"SciNCL - Reviewer before {train_paper_aff_j}")
+                    train_paper_aff_j = train_paper_aff_j * train_weight_j_norm.unsqueeze(0)
+                    print(f"SciNCL - Reviewer after {train_paper_aff_j}")
 
                 if self.percentile_select is not None:
                     # Select score based on percentile
