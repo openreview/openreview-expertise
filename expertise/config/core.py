@@ -16,6 +16,8 @@ class ModelConfig(UserDict):
         elif kwargs.get('config_dict'):
             self.data = kwargs['config_dict']
 
+        ModelConfig.validate_weight_specification(self.data)
+
     def __repr__(self):
         return json.dumps(self.data, indent=4)
 
@@ -33,3 +35,23 @@ class ModelConfig(UserDict):
             data = json.load(file_handle)
 
         self.update(**data)
+
+    def validate_weight_specification(config):
+        # Validate weight specification
+        dataset_params = config.get('dataset', {})
+        weight_specification = dataset_params.get('weight_specification', None)
+        if weight_specification:
+            if not isinstance(weight_specification, list):
+                raise ValueError('weight_specification must be a list')
+            for venue_spec in weight_specification:
+                if not isinstance(venue_spec, dict):
+                    raise ValueError('Objects in weight_specification must be dictionaries')
+                if 'prefix' in venue_spec and 'value' in venue_spec and 'inOpenReview' in venue_spec:
+                    raise KeyError('Objects in weight_specification must only have one of [prefix, value, inOpenReview]')
+                if 'prefix' not in venue_spec and 'value' not in venue_spec and 'inOpenReview' not in venue_spec:
+                    raise KeyError('Objects in weight_specification must have a prefix, value, or inOpenReview key')
+                if 'weight' not in venue_spec:
+                    raise KeyError('Objects in weight_specification must have a weight key')
+                # weight must be an integer or float
+                if not isinstance(venue_spec['weight'], int) and not isinstance(venue_spec['weight'], float):
+                    raise ValueError('weight must be an integer or float')

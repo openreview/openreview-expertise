@@ -37,6 +37,8 @@ class OpenReviewExpertise(object):
 
         self.venue_list = openreview_client_v2.get_group('venues').members
 
+        ModelConfig.validate_weight_specification(self.config)
+
     def convert_to_list(self, config_invitations):
         if (isinstance(config_invitations, str)):
             invitations = [config_invitations]
@@ -130,22 +132,6 @@ class OpenReviewExpertise(object):
             self.get_paper_notes(author_id, dataset_params)
         )
 
-        # Validate weight specification
-        if weight_specification:
-            if not isinstance(weight_specification, list):
-                raise ValueError('weight_specification must be a list')
-            for venue_spec in weight_specification:
-                if not isinstance(venue_spec, dict):
-                    raise ValueError('Objects in weight_specification must be dictionaries')
-                if 'prefix' in venue_spec and 'value' in venue_spec and 'inOpenReview' in venue_spec:
-                    raise KeyError('Objects in weight_specification must only have one of [prefix, value, inOpenReview]')
-                if 'prefix' not in venue_spec and 'value' not in venue_spec and 'inOpenReview' not in venue_spec:
-                    raise KeyError('Objects in weight_specification must have a prefix, value, or inOpenReview key')
-                if 'weight' not in venue_spec:
-                    raise KeyError('Objects in weight_specification must have a weight key')
-                # weight must be an integer or float
-                if not isinstance(venue_spec['weight'], int) and not isinstance(venue_spec['weight'], float):
-                    raise ValueError('weight must be an integer or float')
         # Get all publications and assign tcdate to cdate in case cdate is None. If tcdate is also None
         # assign cdate := 0
         unsorted_publications = []

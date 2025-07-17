@@ -191,6 +191,123 @@ def test_retrieve_expertise(get_paperhash, client, openreview_client):
             else:
                 assert len(expertise[profile['id']]) == len(profile['publications'])
 
+def test_weight_specification_validation(client, openreview_client):
+    """Test weight specification validation edge cases and failure modes"""
+    
+    # Test 1: weight_specification must be a list
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers',
+        'dataset': {
+            'weight_specification': 'not_a_list'
+        }
+    }
+    with pytest.raises(ValueError, match='weight_specification must be a list'):
+        OpenReviewExpertise(client, openreview_client, config)
+    
+    # Test 2: Objects in weight_specification must be dictionaries
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers',
+        'dataset': {
+            'weight_specification': ['not_a_dict']
+        }
+    }
+    with pytest.raises(ValueError, match='Objects in weight_specification must be dictionaries'):
+        OpenReviewExpertise(client, openreview_client, config)
+    
+    # Test 3: Cannot have multiple matching keys (prefix, value, inOpenReview)
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers',
+        'dataset': {
+            'weight_specification': [
+                {'prefix': 'CONF', 'value': 'CONF.cc', 'inOpenReview': True, 'weight': 2.0}
+            ]
+        }
+    }
+    with pytest.raises(KeyError, match='Objects in weight_specification must only have one of'):
+        OpenReviewExpertise(client, openreview_client, config)
+    
+    # Test 4: Must have at least one of prefix, value, or inOpenReview
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers',
+        'dataset': {
+            'weight_specification': [
+                {'weight': 2.0}
+            ]
+        }
+    }
+    with pytest.raises(KeyError, match='Objects in weight_specification must have a prefix, value, or inOpenReview key'):
+        OpenReviewExpertise(client, openreview_client, config)
+    
+    # Test 5: Must have weight key
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers',
+        'dataset': {
+            'weight_specification': [
+                {'prefix': 'CONF'}
+            ]
+        }
+    }
+    with pytest.raises(KeyError, match='Objects in weight_specification must have a weight key'):
+        OpenReviewExpertise(client, openreview_client, config)
+    
+    # Test 6: Weight must be numeric (int or float)
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers',
+        'dataset': {
+            'weight_specification': [
+                {'prefix': 'CONF', 'weight': 'not_numeric'}
+            ]
+        }
+    }
+    with pytest.raises(ValueError, match='weight must be an integer or float'):
+        OpenReviewExpertise(client, openreview_client, config)
+    
+    # Test 7: Valid configurations should work
+    valid_configs = [
+        # Prefix matching
+        {'prefix': 'CONF', 'weight': 2.0},
+        # Value matching
+        {'value': 'CONF.cc', 'weight': 3},
+        # InOpenReview matching
+        {'inOpenReview': True, 'weight': 1.5},
+        # With order
+        {'prefix': 'HIGH', 'weight': 10.0, 'order': 1},
+        # Mixed types
+        {'prefix': 'LOW', 'weight': 0.5, 'order': 2}
+    ]
+    
+    for spec in valid_configs:
+        config = {
+            'use_email_ids': False,
+            'match_group': 'DEF.cc/Reviewers',
+            'dataset': {
+                'weight_specification': [spec]
+            }
+        }
+        # Should not raise any exceptions
+        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        assert or_expertise is not None
+    
+    # Test 8: Multiple valid specifications with order precedence
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers',
+        'dataset': {
+            'weight_specification': [
+                {'prefix': 'HIGH', 'weight': 10.0, 'order': 2},
+                {'prefix': 'LOW', 'weight': 0.5, 'order': 1},
+                {'inOpenReview': True, 'weight': 5.0}  # No order, should use index
+            ]
+        }
+    }
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    assert or_expertise is not None
 def test_get_submissions_from_invitation(client, openreview_client):
     config = {
         'use_email_ids': False,
