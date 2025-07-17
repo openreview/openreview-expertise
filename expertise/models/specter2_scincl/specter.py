@@ -124,7 +124,6 @@ class Specter2Predictor(Predictor):
                     self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract').strip() if publication['content'].get('abstract').strip() else "."
                     pub_mdate = publication.get('mdate', int(time.time()))
                     pub_cache_key = publication['id'] + "_" + str(pub_mdate)
-                    pub_weight = publication.get('content', {}).get('weight', 1) ## Mention that default weights are 1
                     self.pub_note_id_to_cache_key[publication['id']] = pub_cache_key
                     if self.redis is None or not self.redis.exists(pub_cache_key):
                         if publication['id'] in output_dict:
@@ -139,7 +138,7 @@ class Specter2Predictor(Predictor):
                                 "mdate": pub_mdate
                             }
                         if self.venue_specific_weights:
-                            output_dict[publication['id']]['weight'] = pub_weight
+                            output_dict[publication['id']]['weight'] = publication['content']['weight']
                         self._remove_keys_from_cache(publication["id"])
                 else:
                     print(f"Skipping publication {publication['id']}. Either title or abstract must be provided ")

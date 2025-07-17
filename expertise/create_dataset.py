@@ -97,10 +97,14 @@ class OpenReviewExpertise(object):
                 ('value' in venue_spec and venueid == venue_spec['value']) or
                 ('inOpenReview' in venue_spec)
             )
-
-        if not venueid or not weight_specification:
+        
+        if weight_specification is None: ## No weighting, no weight
             return None
-            
+
+        ## If weight specification but no venueid (API1 papers), return default weight
+        if not venueid:
+            return 1
+
         # Get domain from either domain field or invitation prefix
         domain = getattr(pub, 'domain', None)
         if domain is None:
@@ -108,11 +112,11 @@ class OpenReviewExpertise(object):
         
         # Return early on DBLP papers (venueid =/= domain) and non-accepted papers (domain not in venue_list)
         if not (venueid == domain and domain in self.venue_list):
-            return None
+            return 1
         ## Papers allowed: accepted papers from an OpenReview venue
             
         # Find matching weight specification
-        current_weight, current_order = None, None
+        current_weight, current_order = 1, None ## Default weight one
         for idx, venue_spec in enumerate(weight_specification):
             if _matches(venue_spec, venueid):
                 order = venue_spec.get('order', idx) ## Support optional order, fallback to index
