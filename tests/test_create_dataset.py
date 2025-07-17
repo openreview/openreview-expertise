@@ -238,7 +238,7 @@ def test_weight_specification_validation(client, openreview_client):
             ]
         }
     }
-    with pytest.raises(KeyError, match='Objects in weight_specification must only have one of'):
+    with pytest.raises(KeyError, match=r'Objects in weight_specification must have exactly one of '):
         OpenReviewExpertise(client, openreview_client, config)
     
     # Test: Must have at least one of prefix, value, or inOpenReview
@@ -291,6 +291,19 @@ def test_weight_specification_validation(client, openreview_client):
         }
     }
     with pytest.raises(ValueError, match='weight must be an integer or float greater than 0'):
+        OpenReviewExpertise(client, openreview_client, config)
+
+    # Test: Cannot pass non-boolean to inOpenReview
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers',
+        'dataset': {
+            'weight_specification': [
+                {'weight': 0, 'inOpenReview': 'Not a boolean'}
+            ]
+        }
+    }
+    with pytest.raises(KeyError, match='The inOpenReview key can only have a boolean value'):
         OpenReviewExpertise(client, openreview_client, config)
     
     # Test: Valid configurations should work

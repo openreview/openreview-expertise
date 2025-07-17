@@ -91,11 +91,16 @@ class OpenReviewExpertise(object):
         return deduplicated
     
     def get_pub_weight(self, pub=None, weight_specification=[]):
-        def _matches(venue_spec, venueid):
+        def _matches(venue_spec, venueid, domain):
+            in_openreview = venueid == domain and domain in self.venue_list
+            ## Papers allowed: accepted papers from an OpenReview venue
+            ## not in_openreview: DBLP papers (venueid =/= domain) and non-accepted papers (domain not in venue_list)
+
             return (
-                ('prefix' in venue_spec and venueid.startswith(venue_spec['prefix'])) or
-                ('value' in venue_spec and venueid == venue_spec['value']) or
-                ('inOpenReview' in venue_spec)
+                ('prefix' in venue_spec and in_openreview and venueid.startswith(venue_spec['prefix'])) or
+                ('value' in venue_spec and in_openreview and venueid == venue_spec['value']) or
+                ('inOpenReview' in venue_spec and in_openreview and venue_spec['inOpenReview']) or
+                ('inOpenReview' in venue_spec and not in_openreview and not venue_spec['inOpenReview'])
             )
         
         venueid = pub.content.get('venueid', '')
@@ -107,17 +112,14 @@ class OpenReviewExpertise(object):
             return 1
 
         # Get domain from either domain field or invitation prefix
-        domain = getattr(pub, 'domain', pub.invitation.split('/-/')[0])  # API1 fallback to invitation
-        
-        # Return early on DBLP papers (venueid =/= domain) and non-accepted papers (domain not in venue_list)
-        if not (venueid == domain and domain in self.venue_list):
-            return 1
-        ## Papers allowed: accepted papers from an OpenReview venue
+        domain = getattr(pub, 'domain', None)
+        if domain is None:
+            domain = pub.invitation.split('/-/')[0]
             
         # Find matching weight specification
         current_weight, current_order = 1, None ## Default weight one
         for idx, venue_spec in enumerate(weight_specification):
-            if _matches(venue_spec, venueid):
+            if _matches(venue_spec, venueid, domain):
                 order = venue_spec.get('order', idx) ## Support optional order, fallback to index
                 if current_order is None or order <= current_order:
                     current_weight = venue_spec['weight']

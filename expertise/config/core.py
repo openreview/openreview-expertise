@@ -46,12 +46,21 @@ class ModelConfig(UserDict):
             for venue_spec in weight_specification:
                 if not isinstance(venue_spec, dict):
                     raise ValueError('Objects in weight_specification must be dictionaries')
-                if 'prefix' in venue_spec and 'value' in venue_spec and 'inOpenReview' in venue_spec:
-                    raise KeyError('Objects in weight_specification must only have one of [prefix, value, inOpenReview]')
+
+                # Count how many matching keys are present
+                matching_keys = ['prefix', 'value', 'inOpenReview']
+                present_keys = [key for key in matching_keys if key in venue_spec]
+                if len(present_keys) > 1:
+                    raise KeyError(f'Objects in weight_specification must have exactly one of [prefix, value, inOpenReview]. Found: {present_keys}')
+
                 if 'prefix' not in venue_spec and 'value' not in venue_spec and 'inOpenReview' not in venue_spec:
                     raise KeyError('Objects in weight_specification must have a prefix, value, or inOpenReview key')
                 if 'weight' not in venue_spec:
                     raise KeyError('Objects in weight_specification must have a weight key')
+                
+                if 'inOpenReview' in venue_spec and not isinstance(venue_spec['inOpenReview'], bool):
+                    raise KeyError('The inOpenReview key can only have a boolean value')
+
                 # weight must be an integer or float
                 if not isinstance(venue_spec['weight'], int) and not isinstance(venue_spec['weight'], float):
                     raise ValueError('weight must be an integer or float greater than 0')
