@@ -556,12 +556,79 @@ class TestExpertiseService():
         # Build scores to reference later
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
         response = response.json['results']
-        weighted_harold_scores = {}
+        weighted_royal_scores = {}
         for item in response:
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
             print(item)
             if profile_id == '~Royal_Toy1':
-                weighted_harold_scores[submission_id] = score
+                weighted_royal_scores[submission_id] = score
+
+        # Make a request with weight specification, use inOpenReview
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'max'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0,
+                        "weightSpecification": [
+                            {
+                                "prefix": "UPWEIGHT",
+                                "weight": 10,
+                                "order": 2
+                            },
+                            {
+                                "inOpenReview": True,
+                                "weight": 5,
+                                "order": 1
+                            }
+                        ]
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+        # Weight shifts scores onto a single submission
+        # Build scores to reference later
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        response = response.json['results']
+        openreview_royal_scores = {}
+        for item in response:
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            print(item)
+            if profile_id == '~Royal_Toy1':
+                openreview_royal_scores[submission_id] = score
 
         # Make a request
         response = test_client.post(
@@ -613,9 +680,9 @@ class TestExpertiseService():
         # assert response[0]['status'] == 'Queued'
         # assert response[0]['description'] == 'Server received config and allocated space'
 
-        # Check that the search returns a single job before the new job is completed when searching for completed
+        # Check that the search returns both job beforejobs the new job is completed when searching for completed
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
-        assert len(response) == 1
+        assert len(response) == 2
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -648,7 +715,7 @@ class TestExpertiseService():
 
         # After completion, check for non-empty completed list
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
-        assert len(response) == 2
+        assert len(response) == 3
         assert response[0]['status'] == 'Completed'
         assert response[0]['name'] == 'test_run'
 
@@ -665,7 +732,9 @@ class TestExpertiseService():
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
             print(item)
             if profile_id == '~Royal_Toy1':
-                assert weighted_harold_scores[submission_id] > score
+                assert weighted_royal_scores[submission_id] > score
+                assert openreview_royal_scores[submission_id] > score
+                assert weighted_royal_scores[submission_id] > openreview_royal_scores[submission_id]
 
         response = test_client.post(
             '/expertise',
@@ -713,7 +782,7 @@ class TestExpertiseService():
         test_client = openreview_context['test_client']
         # Test for status query
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
-        assert len(response) == 3
+        assert len(response) == 4
         assert response[0]['status'] == 'Completed'
         assert response[1]['status'] == 'Completed'
         assert response[2]['status'] == 'Completed'
@@ -722,7 +791,7 @@ class TestExpertiseService():
 
         # Test for member query
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'memberOf': 'ABC'}).json['results']
-        assert len(response) == 3
+        assert len(response) == 4
         assert response[0]['request']['entityA']['memberOf'] == 'ABC.cc/Reviewers'
         assert response[1]['request']['entityA']['memberOf'] == 'ABC.cc/Reviewers'
         assert response[2]['request']['entityA']['memberOf'] == 'ABC.cc/Reviewers'
@@ -731,7 +800,7 @@ class TestExpertiseService():
 
         # Test for invitation query
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'invitation': 'ABC.cc'}).json['results']
-        assert len(response) == 3
+        assert len(response) == 4
         assert response[0]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response[1]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response[2]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
@@ -741,7 +810,7 @@ class TestExpertiseService():
 
         # Test for combination
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed', 'memberOf': 'ABC'}).json['results']
-        assert len(response) == 3
+        assert len(response) == 4
         assert response[0]['status'] == 'Completed'
         assert response[1]['status'] == 'Completed'
         assert response[2]['status'] == 'Completed'
@@ -991,7 +1060,7 @@ class TestExpertiseService():
         # Assert that there are two completed jobs belonging to this user
         test_client = openreview_context['test_client']
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={}).json['results']
-        assert len(response) == 6
+        assert len(response) == 7
         for job_dict in response:
             assert job_dict['status'] == 'Completed'
 

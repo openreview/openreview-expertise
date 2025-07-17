@@ -89,6 +89,13 @@ class OpenReviewExpertise(object):
         return deduplicated
     
     def get_pub_weight(self, pub=None, venueid=None, weight_specification=None):
+        def _matches(venue_spec, venueid):
+            return (
+                ('prefix' in venue_spec and venueid.startswith(venue_spec['prefix'])) or
+                ('value' in venue_spec and venueid == venue_spec['value']) or
+                ('inOpenReview' in venue_spec)
+            )
+
         if not venueid or not weight_specification:
             return None
             
@@ -103,16 +110,15 @@ class OpenReviewExpertise(object):
         ## Papers allowed: accepted papers from an OpenReview venue
             
         # Find matching weight specification
-        fallback_weight = None
-        for venue_spec in weight_specification:
-            if 'prefix' in venue_spec and venueid.startswith(venue_spec['prefix']):
-                return venue_spec['weight']
-            if 'value' in venue_spec and venueid == venue_spec['value']:
-                return venue_spec['weight']
-            if 'inOpenReview' in venue_spec:
-                fallback_weight = venue_spec['weight']
+        current_weight, current_order = None, None
+        for idx, venue_spec in enumerate(weight_specification):
+            if _matches(venue_spec, venueid):
+                order = venue_spec.get('order', idx) ## Support optional order, fallback to index
+                if current_order is None or order <= current_order:
+                    current_weight = venue_spec['weight']
+                    current_order = order
 
-        return fallback_weight ## Prioritize venue match, then fallback to geenral OpenReview upweight
+        return current_weight
 
     def get_publications(self, author_id):
 
@@ -139,7 +145,7 @@ class OpenReviewExpertise(object):
                     raise KeyError('Objects in weight_specification must have a weight key')
                 # weight must be an integer or float
                 if not isinstance(venue_spec['weight'], int) and not isinstance(venue_spec['weight'], float):
-                    raise ValueError('weight must be an integer')
+                    raise ValueError('weight must be an integer or float')
         # Get all publications and assign tcdate to cdate in case cdate is None. If tcdate is also None
         # assign cdate := 0
         unsorted_publications = []
