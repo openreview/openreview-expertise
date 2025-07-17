@@ -522,13 +522,14 @@ class TestExpertiseService():
             signatures=['~Royal_Toy1'],
             note=submission
         )
+        upweighted_note_id = submission_edit['note']['id']
         openreview_client.post_note_edit(
             invitation="UPWEIGHT.cc/-/Edit",
             readers=["UPWEIGHT.cc"],
             writers=["UPWEIGHT.cc"],
             signatures=["UPWEIGHT.cc"],
             note=openreview.api.Note(
-                id=submission_edit['note']['id'],
+                id=upweighted_note_id,
                 content={
                     'venueid': {
                         'value': 'UPWEIGHT.cc'
@@ -604,6 +605,25 @@ class TestExpertiseService():
             if profile_id == '~Royal_Toy1':
                 weighted_royal_scores[submission_id] = score
 
+        # Check weights applied in both embedding files:
+        specter_file = f"./tests/jobs/{job_id}/pub2vec_specter.jsonl"
+        scincl_file = f"./tests/jobs/{job_id}/pub2vec_scincl.jsonl"
+
+        with open(specter_file, 'r') as f, open(scincl_file, 'r') as g:
+            for specter_line, scincl_line in zip(f, g):
+                # Parse both lines
+                specter_pub = json.loads(specter_line.strip())
+                scincl_pub = json.loads(scincl_line.strip())
+
+                # Validate both publications have weight field
+                assert 'weight' in specter_pub, f"Missing weight in specter publication {specter_pub.get('paper_id')}"
+                assert 'weight' in scincl_pub, f"Missing weight in scincl publication {scincl_pub.get('paper_id')}"
+
+                # Check weights for both publications
+                for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
+                    expected_weight = 10 if pub['paper_id'] == upweighted_note_id else 1
+                    assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
+
         # Make a request with weight specification, use inOpenReview
         response = test_client.post(
             '/expertise',
@@ -670,6 +690,25 @@ class TestExpertiseService():
             print(item)
             if profile_id == '~Royal_Toy1':
                 openreview_royal_scores[submission_id] = score
+
+        # Check weights applied in both embedding files (now it should be weight 5):
+        specter_file = f"./tests/jobs/{job_id}/pub2vec_specter.jsonl"
+        scincl_file = f"./tests/jobs/{job_id}/pub2vec_scincl.jsonl"
+
+        with open(specter_file, 'r') as f, open(scincl_file, 'r') as g:
+            for specter_line, scincl_line in zip(f, g):
+                # Parse both lines
+                specter_pub = json.loads(specter_line.strip())
+                scincl_pub = json.loads(scincl_line.strip())
+
+                # Validate both publications have weight field
+                assert 'weight' in specter_pub, f"Missing weight in specter publication {specter_pub.get('paper_id')}"
+                assert 'weight' in scincl_pub, f"Missing weight in scincl publication {scincl_pub.get('paper_id')}"
+
+                # Check weights for both publications
+                for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
+                    expected_weight = 5 if pub['paper_id'] == upweighted_note_id else 1
+                    assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
 
         # Make a request
         response = test_client.post(
