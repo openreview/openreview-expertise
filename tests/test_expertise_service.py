@@ -459,6 +459,47 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: Expertise invitation indicated but ID not provided"
 
+    def test_request_expertise_with_invalid_model_venue_weights(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submitting a request with weightSpecification on an invalid model
+        test_client = openreview_context['test_client']
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'max'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0,
+                        "weightSpecification": [
+                            {
+                                "prefix": "UPWEIGHT",
+                                "weight": 10
+                            }
+                        ]
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 400, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == "Bad request: model specter+mfr does not support weighting by venue"
+
     def test_request_expertise_with_valid_parameters(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes

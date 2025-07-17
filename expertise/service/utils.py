@@ -568,6 +568,11 @@ class JobConfig(object):
             config.model_params['mfr_feature_vocab_file'] = server_config['MFR_VOCAB_DIR']
             config.model_params['mfr_checkpoint_dir'] = server_config['MFR_CHECKPOINT_DIR']
 
+        # Add validation for model type and weightSpecification
+        if config.dataset and 'weight_specification' in config.dataset:
+            if config.model != 'specter2+scincl':
+                raise openreview.OpenReviewException(f"Bad request: model {config.model} does not support weighting by venue")
+
         return config
     
     def from_json(job_config):
