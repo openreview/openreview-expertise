@@ -194,7 +194,7 @@ def test_retrieve_expertise(get_paperhash, client, openreview_client):
 def test_weight_specification_validation(client, openreview_client):
     """Test weight specification validation edge cases and failure modes"""
     
-    # Test 1: weight_specification must be a list
+    # Test: weight_specification must be a list
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
@@ -205,7 +205,7 @@ def test_weight_specification_validation(client, openreview_client):
     with pytest.raises(ValueError, match='weight_specification must be a list'):
         OpenReviewExpertise(client, openreview_client, config)
     
-    # Test 2: Objects in weight_specification must be dictionaries
+    # Test: Objects in weight_specification must be dictionaries
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
@@ -216,7 +216,7 @@ def test_weight_specification_validation(client, openreview_client):
     with pytest.raises(ValueError, match='Objects in weight_specification must be dictionaries'):
         OpenReviewExpertise(client, openreview_client, config)
     
-    # Test 3: Cannot have multiple matching keys (prefix, value, inOpenReview)
+    # Test: Cannot have multiple matching keys (prefix, value, inOpenReview)
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
@@ -229,7 +229,7 @@ def test_weight_specification_validation(client, openreview_client):
     with pytest.raises(KeyError, match='Objects in weight_specification must only have one of'):
         OpenReviewExpertise(client, openreview_client, config)
     
-    # Test 4: Must have at least one of prefix, value, or inOpenReview
+    # Test: Must have at least one of prefix, value, or inOpenReview
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
@@ -242,7 +242,7 @@ def test_weight_specification_validation(client, openreview_client):
     with pytest.raises(KeyError, match='Objects in weight_specification must have a prefix, value, or inOpenReview key'):
         OpenReviewExpertise(client, openreview_client, config)
     
-    # Test 5: Must have weight key
+    # Test: Must have weight key
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
@@ -255,7 +255,7 @@ def test_weight_specification_validation(client, openreview_client):
     with pytest.raises(KeyError, match='Objects in weight_specification must have a weight key'):
         OpenReviewExpertise(client, openreview_client, config)
     
-    # Test 6: Weight must be numeric (int or float)
+    # Test: Weight must be numeric (int or float)
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
@@ -265,10 +265,23 @@ def test_weight_specification_validation(client, openreview_client):
             ]
         }
     }
-    with pytest.raises(ValueError, match='weight must be an integer or float'):
+    with pytest.raises(ValueError, match='weight must be an integer or float greater than 0'):
+        OpenReviewExpertise(client, openreview_client, config)
+
+    # Test: Must be greater than 0
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers',
+        'dataset': {
+            'weight_specification': [
+                {'prefix': 'CONF', 'weight': 0}
+            ]
+        }
+    }
+    with pytest.raises(ValueError, match='weight must be an integer or float greater than 0'):
         OpenReviewExpertise(client, openreview_client, config)
     
-    # Test 7: Valid configurations should work
+    # Test: Valid configurations should work
     valid_configs = [
         # Prefix matching
         {'prefix': 'CONF', 'weight': 2.0},
@@ -294,7 +307,7 @@ def test_weight_specification_validation(client, openreview_client):
         or_expertise = OpenReviewExpertise(client, openreview_client, config)
         assert or_expertise is not None
     
-    # Test 8: Multiple valid specifications with order precedence
+    # Test: Multiple valid specifications with order precedence
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
@@ -308,6 +321,7 @@ def test_weight_specification_validation(client, openreview_client):
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
     assert or_expertise is not None
+
 def test_get_submissions_from_invitation(client, openreview_client):
     config = {
         'use_email_ids': False,

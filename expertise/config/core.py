@@ -54,4 +54,7 @@ class ModelConfig(UserDict):
                     raise KeyError('Objects in weight_specification must have a weight key')
                 # weight must be an integer or float
                 if not isinstance(venue_spec['weight'], int) and not isinstance(venue_spec['weight'], float):
-                    raise ValueError('weight must be an integer or float')
+                    raise ValueError('weight must be an integer or float greater than 0')
+                else:
+                    if venue_spec['weight'] <= 0:
+                        raise ValueError('weight must be an integer or float greater than 0')
