@@ -107,9 +107,7 @@ class OpenReviewExpertise(object):
             return 1
 
         # Get domain from either domain field or invitation prefix
-        domain = getattr(pub, 'domain', None)
-        if domain is None:
-            domain = getattr(pub, 'domain', pub.invitation.split('/-/')[0])  # API1 fallback to invitation
+        domain = getattr(pub, 'domain', pub.invitation.split('/-/')[0])  # API1 fallback to invitation
         
         # Return early on DBLP papers (venueid =/= domain) and non-accepted papers (domain not in venue_list)
         if not (venueid == domain and domain in self.venue_list):
