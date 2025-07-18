@@ -99,8 +99,8 @@ class OpenReviewExpertise(object):
             return (
                 ('prefix' in venue_spec and in_openreview and venueid.startswith(venue_spec['prefix'])) or
                 ('value' in venue_spec and in_openreview and venueid == venue_spec['value']) or
-                ('inOpenReview' in venue_spec and in_openreview and venue_spec['inOpenReview']) or
-                ('inOpenReview' in venue_spec and not in_openreview and not venue_spec['inOpenReview'])
+                ('articleSubmittedToOpenReview' in venue_spec and in_openreview and venue_spec['articleSubmittedToOpenReview']) or
+                ('articleSubmittedToOpenReview' in venue_spec and not in_openreview and not venue_spec['articleSubmittedToOpenReview'])
             )
         
         venueid = pub.content.get('venueid', '')

@@ -48,18 +48,18 @@ class ModelConfig(UserDict):
                     raise ValueError('Objects in weight_specification must be dictionaries')
 
                 # Count how many matching keys are present
-                matching_keys = ['prefix', 'value', 'inOpenReview']
+                matching_keys = ['prefix', 'value', 'articleSubmittedToOpenReview']
                 present_keys = [key for key in matching_keys if key in venue_spec]
                 if len(present_keys) > 1:
-                    raise KeyError(f'Objects in weight_specification must have exactly one of [prefix, value, inOpenReview]. Found: {present_keys}')
+                    raise KeyError(f'Objects in weight_specification must have exactly one of [prefix, value, articleSubmittedToOpenReview]. Found: {present_keys}')
 
-                if 'prefix' not in venue_spec and 'value' not in venue_spec and 'inOpenReview' not in venue_spec:
-                    raise KeyError('Objects in weight_specification must have a prefix, value, or inOpenReview key')
+                if 'prefix' not in venue_spec and 'value' not in venue_spec and 'articleSubmittedToOpenReview' not in venue_spec:
+                    raise KeyError('Objects in weight_specification must have a prefix, value, or articleSubmittedToOpenReview key')
                 if 'weight' not in venue_spec:
                     raise KeyError('Objects in weight_specification must have a weight key')
                 
-                if 'inOpenReview' in venue_spec and not isinstance(venue_spec['inOpenReview'], bool):
-                    raise KeyError('The inOpenReview key can only have a boolean value')
+                if 'articleSubmittedToOpenReview' in venue_spec and not isinstance(venue_spec['articleSubmittedToOpenReview'], bool):
+                    raise KeyError('The articleSubmittedToOpenReview key can only have a boolean value')
 
                 # weight must be an integer or float
                 if not isinstance(venue_spec['weight'], int) and not isinstance(venue_spec['weight'], float):

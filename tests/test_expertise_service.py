@@ -624,7 +624,7 @@ class TestExpertiseService():
                     expected_weight = 10 if pub['paper_id'] == upweighted_note_id else 1
                     assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
 
-        # Make a request with weight specification, use inOpenReview
+        # Make a request with weight specification, use articleSubmittedToOpenReview
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -653,7 +653,7 @@ class TestExpertiseService():
                                 "order": 2
                             },
                             {
-                                "inOpenReview": True,
+                                "articleSubmittedToOpenReview": True,
                                 "weight": 5,
                                 "order": 1
                             }

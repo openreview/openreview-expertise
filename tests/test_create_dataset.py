@@ -228,20 +228,20 @@ def test_weight_specification_validation(client, openreview_client):
     with pytest.raises(ValueError, match='Objects in weight_specification must be dictionaries'):
         OpenReviewExpertise(client, openreview_client, config)
     
-    # Test: Cannot have multiple matching keys (prefix, value, inOpenReview)
+    # Test: Cannot have multiple matching keys (prefix, value, articleSubmittedToOpenReview)
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
         'dataset': {
             'weight_specification': [
-                {'prefix': 'CONF', 'value': 'CONF.cc', 'inOpenReview': True, 'weight': 2.0}
+                {'prefix': 'CONF', 'value': 'CONF.cc', 'articleSubmittedToOpenReview': True, 'weight': 2.0}
             ]
         }
     }
     with pytest.raises(KeyError, match=r'Objects in weight_specification must have exactly one of '):
         OpenReviewExpertise(client, openreview_client, config)
     
-    # Test: Must have at least one of prefix, value, or inOpenReview
+    # Test: Must have at least one of prefix, value, or articleSubmittedToOpenReview
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
@@ -251,7 +251,7 @@ def test_weight_specification_validation(client, openreview_client):
             ]
         }
     }
-    with pytest.raises(KeyError, match='Objects in weight_specification must have a prefix, value, or inOpenReview key'):
+    with pytest.raises(KeyError, match='Objects in weight_specification must have a prefix, value, or articleSubmittedToOpenReview key'):
         OpenReviewExpertise(client, openreview_client, config)
     
     # Test: Must have weight key
@@ -293,17 +293,17 @@ def test_weight_specification_validation(client, openreview_client):
     with pytest.raises(ValueError, match='weight must be an integer or float greater than 0'):
         OpenReviewExpertise(client, openreview_client, config)
 
-    # Test: Cannot pass non-boolean to inOpenReview
+    # Test: Cannot pass non-boolean to articleSubmittedToOpenReview
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
         'dataset': {
             'weight_specification': [
-                {'weight': 0, 'inOpenReview': 'Not a boolean'}
+                {'weight': 0, 'articleSubmittedToOpenReview': 'Not a boolean'}
             ]
         }
     }
-    with pytest.raises(KeyError, match='The inOpenReview key can only have a boolean value'):
+    with pytest.raises(KeyError, match='The articleSubmittedToOpenReview key can only have a boolean value'):
         OpenReviewExpertise(client, openreview_client, config)
     
     # Test: Valid configurations should work
@@ -312,8 +312,8 @@ def test_weight_specification_validation(client, openreview_client):
         {'prefix': 'CONF', 'weight': 2.0},
         # Value matching
         {'value': 'CONF.cc', 'weight': 3},
-        # InOpenReview matching
-        {'inOpenReview': True, 'weight': 1.5},
+        # articleSubmittedToOpenReview matching
+        {'articleSubmittedToOpenReview': True, 'weight': 1.5},
         # With order
         {'prefix': 'HIGH', 'weight': 10.0, 'order': 1},
         # Mixed types
@@ -340,7 +340,7 @@ def test_weight_specification_validation(client, openreview_client):
             'weight_specification': [
                 {'prefix': 'HIGH', 'weight': 10.0, 'order': 2},
                 {'prefix': 'LOW', 'weight': 0.5, 'order': 1},
-                {'inOpenReview': True, 'weight': 5.0}  # No order, should use index
+                {'articleSubmittedToOpenReview': True, 'weight': 5.0}  # No order, should use index
             ]
         }
     }
