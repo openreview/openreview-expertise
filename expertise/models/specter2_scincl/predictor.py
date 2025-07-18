@@ -1,4 +1,6 @@
 from tqdm import tqdm
+import json
+
 class Predictor:
     def _sparse_scores_helper(self, all_scores, id_index):
         counter = 0
@@ -17,3 +19,12 @@ class Predictor:
                 current_id = (note_id, profile_id)[id_index]
             counter += 1
         return all_scores
+    
+    def _build_embedding_jsonl(self, paper, embedding):
+        data = {
+            'paper_id': paper['paper_id'],
+            'embedding': embedding.detach().cpu().numpy().tolist()
+        }
+        if 'weight' in paper:
+            data['weight'] = paper['weight']
+        return json.dumps(data) + '\n'

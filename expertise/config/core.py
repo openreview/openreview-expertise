@@ -16,6 +16,8 @@ class ModelConfig(UserDict):
         elif kwargs.get('config_dict'):
             self.data = kwargs['config_dict']
 
+        ModelConfig.validate_weight_specification(self.data)
+
     def __repr__(self):
         return json.dumps(self.data, indent=4)
 
@@ -33,3 +35,40 @@ class ModelConfig(UserDict):
             data = json.load(file_handle)
 
         self.update(**data)
+
+    def validate_weight_specification(config):
+        # Validate weight specification
+        dataset_params = config.get('dataset', {})
+        weight_specification = dataset_params.get('weight_specification', None)
+        if weight_specification:
+            if not isinstance(weight_specification, list):
+                raise ValueError('weight_specification must be a list')
+            for venue_spec in weight_specification:
+                if not isinstance(venue_spec, dict):
+                    raise ValueError('Objects in weight_specification must be dictionaries')
+                
+                allowed_keys = ['prefix', 'value', 'articleSubmittedToOpenReview', 'weight']
+                disallowed_keys = [key for key in venue_spec.keys() if key not in allowed_keys]
+                if len(disallowed_keys) > 0:
+                    raise KeyError(f'Object in weight_specification has unsupported field(s): {disallowed_keys}')
+
+                # Count how many matching keys are present
+                matching_keys = ['prefix', 'value', 'articleSubmittedToOpenReview']
+                present_keys = [key for key in matching_keys if key in venue_spec]
+                if len(present_keys) > 1:
+                    raise KeyError(f'Objects in weight_specification must have exactly one of [prefix, value, articleSubmittedToOpenReview]. Found: {present_keys}')
+
+                if 'prefix' not in venue_spec and 'value' not in venue_spec and 'articleSubmittedToOpenReview' not in venue_spec:
+                    raise KeyError('Objects in weight_specification must have a prefix, value, or articleSubmittedToOpenReview key')
+                if 'weight' not in venue_spec:
+                    raise KeyError('Objects in weight_specification must have a weight key')
+                
+                if 'articleSubmittedToOpenReview' in venue_spec and not isinstance(venue_spec['articleSubmittedToOpenReview'], bool):
+                    raise KeyError('The articleSubmittedToOpenReview key can only have a boolean value')
+
+                # weight must be an integer or float
+                if not isinstance(venue_spec['weight'], int) and not isinstance(venue_spec['weight'], float):
+                    raise ValueError('weight must be an integer or float greater than or equal to 0')
+                else:
+                    if venue_spec['weight'] < 0:
+                        raise ValueError('weight must be an integer or float greater than or equal to 0')
