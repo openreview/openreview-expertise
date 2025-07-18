@@ -251,7 +251,7 @@ def test_weight_specification_validation(client, openreview_client):
             ]
         }
     }
-    with pytest.raises(KeyError, match=r'Object in weight_specification has unsupported field(s)'):
+    with pytest.raises(KeyError, match=r'Object in weight_specification has unsupported field'):
         OpenReviewExpertise(client, openreview_client, config)
     
     # Test: Must have at least one of prefix, value, or articleSubmittedToOpenReview
@@ -290,20 +290,20 @@ def test_weight_specification_validation(client, openreview_client):
             ]
         }
     }
-    with pytest.raises(ValueError, match='weight must be an integer or float greater than 0'):
+    with pytest.raises(ValueError, match='weight must be an integer or float greater than or equal to 0'):
         OpenReviewExpertise(client, openreview_client, config)
 
-    # Test: Must be greater than 0
+    # Test: Must be greater than or equal to 0
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
         'dataset': {
             'weight_specification': [
-                {'prefix': 'CONF', 'weight': 0}
+                {'prefix': 'CONF', 'weight': -1}
             ]
         }
     }
-    with pytest.raises(ValueError, match='weight must be an integer or float greater than 0'):
+    with pytest.raises(ValueError, match='weight must be an integer or float greater than or equal to 0'):
         OpenReviewExpertise(client, openreview_client, config)
 
     # Test: Cannot pass non-boolean to articleSubmittedToOpenReview
@@ -326,11 +326,7 @@ def test_weight_specification_validation(client, openreview_client):
         # Value matching
         {'value': 'CONF.cc', 'weight': 3},
         # articleSubmittedToOpenReview matching
-        {'articleSubmittedToOpenReview': True, 'weight': 1.5},
-        # With order
-        {'prefix': 'HIGH', 'weight': 10.0, 'order': 1},
-        # Mixed types
-        {'prefix': 'LOW', 'weight': 0.5, 'order': 2}
+        {'articleSubmittedToOpenReview': True, 'weight': 1.5}
     ]
     
     for spec in valid_configs:
@@ -345,15 +341,15 @@ def test_weight_specification_validation(client, openreview_client):
         or_expertise = OpenReviewExpertise(client, openreview_client, config)
         assert or_expertise is not None
     
-    # Test: Multiple valid specifications with order precedence
+    # Test: Multiple valid specifications
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers',
         'dataset': {
             'weight_specification': [
-                {'prefix': 'HIGH', 'weight': 10.0, 'order': 2},
-                {'prefix': 'LOW', 'weight': 0.5, 'order': 1},
-                {'articleSubmittedToOpenReview': True, 'weight': 5.0}  # No order, should use index
+                {'prefix': 'HIGH', 'weight': 10.0},
+                {'prefix': 'LOW', 'weight': 0.5},
+                {'articleSubmittedToOpenReview': True, 'weight': 5.0}
             ]
         }
     }
