@@ -91,6 +91,8 @@ class OpenReviewExpertise(object):
         return deduplicated
     
     def get_pub_weight(self, pub=None, weight_specification=[]):
+        rule_precedence = {'articleSubmittedToOpenReview': 0, 'value': 1, 'prefix': 2}
+
         def _matches(venue_spec, in_openreview):
             
             ## Papers allowed: accepted papers from an OpenReview venue
@@ -117,16 +119,19 @@ class OpenReviewExpertise(object):
             domain = pub.invitation.split('/-/')[0]
             
         # Find matching weight specification
-        current_weight, current_order = 1, None ## Default weight one
+        matching_weight, matching_priority = 1, -1 ## Default weight one
         in_openreview = venueid == domain and domain in self.venue_list
-        for idx, venue_spec in enumerate(weight_specification):
+        for venue_spec in weight_specification:
             if _matches(venue_spec, in_openreview):
-                order = venue_spec.get('order', idx) ## Support optional order, fallback to index
-                if current_order is None or order <= current_order:
-                    current_weight = venue_spec['weight']
-                    current_order = order
+                rule_keys = set(venue_spec.keys()) - {'weight'}
+                rule = next(iter(rule_keys))  # Get the single rule key
 
-        return current_weight
+                current_priority = rule_precedence.get(rule, -1)
+                if current_priority > matching_priority:
+                    matching_weight = venue_spec['weight']
+                    matching_priority = current_priority
+
+        return matching_weight
 
     def get_publications(self, author_id):
 
@@ -168,6 +173,9 @@ class OpenReviewExpertise(object):
             # Compare venueid to domain/invitation prefix to determine acceptance
             pub_weight = self.get_pub_weight(pub=publication, weight_specification=weight_specification)
 
+            if pub_weight == 0:
+                continue
+
             reduced_publication = {
                 'id': publication.id,
                 'cdate': publication.cdate,
@@ -177,6 +185,7 @@ class OpenReviewExpertise(object):
                     'abstract': pub_abstr
                 }
             }
+
             if weight_specification:
                 reduced_publication['content']['weight'] = pub_weight
             unsorted_publications.append(reduced_publication)

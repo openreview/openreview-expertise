@@ -240,6 +240,19 @@ def test_weight_specification_validation(client, openreview_client):
     }
     with pytest.raises(KeyError, match=r'Objects in weight_specification must have exactly one of '):
         OpenReviewExpertise(client, openreview_client, config)
+
+    # Test: Cannot have unsupported keys
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers',
+        'dataset': {
+            'weight_specification': [
+                {'prefix': 'CONF', 'weight': 2.0, 'random': 'key'}
+            ]
+        }
+    }
+    with pytest.raises(KeyError, match=r'Object in weight_specification has unsupported field(s)'):
+        OpenReviewExpertise(client, openreview_client, config)
     
     # Test: Must have at least one of prefix, value, or articleSubmittedToOpenReview
     config = {

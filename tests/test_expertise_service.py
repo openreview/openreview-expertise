@@ -568,8 +568,8 @@ class TestExpertiseService():
                         'minimumPubDate': 0,
                         "weightSpecification": [
                             {
-                                "prefix": "UPWEIGHT",
-                                "weight": 10
+                                "articleSubmittedToOpenReview": True,
+                                "weight": 0
                             }
                         ]
                     }
@@ -598,17 +598,18 @@ class TestExpertiseService():
         # Build scores to reference later
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
         response = response.json['results']
-        weighted_royal_scores = {}
+        zeroed_royal_scores = {}
         for item in response:
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
             print(item)
             if profile_id == '~Royal_Toy1':
-                weighted_royal_scores[submission_id] = score
+                zeroed_royal_scores[submission_id] = score
 
         # Check weights applied in both embedding files:
         specter_file = f"./tests/jobs/{job_id}/pub2vec_specter.jsonl"
         scincl_file = f"./tests/jobs/{job_id}/pub2vec_scincl.jsonl"
 
+        all_publication_ids = set()
         with open(specter_file, 'r') as f, open(scincl_file, 'r') as g:
             for specter_line, scincl_line in zip(f, g):
                 # Parse both lines
@@ -621,8 +622,11 @@ class TestExpertiseService():
 
                 # Check weights for both publications
                 for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
+                    all_publication_ids.add(pub['paper_id'])
                     expected_weight = 10 if pub['paper_id'] == upweighted_note_id else 1
                     assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
+
+        assert upweighted_note_id not in all_publication_ids
 
         # Make a request with weight specification, use articleSubmittedToOpenReview
         response = test_client.post(
@@ -648,14 +652,12 @@ class TestExpertiseService():
                         'minimumPubDate': 0,
                         "weightSpecification": [
                             {
-                                "prefix": "UPWEIGHT",
-                                "weight": 10,
-                                "order": 2
+                                "articleSubmittedToOpenReview": True,
+                                "weight": 0
                             },
                             {
-                                "articleSubmittedToOpenReview": True,
-                                "weight": 5,
-                                "order": 1
+                                "prefix": "UPWEIGHT",
+                                "weight": 10
                             }
                         ]
                     }
@@ -707,7 +709,7 @@ class TestExpertiseService():
 
                 # Check weights for both publications
                 for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
-                    expected_weight = 5 if pub['paper_id'] == upweighted_note_id else 1
+                    expected_weight = 10 if pub['paper_id'] == upweighted_note_id else 1
                     assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
 
         # Make a request
@@ -812,9 +814,9 @@ class TestExpertiseService():
             submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
             print(item)
             if profile_id == '~Royal_Toy1':
-                assert weighted_royal_scores[submission_id] > score
+                assert round(zeroed_royal_scores[submission_id], 5) == round(score, 5)
                 assert openreview_royal_scores[submission_id] > score
-                assert weighted_royal_scores[submission_id] > openreview_royal_scores[submission_id]
+                assert openreview_royal_scores[submission_id] > zeroed_royal_scores[submission_id]
 
         response = test_client.post(
             '/expertise',

@@ -46,6 +46,11 @@ class ModelConfig(UserDict):
             for venue_spec in weight_specification:
                 if not isinstance(venue_spec, dict):
                     raise ValueError('Objects in weight_specification must be dictionaries')
+                
+                allowed_keys = ['prefix', 'value', 'articleSubmittedToOpenReview', 'weight']
+                disallowed_keys = [key for key in venue_spec.keys() if key not in allowed_keys]
+                if len(disallowed_keys) > 0:
+                    raise KeyError(f'Object in weight_specification has unsupported field(s): {present_keys}')
 
                 # Count how many matching keys are present
                 matching_keys = ['prefix', 'value', 'articleSubmittedToOpenReview']
@@ -63,7 +68,7 @@ class ModelConfig(UserDict):
 
                 # weight must be an integer or float
                 if not isinstance(venue_spec['weight'], int) and not isinstance(venue_spec['weight'], float):
-                    raise ValueError('weight must be an integer or float greater than 0')
+                    raise ValueError('weight must be an integer or float greater than or equal to 0')
                 else:
-                    if venue_spec['weight'] <= 0:
-                        raise ValueError('weight must be an integer or float greater than 0')
+                    if venue_spec['weight'] < 0:
+                        raise ValueError('weight must be an integer or float greater than or equal to 0')
