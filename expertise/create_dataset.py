@@ -35,7 +35,7 @@ class OpenReviewExpertise(object):
             'no_publications': []
         }
 
-        self.venue_list = openreview_client_v2.get_group('venues').members
+        self.venue_list = set(openreview_client_v2.get_group('venues').members)
 
         ModelConfig.validate_weight_specification(self.config)
 
@@ -91,8 +91,8 @@ class OpenReviewExpertise(object):
         return deduplicated
     
     def get_pub_weight(self, pub=None, weight_specification=[]):
-        def _matches(venue_spec, venueid, domain):
-            in_openreview = venueid == domain and domain in self.venue_list
+        def _matches(venue_spec, in_openreview):
+            
             ## Papers allowed: accepted papers from an OpenReview venue
             ## not in_openreview: DBLP papers (venueid =/= domain) and non-accepted papers (domain not in venue_list)
 
@@ -118,8 +118,9 @@ class OpenReviewExpertise(object):
             
         # Find matching weight specification
         current_weight, current_order = 1, None ## Default weight one
+        in_openreview = venueid == domain and domain in self.venue_list
         for idx, venue_spec in enumerate(weight_specification):
-            if _matches(venue_spec, venueid, domain):
+            if _matches(venue_spec, in_openreview):
                 order = venue_spec.get('order', idx) ## Support optional order, fallback to index
                 if current_order is None or order <= current_order:
                     current_weight = venue_spec['weight']
