@@ -50,7 +50,7 @@ class ModelConfig(UserDict):
                 allowed_keys = ['prefix', 'value', 'articleSubmittedToOpenReview', 'weight']
                 disallowed_keys = [key for key in venue_spec.keys() if key not in allowed_keys]
                 if len(disallowed_keys) > 0:
-                    raise KeyError(f'Object in weight_specification has unsupported field(s): {present_keys}')
+                    raise KeyError(f'Object in weight_specification has unsupported field(s): {disallowed_keys}')
 
                 # Count how many matching keys are present
                 matching_keys = ['prefix', 'value', 'articleSubmittedToOpenReview']
