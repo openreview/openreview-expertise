@@ -90,7 +90,7 @@ class OpenReviewExpertise(object):
 
         return deduplicated
     
-    def get_pub_weight(self, pub=None, weight_specification=[]):
+    def get_pub_weight(self, venueid, pub=None, weight_specification=[]):
         rule_precedence = {'articleSubmittedToOpenReview': 0, 'value': 1, 'prefix': 2}
 
         def _matches(venue_spec, in_openreview):
@@ -105,14 +105,6 @@ class OpenReviewExpertise(object):
                 ('articleSubmittedToOpenReview' in venue_spec and not in_openreview and not venue_spec['articleSubmittedToOpenReview'])
             )
         
-        venueid = pub.content.get('venueid', '')
-        if isinstance(venueid, dict):
-            venueid = venueid.get('value')
-        
-        ## If weight specification but no venueid, return default weight
-        if not venueid:
-            return 1
-
         # Get domain from either domain field or invitation prefix
         domain = getattr(pub, 'domain', None)
         if domain is None:
@@ -170,8 +162,14 @@ class OpenReviewExpertise(object):
             if isinstance(pub_abstr, dict):
                 pub_abstr = pub_abstr.get('value')
 
+            pub_venueid = publication.content.get('venueid', '')
+            if isinstance(pub_venueid, dict):
+                pub_venueid = pub_venueid.get('value')
+            if not pub_venueid:
+                pub_venueid = publication.invitation.split('/-/')[0]
+
             # Compare venueid to domain/invitation prefix to determine acceptance
-            pub_weight = self.get_pub_weight(pub=publication, weight_specification=weight_specification)
+            pub_weight = self.get_pub_weight(pub_venueid, pub=publication, weight_specification=weight_specification)
 
             if pub_weight == 0:
                 continue
@@ -182,7 +180,8 @@ class OpenReviewExpertise(object):
                 'mdate': publication.mdate,
                 'content': {
                     'title': pub_title,
-                    'abstract': pub_abstr
+                    'abstract': pub_abstr,
+                    'venueid': pub_venueid
                 }
             }
 
