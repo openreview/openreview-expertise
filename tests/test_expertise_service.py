@@ -532,10 +532,10 @@ class TestExpertiseService():
                 id=upweighted_note_id,
                 content={
                     'venueid': {
-                        'value': 'UPWEIGHT.cc'
+                        'value': 'UPWEIGHT.cc/Withdrawn_Submission'
                     },
                     'venue': {
-                        'value': 'UPWEIGHT Accepted Submission'
+                        'value': 'UPWEIGHT Withdrawn Submission'
                     }
                 },
                 readers=['everyone'],

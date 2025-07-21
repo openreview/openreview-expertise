@@ -120,7 +120,7 @@ class OpenReviewExpertise(object):
             
         # Find matching weight specification
         matching_weight, matching_priority = 1, -1 ## Default weight one
-        in_openreview = venueid == domain and domain in self.venue_list
+        in_openreview = domain in self.venue_list
         for venue_spec in weight_specification:
             if _matches(venue_spec, in_openreview):
                 rule_keys = set(venue_spec.keys()) - {'weight'}
