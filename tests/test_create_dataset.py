@@ -358,62 +358,84 @@ def test_weight_specification_validation(client, openreview_client):
 
 def test_weights_applied_by_venue(client, openreview_client):
     # Post a submission and manually make it public and accepted
-        submission = openreview.api.Note(
-            content = {
-                "title": { 'value': "test_weight" },
-                "abstract": { 'value': "abstract weight" },
-                "authors": { 'value': ['Romeo Mraz'] },
-                "authorids": { 'value': ['~Romeo_Mraz1'] },
-                'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
-                'competing_interests': {'value': 'aaa'},
-                'human_subjects_reporting': {'value': 'bbb'}
-            }
-        )
-        submission_edit = openreview_client.post_note_edit(
-            invitation="UPWEIGHT-DATASET.cc/-/Submission",
-            signatures=['~Romeo_Mraz1'],
-            note=submission
-        )
-        upweighted_note_id = submission_edit['note']['id']
-        openreview_client.post_note_edit(
-            invitation="UPWEIGHT-DATASET.cc/-/Edit",
-            readers=["UPWEIGHT-DATASET.cc"],
-            writers=["UPWEIGHT-DATASET.cc"],
-            signatures=["UPWEIGHT-DATASET.cc"],
-            note=openreview.api.Note(
-                id=upweighted_note_id,
-                content={
-                    'venueid': {
-                        'value': 'UPWEIGHT-DATASET.cc'
-                    },
-                    'venue': {
-                        'value': 'UPWEIGHT-DATASET Accepted Submission'
-                    }
-                },
-                readers=['everyone'],
-                pdate = 1554819115,
-                license = 'CC BY-SA 4.0'
-            )
-        )
-
-        or_expertise = OpenReviewExpertise(client, openreview_client, {})
-        config = {
-            'dataset': {
-                'weight_specification': [
-                    {
-                        "prefix": "UPWEIGHT-DATASET",
-                        "weight": 10
-                    }
-                ]
-            }
+    submission = openreview.api.Note(
+        content = {
+            "title": { 'value': "test_weight" },
+            "abstract": { 'value': "abstract weight" },
+            "authors": { 'value': ['Romeo Mraz'] },
+            "authorids": { 'value': ['~Romeo_Mraz1'] },
+            'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
+            'competing_interests': {'value': 'aaa'},
+            'human_subjects_reporting': {'value': 'bbb'}
         }
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
-        publications = or_expertise.get_publications('~Romeo_Mraz1')
-        for publication in publications:
-            if publication['id'] != upweighted_note_id:
-                assert publication['content']['weight'] == 1
-            else:
-                assert publication['content']['weight'] == 10
+    )
+    submission_edit = openreview_client.post_note_edit(
+        invitation="UPWEIGHT-DATASET.cc/-/Submission",
+        signatures=['~Romeo_Mraz1'],
+        note=submission
+    )
+    upweighted_note_id = submission_edit['note']['id']
+    openreview_client.post_note_edit(
+        invitation="UPWEIGHT-DATASET.cc/-/Edit",
+        readers=["UPWEIGHT-DATASET.cc"],
+        writers=["UPWEIGHT-DATASET.cc"],
+        signatures=["UPWEIGHT-DATASET.cc"],
+        note=openreview.api.Note(
+            id=upweighted_note_id,
+            content={
+                'venueid': {
+                    'value': 'UPWEIGHT-DATASET.cc'
+                },
+                'venue': {
+                    'value': 'UPWEIGHT-DATASET Accepted Submission'
+                }
+            },
+            readers=['everyone'],
+            pdate = 1554819115,
+            license = 'CC BY-SA 4.0'
+        )
+    )
+
+    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    config = {
+        'dataset': {
+            'weight_specification': [
+                {
+                    "prefix": "UPWEIGHT-DATASET",
+                    "weight": 10
+                }
+            ]
+        }
+    }
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    publications = or_expertise.get_publications('~Romeo_Mraz1')
+    for publication in publications:
+        if publication['id'] != upweighted_note_id:
+            assert publication['content']['weight'] == 1
+        else:
+            assert publication['content']['weight'] == 10
+
+    # Check archive weights - all publications out side of the new one
+    # are archive publications
+
+    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    config = {
+        'dataset': {
+            'weight_specification': [
+                {
+                    "articleSubmittedToOpenReview": False,
+                    "weight": 10
+                }
+            ]
+        }
+    }
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    publications = or_expertise.get_publications('~Romeo_Mraz1')
+    for publication in publications:
+        if publication['id'] != upweighted_note_id:
+            assert publication['content']['weight'] == 10
+        else:
+            assert publication['content']['weight'] == 1
 
 def test_get_submissions_from_invitation(client, openreview_client):
     config = {
