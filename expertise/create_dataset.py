@@ -35,6 +35,10 @@ class OpenReviewExpertise(object):
             'no_publications': []
         }
 
+        self.venue_list = set(openreview_client_v2.get_group('venues').members)
+
+        ModelConfig.validate_weight_specification(self.config)
+
     def convert_to_list(self, config_invitations):
         if (isinstance(config_invitations, str)):
             invitations = [config_invitations]
@@ -85,13 +89,48 @@ class OpenReviewExpertise(object):
                 deduplicated.append(pub)
 
         return deduplicated
+    
+    def get_pub_weight(self, venueid, pub=None, weight_specification=[]):
+        rule_precedence = {'articleSubmittedToOpenReview': 0, 'value': 1, 'prefix': 2}
+
+        def _matches(venue_spec, in_openreview):
+            
+            ## Papers allowed: accepted papers from an OpenReview venue
+            ## not in_openreview: DBLP papers (venueid =/= domain) and non-accepted papers (domain not in venue_list)
+
+            return (
+                ('prefix' in venue_spec and in_openreview and venueid.startswith(venue_spec['prefix'])) or
+                ('value' in venue_spec and in_openreview and venueid == venue_spec['value']) or
+                ('articleSubmittedToOpenReview' in venue_spec and in_openreview and venue_spec['articleSubmittedToOpenReview']) or
+                ('articleSubmittedToOpenReview' in venue_spec and not in_openreview and not venue_spec['articleSubmittedToOpenReview'])
+            )
+        
+        # Get domain from either domain field or invitation prefix
+        domain = getattr(pub, 'domain', None)
+        if domain is None:
+            domain = pub.invitation.split('/-/')[0]
+            
+        # Find matching weight specification
+        matching_weight, matching_priority = 1, -1 ## Default weight one
+        in_openreview = domain in self.venue_list
+        for venue_spec in weight_specification:
+            if _matches(venue_spec, in_openreview):
+                rule_keys = set(venue_spec.keys()) - {'weight'}
+                rule = next(iter(rule_keys))  # Get the single rule key
+
+                current_priority = rule_precedence.get(rule, -1)
+                if current_priority > matching_priority:
+                    matching_weight = venue_spec['weight']
+                    matching_priority = current_priority
+
+        return matching_weight
 
     def get_publications(self, author_id):
 
         dataset_params = self.config.get('dataset', {})
+        weight_specification = dataset_params.get('weight_specification', [])
         minimum_pub_date = dataset_params.get('minimum_pub_date') or dataset_params.get('or', {}).get('minimum_pub_date', 0)
         top_recent_pubs = dataset_params.get('top_recent_pubs') or dataset_params.get('or', {}).get('top_recent_pubs', False)
-
         publications = self.deduplicate_publications(
             self.get_paper_notes(author_id, dataset_params)
         )
@@ -122,16 +161,32 @@ class OpenReviewExpertise(object):
             pub_abstr = publication.content.get('abstract', '')
             if isinstance(pub_abstr, dict):
                 pub_abstr = pub_abstr.get('value')
-            
+
+            pub_venueid = publication.content.get('venueid', '')
+            if isinstance(pub_venueid, dict):
+                pub_venueid = pub_venueid.get('value')
+            if not pub_venueid:
+                pub_venueid = publication.invitation.split('/-/')[0]
+
+            # Compare venueid to domain/invitation prefix to determine acceptance
+            pub_weight = self.get_pub_weight(pub_venueid, pub=publication, weight_specification=weight_specification)
+
+            if pub_weight == 0:
+                continue
+
             reduced_publication = {
                 'id': publication.id,
                 'cdate': publication.cdate,
                 'mdate': publication.mdate,
                 'content': {
                     'title': pub_title,
-                    'abstract': pub_abstr
+                    'abstract': pub_abstr,
+                    'venueid': pub_venueid
                 }
             }
+
+            if weight_specification:
+                reduced_publication['content']['weight'] = pub_weight
             unsorted_publications.append(reduced_publication)
 
         # If the author does not have publications, then return early

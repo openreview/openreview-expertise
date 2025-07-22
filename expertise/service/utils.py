@@ -12,6 +12,8 @@ from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
 from google.cloud.aiplatform_v1.types import PipelineState
+from copy import deepcopy
+from expertise.config import ModelConfig
 
 import re
 SUPERUSER_IDS = ['openreview.net', 'OpenReview.net', '~Super_User1']
@@ -475,9 +477,10 @@ class JobConfig(object):
         # Load optional dataset params from default config
         allowed_dataset_params = [
             'minimumPubDate',
-            'topRecentPubs'
+            'topRecentPubs',
+            'weightSpecification'
         ]
-        config.dataset = starting_config.get('dataset', {})
+        config.dataset = deepcopy(starting_config.get('dataset', {}))
         config.dataset['directory'] = root_dir
 
         # Attempt to load any API request dataset params
@@ -487,6 +490,10 @@ class JobConfig(object):
                 # Handle general case
                 if param not in allowed_dataset_params:
                     raise openreview.OpenReviewException(f"Bad request: unexpected fields in model: {[param]}")
+                
+                # Validate weightSpecification
+                if param == 'weightSpecification':
+                    ModelConfig.validate_weight_specification(config.dataset)
 
                 snake_param = _camel_to_snake(param)
                 config.dataset[snake_param] = dataset_params[param]
@@ -502,8 +509,8 @@ class JobConfig(object):
             'skipSpecter',
             'percentileSelect'
         ]
-        config.model = starting_config.get('model', None)
-        model_params = starting_config.get('model_params', {})
+        config.model = deepcopy(starting_config.get('model', None))
+        model_params = deepcopy(starting_config.get('model_params', {}))
         config.model_params = {}
         config.model_params['use_title'] = model_params.get('use_title', None)
         config.model_params['use_abstract'] = model_params.get('use_abstract', None)
@@ -560,6 +567,11 @@ class JobConfig(object):
         if 'mfr' in config.model:
             config.model_params['mfr_feature_vocab_file'] = server_config['MFR_VOCAB_DIR']
             config.model_params['mfr_checkpoint_dir'] = server_config['MFR_CHECKPOINT_DIR']
+
+        # Add validation for model type and weightSpecification
+        if config.dataset and 'weight_specification' in config.dataset:
+            if config.model != 'specter2+scincl':
+                raise openreview.OpenReviewException(f"Bad request: model {config.model} does not support weighting by venue")
 
         return config
     
