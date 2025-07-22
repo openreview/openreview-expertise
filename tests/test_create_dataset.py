@@ -437,6 +437,43 @@ def test_weights_applied_by_venue(client, openreview_client):
         else:
             assert publication['content']['weight'] == 1
 
+    # Post new publication to archive and check its weight
+
+    submission = openreview.api.Note(
+        pdate=1554819115,
+        license='CC BY-SA 4.0',
+        content = {
+            "title": { 'value': "test_archive" },
+            "abstract": { 'value': "abstract archive" },
+            "authors": { 'value': ['Romeo Mraz'] },
+            "authorids": { 'value': ['~Romeo_Mraz1'] },
+            'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' }
+        }
+    )
+    archive_note_edit = openreview_client.post_note_edit(
+        invitation = 'openreview.net/Archive/-/Direct_Upload',
+        signatures = ['~Romeo_Mraz1'],
+        note = submission
+    )
+    archive_note_id = archive_note_edit['note']['id']
+
+    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    config = {
+        'dataset': {
+            'weight_specification': [
+                {
+                    "articleSubmittedToOpenReview": False,
+                    "weight": 10
+                }
+            ]
+        }
+    }
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    publications = or_expertise.get_publications('~Romeo_Mraz1')
+    for publication in publications:
+        if publication['id'] == archive_note_id:
+            assert publication['content']['weight'] == 10
+
 def test_get_submissions_from_invitation(client, openreview_client):
     config = {
         'use_email_ids': False,
