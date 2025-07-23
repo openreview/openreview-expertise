@@ -2,18 +2,56 @@
 
 A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
 
-## Prerequisites (Optional)
+## Model Descriptions
 
-If you plan to use expertise regularly, please consider installing [RedisAI](https://oss.redis.com/redisai/) to make the runs more efficient. We recommend to use Docker image `redislabs/redisai`, however you can install it directly from the source code as explained [here](https://oss.redis.com/redisai/quickstart/).
+**SPECTER - SPECTER: Document-level Representation Learning using Citation-informed Transformers (2020)**
+
+SPECTER is a BERT-based document encoder for scientific articles using titles and abstracts. SPECTER is first initialized using SciBERT as a scientific-text specific starting point and uses inter-document citation graph information to learn a general-purpose embedding. During training, SPECTER sees 3 papers: a query paper, a paper cited by the query for a positive example, and a paper cited by the positive example but not the query. SPECTER learns to group together documents where one document cites the other and separate documents that are farther away on the citation graph. SPECTER can be used for inference without any additional citation information.
+
+**Multi-facet Recommender (MFR) - Cold-start Paper Recommendation using Multi-facet Embedding (2021)**
+
+Multi-facet Recommender (MFR) is a transformer-based recommendation system for scientific papers. The core principle is that articles can have several different key areas whose information is lost when compressing the title and abstract into a single embedding. Papers in MFR are represented with multiple vectors called facets. Authors are built by minimizing the distance between the author representation and all facets of each of their publications. A recommendation is made by scoring the author against the most similar facet of a venue’s submission.
+
+Specter + MFR are ensembled at the reviewer-paper affinity score level with a weight of 0.8 on SPECTER and 0.2 on MFR.
+
+**SPECTER2 - SciRepEval: A Multi-Format Benchmark for Scientific Document Representations (2022, model updated with papers from 2023)**
+
+SPECTER2’s underlying architecture is very similar to SPECTER, but pre-trained on a larger set of documents spanning a broader number of fields of study. This pre-trained model is SPECTER2 base, further training is done to learn task format-specific adapter layers and attention modules as a middle ground between using a single embedding for all downstream tasks and specific embeddings per task. We use the proximity adapter for paper recommendation, where the training objective is the same triplet loss as the pre-training objective, as well as the original SPECTER objective.
+
+**SciNCL - Neighborhood Contrastive Learning for Scientific Document Representations with Citation Embeddings (2022)**
+
+SciNCL is another transformer-based document encoder initialized on SciBERT. SciNCL looks to address some key design choices in the SPECTER models training procedure. While they share the same triplet-loss objective, SPECTER uses the discrete citations, which may miss similar papers but were not cited and may reflect citation policy rather than pure similarity, and unidirectional citations, which can cause a paper to be both a positive and negative example. SciNCL first trains embeddings over the citation graph to move the embeddings into a continuous space, and uses nearest neighbors of a query document to determine its triplets for training.
+
+Specter2 + SciNCL are ensembled at the paper-paper similarity level with equal weights of 0.5 on each model.
+
+### Performance
+We use metrics provided by [Stelmakh et al.](https://github.com/niharshah/goldstandard-reviewer-paper-match) as they correlated most closely with the problem of recommending papers to reviewers with sufficient expertise. The task is: given a reviewer's profile in the form of their publications, and their self-reported expertise on reviewing two papers, return the correct ordering of papers so that the higher expertise-ranked paper is recommended fist. The table below reports the following evaluations:
+1. Loss: An error from the underlying model occurs when the higher rated paper is returned as the second result. The loss is the absolute difference between the expertise ratings, so that the more obvious the error, the higher loss is incurred. A formal definition is provided [here](https://arxiv.org/pdf/2303.16750.pdf) in subsection 5.1.
+2. Easy Triples: Accuracy of a model on data where the gap between the expertise ratings is large, indicating an obvious error.
+3. Hard Triples: Accuracy of a model on data where the gap between the expertise ratings is small, indicating a less-obvious error that requires fine-grained understanding to be correct.
+
+The following table is partially taken from Stelmakh et al., where SPECTER2, SciNCL and SPECTER2+SciNCL were evaluated by the OpenReview team on their public dataset and evaluation scripts.
+
+| Model          |  Loss  |  Easy Triples  |  Hard Triples  |  
+|----------------|--------|----------------|----------------|
+|   TPMS (Full)  |  N/A   |      0.84      |      0.64      |
+|      TPMS      |  0.28  |      0.80      |      0.62      |
+|      ELMo      |  0.34  |      0.70      |      0.57      |
+|    SPECTER     |  0.27  |      0.85      |      0.57      |
+|  SPECTER+MFR   |  0.24  |      0.88      |      0.60      |
+|      ACL       |  0.30  |      0.78      |      0.62      |
+|    SPECTER2    |  0.22  |      0.89      |      0.61      |
+|     SciNCL     |  0.22  |      0.90      |      0.65      |
+| SPECTER2+SciNCL|  0.21  |      0.91      |      0.65      |
 
 ## Installation
 
-This repository only supports Python 3.6 and above. Python 3.8 and above is required to run SPECTER2
-Clone this repository and install the package using pip as follows. If you plan to use ELMo, then you will need to install [Miniconda](https://docs.conda.io/en/latest/miniconda.html), since one of the packages is only available in conda. You may use the `pip` command in a conda environment as long as you first run all the pip installs and then conda installs. Just follow the order of the commands shown below and it should work. You may read more about this [here](https://www.anaconda.com/using-pip-in-a-conda-environment/).
+This repository only supports Python 3.8 and above (Python 3.11 is recommended). Python 3.8 and above is required to run SPECTER2
+Clone this repository and install the package using pip as follows. You may use the `pip` command in a conda environment as long as you first run all the pip installs and then conda installs. Just follow the order of the commands shown below and it should work. You may read more about this [here](https://www.anaconda.com/using-pip-in-a-conda-environment/).
 
 Run this command only if you are using conda:
 ```
-conda create -n affinity python=3.8
+conda create -n affinity python=3.11
 conda activate affinity
 conda install pip
 ```
@@ -28,30 +66,12 @@ If you plan to actively develop models, it's best to install the package in "edi
 pip install -e <location of this repository>
 ```
 
-Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use ELMo, SPECTER, Multifacet-Recommender (MFR), SPECTER+MFR, SPECTER2+SciNCL with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
+Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use SPECTER, Multifacet-Recommender (MFR), SPECTER+MFR, SPECTER2+SciNCL with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
 
-We also use [faiss](https://github.com/facebookresearch/faiss/) for ELMo to calculate vector similarities. This is not included in the dependencies inside `setup.py` because the official package is only available in conda.
-
-Run this command if you plan to use ELMo (Using CPU is fine):
+If you plan to use GPU acceleration SPECTER / SPECTER+MFR, with the conda environment `affinity` active:
 ```
-conda install intel-openmp==2019.4
-conda install faiss-cpu==1.7.3 -c pytorch
-```
-[Here](https://github.com/facebookresearch/faiss/blob/master/INSTALL.md) you can find the above installation command.
-
-If you plan to use SPECTER / SPECTER+MFR, with the conda environment `affinity` active:
-```
-git clone https://github.com/allenai/specter.git
-cd specter
-
-wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
-tar -xzvf archive.tar.gz
-
 conda install pytorch cudatoolkit=10.1 -c pytorch 
 pip install -r requirements.txt
-python setup.py install
-conda install filelock
-cd ..
 pip install -I protobuf==3.20.1
 pip install numpy==1.24.4 --force-reinstall
 ```
@@ -82,24 +102,16 @@ conda create -n expertise python=$PYTHON_VERSION -c conda-forge
 conda activate expertise
 mkdir ../expertise-utils
 cd ../expertise-utils
-git clone https://github.com/allenai/specter.git
-cd specter
-wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
-tar -xzvf archive.tar.gz
-conda install pytorch cudatoolkit=10.1 -c pytorch 
-pip install -r requirements.txt
-python setup.py install
+conda install "pytorch>=2.3" pytorch-cuda=12.4 -c pytorch -c nvidia
 conda install -y filelock
-cd ..
 wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
 tar -xzvf mfr.tar.gz
 mv ./multifacet_recommender_data ./multifacet_recommender
 cd ~/openreview-expertise
-pip install -e .
+python -m pip install -e .
 conda install -y intel-openmp==2019.4
-conda install -y faiss-cpu==1.7.3 -c pytorch
-pip install -I protobuf==3.20.1
-pip install numpy==1.24.4 --force-reinstall
+conda install -y -c conda-forge faiss-cpu=1.7.4 "pytorch>=2.3"
+python -m pip install -I protobuf==3.20.1
 ```
 ## Affinity Scores
 
@@ -121,7 +133,7 @@ python -m expertise.create_dataset config.json \
 If you wish to create your own dataset without using the OpenReview API to obtain the data, please follow the formatting provided below:
 ![dataset_format](https://user-images.githubusercontent.com/43583679/166930738-6e4a8ac9-f2a8-499a-8eb0-98b1f26a9a12.png)
 
-For ELMo, SPECTER, Multifacet-Recommender and BM25 run the following command
+For SPECTER, Multifacet-Recommender and BM25 run the following command
 ```
 python -m expertise.run config.json
 ```
@@ -134,38 +146,6 @@ python -m expertise.tfidf_scores config.json
 
 The output will generate a `.csv` file with the name pattern `<config_name>-scores.csv`.
 
-## Detect Duplicates
-
-Duplicate detection can be used to find duplicates both within a venue or between 2 different venues.
-
-- For detecting duplicates within a venue only one submissions directory or one submissions.jsonl file is needed.
-- For detecting duplicates between 2 different venues, either one submissions and one other submissions directories are needed or one submissions.jsonl and one other_submissions.jsonl are needed.
-
-More details about these files/directories can be found at the end of this section.
-
-There are two steps to detect duplicates:
-- Create Dataset or Datasets
-- Run Duplicate Detection
-
-The dataset can be generated using the [OpenReview python API](https://github.com/openreview/openreview-py) which should be installed when this repository is installed. You can generate your own dataset from some other source as long as it is compliant with the format shown in the Datasets section.
-Start by creating an "experiment directory" (`experiment_dir`), and a JSON config file (e.g. `config.json`) in it. Go to the Configuration File section for details on how to create the `config.json`.
-
-Duplicate detection uses ELMo exclusively, since we always normalize the scores for BM25. ELMo scores have values from 0 to 1. The closer a score is to 1, the more similar the submissions are. The `normalize` option for ELMo is disabled for duplicate detection.
-
-Create a dataset by running the following command (this is optional if you already have the dataset):
-```
-python -m expertise.create_dataset config.json \
-	--baseurl <usually https://api.openreview.net> \
-	--password <your_password> \
-	--username <your_username> \
-```
-
-For ELMo run the following command
-```
-python -m expertise.run_duplicate_detection config.json
-```
-The output will generate a `.csv` file with the name pattern `<config_name>.csv`. Read the `Configuration File` section to understand how to create one. For duplicate detection, the parameters that apply are in `Affinity Scores Configuration Options`, `ELMo specific parameters (affinity scores)`, and `ELMo specific parameters (duplicate detection)`.
-
 ## Running the Server
 The server is implemented in Flask and can be started from the command line:
 ```
@@ -173,11 +153,6 @@ python -m expertise.service --host localhost --port 5000
 ```
 
 By default, the app will run on `http://localhost:5000`. The endpoint `/expertise/test` should show a simple page indicating that Flask is running. Accessing the `/expertise` endpoint to compute affinity scores **requires** valid authentication in the headers of the request (i.e submitted from a logged in Python client)
-
-In order to start the Celery queue worker, use: 
-```
-celery --app expertise.service.server.celery_app worker
-```
 
 By default, if using SPECTER and/or MFR, the server config expects the checkpoints to be placed in the following directories:
 ```
@@ -227,6 +202,8 @@ This parameters could be included in a separate file, like `dataset-config.json`
 - `paper_invitation`: (optional) String or array of strings with the submission invitations. This is the invitation for Submissions, all the submissions in OpenReview for a particular venue have an invitation and that is how they are grouped together.
 - `paper_venueid`: (optional) String with the submission venue id. In API2, submissions may have multiple invitations which accumulate as the submission is modified. The venue id is a way of grouping submissions in API2 using a singular value.
 - `paper_id`: (optional) String with the submission ID. All submissions in OpenReview have an associated unique ID that can be used to fetch the paper.
+- `paper_content`: (optional) Dictionary mapping from a content field to the target value that the field should be. The primary use case is to perform affinity scoring for a subset of submissions matching a specific track, but this can be generalized to any content field
+- `match_paper_invitation`, `match_paper_venueid`, `match_paper_id`, `match_paper_content`: (optional) Equivalents of the previously mentioned paper config fields, but these are used to fetch submissions into the `match_submissions.jsonl` archives file to enable scoring between papers.
 - `exclusion_inv` (optional): String or array of strings with the exclusion invitations. Reviewers (and Area Chairs) can choose to exclude some of their papers before the affinity scores are calculated so that they get papers that are more aligned to their current expertise/interest. Papers included here will not be taken into consideration when calculating the affinity scores.
 - `csv_submissions`: (optional) String with the relative path from `dataset.directory` to a csv file containing the submissions in the following format: "submission_id","title","abstract". This can be added on top of `paper_invitation`, the values will be combined.
 - `bid_inv` (optional): String or array of strings with the bid invitations. Bids are used by the reviewers in OpenReview to select papers that they would or would not like to review. These bids are then used to compute a final affinity score to be more fair with the reviewers.
@@ -319,6 +296,7 @@ These parameters could be included in a separate file, like `affinity-config.jso
 - `model_params.use_title`: Boolean that indicates whether to use the title for the affinity scores or not. If this is `true` and `model_params.use_abstract` is also `true`, then, whenever a Submission or Publication does not have an abstract, it will fallback to the title.
 - `model_params.use_abstract`: Boolean that indicates whether to use the abstract for the affinity scores or not. If this is `true` and `model_params.use_title` is also `true`, then, whenever a Submission or Publication does not have an abstract, it will fallback to the title.
 - `model_params.sparse_value` (optional): Numerical value. If passed, instead of returning all the possible reviewer-submission combinations, only the top scores will be returned. The number of top scores will be determined by the `sparse_value`. That does not mean that the number of scores per submission will be equal to the `sparse_value`. Here is an example, if there are only 10 submissions and 5 reviewers, there would be a total of 50 scores. If we set the `sparse_value` to 5, each reviewer will get the top 5 submissions that are most similar to their publications. However, there might be a submission (or more submissions) that is not among the top 5 of any reviewer. In order to ensure that all submissions also have reviewers, the top 5 reviewers are assigned to each submission. As you can imagine, some reviewers will have more than 5 submissions assigned because of this reason.
+- `model_params.compute_paper_paper`: (optional) Boolean that indicates if you want to compute and output scores between papers. This must be set along with passing a `match_paper_*` field to ensure both steps are aware of the context.
 - `dataset.directory`: This is the directory where the data will be read from. If `create_dataset` is used, then the files will have the required format. If, however, the data does not come from OpenReview, then the dataset should be compliant with the format specified in the Datasets section.
 - `dataset.with_title` (optional): Boolean to indicate if only publications in OpenReview with title should be included.
 - `dataset.with_abstract` (optional): Boolean to indicate if only publications in OpenReview with abstract should be included.
@@ -339,37 +317,6 @@ Here is an example:
         "use_title": false,
         "use_abstract": true,
         "workers": 4,
-        "publications_path": "./",
-        "submissions_path": "./"
-    }
-}
-```
-
-#### ELMo specific parameters (affinity scores):
-- `model_params.use_cuda`: Boolean to indicate whether to use GPU (`true`) or CPU (`false`) when running ELMo. Currently, only 1 GPU is supported, but there does not seem to be necessary to have more.
-- `model_params.batch_size`: Batch size when running ELMo. This defaults to 8, but depending on your machine, this value could be different.
-- `model_params.publications_path`: When running ELMo, this is where the embedded abstracts/titles of the Reviewers (and Area Chairs) are stored.
-- `model_params.submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the Submissions are stored.
-- `model_params.knn` (optional): This parameter specifies the k Nearest Neighbors that will be printed to the csv file. For instance, if the value is 10, then only the first 10 authors with the highest affinity score will be printed for each submission. You may see that if the value is 10, more than 10 values are printed, that is because there are ties in the scores. If the parameter is not specified, then each submission will have a score for every reviewer.
-- `model_params.normalize` (optional): This parameter specifies if the ELMo scores should be normalized. Normally, the ELMo scores are between 0.5 and 1. Therefore, normalizing the scores can provide better matching between reviewers and submissions. This of course would not change the order of the results, if reviewer 1 is better than reviewer 2 for a particular submission, this will still be true after normalizing the scores.
-- `model_params.skip_elmo`: Since running ELMo can take a significant amount of time, the vectors are saved in `model_params.submissions_path` and `model_params.publications_path`. If you want to run other operations with these results, like changing the value of `model_params.knn`, you may do so without running ELMo again by setting `model_params.skip_elmo` to true. The pickle files will be loaded with all the vectors.
-
-Here is an example:
-```
-{
-    "name": "iclr2020_elmo_abstracts",
-    "dataset": {
-        "directory": "./"
-    },
-    "model": "elmo",
-    "model_params": {
-        "scores_path": "./",
-        "use_title": false,
-        "use_abstract": true,
-        "use_cuda": true,
-        "batch_size": 8,
-        "normalize": true,
-        "skip_elmo": false,
         "publications_path": "./",
         "submissions_path": "./"
     }
@@ -484,31 +431,6 @@ Here is an example:
 }
 ```
 
-#### ELMo specific parameters (duplicate detection):
-- `model_params.other_submissions_path`: When running ELMo, this is where the embedded abstracts/titles of the other Submissions are stored.
-All the other parameters are the same as in the affinity scores.
-
-Here is an example:
-```
-{
-    "name": "duplicate_detection",
-    "dataset": {
-        "directory": "./"
-    },
-    "model_params": {
-        "scores_path": "./",
-        "use_title": false,
-        "use_abstract": true,
-        "use_cuda": true,
-        "batch_size": 4,
-        "knn": 10,
-        "skip_elmo": false,
-        "submissions_path": "./",
-        "other_submissions_path": "./"
-    }
-}
-```
-
 #### TF-IDF Sparse Vector Similarity specific parameters with suggested values:
 - `min_count_for_vocab`: 1,
 - `random_seed`: 9,
@@ -556,7 +478,7 @@ dataset-name/
 
 ```
 
-In case BM25 or ELMo is used, then the Submissions (and Other Submissions when doing duplicate detection) can have the following format
+In case BM25 is used, then the Submissions (and Other Submissions when doing duplicate detection) can have the following format
 
 ```
 dataset-name/
@@ -570,7 +492,7 @@ The `archives` folder will contain the user ids of people that will review paper
 
 The `submissions` folder contains all the submissions of a particular venue. The name of the file is the id used to identify the submission in OpenReview. Each file will only contain one line with all the submission content.
 
-Alternatively, instead of using the `submissions` folder for BM25 and ELMo, the `submissions.jsonl` and `other_submissions.jsonl` will have a strigified JSON submission per line.
+Alternatively, instead of using the `submissions` folder for BM25, the `submissions.jsonl` and `other_submissions.jsonl` will have a strigified JSON submission per line.
 
 The stringified JSONs representing a Submission or Publication should have the following schema to work:
 ```
@@ -645,7 +567,7 @@ To run a single set of tests from a file, you can include the file name as an ar
 pytest tests/test_double_blind_conference.py
 ```
 
-## Test
+## Test (Outdated)
 The testing methodology used for the model tries to check how good the model is. We are aware that this may not be the best strategy, but it has given good results so far. The test consists on using the publications of several reviewers and take one of those publications out from the corpus. We then use that extracted publication to calculate affinity scores against the remaining publications in the corpus. If the model is good then, we expect the authors of the extracted publication to have the highest affinity scores.
 
 This method has two obvious disadvantages:

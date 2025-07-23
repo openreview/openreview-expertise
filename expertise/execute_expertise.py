@@ -11,6 +11,7 @@ def execute_expertise(config):
     config = ModelConfig(config_dict=config)
 
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
+    venue_specific_weights = 'weight_specification' in config['dataset'].keys()
     if Path(config['dataset']['directory']).joinpath('submissions').exists():
         submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
     elif Path(config['dataset']['directory']).joinpath('submissions.json').exists():
@@ -40,35 +41,6 @@ def execute_expertise(config):
                 scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
-    if config['model'] == 'elmo':
-        from .models import elmo
-        elmoModel = elmo.Model(
-            average_score=config['model_params'].get('average_score', False),
-            max_score=config['model_params'].get('max_score', True),
-            use_title=config['model_params'].get('use_title', False),
-            use_abstract=config['model_params'].get('use_abstract', True),
-            use_cuda=config['model_params'].get('use_cuda', False),
-            batch_size=config['model_params'].get('batch_size', 4),
-            knn=config['model_params'].get('knn'),
-            normalize=config['model_params'].get('normalize', False),
-            sparse_value=config['model_params'].get('sparse_value')
-        )
-        elmoModel.set_archives_dataset(archives_dataset)
-        elmoModel.set_submissions_dataset(submissions_dataset)
-        if not config['model_params'].get('skip_elmo', False):
-            elmoModel.embed_publications(publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.pkl'))
-            elmoModel.embed_submissions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'))
-        elmoModel.all_scores(
-            publications_path=Path(config['model_params']['publications_path']).joinpath('pub2vec.pkl'),
-            submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.pkl'),
-            scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
-        )
-
-        if config['model_params'].get('sparse_value'):
-            elmoModel.sparse_scores(
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
-            )
-
     if config['model'] == 'specter':
         from .models import multifacet_recommender
         specter_predictor = multifacet_recommender.SpecterPredictor(
@@ -79,7 +51,8 @@ def execute_expertise(config):
             batch_size=config['model_params'].get('batch_size', 16),
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
-            use_redis=config['model_params'].get('use_redis', False)
+            use_redis=config['model_params'].get('use_redis', False),
+            compute_paper_paper=config['model_params'].get('compute_paper_paper', False)
         )
         specter_predictor.set_archives_dataset(archives_dataset)
         specter_predictor.set_submissions_dataset(submissions_dataset)
@@ -109,7 +82,10 @@ def execute_expertise(config):
             max_score=config['model_params'].get('max_score', True),
             specter_batch_size=config['model_params'].get('batch_size', 16),
             use_cuda=config['model_params'].get('use_cuda', False),
-            sparse_value=config['model_params'].get('sparse_value')
+            sparse_value=config['model_params'].get('sparse_value'),
+            compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
+            venue_specific_weights=venue_specific_weights,
+            percentile_select=config['model_params'].get('percentile_select', None)
         )
         ens_predictor.set_archives_dataset(archives_dataset)
         ens_predictor.set_submissions_dataset(submissions_dataset)
@@ -146,7 +122,9 @@ def execute_expertise(config):
             batch_size=config['model_params'].get('batch_size', 16),
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
-            dump_p2p=config['model_params'].get('dump_p2p', False)
+            dump_p2p=config['model_params'].get('dump_p2p', False),
+            compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
+            percentile_select=config['model_params'].get('percentile_select', None)
         )
         scincl_predictor.set_archives_dataset(archives_dataset)
         scincl_predictor.set_submissions_dataset(submissions_dataset)
@@ -179,7 +157,9 @@ def execute_expertise(config):
             batch_size=config['model_params'].get('batch_size', 16),
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
-            dump_p2p=config['model_params'].get('dump_p2p', False)
+            dump_p2p=config['model_params'].get('dump_p2p', False),
+            compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
+            percentile_select=config['model_params'].get('percentile_select', None)
         )
         spec2_predictor.set_archives_dataset(archives_dataset)
         spec2_predictor.set_submissions_dataset(submissions_dataset)

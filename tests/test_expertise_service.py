@@ -11,9 +11,103 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
-from expertise.models import elmo
 from expertise.service.utils import JobConfig, RedisDatabase
 
+# Default parameters for the module's common setup
+DEFAULT_JOURNAL_ID = 'TMLR'
+DEFAULT_CONF_ID = 'ABC.cc'
+DEFAULT_POST_REVIEWERS = True
+DEFAULT_POST_AREA_CHAIRS = False
+DEFAULT_POST_SENIOR_AREA_CHAIRS = False
+DEFAULT_POST_SUBMISSIONS = True
+DEFAULT_POST_PUBLICATIONS = True
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_tmlr(clean_start_journal, client, openreview_client):
+    clean_start_journal(
+        openreview_client,
+        DEFAULT_JOURNAL_ID,
+        editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'],
+        additional_editors=['~Margherita_Hilpert1'],
+        post_submissions=True,
+        post_publications=True,
+        post_editor_data=True
+    )
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_abc_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
+        DEFAULT_CONF_ID,
+        post_reviewers=DEFAULT_POST_REVIEWERS,
+        post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
+        post_senior_area_chairs=DEFAULT_POST_SENIOR_AREA_CHAIRS,
+        post_submissions=DEFAULT_POST_SUBMISSIONS,
+        post_publications=DEFAULT_POST_PUBLICATIONS
+    )
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_hij_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
+        'HIJ.cc',
+        fake_data_source_id=DEFAULT_CONF_ID,
+        exclude_expertise=False,
+        post_reviewers=True,
+        post_area_chairs=False,
+        post_senior_area_chairs=False,
+        post_submissions=False,
+        post_publications=True
+    )
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_upweight(clean_start_journal, client, openreview_client):
+    clean_start_journal(
+        openreview_client,
+        'UPWEIGHT.cc',
+        editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'],
+        additional_editors=['~Margherita_Hilpert1'],
+        post_submissions=False,
+        post_publications=False,
+        post_editor_data=False
+    )
+
+
+EXCLUSION_CONF_ID = 'EXCLUSION.cc'
+EXPERTISE_SELECTION_POSTING = False
+@pytest.fixture(scope="module", autouse=True)
+def _setup_exclusion_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
+        EXCLUSION_CONF_ID,
+        fake_data_source_id=DEFAULT_CONF_ID,
+        post_reviewers=DEFAULT_POST_REVIEWERS,
+        post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
+        post_senior_area_chairs=DEFAULT_POST_SENIOR_AREA_CHAIRS,
+        post_submissions=EXPERTISE_SELECTION_POSTING,
+        post_publications=EXPERTISE_SELECTION_POSTING,
+        post_expertise_selection={
+            '~Harold_Rice1': 'Exclude'
+        }
+    )
+
+INCLUSION_CONF_ID = 'INCLUSION.cc'
+@pytest.fixture(scope="module", autouse=True)
+def _setup_include_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
+        INCLUSION_CONF_ID,
+        exclude_expertise=False,
+        fake_data_source_id=DEFAULT_CONF_ID,
+        post_reviewers=DEFAULT_POST_REVIEWERS,
+        post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
+        post_senior_area_chairs=DEFAULT_POST_SENIOR_AREA_CHAIRS,
+        post_submissions=EXPERTISE_SELECTION_POSTING,
+        post_publications=EXPERTISE_SELECTION_POSTING,
+        post_expertise_selection={
+            '~Harold_Rice1': 'Include'
+        }
+    )
 
 class TestExpertiseService():
 
@@ -365,11 +459,9 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: Expertise invitation indicated but ID not provided"
 
-    def test_request_expertise_with_valid_parameters(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
-        # Submit a working job and return the job ID
-        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+    def test_request_expertise_with_invalid_model_venue_weights(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submitting a request with weightSpecification on an invalid model
         test_client = openreview_context['test_client']
-        # Make a request
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -387,7 +479,258 @@ class TestExpertiseService():
                             'useTitle': False, 
                             'useAbstract': True, 
                             'skipSpecter': False,
-                            'scoreComputation': 'avg'
+                            'scoreComputation': 'max'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0,
+                        "weightSpecification": [
+                            {
+                                "prefix": "UPWEIGHT",
+                                "weight": 10
+                            }
+                        ]
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 400, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert response.json['message'] == "Bad request: model specter+mfr does not support weighting by venue"
+
+    def test_request_expertise_with_valid_parameters(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+        
+        # Post a submission and manually make it public and accepted
+        submission = openreview.api.Note(
+            content = {
+                "title": { 'value': "test_weight" },
+                "abstract": { 'value': "abstract weight" },
+                "authors": { 'value': ['Royal Toy'] },
+                "authorids": { 'value': ['~Royal_Toy1'] },
+                'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
+                'competing_interests': {'value': 'aaa'},
+                'human_subjects_reporting': {'value': 'bbb'}
+            }
+        )
+        submission_edit = openreview_client.post_note_edit(
+            invitation="UPWEIGHT.cc/-/Submission",
+            signatures=['~Royal_Toy1'],
+            note=submission
+        )
+        upweighted_note_id = submission_edit['note']['id']
+        openreview_client.post_note_edit(
+            invitation="UPWEIGHT.cc/-/Edit",
+            readers=["UPWEIGHT.cc"],
+            writers=["UPWEIGHT.cc"],
+            signatures=["UPWEIGHT.cc"],
+            note=openreview.api.Note(
+                id=upweighted_note_id,
+                content={
+                    'venueid': {
+                        'value': 'UPWEIGHT.cc/Withdrawn_Submission'
+                    },
+                    'venue': {
+                        'value': 'UPWEIGHT Withdrawn Submission'
+                    }
+                },
+                readers=['everyone'],
+                pdate = 1554819115,
+                license = 'CC BY-SA 4.0'
+            )
+        )
+
+        # Make a request with weight specification
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'max'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0,
+                        "weightSpecification": [
+                            {
+                                "articleSubmittedToOpenReview": True,
+                                "weight": 0
+                            }
+                        ]
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+        # Weight shifts scores onto a single submission
+        # Build scores to reference later
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        response = response.json['results']
+        zeroed_royal_scores = {}
+        for item in response:
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            print(item)
+            if profile_id == '~Royal_Toy1':
+                zeroed_royal_scores[submission_id] = score
+
+        # Check weights applied in both embedding files:
+        specter_file = f"./tests/jobs/{job_id}/pub2vec_specter.jsonl"
+        scincl_file = f"./tests/jobs/{job_id}/pub2vec_scincl.jsonl"
+
+        all_publication_ids = set()
+        with open(specter_file, 'r') as f, open(scincl_file, 'r') as g:
+            for specter_line, scincl_line in zip(f, g):
+                # Parse both lines
+                specter_pub = json.loads(specter_line.strip())
+                scincl_pub = json.loads(scincl_line.strip())
+
+                # Validate both publications have weight field
+                assert 'weight' in specter_pub, f"Missing weight in specter publication {specter_pub.get('paper_id')}"
+                assert 'weight' in scincl_pub, f"Missing weight in scincl publication {scincl_pub.get('paper_id')}"
+
+                # Check weights for both publications
+                for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
+                    all_publication_ids.add(pub['paper_id'])
+                    expected_weight = 10 if pub['paper_id'] == upweighted_note_id else 1
+                    assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
+
+        assert upweighted_note_id not in all_publication_ids
+
+        # Make a request with weight specification, use articleSubmittedToOpenReview
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'max'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0,
+                        "weightSpecification": [
+                            {
+                                "articleSubmittedToOpenReview": True,
+                                "weight": 0
+                            },
+                            {
+                                "prefix": "UPWEIGHT",
+                                "weight": 10
+                            }
+                        ]
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+        # Weight shifts scores onto a single submission
+        # Build scores to reference later
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        response = response.json['results']
+        openreview_royal_scores = {}
+        for item in response:
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            print(item)
+            if profile_id == '~Royal_Toy1':
+                openreview_royal_scores[submission_id] = score
+
+        # Check weights applied in both embedding files (now it should be weight 5):
+        specter_file = f"./tests/jobs/{job_id}/pub2vec_specter.jsonl"
+        scincl_file = f"./tests/jobs/{job_id}/pub2vec_scincl.jsonl"
+
+        with open(specter_file, 'r') as f, open(scincl_file, 'r') as g:
+            for specter_line, scincl_line in zip(f, g):
+                # Parse both lines
+                specter_pub = json.loads(specter_line.strip())
+                scincl_pub = json.loads(scincl_line.strip())
+
+                # Validate both publications have weight field
+                assert 'weight' in specter_pub, f"Missing weight in specter publication {specter_pub.get('paper_id')}"
+                assert 'weight' in scincl_pub, f"Missing weight in scincl publication {scincl_pub.get('paper_id')}"
+
+                # Check weights for both publications
+                for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
+                    expected_weight = 10 if pub['paper_id'] == upweighted_note_id else 1
+                    assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
+
+        # Make a request
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'max'
                     },
                     "dataset": {
                         'minimumPubDate': 0
@@ -400,7 +743,7 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
         # assert response[0]['description'] == 'Server received config and allocated space'
@@ -419,17 +762,17 @@ class TestExpertiseService():
         # assert response[0]['status'] == 'Queued'
         # assert response[0]['description'] == 'Server received config and allocated space'
 
-        # Check that the search returns an empty list before the job is completed when searching for completed
-        response = test_client.get('/expertise/status/all', query_string={'status': 'Completed'}).json['results']
-        assert len(response) == 0
+        # Check that the search returns both job beforejobs the new job is completed when searching for completed
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
+        assert len(response) == 2
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
@@ -453,15 +796,27 @@ class TestExpertiseService():
         assert response['cdate'] <= response['mdate']
 
         # After completion, check for non-empty completed list
-        response = test_client.get('/expertise/status/all', query_string={'status': 'Completed'}).json['results']
-        assert len(response) == 1
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
+        assert len(response) == 3
         assert response[0]['status'] == 'Completed'
         assert response[0]['name'] == 'test_run'
 
-        response = test_client.get('/expertise/status/all', query_string={'status': 'Running'}).json['results']
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Running'}).json['results']
         assert len(response) == 0
 
         openreview_context['job_id'] = job_id
+
+        # Check that ~Royal_Toy1 has a lower score than in the venue-weighted job - look at full 
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        response = response.json['results']
+
+        for item in response:
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            print(item)
+            if profile_id == '~Royal_Toy1':
+                assert round(zeroed_royal_scores[submission_id], 5) == round(score, 5)
+                assert openreview_royal_scores[submission_id] > score
+                assert openreview_royal_scores[submission_id] > zeroed_royal_scores[submission_id]
 
         response = test_client.post(
             '/expertise',
@@ -476,11 +831,11 @@ class TestExpertiseService():
                     'invitation': "ABC.cc/-/Submission"
                 },
                 "model": {
-                    "name": "specter+mfr",
+                    "name": "specter2+scincl",
                     'useTitle': False,
                     'useAbstract': True,
                     'skipSpecter': False,
-                    'scoreComputation': 'avg'
+                    'scoreComputation': 'max'
                 }
             }
             ),
@@ -491,12 +846,12 @@ class TestExpertiseService():
         job_id = response.json['jobId']
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
@@ -505,51 +860,53 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         openreview_context['job_id2'] = job_id
 
-    def test_status_all_query_params(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_status_all_query_params(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Test for status query
-        response = test_client.get('/expertise/status/all', query_string={'status': 'Completed'}).json['results']
-        assert len(response) == 2
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
+        assert len(response) == 4
         assert response[0]['status'] == 'Completed'
         assert response[1]['status'] == 'Completed'
-
-        response = test_client.get('/expertise/status/all', query_string={'status': 'Running'}).json['results']
+        assert response[2]['status'] == 'Completed'
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Running'}).json['results']
         assert len(response) == 0
 
         # Test for member query
-        response = test_client.get('/expertise/status/all', query_string={'memberOf': 'ABC'}).json['results']
-        assert len(response) == 2
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'memberOf': 'ABC'}).json['results']
+        assert len(response) == 4
         assert response[0]['request']['entityA']['memberOf'] == 'ABC.cc/Reviewers'
         assert response[1]['request']['entityA']['memberOf'] == 'ABC.cc/Reviewers'
-
-        response = test_client.get('/expertise/status/all', query_string={'memberOf': 'CBA'}).json['results']
+        assert response[2]['request']['entityA']['memberOf'] == 'ABC.cc/Reviewers'
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'memberOf': 'CBA'}).json['results']
         assert len(response) == 0
 
         # Test for invitation query
-        response = test_client.get('/expertise/status/all', query_string={'invitation': 'ABC.cc'}).json['results']
-        assert len(response) == 2
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'invitation': 'ABC.cc'}).json['results']
+        assert len(response) == 4
         assert response[0]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response[1]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
+        assert response[2]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
 
-        response = test_client.get('/expertise/status/all', query_string={'invitation': 'CBA'}).json['results']
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'invitation': 'CBA'}).json['results']
         assert len(response) == 0
 
         # Test for combination
-        response = test_client.get('/expertise/status/all', query_string={'status': 'Completed', 'memberOf': 'ABC'}).json['results']
-        assert len(response) == 2
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed', 'memberOf': 'ABC'}).json['results']
+        assert len(response) == 4
         assert response[0]['status'] == 'Completed'
         assert response[1]['status'] == 'Completed'
+        assert response[2]['status'] == 'Completed'
 
-        response = test_client.get('/expertise/status/all', query_string={'status': 'Running', 'memberOf': 'ABC'}).json['results']
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Running', 'memberOf': 'ABC'}).json['results']
         assert len(response) == 0
 
-        response = test_client.get('/expertise/status/all', query_string={'status': 'Running', 'memberOf': 'CBA'}).json['results']
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Running', 'memberOf': 'CBA'}).json['results']
         assert len(response) == 0
 
-    def test_get_results_by_job_id(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_by_job_id(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for results from the given job_id assuming the job has completed
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}"})
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 2
         response = response.json['results']
@@ -570,15 +927,15 @@ class TestExpertiseService():
         assert "~C.V._Lastname1" in all_users
 
 
-    def test_compare_results_for_identical_jobs(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_compare_results_for_identical_jobs(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for results from the given job_id assuming the job has completed
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}"})
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 2
         results_a = response.json['results']
 
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id2']}"})
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id2']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 2
         results_b = response.json['results']
@@ -599,7 +956,7 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'exclusion': {'invitation': 'HIJ.cc/-/Expertise_Selection' } }
+                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Note",
@@ -620,17 +977,17 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
@@ -645,7 +1002,7 @@ class TestExpertiseService():
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
-        assert req['entityA']['expertise']['exclusion']['invitation'] == 'HIJ.cc/-/Expertise_Selection'
+        assert req['entityA']['expertise']['invitation'] == 'INCLUSION.cc/-/Expertise_Selection'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
@@ -683,17 +1040,17 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
@@ -725,7 +1082,7 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'exclusion': { 'invitation': 'DEF.cc/-/Expertise_Selection' } }
+                        'expertise': {  'invitation': 'EXCLUSION.cc/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Note",
@@ -746,17 +1103,17 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
@@ -771,7 +1128,7 @@ class TestExpertiseService():
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
-        assert req['entityA']['expertise']['exclusion']['invitation'] == 'DEF.cc/-/Expertise_Selection'
+        assert req['entityA']['expertise']['invitation'] == 'EXCLUSION.cc/-/Expertise_Selection'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
@@ -781,22 +1138,104 @@ class TestExpertiseService():
         with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
         assert with_exclusion < no_exclusion
 
-    def test_get_results_for_all_jobs(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_for_all_jobs(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Assert that there are two completed jobs belonging to this user
         test_client = openreview_context['test_client']
-        response = test_client.get('/expertise/status/all', query_string={}).json['results']
-        assert len(response) == 5
+        response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={}).json['results']
+        assert len(response) == 7
         for job_dict in response:
             assert job_dict['status'] == 'Completed'
 
-    def test_get_results_and_delete_data(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_and_delete_data(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Clean up directories by setting the "delete_on_get" flag
         assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
         ## Assert the next expertise results should return empty result
+
+    def test_paper_paper_request(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID, DEF has a single exclude edge
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+        # Make a request
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                        "name": "specter2+scincl",
+                        'useTitle': False, 
+                        'useAbstract': True, 
+                        'skipSpecter': False,
+                        'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        # Check for API request
+        req = response['request']
+        assert req['name'] == 'test_run'
+        assert req['entityA']['type'] == 'Note'
+        assert req['entityA']['invitation'] == 'ABC.cc/-/Submission'
+        assert req['entityB']['type'] == 'Note'
+        assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
+        assert response['cdate'] <= response['mdate']
+
+        # Check archives folder
+        assert os.path.isdir(f"./tests/jobs/{job_id}/archives")
+        assert os.path.isfile(f"./tests/jobs/{job_id}/archives/match_submissions.jsonl")
+        with open(f"./tests/jobs/{job_id}/archives/match_submissions.jsonl", 'r') as f:
+            assert len(f.readlines()) == 2
+
+        # Check scores matrix
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{job_id}", 'deleteOnGet': True})
+        metadata = response.json['metadata']
+        #assert metadata['submission_count'] == 1
+        response = response.json['results']
+        assert len(response) == 4 ## 2 papers x 2 papers = 4 entries in the score matrix
+        print(response)
+        for item in response:
+            match_submission_id, submission_id, score = item['match_submission'], item['submission'], float(item['score'])
+            assert len(submission_id) >= 1
+            assert len(match_submission_id) >= 1
+            assert score >= 0
+            if match_submission_id == submission_id:
+                assert score >= 0.99
 
     def test_request_expertise_with_model_errors(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a config with an error in the model field and return the job_id
@@ -831,21 +1270,21 @@ class TestExpertiseService():
 
         openreview_context['job_id'] = job_id
 
-    def test_get_results_and_get_error(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_and_get_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
         # Query until job is err
         time.sleep(5)
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}"})
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         assert response.status_code == 404
 
-        response = test_client.get('/expertise/status', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -856,7 +1295,7 @@ class TestExpertiseService():
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
         # Clean up error job by calling the delete endpoint
-        response = test_client.get('/expertise/delete', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+        response = test_client.get('/expertise/delete', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
         assert response['name'] == 'test_run'
         assert response['cdate'] <= response['mdate']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
@@ -894,32 +1333,32 @@ class TestExpertiseService():
 
         openreview_context['job_id'] = job_id
 
-    def test_get_results_and_get_no_submission_error(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_and_get_no_submission_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
         # Query until job is err
         time.sleep(5)
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}"})
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         assert response.status_code == 404
 
-        response = test_client.get('/expertise/status', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['name'] == 'test_run'
         assert response['status'].strip() == 'Error'
-        assert response['description'] == "Dimension out of range (expected to be in range of [-1, 0], but got 1). Please check that you have at least 1 submission submitted and that you have run the Post Submission stage."
+        assert response['description'] == "Not Found Error: No papers found for: invitation_ids: ['HIJ.cc/-/Submission']"
         assert response['cdate'] <= response['mdate']
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
         # Clean up error job by calling the delete endpoint
-        response = test_client.get('/expertise/delete', query_string={'jobId': f"{openreview_context['job_id']}"}).json
+        response = test_client.get('/expertise/delete', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
         assert response['name'] == 'test_run'
         assert response['cdate'] <= response['mdate']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
@@ -963,17 +1402,17 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
@@ -991,10 +1430,10 @@ class TestExpertiseService():
         assert req['entityB']['id'] == target_id
         openreview_context['job_id'] = job_id
     
-    def test_get_journal_results(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_journal_results(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for journal results from the given job_id assuming the job has completed
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}"})
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 1
         response = response.json['results']
@@ -1006,13 +1445,13 @@ class TestExpertiseService():
             assert score >= 0 and score <= 1
         
         # Clean up journal request
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
     def test_high_load(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         test_client = openreview_context['test_client']
-        num_requests = 3
+        num_requests = 1
         id_list = []
 
         # Fetch a paper ID
@@ -1051,14 +1490,14 @@ class TestExpertiseService():
             job_id = response.json['jobId']
             id_list.append(job_id)
             time.sleep(2)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             assert response['name'] == 'test_run'
             assert response['status'] != 'Error'
 
         assert id_list is not None
         openreview_context['job_id'] = id_list
     
-    def test_fetch_high_load_results(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_fetch_high_load_results(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         MAX_TIMEOUT = 1200 # Timeout after 20 minutes
         assert openreview_context['job_id'] is not None
         id_list = openreview_context['job_id']
@@ -1067,12 +1506,12 @@ class TestExpertiseService():
         last_job_id = id_list[num_requests - 1]
 
         # Assert that the last request completes
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{last_job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{last_job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{last_job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{last_job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
@@ -1084,12 +1523,12 @@ class TestExpertiseService():
         # Now fetch and empty out all previous jobs
         for id in id_list:
             # Assert that they are complete
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{id}'}).json
             assert response['status'] == 'Completed'
             assert response['name'] == 'test_run'
             assert response['description'] == 'Job is complete and the computed scores are ready'
 
-            response = test_client.get('/expertise/results', query_string={'jobId': f"{id}", 'deleteOnGet': True})
+            response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{id}", 'deleteOnGet': True})
             metadata = response.json['metadata']
             assert metadata['submission_count'] == 1
             response = response.json['results']
@@ -1133,17 +1572,17 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
@@ -1163,7 +1602,7 @@ class TestExpertiseService():
         assert req['entityB']['memberOf'] == 'ABC.cc/Reviewers'
         openreview_context['job_id'] = job_id ## Store no expertise selection job ID
 
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{job_id}"})
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{job_id}"})
         response = response.json['results']
 
         submission_users, match_users = set(), set()
@@ -1201,12 +1640,12 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'DEF.cc/-/Expertise_Selection' }
+                        'expertise': {  'invitation': 'EXCLUSION.cc/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'DEF.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'EXCLUSION.cc/-/Expertise_Selection' }
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -1223,17 +1662,17 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
@@ -1275,12 +1714,12 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'DEF.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'EXCLUSION.cc/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'HIJ.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection' }
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -1297,17 +1736,17 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
@@ -1350,12 +1789,12 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'HIJ.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection' }
                     },
                     "entityB": { 
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'HIJ.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection' }
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -1372,17 +1811,17 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(2)
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
         assert response['status'] != 'Error'
 
         # Query until job is complete
-        response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
-            response = test_client.get('/expertise/status', query_string={'jobId': f'{job_id}'}).json
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
@@ -1404,7 +1843,8 @@ class TestExpertiseService():
         no_inclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['job_id']}/archives") if d.is_file())
         with_inclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
         with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{openreview_context['exclusion_id']}/archives") if d.is_file())
-        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) == 4
+        print(list(os.scandir(f"./tests/jobs/{job_id}/archives")))
+        assert sum(1 for _ in os.scandir(f"./tests/jobs/{job_id}/archives")) == 4 # One member as no publications, the other only has TMLR submissions
         assert os.path.getsize(f"./tests/jobs/{job_id}/archives/~Harold_Rice1.jsonl") < os.path.getsize(f"./tests/jobs/{openreview_context['job_id']}/archives/~Harold_Rice1.jsonl")
         assert with_inclusion < no_inclusion
         assert with_inclusion < with_exclusion
@@ -1416,12 +1856,12 @@ class TestExpertiseService():
         assert with_inclusion < no_inclusion
         assert with_inclusion < with_exclusion
 
-    def test_get_group_results(self, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_group_results(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
         # Searches for journal results from the given job_id assuming the job has completed
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}"})
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
-        assert metadata['submission_count'] == 9
+        assert metadata['submission_count'] == 10 ## Additional from new conferences, 10 from new publication
         response = response.json['results']
         for item in response:
             match_id, submitter_id, score = item['match_member'], item['submission_member'], float(item['score'])
@@ -1430,9 +1870,14 @@ class TestExpertiseService():
             assert match_id.startswith('~')
             assert submitter_id.startswith('~')
             assert score >= 0 and score <= 1
+
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
+        # Check that all results are sorted in desc cdate
+        for i in range(len(response) - 1):
+            assert response[i]['cdate'] >= response[i + 1]['cdate']
         
         # Clean up journal request
-        response = test_client.get('/expertise/results', query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
         # Clean up directory

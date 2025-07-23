@@ -33,7 +33,7 @@ jobs:
           export_environment_variables: true
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v1
-      - name: Run deploy script
+      - name: Run deploy scripts
         run: |
-          gcloud config set compute/zone us-central1-c
-          gcloud compute ssh openreview@instance-matching-server-gpu --command '/bin/expertise_build.sh' --quiet
+          gcloud config set compute/zone us-central1-b
+          gcloud compute ssh openreview@openreview-expertise-instance --command '/bin/expertise_build.sh' --quiet
