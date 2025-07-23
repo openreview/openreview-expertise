@@ -166,7 +166,7 @@ class OpenReviewExpertise(object):
             if isinstance(pub_venueid, dict):
                 pub_venueid = pub_venueid.get('value')
             if not pub_venueid:
-                pub_venueid = publication.invitation.split('/-/')[0]
+                pub_venueid = getattr(publication, 'invitation', getattr(publication, 'invitations', [''])[0]).split('/-/')[0]
 
             # Compare venueid to domain/invitation prefix to determine acceptance
             pub_weight = self.get_pub_weight(pub_venueid, pub=publication, weight_specification=weight_specification)
