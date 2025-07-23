@@ -12,6 +12,8 @@ from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
 from google.cloud.aiplatform_v1.types import PipelineState
+from copy import deepcopy
+from expertise.config import ModelConfig
 
 import re
 SUPERUSER_IDS = ['openreview.net', 'OpenReview.net', '~Super_User1']
@@ -475,9 +477,10 @@ class JobConfig(object):
         # Load optional dataset params from default config
         allowed_dataset_params = [
             'minimumPubDate',
-            'topRecentPubs'
+            'topRecentPubs',
+            'weightSpecification'
         ]
-        config.dataset = starting_config.get('dataset', {})
+        config.dataset = deepcopy(starting_config.get('dataset', {}))
         config.dataset['directory'] = root_dir
 
         # Attempt to load any API request dataset params
@@ -487,6 +490,10 @@ class JobConfig(object):
                 # Handle general case
                 if param not in allowed_dataset_params:
                     raise openreview.OpenReviewException(f"Bad request: unexpected fields in model: {[param]}")
+                
+                # Validate weightSpecification
+                if param == 'weightSpecification':
+                    ModelConfig.validate_weight_specification(config.dataset)
 
                 snake_param = _camel_to_snake(param)
                 config.dataset[snake_param] = dataset_params[param]
@@ -502,8 +509,8 @@ class JobConfig(object):
             'skipSpecter',
             'percentileSelect'
         ]
-        config.model = starting_config.get('model', None)
-        model_params = starting_config.get('model_params', {})
+        config.model = deepcopy(starting_config.get('model', None))
+        model_params = deepcopy(starting_config.get('model_params', {}))
         config.model_params = {}
         config.model_params['use_title'] = model_params.get('use_title', None)
         config.model_params['use_abstract'] = model_params.get('use_abstract', None)
@@ -560,6 +567,11 @@ class JobConfig(object):
         if 'mfr' in config.model:
             config.model_params['mfr_feature_vocab_file'] = server_config['MFR_VOCAB_DIR']
             config.model_params['mfr_checkpoint_dir'] = server_config['MFR_CHECKPOINT_DIR']
+
+        # Add validation for model type and weightSpecification
+        if config.dataset and 'weight_specification' in config.dataset:
+            if config.model != 'specter2+scincl':
+                raise openreview.OpenReviewException(f"Bad request: model {config.model} does not support weighting by venue")
 
         return config
     
@@ -1017,9 +1029,10 @@ class GCPInterface(object):
 
     def get_job_results(self, user_id, job_id, delete_on_get=False):
 
-        def _get_scores_and_metadata(all_blobs, job_id, group_scoring=False, paper_scoring=False):
+        def _get_scores_and_metadata_streaming(all_blobs, job_id, group_scoring=False, paper_scoring=False):
             """
-            Extracts the scores and metadata from the GCS bucket
+            Extracts the scores and metadata from the GCS bucket and returns a generator that yields
+            chunks of results to enable streaming
 
             :param all_blobs: A list of all blobs for a given job
             :type all_blobs: list
@@ -1030,8 +1043,7 @@ class GCPInterface(object):
             :param paper_scoring: Indicator for scores between papers
             :type paper_scoring: bool
 
-            :returns scores: The scores as a list of JSONs
-            :returns metadata: The metadata as a dictionary
+            :returns generator: A generator that yields chunks of scores and finally the metadata
             """
             metadata_files = [
                 blob for blob in all_blobs if 'metadata.json' in blob.name
@@ -1046,15 +1058,42 @@ class GCPInterface(object):
             if len(score_files) < 1 or len(score_files) > 2:
                 raise openreview.OpenReviewException(f"Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}")
 
+            # First yield the metadata
+            metadata = json.loads(metadata_files[0].download_as_string())
+            yield {'metadata': metadata, 'results': []}
+
+            # Then stream the scores
             if not skip_sparse:
                 sparse_score_files = [
                     blob for blob in score_files if 'sparse' in blob.name
                 ]
                 if len(sparse_score_files) != 1:
                     raise openreview.OpenReviewException(f"Internal Error: incorrect sparse score files found expected [1] found {len(sparse_score_files)}")
-                scores_str = sparse_score_files[0].download_as_string()
-                if isinstance(scores_str, bytes):
-                    scores_str = scores_str.decode('utf-8')
+                
+                # Stream the sparse scores in chunks
+                downloader = sparse_score_files[0].open('r')
+                chunk = downloader.readline()
+                results_chunk = []
+                chunk_size = 1000  # Adjust this number based on your data size
+                
+                while chunk:
+                    if isinstance(chunk, bytes):
+                        chunk = chunk.decode('utf-8')
+                    if chunk.strip():
+                        results_chunk.append(json.loads(chunk.strip()))
+                    
+                    # Yield chunks of results
+                    if len(results_chunk) >= chunk_size:
+                        yield {'results': results_chunk, 'metadata': None}
+                        results_chunk = []
+                    
+                    chunk = downloader.readline()
+                
+                # Yield any remaining results
+                if results_chunk:
+                    yield {'results': results_chunk, 'metadata': None}
+                    
+                downloader.close()
             else:
                 non_sparse_score_files = [
                     blob for blob in score_files if 'sparse' not in blob.name
@@ -1062,19 +1101,33 @@ class GCPInterface(object):
                 if len(non_sparse_score_files) != 1:
                     scoring_type_string = 'group' if group_scoring else 'paper'
                     raise openreview.OpenReviewException(f"Internal Error: incorrect {scoring_type_string} score files found expected [1] found {len(non_sparse_score_files)}")
-                scores_str = non_sparse_score_files[0].download_as_string()
-                if isinstance(scores_str, bytes):
-                    scores_str = scores_str.decode('utf-8')
-
-            metadata = json.loads(metadata_files[0].download_as_string())
-            scores = [json.loads(line) for line in scores_str.split('\n') if line != '']
-
-            return {
-                'results': scores,
-                'metadata': metadata
-            }
-
-        # convert to csv
+                
+                # Stream the non-sparse scores in chunks
+                downloader = non_sparse_score_files[0].open('r')
+                chunk = downloader.readline()
+                results_chunk = []
+                chunk_size = 1000  # Adjust this number based on your data size
+                
+                while chunk:
+                    if isinstance(chunk, bytes):
+                        chunk = chunk.decode('utf-8')
+                    if chunk.strip():
+                        results_chunk.append(json.loads(chunk.strip()))
+                    
+                    # Yield chunks of results
+                    if len(results_chunk) >= chunk_size:
+                        yield {'results': results_chunk, 'metadata': None}
+                        results_chunk = []
+                    
+                    chunk = downloader.readline()
+                
+                # Yield any remaining results
+                if results_chunk:
+                    yield {'results': results_chunk, 'metadata': None}
+                
+                downloader.close()
+    
+        # Main function implementation
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
         self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}/")
         self.logger.info(f"Found {len(job_blobs)} blobs")
@@ -1091,11 +1144,9 @@ class GCPInterface(object):
         if len(authenticated_requests) > 1:
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
-        ret_list = []
         request = authenticated_requests[0]
         group_group_matching = request.get('entityA', {}).get('type', '') == 'Group' and request.get('entityB', {}).get('type', '') == 'Group'
         paper_paper_matching = request.get('entityA', {}).get('type', '') == 'Note' and request.get('entityB', {}).get('type', '') == 'Note'
 
-        return _get_scores_and_metadata(job_blobs, job_id, group_scoring=group_group_matching, paper_scoring=paper_paper_matching)
+        return _get_scores_and_metadata_streaming(job_blobs, job_id, group_scoring=group_group_matching, paper_scoring=paper_paper_matching)
 
-        
