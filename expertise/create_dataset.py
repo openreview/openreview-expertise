@@ -98,11 +98,20 @@ class OpenReviewExpertise(object):
             ## Papers allowed: accepted papers from an OpenReview venue
             ## not in_openreview: DBLP papers (venueid =/= domain) and non-accepted papers (domain not in venue_list)
 
+            has_prefix_match = 'prefix' in venue_spec and venueid.startswith(venue_spec['prefix'])
+            has_exact_value_match = 'value' in venue_spec and venueid == venue_spec['value']
+            submitted_to_openreview = (
+                'articleSubmittedToOpenReview' in venue_spec and in_openreview and venue_spec['articleSubmittedToOpenReview']
+            )
+            not_submitted_to_openreview = (
+                'articleSubmittedToOpenReview' in venue_spec and not in_openreview and not venue_spec['articleSubmittedToOpenReview']
+            )
+            
             return (
-                ('prefix' in venue_spec and venueid.startswith(venue_spec['prefix'])) or
-                ('value' in venue_spec and venueid == venue_spec['value']) or
-                ('articleSubmittedToOpenReview' in venue_spec and in_openreview and venue_spec['articleSubmittedToOpenReview']) or
-                ('articleSubmittedToOpenReview' in venue_spec and not in_openreview and not venue_spec['articleSubmittedToOpenReview'])
+                has_prefix_match or
+                has_exact_value_match or
+                submitted_to_openreview or
+                not_submitted_to_openreview
             )
         
         # Get domain from either domain field or invitation prefix
