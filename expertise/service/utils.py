@@ -789,7 +789,7 @@ class GCPInterface(object):
         data['baseurl_v1'] = openreview.tools.get_base_urls(or_client)[0]
         data['baseurl_v2'] = openreview.tools.get_base_urls(or_client)[1]
         data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
-        data['dump_embs'] = True
+        #data['dump_embs'] = True
         data['dump_archives'] = True
 
         # Deleted metadata fields before hitting the pipeline
