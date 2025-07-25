@@ -790,7 +790,7 @@ class GCPInterface(object):
         data['baseurl_v2'] = openreview.tools.get_base_urls(or_client)[1]
         data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
         #data['dump_embs'] = True
-        data['dump_archives'] = True
+        #data['dump_archives'] = True
 
         # Deleted metadata fields before hitting the pipeline
         data['user_id'] = user_id if user_id else get_user_id(or_client)
