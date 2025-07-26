@@ -129,6 +129,8 @@ class APIRequest(object):
                 target_entity['withVenueid'] = _get_from_entity('withVenueid')
             elif 'id' in source_entity.keys():
                 target_entity['id'] = _get_from_entity('id')
+            elif 'submissions' in source_entity.keys():
+                target_entity['submissions'] = _get_from_entity('submissions')
             else:
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
             
@@ -253,6 +255,7 @@ class JobConfig(object):
         match_paper_venueid=None,
         match_paper_id=None,
         match_paper_content=None,
+        match_provided_submissions=None,
         alternate_match_group=None,
         reviewer_ids=None,
         dataset=None,
@@ -265,6 +268,7 @@ class JobConfig(object):
         paper_venueid=None,
         paper_content=None,
         paper_id=None,
+        provided_submissions=None,
         model_params=None):
         
         self.name = name
@@ -283,6 +287,7 @@ class JobConfig(object):
         self.match_paper_venueid = match_paper_venueid
         self.match_paper_id = match_paper_id
         self.match_paper_content = match_paper_content
+        self.match_provided_submissions = match_provided_submissions
         self.alternate_match_group = alternate_match_group
         self.reviewer_ids = reviewer_ids
         self.dataset = dataset
@@ -295,6 +300,7 @@ class JobConfig(object):
         self.paper_venueid = paper_venueid
         self.paper_content = paper_content
         self.paper_id = paper_id
+        self.provided_submissions = provided_submissions
         self.model_params = model_params
 
         self.api_request = None
@@ -319,6 +325,8 @@ class JobConfig(object):
             'match_paper_content',
             'alternate_match_group',
             'reviewer_ids',
+            'match_provided_submissions',
+            'provided_submissions',
             'dataset',
             'model',
             'exclusion_inv',
@@ -357,7 +365,7 @@ class JobConfig(object):
             return re.sub('([a-z0-9])([A-Z])', r'\1_\2', camel_str).lower()
 
         def _populate_note_fields(entity, config, paper_paper_scoring=False):
-            inv, id, venueid, content = entity.get('invitation', None), entity.get('id', None), entity.get('withVenueid', None), entity.get('withContent', None)
+            inv, id, venueid, content, submissions = entity.get('invitation', None), entity.get('id', None), entity.get('withVenueid', None), entity.get('withContent', None), entity.get('submissions', None)
 
             if paper_paper_scoring:
                 if inv:
@@ -368,6 +376,8 @@ class JobConfig(object):
                     config.match_paper_venueid = venueid
                 if content:
                     config.match_paper_content = content
+                if submissions:
+                    config.match_provided_submissions = submissions
             else:
                 if inv:
                     config.paper_invitation = inv
@@ -377,6 +387,8 @@ class JobConfig(object):
                     config.paper_venueid = venueid
                 if content:
                     config.paper_content = content
+                if submissions:
+                    config.provided_submissions = submissions
 
         descriptions = JobDescription.VALS.value
         config = JobConfig()
@@ -591,6 +603,7 @@ class JobConfig(object):
             match_paper_invitation = job_config.get('match_paper_invitation'),
             match_paper_venueid = job_config.get('match_paper_venueid'),
             match_paper_id = job_config.get('match_paper_id'),
+            match_paper_content = job_config.get('match_paper_content'),
             alternate_match_group=job_config.get('alternate_match_group'),
             reviewer_ids=job_config.get('reviewer_ids'),
             dataset = job_config.get('dataset'),
@@ -603,6 +616,7 @@ class JobConfig(object):
             paper_venueid = job_config.get('paper_venueid'),
             paper_content = job_config.get('paper_content'),
             paper_id = job_config.get('paper_id'),
+            provided_submissions = job_config.get('provided_submissions'),
             model_params = job_config.get('model_params')
         )
         return config
