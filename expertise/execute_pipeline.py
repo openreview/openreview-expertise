@@ -27,20 +27,67 @@ DEFAULT_CONFIG = {
 }
 DELETED_FIELDS = ['user_id', 'cdate']
 
-def run_pipeline(api_request_str, working_dir=None):
-    # Try parsing api_request_str as JSON, otherwise assume its a filepath
-    try:
-        raw_request: dict = json.loads(api_request_str)
-    except:
-        if not os.path.exists(api_request_str):
-            raise FileNotFoundError(f"File {api_request_str} not found")
-        with open(api_request_str, 'r') as f:
-            raw_request = json.load(f)
-        print(f"Loaded request from {api_request_str}")
+def load_gcs(gcs_path):
+    """Return client and bucket for a GCS path."""
+    if not gcs_path.startswith('gs://'):
+        raise ValueError(f"Invalid GCS path: {gcs_path}")
+    
+    # Parse GCS path: gs://bucket_name/path/to/file
+    bucket_name = gcs_path.split('/')[2]
+    gcs_client = storage.Client()
+    bucket = gcs_client.bucket(bucket_name)
+    
+    return gcs_client, bucket
 
-    # Pop token, base URLs and other expected variable
+def download_from_gcs(gcs_path):
+    """Download JSON content from a GCS path."""
+    if not gcs_path.startswith('gs://'):
+        raise ValueError(f"Invalid GCS path: {gcs_path}")
+    
+    # Parse GCS path: gs://bucket_name/path/to/file
+    _, bucket = load_gcs(gcs_path)
+
+    blob_prefix = '/'.join(gcs_path.split('/')[3:])
+    blob_name = f"{blob_prefix}/request.json"
+    
+    blob = bucket.blob(blob_name)
+    
+    if not blob.exists():
+        raise FileNotFoundError(f"GCS object not found: {gcs_path}")
+    
+    # Download as JSON
+    content = blob.download_as_text(encoding='utf-8')
+    return json.loads(content)
+
+def run_pipeline(
+        api_request_str=None, 
+        gcs_dir=None,
+        working_dir=None
+    ):
+
+    if gcs_dir is None and api_request_str is None:
+        raise ValueError("Either gcs_dir or api_request_str must be provided")
+    
+    # Initialize variables for exception handling
+    bucket = None
+    blob_prefix = None
+    
     try:
-        raw_request: dict = json.loads(api_request_str)
+        if api_request_str is not None:
+            try:
+                raw_request: dict = json.loads(api_request_str)
+                print("Parsed request as JSON string")
+            except:
+                if not os.path.exists(api_request_str):
+                    raise FileNotFoundError(f"File {api_request_str} not found")
+                with open(api_request_str, 'r') as f:
+                    raw_request = json.load(f)
+                print(f"Loaded request from local file: {api_request_str}")
+        elif gcs_dir is not None:
+            raw_request = download_from_gcs(gcs_dir)
+            print("Parsed request from GCS folder")
+        
+        # Pop token, base URLs and other expected variable
         print('Popping variables')
         for field in DELETED_FIELDS:
             raw_request.pop(field, None)
@@ -60,10 +107,8 @@ def run_pipeline(api_request_str, working_dir=None):
             'MFR_VOCAB_DIR': mfr_vocab_dir,
             'MFR_CHECKPOINT_DIR': mfr_checkpoint_dir,
         }
-        bucket_name = destination_prefix.split('/')[2]
+        _, bucket = load_gcs(destination_prefix)
         blob_prefix = '/'.join(destination_prefix.split('/')[3:])
-        gcs_client = storage.Client()
-        bucket = gcs_client.bucket(bucket_name)
 
         print('Loading model artifacts')
         load_model_artifacts()
@@ -101,13 +146,14 @@ def run_pipeline(api_request_str, working_dir=None):
         execute_create_dataset(client_v1, client_v2, config.to_json())
         execute_expertise(config.to_json())
     except Exception as e:
-        # Write error to single JSONL line in GCS
-        error_message = {
-            'error': str(e)
-        }
-        destination_blob = f"{blob_prefix}/error.json"
-        blob = bucket.blob(destination_blob)
-        blob.upload_from_string(json.dumps(error_message))
+        # Write error to single JSONL line in GCS if bucket is available
+        if bucket is not None and blob_prefix is not None:
+            error_message = {
+                'error': str(e)
+            }
+            destination_blob = f"{blob_prefix}/error.json"
+            blob = bucket.blob(destination_blob)
+            blob.upload_from_string(json.dumps(error_message))
 
         exception = e.with_traceback(e.__traceback__)
         raise exception

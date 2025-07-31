@@ -798,12 +798,15 @@ class GCPInterface(object):
 
         write_json_to_gcs(self.bucket_name, folder_path, self.request_fname, data)
 
+        # Pass GCS path instead of JSON data to avoid parameter size limits
+        gcs_request_path = f"gs://{self.bucket_name}/{folder_path}/{self.request_fname}"
+
         job = aip.PipelineJob(
             display_name = valid_vertex_id,
             template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
-            parameter_values = {'job_config': json.dumps(data)},
+            parameter_values = {'gcs_request_path': gcs_request_path},
             labels = self.service_label)
 
         job.submit()
