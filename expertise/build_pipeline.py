@@ -81,7 +81,9 @@ if __name__ == '__main__':
         gcs_request_path: str
     ) -> None:
         from expertise.execute_pipeline import run_pipeline
-        run_pipeline(gcs_request_path)
+        run_pipeline(
+            gcs_dir=gcs_request_path
+        )
 
     custom_expertise_job_from_file_input = create_custom_training_job_from_component(
         execute_expertise_pipeline_op,
