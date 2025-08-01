@@ -47,8 +47,7 @@ def download_from_gcs(gcs_path):
     # Parse GCS path: gs://bucket_name/path/to/file
     _, bucket = load_gcs(gcs_path)
 
-    blob_prefix = '/'.join(gcs_path.split('/')[3:])
-    blob_name = f"{blob_prefix}/request.json"
+    blob_name = '/'.join(gcs_path.split('/')[3:])
     
     blob = bucket.blob(blob_name)
     
