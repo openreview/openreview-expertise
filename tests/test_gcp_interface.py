@@ -159,7 +159,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, openreview_client):
         ),
         job_id=result,
         pipeline_root="gs://test-bucket/pipeline-root",
-        parameter_values={"job_config": json.dumps(submitted_json)},
+        parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json"},
         labels={"test": "label"}
     )
     mock_pipeline_instance.submit.assert_called_once()

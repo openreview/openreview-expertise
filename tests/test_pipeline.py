@@ -100,7 +100,7 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
 
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
-    run_pipeline(api_request_str, working_dir)
+    run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
 
     # Assertions
 
@@ -192,7 +192,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
 
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
-    run_pipeline(api_request_str, working_dir)
+    run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
 
     # Assertions
     bucket = gcs_test_bucket
@@ -275,7 +275,7 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
 
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
-    run_pipeline(api_request_str, working_dir)
+    run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
 
     # Assertions
     # Check that blobs were created and data was uploaded to GCS
@@ -355,7 +355,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
     try:
-        run_pipeline(api_request_str, working_dir)
+        run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
     except Exception as e:
         assert str(e) == 'Not Found Error: No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
 
