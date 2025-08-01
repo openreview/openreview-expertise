@@ -133,6 +133,107 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
     assert len(archives_blobs) == 4
 
+# Test case for the `run_pipeline` function using gcs_dir
+@patch("expertise.execute_pipeline.execute_expertise")  # Mock execute_expertise
+@patch("expertise.execute_pipeline.load_model_artifacts")  # Mock load_model_artifacts
+def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+    # Mock other external dependencies
+    mock_load_model_artifacts.return_value = None
+    mock_execute_expertise.return_value = None
+
+    # Prepare input API request string
+    api_request = {
+        "name": "test_run_gcs",
+        "entityA": {
+            'type': "Group",
+            'memberOf': "PIPELINE.cc/Reviewers",
+        },
+        "entityB": {
+            'type': "Note",
+            'invitation': "PIPELINE.cc/-/Submission"
+        },
+        "model": {
+            "name": "specter+mfr",
+            'useTitle': False,
+            'useAbstract': True,
+            'skipSpecter': False,
+            'scoreComputation': 'avg'
+        },
+        "user_id": "openreview.net",
+        "token": openreview_client.token,
+        "baseurl_v1": "http://localhost:3000",
+        "baseurl_v2": "http://localhost:3001",
+        "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_gcs_dir",
+        "dump_embs": True,
+        "dump_archives": True,
+    }
+
+    # Prepare environment variables
+    os.environ["SPECTER_DIR"] = "/path/to/specter"
+    os.environ["MFR_VOCAB_DIR"] = "/path/to/mfr_vocab"
+    os.environ["MFR_CHECKPOINT_DIR"] = "/path/to/mfr_checkpoint"
+
+    # Build files
+    working_dir = './test_pipeline'
+    os.makedirs(working_dir, exist_ok=True)
+
+    ## Build scores file
+    scores_file = os.path.join(working_dir, 'scores.csv')
+    with open(scores_file, 'w') as f:
+        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+    sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
+    with open(sparse_file, 'w') as f:
+        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+
+    ## Build embeddings
+    embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
+    with open(embeddings_dir, 'w') as f:
+        f.write(json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}))
+
+    ## Write a request file to GCS
+    request_blob_name = f"{gcs_jobs_prefix}/test_prefix_gcs_dir/request.json"
+    blob = gcs_test_bucket.blob(request_blob_name)
+    blob.upload_from_string(
+        data=json.dumps(api_request),
+        content_type="application/json"
+    )
+
+    # Call the function
+    request_blob_path = f"gs://{GCS_TEST_BUCKET}/{request_blob_name}"
+    from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
+    run_pipeline(gcs_dir=request_blob_path, working_dir=working_dir)
+
+    # Assertions
+
+    # Ensure execute_create_dataset and execute_expertise were called
+    # Use the gcs_test_bucket fixture to get actual 
+    bucket = gcs_test_bucket
+    prefix = f"{gcs_jobs_prefix}/test_prefix_gcs_dir/"
+
+    # Check for scores.jsonl file
+    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    assert scores_blob.exists()
+    scores_content = scores_blob.download_as_text()
+    assert '{"submission": "test_user", "user": "note1", "score": 0.5}' in scores_content
+    assert '{"submission": "test_user", "user": "note2", "score": 0.5}' in scores_content
+
+    # Check for metadata.json file
+    metadata_blob = bucket.blob(f"{prefix}metadata.json")
+    assert metadata_blob.exists()
+    metadata_content = json.loads(metadata_blob.download_as_text())
+    assert metadata_content["submission_count"] == 2
+    assert metadata_content["no_publications_count"] == 0
+
+    # Check for pub2vec.jsonl file
+    pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
+    assert pub2vec_blob.exists()
+    pub2vec_content = pub2vec_blob.download_as_text()
+    assert '{"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}' in pub2vec_content
+
+    # Check archives subdirectory for 4 files
+    archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
+    assert len(archives_blobs) == 4
+
 # Test case for the `run_pipeline` function
 @patch("expertise.execute_pipeline.execute_expertise")  # Mock execute_expertise
 @patch("expertise.execute_pipeline.load_model_artifacts")  # Mock load_model_artifacts
