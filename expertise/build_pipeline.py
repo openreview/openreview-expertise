@@ -5,7 +5,6 @@ from kfp.dsl import (
     component,
     container_component,
     InputPath,
-    OutputPath,
     ContainerSpec
 )
 from kfp.registry import RegistryClient
@@ -74,24 +73,17 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    # New component to write a string (our JSON config) to a file
-    @component(base_image='python:3.9-slim')
-    def write_string_to_file_op(
-        data: str,
-        output_file: OutputPath(str)
-    ):
-        """Writes string data to a file."""
-        with open(output_file, 'w') as f:
-            f.write(data)
 
     @component(
         base_image=f"{args.region}-docker.pkg.dev/{args.project}/{args.repo}/{args.image}:{args.tag}"
     )
     def execute_expertise_pipeline_op(
-        job_config_file: str
+        gcs_request_path: str
     ) -> None:
         from expertise.execute_pipeline import run_pipeline
-        run_pipeline(job_config_file)
+        run_pipeline(
+            gcs_dir=gcs_request_path
+        )
 
     custom_expertise_job_from_file_input = create_custom_training_job_from_component(
         execute_expertise_pipeline_op,
@@ -105,21 +97,16 @@ if __name__ == '__main__':
 
     @pipeline(
         name=args.kfp_name,
-        description='Processes request for user-paper expertise scores using file-based config'
+        description='Processes request for user-paper expertise scores using GCS path'
     )
     def expertise_pipeline(
-        job_config: str
+        gcs_request_path: str
     ):
-        # Write the raw JSON string to a file
-        write_config_task = write_string_to_file_op(
-            data=job_config
-        ).set_display_name("Write Job Config to File")
-
-        # Pass the path to this file to the custom job
+        # Pass the GCS path directly to the custom job
         run_expertise_task = custom_expertise_job_from_file_input(
             project=args.project,
             location=args.kfp_region,
-            job_config_file=write_config_task.outputs['output_file'] # Pass the output file path
+            gcs_request_path=gcs_request_path
         ).set_display_name("Running Expertise Pipeline")
 
     compiler.Compiler().compile(
