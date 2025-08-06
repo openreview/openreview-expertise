@@ -518,6 +518,8 @@ class BaseExpertiseService:
                 if entity.get('withContent'):
                     for key, value in entity['withContent'].items():
                         key_parts.append(f"{key}:{value}")
+                if entity.get('submissions') and isinstance(entity['submissions'], list):
+                    key_parts.append(f"submissions:{len(entity['submissions'])}")
 
         if request.get('model', {}).get('name'):
             key_parts.append(request['model']['name'])
