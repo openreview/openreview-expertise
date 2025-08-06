@@ -1899,7 +1899,7 @@ class TestExpertiseService():
         if os.path.isfile('default.log'):
             os.remove('default.log')
 
-    def test_request_expertise_with_valid_parameters_asdfasdf(self, openreview_client, openreview_context):
+    def test_request_expertise_with_submissions(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
