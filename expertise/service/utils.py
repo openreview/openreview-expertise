@@ -807,7 +807,7 @@ class GCPInterface(object):
             template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
-            parameter_values = {'gcs_request_path': gcs_request_path},
+            parameter_values = {'gcs_request_path': gcs_request_path, 'notes_count': notes_count},
             labels = self.service_label)
 
         job.submit()

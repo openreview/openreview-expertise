@@ -8,6 +8,7 @@ from kfp.dsl import (
     OutputPath,
     ContainerSpec,
     If,
+    Elif,
     Else
 )
 from kfp.registry import RegistryClient
@@ -76,22 +77,6 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-
-    @component(base_image='python:3.9-slim')
-    def determine_job_size_op(job_config: str) -> str:
-        """Determines job size based on paper count"""
-        import json
-        config = json.loads(job_config)
-
-        paper_count = len(config.get('notes_count', 0))  # Adjust based on your actual config
-
-        ## TODO: Maybe make a file to store this configuration?
-        ## Same with resource specifications
-        if paper_count < 1000:
-            return "small"
-        else:
-            return "large"
-
     @component(
         base_image=f"{args.region}-docker.pkg.dev/{args.project}/{args.repo}/{args.image}:{args.tag}"
     )
@@ -113,6 +98,16 @@ if __name__ == '__main__':
         boot_disk_size_gb=200,
     )
 
+    medium_expertise_job_from_file_input = create_custom_training_job_from_component(
+        execute_expertise_pipeline_op,
+        display_name="expertise-job-medium",
+        machine_type="n1-standard-32",
+        accelerator_type="NVIDIA_TESLA_T4",
+        accelerator_count=2,
+        boot_disk_type="pd-ssd",
+        boot_disk_size_gb=200,
+    )
+
     large_expertise_job_from_file_input = create_custom_training_job_from_component(
         execute_expertise_pipeline_op,
         display_name="expertise-job-large",
@@ -129,17 +124,22 @@ if __name__ == '__main__':
     )
     def expertise_pipeline(
         gcs_request_path: str,
+        notes_count: int = 0,
     ):
 
-        job_size = determine_job_size_op(job_config=job_config)
-
         # Conditional execution based on job size
-        with If(job_size.output == "small"):
+        with If(notes_count < 1000):  # small
             run_small = small_expertise_job_from_file_input(
                 project=args.project,
                 location=args.kfp_region,
                 gcs_request_path=gcs_request_path
             ).set_display_name("Running Small Expertise Pipeline")
+        with Elif(notes_count < 5000): # medium
+            run_medium = medium_expertise_job_from_file_input(
+                project=args.project,
+                location=args.kfp_region,
+                gcs_request_path=gcs_request_path
+            ).set_display_name("Running Medium Expertise Pipeline")
         with Else():  # large
             run_large = large_expertise_job_from_file_input(
                 project=args.project,
