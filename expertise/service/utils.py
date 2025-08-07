@@ -739,6 +739,11 @@ class GCPInterface(object):
                 return f"venueid-{group_entity['memberOf']}"
             elif 'id' in note_entity:
                 return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
+            elif 'submissions' in note_entity:
+                if 'memberOf' in group_entity:
+                    return f"submissions-{group_entity['memberOf']}"
+                elif 'reviewerIds' in group_entity:
+                    return f"submissions-reviewers"
             
         elif key == 'Note-Note':
             match_note_entity = api_request.entityA
