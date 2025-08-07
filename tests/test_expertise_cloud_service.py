@@ -700,7 +700,7 @@ class TestExpertiseCloudService():
         scores_blob.upload_from_string('{"submission": "ASDFASDF","user": "~Harold_Rice1","score": 0.987}\n{"submission": "ASDFASDF","user": "~Zonia_Willms1","score": 0.987}')
 
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
-        scores_sparse_blob.upload_from_string('{"submission": "ASDFASDF","user": "~Harold_Rice1","score": 0.987}\n{"submission": "abcde","user": "~Zonia_Willms1","score": 0.987}')
+        scores_sparse_blob.upload_from_string('{"submission": "ASDFASDF","user": "~Harold_Rice1","score": 0.987}\n{"submission": "ASDFASDF","user": "~Zonia_Willms1","score": 0.987}')
 
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
