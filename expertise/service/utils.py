@@ -160,6 +160,105 @@ class APIRequest(object):
                 body['dataset'] = self.dataset
 
         return body
+    
+    @staticmethod
+    def extract_from_entity(
+        entity,
+        get_value=False,
+        get_prefix=False,
+        return_as_list=False,
+        separator=':'
+    ):
+        if not get_value and not get_prefix and not return_as_list:
+            raise ValueError("At least one of get_value get_prefix must be True")
+        if get_value and get_prefix:
+            raise ValueError("Cannot set both get_value and get_prefix to True")
+        
+        entity_type = entity.get('type', None)
+        if entity_type is None:
+            raise openreview.OpenReviewException("'type' is required for Entity objects")
+        
+        all_values = []
+        
+        if entity_type == 'Group':
+            if 'memberOf' in entity:
+                if return_as_list:
+                    all_values.append(entity['memberOf'])
+                else:
+                    return entity['memberOf']
+            if 'reviewerIds' in entity:
+                ## no option, actual data is too large
+                if return_as_list:
+                    all_values.append(
+                        f"reviewers{separator}{len(entity['reviewerIds'])}"
+                    )
+                else:
+                    return f"reviewers{separator}{len(entity['reviewerIds'])}"
+            if not 'memberOf' in entity and not 'reviewerIds' in entity:
+                if return_as_list:
+                    all_values.append('unknownGroup')
+                else:
+                    return 'unknownGroup'
+        elif entity_type == 'Note':
+            if 'id' in entity:
+                if get_value:
+                    if return_as_list:
+                        all_values.append(entity['id'])
+                    else:
+                        return entity['id']
+                elif get_prefix:
+                    if return_as_list:
+                        all_values.append(f"pid-{entity['id']}")
+                    else:
+                        return f"pid-{entity['id']}"
+            if 'invitation' in entity:
+                if get_value:
+                    if return_as_list:
+                        all_values.append(entity['invitation'])
+                    else:
+                        return entity['invitation']
+                elif get_prefix:
+                    if return_as_list:
+                        all_values.append('inv')
+                    else:
+                        return 'inv'
+            if 'withVenueid' in entity:
+                if get_value:
+                    if return_as_list:
+                        all_values.append(entity['withVenueid'])
+                    else:
+                        return entity['withVenueid']
+                elif get_prefix:
+                    if return_as_list:
+                        all_values.append('venueid')
+                    else:
+                        return 'venueid'
+            if 'withContent' in entity and return_as_list:
+                if get_value:
+                    for key, value in entity['withContent'].items():
+                        all_values.append(f"{key}:{value}")
+                elif get_prefix:
+                    all_values.append('withContent')
+            if 'submissions' in entity:
+                ## no option, actual data is too large
+                if return_as_list:
+                    all_values.append(
+                        f"submissions{separator}{len(entity['submissions'])}"
+                    )
+                else:
+                    return f"submissions{separator}{len(entity['submissions'])}"
+            if not ('id' in entity or \
+                    'invitation' in entity or \
+                    'withVenueid' in entity or \
+                    'submissions' in entity
+                ):
+                if return_as_list:
+                    all_values.append('unknownNote')
+                else:
+                    return 'unknownNote'
+                
+        return all_values
+        
 
 class RedisDatabase(object):
     """
@@ -733,31 +832,36 @@ class GCPInterface(object):
         elif key == 'Group-Note' or key == 'Note-Group':
             note_entity = api_request.entityA if api_request.entityA['type'] == 'Note' else api_request.entityB
             group_entity = api_request.entityA if api_request.entityA['type'] == 'Group' else api_request.entityB
-            if 'invitation' in note_entity:
-                return f"inv-{group_entity['memberOf']}"
-            elif 'withVenueid' in note_entity:
-                return f"venueid-{group_entity['memberOf']}"
-            elif 'id' in note_entity:
-                return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
-            elif 'submissions' in note_entity:
-                if 'memberOf' in group_entity:
-                    return f"submissions-{group_entity['memberOf']}"
-                elif 'reviewerIds' in group_entity:
-                    return f"submissions-reviewers"
+
+            note_value = APIRequest.extract_from_entity(
+                note_entity,
+                get_prefix=True,
+                separator='-'
+            )
+            grp_value = APIRequest.extract_from_entity(
+                group_entity,
+                get_prefix=True,
+                separator='-'
+            )
+
+            return f"{note_value}-{grp_value}"
             
         elif key == 'Note-Note':
             match_note_entity = api_request.entityA
             submission_note_entity = api_request.entityB
-            note_fields = ['invitation', 'withVenueid', 'id']
 
-            match_prefix, submission_prefix = None, None
-            for field in note_fields:
-                if field in match_note_entity:
-                    match_prefix = match_note_entity[field]
-                if field in submission_note_entity:
-                    submission_prefix = submission_note_entity[field]
+            match_note_value = APIRequest.extract_from_entity(
+                match_note_entity,
+                get_value=True,
+                separator='-'
+            )
+            submission_note_value = APIRequest.extract_from_entity(
+                submission_note_entity,
+                get_value=True,
+                separator='-'
+            )
 
-            return f"{match_prefix}-{submission_prefix}"
+            return f"{match_note_value}-{submission_note_value}"
 
     def create_job(self, json_request: dict, user_id: str = None, client = None):
         def create_folder(bucket_name, folder_path):
