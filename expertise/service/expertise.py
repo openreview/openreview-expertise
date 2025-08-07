@@ -449,7 +449,13 @@ class BaseExpertiseService:
 
         for entity in entities:
             if entity['type'] == 'Group':
-                job_name_parts.append(entity.get('memberOf', 'No Group Found'))
+                if entity.get('memberOf'):
+                    job_name_parts.append(entity['memberOf'])
+                elif entity.get('reviewerIds') and isinstance(entity['reviewerIds'], list):
+                    job_name_parts.append(f"reviewers:{len(entity['reviewerIds'])}")
+                else:
+                    job_name_parts.append('No Group Information Found')
+                    
             elif entity['type'] == 'Note':
                 if entity.get('id'):
                     job_name_parts.append(entity['id'])
@@ -457,6 +463,8 @@ class BaseExpertiseService:
                     job_name_parts.append(entity['invitation'])
                 elif entity.get('withVenueid'):
                     job_name_parts.append(entity['withVenueid'])
+                elif entity.get('submissions') and isinstance(entity['submissions'], list):
+                    job_name_parts.append(f"submissions:{len(entity['submissions'])}")
                 else:
                     job_name_parts.append('No Note Information Found')
 
