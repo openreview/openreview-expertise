@@ -448,17 +448,13 @@ class BaseExpertiseService:
             job_name_parts.append('No Entity B Type Found')
 
         for entity in entities:
-            if entity['type'] == 'Group':
-                job_name_parts.append(entity.get('memberOf', 'No Group Found'))
-            elif entity['type'] == 'Note':
-                if entity.get('id'):
-                    job_name_parts.append(entity['id'])
-                elif entity.get('invitation'):
-                    job_name_parts.append(entity['invitation'])
-                elif entity.get('withVenueid'):
-                    job_name_parts.append(entity['withVenueid'])
-                else:
-                    job_name_parts.append('No Note Information Found')
+
+            job_name_parts.append(
+                APIRequest.extract_from_entity(
+                    entity,
+                    get_value=True
+                )
+            )
 
         return f'{job_name_parts[0]}: {job_name_parts[1]} - {job_name_parts[2]}'
 
@@ -506,20 +502,13 @@ class BaseExpertiseService:
             key_parts.append('NoEntityB')
 
         for entity in entities:
-            if entity['type'] == 'Group':
-                key_parts.append(entity.get('memberOf', 'NoGroupFound'))
-            elif entity['type'] == 'Note':
-                if entity.get('id'):
-                    key_parts.append(entity['id'])
-                if entity.get('invitation'):
-                    key_parts.append(entity['invitation'])
-                if entity.get('withVenueid'):
-                    key_parts.append(entity['withVenueid'])
-                if entity.get('withContent'):
-                    for key, value in entity['withContent'].items():
-                        key_parts.append(f"{key}:{value}")
-                if entity.get('submissions') and isinstance(entity['submissions'], list):
-                    key_parts.append(f"submissions:{len(entity['submissions'])}")
+            key_parts.extend(
+                APIRequest.extract_from_entity(
+                    entity,
+                    get_value=True,
+                    return_as_list=True
+                )
+            )
 
         if request.get('model', {}).get('name'):
             key_parts.append(request['model']['name'])
