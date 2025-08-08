@@ -618,7 +618,8 @@ class JobConfig(object):
             'useAbstract',
             'scoreComputation',
             'skipSpecter',
-            'percentileSelect'
+            'percentileSelect',
+            'normalizeScores'
         ]
         config.model = deepcopy(starting_config.get('model', None))
         model_params = deepcopy(starting_config.get('model_params', {}))
@@ -634,6 +635,7 @@ class JobConfig(object):
         config.model_params['use_cuda'] = model_params.get('use_cuda', False)
         config.model_params['use_redis'] = model_params.get('use_redis', False)
         config.model_params['percentile_select'] = model_params.get('percentile_select', None)
+        config.model_params['normalize_scores'] = model_params.get('normalize_scores', True)
         # Attempt to load any API request model params
         api_model = api_request.model
         if api_model:
