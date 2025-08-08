@@ -2027,3 +2027,135 @@ class TestExpertiseService():
                 # Check that publications have embeddings
                 for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
                     assert 'embedding' in pub, f"{model_name} publication {pub.get('paper_id')} missing embedding"
+
+    def test_request_expertise_with_normalization_field(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+
+        # Make a request
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'max'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+        assert os.path.getsize(f"./tests/jobs/{job_id}/test_run.csv") == os.path.getsize(f"./tests/jobs/{job_id}/test_run_sparse.csv")
+
+        # Get normalized mean
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        response = response.json['results']
+
+        all_scores = []
+        for item in response:
+            _, _, score = item['submission'], item['user'], float(item['score'])
+            all_scores.append(score)
+        norm_mean_score = sum(all_scores) / len(all_scores)
+
+        # Make a request for unnormalized scores
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'max',
+                            'normalizeScores': False
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        unnorm_job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{unnorm_job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{unnorm_job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{unnorm_job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+        assert os.path.getsize(f"./tests/jobs/{unnorm_job_id}/test_run.csv") == os.path.getsize(f"./tests/jobs/{unnorm_job_id}/test_run_sparse.csv")
+
+        # Check that normalized scores are different
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': unnorm_job_id})
+        response = response.json['results']
+
+        all_scores = []
+        for item in response:
+            _, _, score = item['submission'], item['user'], float(item['score'])
+            all_scores.append(score)
+        unnorm_mean_score = sum(all_scores) / len(all_scores)
+
+        assert unnorm_mean_score > norm_mean_score, 'Unnormalized mean score should be greater than normalized mean score'
