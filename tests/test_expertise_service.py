@@ -72,6 +72,18 @@ def _setup_upweight(clean_start_journal, client, openreview_client):
         post_editor_data=False
     )
 
+@pytest.fixture(scope="module", autouse=True)
+def _setup_provided_submissions(clean_start_journal, client, openreview_client):
+    clean_start_journal(
+        openreview_client,
+        'PROVIDEDSUBMISSIONS.cc',
+        editors=['~Raia_Hadsell1', '~Kyunghyun_Cho1'],
+        additional_editors=['~Margherita_Hilpert1'],
+        post_submissions=False,
+        post_publications=False,
+        post_editor_data=False
+    )
+
 
 EXCLUSION_CONF_ID = 'EXCLUSION.cc'
 EXPERTISE_SELECTION_POSTING = False
@@ -1886,3 +1898,132 @@ class TestExpertiseService():
             os.remove('pytest.log')
         if os.path.isfile('default.log'):
             os.remove('default.log')
+
+    def test_request_expertise_with_submissions(self, openreview_client, openreview_context):
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+        
+        # Post a submission and manually make it public and accepted
+        submission = openreview.api.Note(
+            content = {
+                "title": { 'value': "test_weight" },
+                "abstract": { 'value': "abstract weight" },
+                "authors": { 'value': ['Royal Toy'] },
+                "authorids": { 'value': ['~Royal_Toy1'] },
+                'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
+                'competing_interests': {'value': 'aaa'},
+                'human_subjects_reporting': {'value': 'bbb'}
+            }
+        )
+        submission_edit = openreview_client.post_note_edit(
+            invitation="PROVIDEDSUBMISSIONS.cc/-/Submission",
+            signatures=['~Royal_Toy1'],
+            note=submission
+        )
+        provided_note_id = submission_edit['note']['id']
+        openreview_client.post_note_edit(
+            invitation="PROVIDEDSUBMISSIONS.cc/-/Edit",
+            readers=["PROVIDEDSUBMISSIONS.cc"],
+            writers=["PROVIDEDSUBMISSIONS.cc"],
+            signatures=["PROVIDEDSUBMISSIONS.cc"],
+            note=openreview.api.Note(
+                id=provided_note_id,
+                content={
+                    'venueid': {
+                        'value': 'PROVIDEDSUBMISSIONS.cc/Withdrawn_Submission'
+                    },
+                    'venue': {
+                        'value': 'PROVIDEDSUBMISSIONS Withdrawn Submission'
+                    }
+                },
+                readers=['everyone'],
+                pdate = 1554819115,
+                license = 'CC BY-SA 4.0'
+            )
+        )
+
+        # Make a request with weight specification
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'reviewerIds': [
+                            "~Harold_Rice1",
+                            "~Zonia_Willms1",
+                            "~Royal_Toy1",
+                            "~C.V._Lastname1",
+                        ]
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'submissions': [
+                            {
+                                "id": "ASDFASDF",
+                                "title": "Test Submission",
+                                "abstract": "Test Abstract",
+                            },
+                            {
+                                "id": "SFGSDFGSDFG",
+                                "title": "Test Submission 2",
+                                "abstract": "Test Abstract 2",
+                            }
+                        ]
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'max'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0,
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error'
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+        # Weight shifts scores onto a single submission
+        # Build scores to reference later
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        response = response.json['results']
+        zeroed_royal_scores = {}
+        for item in response:
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            print(item)
+            if profile_id == '~Royal_Toy1':
+                zeroed_royal_scores[submission_id] = score
+
+        # Check weights applied in both embedding files:
+        specter_file = f"./tests/jobs/{job_id}/pub2vec_specter.jsonl"
+        scincl_file = f"./tests/jobs/{job_id}/pub2vec_scincl.jsonl"
+
+        with open(specter_file, 'r') as f, open(scincl_file, 'r') as g:
+            for specter_line, scincl_line in zip(f, g):
+                # Parse both lines
+                specter_pub = json.loads(specter_line.strip())
+                scincl_pub = json.loads(scincl_line.strip())
+
+                # Check that publications have embeddings
+                for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
+                    assert 'embedding' in pub, f"{model_name} publication {pub.get('paper_id')} missing embedding"
