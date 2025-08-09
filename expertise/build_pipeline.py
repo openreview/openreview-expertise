@@ -5,7 +5,11 @@ from kfp.dsl import (
     component,
     container_component,
     InputPath,
-    ContainerSpec
+    OutputPath,
+    ContainerSpec,
+    If,
+    Elif,
+    Else
 )
 from kfp.registry import RegistryClient
 import argparse
@@ -73,7 +77,6 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-
     @component(
         base_image=f"{args.region}-docker.pkg.dev/{args.project}/{args.repo}/{args.image}:{args.tag}"
     )
@@ -85,9 +88,29 @@ if __name__ == '__main__':
             gcs_dir=gcs_request_path
         )
 
-    custom_expertise_job_from_file_input = create_custom_training_job_from_component(
+    small_expertise_job_from_file_input = create_custom_training_job_from_component(
         execute_expertise_pipeline_op,
-        display_name="expertise-job",
+        display_name="expertise-job-small",
+        machine_type="n1-standard-16",
+        accelerator_type="NVIDIA_TESLA_T4",
+        accelerator_count=1,
+        boot_disk_type="pd-ssd",
+        boot_disk_size_gb=200,
+    )
+
+    medium_expertise_job_from_file_input = create_custom_training_job_from_component(
+        execute_expertise_pipeline_op,
+        display_name="expertise-job-medium",
+        machine_type="n1-standard-32",
+        accelerator_type="NVIDIA_TESLA_T4",
+        accelerator_count=2,
+        boot_disk_type="pd-ssd",
+        boot_disk_size_gb=200,
+    )
+
+    large_expertise_job_from_file_input = create_custom_training_job_from_component(
+        execute_expertise_pipeline_op,
+        display_name="expertise-job-large",
         machine_type="n1-highmem-64",
         accelerator_type="NVIDIA_TESLA_T4",
         accelerator_count=4,
@@ -100,14 +123,29 @@ if __name__ == '__main__':
         description='Processes request for user-paper expertise scores using GCS path'
     )
     def expertise_pipeline(
-        gcs_request_path: str
+        gcs_request_path: str,
+        notes_count: int = 0,
     ):
-        # Pass the GCS path directly to the custom job
-        run_expertise_task = custom_expertise_job_from_file_input(
-            project=args.project,
-            location=args.kfp_region,
-            gcs_request_path=gcs_request_path
-        ).set_display_name("Running Expertise Pipeline")
+
+        # Conditional execution based on job size
+        with If(notes_count < 1000):  # small
+            run_small = small_expertise_job_from_file_input(
+                project=args.project,
+                location=args.kfp_region,
+                gcs_request_path=gcs_request_path
+            ).set_display_name("Running Small Expertise Pipeline")
+        with Elif(notes_count < 5000): # medium
+            run_medium = medium_expertise_job_from_file_input(
+                project=args.project,
+                location=args.kfp_region,
+                gcs_request_path=gcs_request_path
+            ).set_display_name("Running Medium Expertise Pipeline")
+        with Else():  # large
+            run_large = large_expertise_job_from_file_input(
+                project=args.project,
+                location=args.kfp_region,
+                gcs_request_path=gcs_request_path
+          ).set_display_name("Running Large Expertise Pipeline")
 
     compiler.Compiler().compile(
         pipeline_func=expertise_pipeline,

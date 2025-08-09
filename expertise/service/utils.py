@@ -865,7 +865,7 @@ class GCPInterface(object):
 
             return f"{match_note_value}-{submission_note_value}"
 
-    def create_job(self, json_request: dict, user_id: str = None, client = None):
+    def create_job(self, json_request: dict, user_id: str = None, client = None, notes_count = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -918,6 +918,7 @@ class GCPInterface(object):
         #data['dump_archives'] = True
 
         # Deleted metadata fields before hitting the pipeline
+        data['notes_count'] = notes_count
         data['user_id'] = user_id if user_id else get_user_id(or_client)
         data['cdate'] = int(time.time() * 1000)
 
@@ -931,7 +932,7 @@ class GCPInterface(object):
             template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
-            parameter_values = {'gcs_request_path': gcs_request_path},
+            parameter_values = {'gcs_request_path': gcs_request_path, 'notes_count': notes_count},
             labels = self.service_label)
 
         job.submit()

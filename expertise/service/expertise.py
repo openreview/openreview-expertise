@@ -15,9 +15,12 @@ import multiprocessing
 from bullmq import Queue, Worker
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from expertise.service.utils import GCPInterface
+from expertise.create_dataset import OpenReviewExpertise
+from expertise.config import ModelConfig
 from copy import deepcopy
 import asyncio
 import threading
+import traceback
 
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase, get_user_id
 
@@ -822,6 +825,64 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.client_v2 = client_v2
         self.cloud.set_client(client_v2)
 
+    def get_notes_count(self, client, client_v2, api_request):
+        config, _ = self._prepare_config(deepcopy(api_request), client_v1=client, client=client)
+        config = config.to_json()
+        dataset_config = ModelConfig(config_dict=config)
+        expertise = OpenReviewExpertise(
+            client,
+            client_v2,
+            dataset_config
+        )
+        note_count = 0
+
+        # Counts submissions (from one venue or both if doing paper-paper scoring)
+        # and/or alternate group publications if doing group-group scoring
+        # TODO: Decide on what count for what threshold
+
+        #if 'match_group' in config or 'reviewer_ids' in self.config:
+        #    expertise = self.retrieve_expertise()
+        #    for pubs in expertise.values():
+        #        note_count += len(pubs)
+
+        if 'match_paper_invitation' in config or 'match_paper_id' in config or 'match_paper_venueid' in config or 'match_paper_content' in config:
+            invitation_ids = expertise.convert_to_list(expertise.config.get('match_paper_invitation', []))
+            paper_id = expertise.config.get('match_paper_id')
+            paper_venueid = expertise.config.get('match_paper_venueid', None)
+            paper_content = expertise.config.get('match_paper_content', None)
+
+            reduced_submissions = expertise.get_submissions_helper(
+                invitation_ids=invitation_ids,
+                paper_id=paper_id,
+                paper_venueid=paper_venueid,
+                paper_content=paper_content
+            )
+
+            note_count += len(reduced_submissions)
+
+        # Retrieve match groups to detect group-group matching
+        group_group_matching = 'alternate_match_group' in config.keys()
+
+        # if invitation ID is supplied, collect records for each submission
+        if 'paper_invitation' in config or 'csv_submissions' in config or 'paper_id' in config or 'paper_venueid' in config or group_group_matching:
+            invitation_ids = expertise.convert_to_list(expertise.config.get('paper_invitation', []))
+            paper_id = expertise.config.get('paper_id')
+            paper_venueid = expertise.config.get('paper_venueid', None)
+            paper_content = expertise.config.get('paper_content', None)
+            submission_groups = expertise.convert_to_list(expertise.config.get('alternate_match_group', []))
+
+            reduced_submissions = expertise.get_submissions_helper(
+                invitation_ids=invitation_ids,
+                paper_id=paper_id,
+                paper_venueid=paper_venueid,
+                paper_content=paper_content,
+                submission_groups=submission_groups
+            )
+
+            note_count += len(reduced_submissions)
+
+        return note_count
+
     async def worker_process(self, job, token):
         descriptions = JobDescription.VALS.value
         user_id = job.data['user_id']
@@ -830,12 +891,36 @@ class ExpertiseCloudService(BaseExpertiseService):
         or_token = job.data['token']
 
         config = self.redis.load_job(redis_id, user_id)
+        openreview_client_v1 = openreview.Client(
+            token=or_token,
+            baseurl=config.baseurl
+        )
         openreview_client_v2 = openreview.api.OpenReviewClient(
             token=or_token,
             baseurl=config.baseurl_v2
         )
+        try:
+            notes_count = self.get_notes_count(
+                openreview_client_v1,
+                openreview_client_v2,
+                deepcopy(request)
+            )
 
-        cloud_id = self.cloud.create_job(deepcopy(request), client=openreview_client_v2, user_id = user_id)
+            cloud_id = self.cloud.create_job(
+                deepcopy(request),
+                client=openreview_client_v2,
+                user_id = user_id,
+                notes_count=notes_count
+            )
+        except Exception as e:
+            self.logger.error(f"Error creating cloud job for {redis_id}: {e} tr={e.__traceback__}")
+            self.logger.error(f"Error details: {traceback.format_exc()}")
+            config = self.redis.load_job(redis_id, user_id)
+            if config.get('status') != JobStatus.ERROR:
+                self.update_status(config, JobStatus.ERROR, f"Error creating cloud job: {e}")
+            # If we fail to create the job, we should not proceed with polling
+            # Re-raise exception to appear in the queue
+            raise e.with_traceback(e.__traceback__)
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
