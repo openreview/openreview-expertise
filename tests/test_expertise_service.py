@@ -567,7 +567,7 @@ class TestExpertiseService():
                     },
                     "entityB": { 
                         'type': "Note",
-                        'invitation': "ABC.cc/-/Submission" 
+                        'invitation': "ABC.cc/-/Submission"
                     },
                     "model": {
                             "name": "specter2+scincl",
@@ -651,7 +651,8 @@ class TestExpertiseService():
                     },
                     "entityB": { 
                         'type': "Note",
-                        'invitation': "ABC.cc/-/Submission" 
+                        'invitation': "ABC.cc/-/Submission",
+                        'withContent': None
                     },
                     "model": {
                             "name": "specter2+scincl",
