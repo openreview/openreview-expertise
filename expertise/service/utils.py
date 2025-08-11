@@ -233,9 +233,9 @@ class APIRequest(object):
                         all_values.append('venueid')
                     else:
                         return 'venueid'
-            if 'withContent' in entity and return_as_list:
+            if 'withContent' in entity and entity.get('withContent') and return_as_list:
                 if get_value:
-                    for key, value in entity['withContent'].items():
+                    for key, value in entity.get('withContent', {}).items():
                         all_values.append(f"{key}:{value}")
                 elif get_prefix:
                     all_values.append('withContent')
