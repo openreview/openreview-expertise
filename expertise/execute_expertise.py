@@ -11,6 +11,7 @@ def execute_expertise(config):
     config = ModelConfig(config_dict=config)
 
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
+    venue_specific_weights = 'weight_specification' in config['dataset'].keys()
     if Path(config['dataset']['directory']).joinpath('submissions').exists():
         submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
     elif Path(config['dataset']['directory']).joinpath('submissions.json').exists():
@@ -83,7 +84,9 @@ def execute_expertise(config):
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
-            percentile_select=config['model_params'].get('percentile_select', None)
+            venue_specific_weights=venue_specific_weights,
+            percentile_select=config['model_params'].get('percentile_select', None),
+            normalize_scores=config['model_params'].get('normalize_scores', True)
         )
         ens_predictor.set_archives_dataset(archives_dataset)
         ens_predictor.set_submissions_dataset(submissions_dataset)
@@ -122,7 +125,8 @@ def execute_expertise(config):
             sparse_value=config['model_params'].get('sparse_value'),
             dump_p2p=config['model_params'].get('dump_p2p', False),
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
-            percentile_select=config['model_params'].get('percentile_select', None)
+            percentile_select=config['model_params'].get('percentile_select', None),
+            normalize_scores=config['model_params'].get('normalize_scores', True)
         )
         scincl_predictor.set_archives_dataset(archives_dataset)
         scincl_predictor.set_submissions_dataset(submissions_dataset)
@@ -157,7 +161,8 @@ def execute_expertise(config):
             sparse_value=config['model_params'].get('sparse_value'),
             dump_p2p=config['model_params'].get('dump_p2p', False),
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
-            percentile_select=config['model_params'].get('percentile_select', None)
+            percentile_select=config['model_params'].get('percentile_select', None),
+            normalize_scores=config['model_params'].get('normalize_scores', True)
         )
         spec2_predictor.set_archives_dataset(archives_dataset)
         spec2_predictor.set_submissions_dataset(submissions_dataset)

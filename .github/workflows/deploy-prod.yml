@@ -39,10 +39,7 @@ jobs:
           export_environment_variables: true
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v1
-      - name: Set Environment Variables
+      - name: Run deploy scripts
         run: |
-          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-      - name: Run deploy script
-        run: |
-          gcloud config set compute/zone us-central1-c
-          gcloud compute ssh openreview@instance-matching-server-gpu --command "GCP_PIPELINE_TAG=${{ env.VERSION }} /bin/expertise_build.sh" --quiet
+          gcloud config set compute/zone us-central1-b
+          gcloud compute ssh openreview@openreview-expertise-instance --command '/bin/expertise_build.sh' --quiet

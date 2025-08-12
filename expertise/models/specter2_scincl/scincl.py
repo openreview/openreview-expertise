@@ -40,7 +40,8 @@ silent
 """
 class SciNCLPredictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None):
+                 sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=False,
+                 normalize_scores=True):
         self.model_name = 'scincl'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -63,6 +64,9 @@ class SciNCLPredictor(Predictor):
         self.redis = None
         self.dump_p2p = dump_p2p
         self.compute_paper_paper = compute_paper_paper
+        self.venue_specific_weights = venue_specific_weights
+        self.normalize_scores = normalize_scores
+        print(f"SciNCL venue_specific_weights: {venue_specific_weights}")
         self.percentile_select = percentile_select
 
         self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
@@ -92,7 +96,7 @@ class SciNCLPredictor(Predictor):
 
         for paper, embedding in zip(batch_data, embeddings):
             paper = paper[1]
-            jsonl_out.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding.detach().cpu().numpy().tolist()}) + '\n')
+            jsonl_out.append(self._build_embedding_jsonl(paper, embedding))
 
         # clean up batch data
         del embeddings
@@ -118,6 +122,7 @@ class SciNCLPredictor(Predictor):
                     self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract').strip() if publication['content'].get('abstract').strip() else "."
                     pub_mdate = publication.get('mdate', int(time.time()))
                     pub_cache_key = publication['id'] + "_" + str(pub_mdate)
+                    pub_weight = publication.get('content', {}).get('weight', 1) ## Mention that default weights are 1
                     self.pub_note_id_to_cache_key[publication['id']] = pub_cache_key
                     if self.redis is None or not self.redis.exists(pub_cache_key):
                         if publication['id'] in output_dict:
@@ -131,6 +136,8 @@ class SciNCLPredictor(Predictor):
                                 "authors": [profile_id],
                                 "mdate": pub_mdate
                             }
+                            if self.venue_specific_weights:
+                                output_dict[publication['id']]['weight'] = pub_weight
                         self._remove_keys_from_cache(publication["id"])
                 else:
                     print(f"Skipping publication {publication['id']}. Either title or abstract must be provided ")
@@ -190,10 +197,11 @@ class SciNCLPredictor(Predictor):
             f.writelines(pub_jsonl)
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None, p2p_path=None):
-        def load_emb_file(emb_file):
+        def load_emb_file(emb_file, load_weight=False):
             paper_emb_size_default = 768
             id_list = []
             emb_list = []
+            weight_list = []
             bad_id_set = set()
             for line in emb_file:
                 paper_data = json.loads(line.rstrip())
@@ -207,14 +215,17 @@ class SciNCLPredictor(Predictor):
                     paper_emb = paper_data['embedding']
                 id_list.append(paper_id)
                 emb_list.append(paper_emb)
+                if load_weight:
+                    weight_list.append(paper_data['weight'])
             emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
             emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
+            weight_tensor = torch.tensor(weight_list, device=torch.device('cpu'), dtype=torch.float32)
             print(len(bad_id_set))
-            return emb_tensor, id_list, bad_id_set
+            return emb_tensor, id_list, bad_id_set, weight_tensor
 
         print('Loading cached publications...')
         with open(publications_path) as f_in:
-            paper_emb_train, train_id_list, train_bad_id_set = load_emb_file(f_in)
+            paper_emb_train, train_id_list, train_bad_id_set, train_weight_tensor = load_emb_file(f_in, load_weight=self.venue_specific_weights)
         paper_num_train = len(train_id_list)
 
         paper_id2train_idx = {}
@@ -223,13 +234,15 @@ class SciNCLPredictor(Predictor):
 
         with open(submissions_path) as f_in:
             print('Loading cached submissions...')
-            paper_emb_test, test_id_list, test_bad_id_set = load_emb_file(f_in)
+            paper_emb_test, test_id_list, test_bad_id_set, _ = load_emb_file(f_in)
             paper_num_test = len(test_id_list)
 
         print('Computing all scores...')
         p2p_aff = torch.empty((paper_num_test, paper_num_train), device=torch.device('cpu'))
         for i in range(paper_num_test):
             p2p_aff[i, :] = torch.sum(paper_emb_test[i, :].unsqueeze(dim=0) * paper_emb_train, dim=1)
+
+        # Note: Venue-specific weights are now applied per-reviewer in the scoring loop below
 
         if self.dump_p2p:
             p2p_dict = {}
@@ -241,9 +254,14 @@ class SciNCLPredictor(Predictor):
                 json.dump(p2p_dict, f, indent=4)
 
         # Normalize all scores
-        min_val = p2p_aff.min()
-        max_val = p2p_aff.max()
-        p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+        if self.normalize_scores:
+            print("Normalizing scores...")
+            min_val = p2p_aff.min()
+            max_val = p2p_aff.max()
+            p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+        else:
+            print("Skipping normalization of scores...")
+            p2p_aff_norm = p2p_aff
 
         csv_scores = []
         self.preliminary_scores = []
@@ -264,6 +282,15 @@ class SciNCLPredictor(Predictor):
                     if paper_id not in train_bad_id_set:
                         train_paper_idx.append(paper_id2train_idx[paper_id])
                 train_paper_aff_j = p2p_aff_norm[:, train_paper_idx]
+
+                # Apply venue-specific weights per reviewer
+                if self.venue_specific_weights:
+                    train_weight_j = train_weight_tensor[train_paper_idx]
+                    # Logit-space transformation preserves bounds and probability mass
+                    epsilon = 1e-8 ## Numerical stability
+                    logits = torch.logit(train_paper_aff_j, eps=epsilon)
+                    weighted_logits = logits + torch.log(torch.clamp(train_weight_j, min=epsilon)).unsqueeze(0)
+                    train_paper_aff_j = torch.sigmoid(weighted_logits)
 
                 if self.percentile_select is not None:
                     # Select score based on percentile
