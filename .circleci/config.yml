@@ -337,41 +337,6 @@ jobs:
           command: |
             wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 10 http://localhost:3001
             :
-      # 2. Start mock GCS server
-      - run:
-          name: Start GCS emulator
-          command: |
-            
-            # Run the GCS emulator in the network
-            docker run -d --name gcs-emulator --network host -p 4443:4443 fsouza/fake-gcs-server -scheme http
-          background: true
-      - run:
-          name: Create test bucket in GCS emulator
-          command: |
-            # Wait longer for GCS emulator to be ready
-            echo "Waiting for GCS emulator to start..."
-            sleep 15
-            
-            # Check if container is running
-            docker ps
-            docker logs gcs-emulator || echo "Could not get logs"
-            
-            # Check what ports are actually listening
-            docker exec gcs-emulator netstat -tuln || echo "netstat not available"
-
-            echo "Trying port 4443..."
-            docker run --rm --network host appropriate/curl -s -v "http://localhost:4443/storage/v1/b" || echo "Port 4443 failed"
-            
-            # Create the bucket using Docker network with correct port 4443
-            docker run --rm --network host appropriate/curl -X POST \
-              "http://localhost:4443/storage/v1/b?project=test-project" \
-              -H "Content-Type: application/json" \
-              -d '{"name": "test-bucket"}'
-            
-            # Verify bucket exists
-            echo "Verifying bucket exists..."
-            docker run --rm --network host appropriate/curl -s \
-              "http://localhost:4443/storage/v1/b?project=test-project"
       - run:
           name: Setup test data
           command: |
@@ -415,8 +380,6 @@ jobs:
             
             # Run with tee to capture output while still displaying it
             docker run --network host \
-              -e GOOGLE_CLOUD_PROJECT=test-project \
-              -e STORAGE_EMULATOR_HOST=http://localhost:4443 \
               -e PYTHONUNBUFFERED=1 \
               -e DEBUG=1 \
               -e LOG_LEVEL=DEBUG \
@@ -429,7 +392,7 @@ jobs:
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/container_tests/verify_group_paper_scores.py
+            python ~/openreview-expertise/tests/container_tests/verify_group_paper_scores.py
       # 8. Run group-group pipeline
       - run:
           name: Generate Token for Group-Group Pipeline
@@ -451,8 +414,6 @@ jobs:
             
             # Run with tee to capture output while still displaying it
             docker run --network host \
-              -e GOOGLE_CLOUD_PROJECT=test-project \
-              -e STORAGE_EMULATOR_HOST=http://localhost:4443 \
               -e PYTHONUNBUFFERED=1 \
               -e DEBUG=1 \
               -e LOG_LEVEL=DEBUG \
@@ -465,7 +426,7 @@ jobs:
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/container_tests/verify_group_group_scores.py
+            python ~/openreview-expertise/tests/container_tests/verify_group_group_scores.py
       # 8. Run group-paper pipeline
       - run:
           name: Generate Token for Paper-Paper Pipeline
@@ -487,8 +448,6 @@ jobs:
             
             # Run with tee to capture output while still displaying it
             docker run --network host \
-              -e GOOGLE_CLOUD_PROJECT=test-project \
-              -e STORAGE_EMULATOR_HOST=http://localhost:4443 \
               -e PYTHONUNBUFFERED=1 \
               -e DEBUG=1 \
               -e LOG_LEVEL=DEBUG \
@@ -501,16 +460,7 @@ jobs:
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/container_tests/verify_paper_paper_scores.py
-
-      # Use to debug GCS emulator
-      #- run:
-      #    name: Test GCS emulator directly
-      #    command: |
-      #      source ~/miniconda/etc/profile.d/conda.sh
-      #      conda activate expertise
-      #      # Run the test
-      #      STORAGE_EMULATOR_HOST=http://localhost:4443 GOOGLE_CLOUD_PROJECT=test-project python ~/openreview-expertise/tests/verify_gcs_bucket.py
+            python ~/openreview-expertise/tests/container_tests/verify_paper_paper_scores.py
 
 # Update workflow to run jobs in parallel
 workflows:

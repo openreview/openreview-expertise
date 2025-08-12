@@ -5,6 +5,7 @@ import sys
 import json
 import os
 from expertise.service.utils import GCPInterface, RedisDatabase
+from tests.conftest import GCSTestHelper
 
 # Define expected rows
 EXPECTED_ROWS = [
@@ -17,18 +18,16 @@ EXPECTED_ROWS = [
 def verify_bucket():
     print("Verifying GCS bucket using production interface")
     
-    # Print environment variables for debugging
-    print(f"STORAGE_EMULATOR_HOST: {os.environ.get('STORAGE_EMULATOR_HOST')}")
-    print(f"GOOGLE_CLOUD_PROJECT: {os.environ.get('GOOGLE_CLOUD_PROJECT')}")
-    
     # Get project ID from environment
-    project_id = os.environ.get('GOOGLE_CLOUD_PROJECT', 'test-project')
+    project_id = GCSTestHelper.GCS_PROJECT
+    bucket_name = GCSTestHelper.GCS_TEST_BUCKET
+    jobs_folder = GCSTestHelper.GCS_TEST_ROOT
     
     # Create GCPInterface with minimal configuration for GCS operations
     gcp_interface = GCPInterface(
         project_id=project_id,
-        bucket_name="test-bucket",
-        jobs_folder="jobs",
+        bucket_name=bucket_name,
+        jobs_folder=jobs_folder,
         # Use a mock client so we can still access the bucket
         openreview_client=None
     )
@@ -36,7 +35,7 @@ def verify_bucket():
     
     # Search for all jobs in the bucket
     storage_client = gcp_interface.gcs_client
-    bucket = storage_client.bucket("test-bucket")
+    bucket = storage_client.bucket(bucket_name)
 
     # Simulate writing request.json to the bucket
     with open('tests/container_jsons/container_paper_paper.json', 'r') as f:
