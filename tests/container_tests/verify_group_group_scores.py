@@ -44,30 +44,35 @@ def verify_bucket():
         # Use a mock client so we can still access the bucket
         openreview_client=None
     )
-    job_id = "group_group_scores"
     
     # Search for all jobs in the bucket
     storage_client = gcp_interface.gcs_client
     bucket = storage_client.bucket(bucket_name)
 
-    # Simulate writing request.json to the bucket
-    with open('tests/container_jsons/container_group_group.json', 'r') as f:
-        request = json.load(f)
-    blob = bucket.blob(f"{gcp_interface.jobs_folder}/{job_id}/request.json")
-    blob.upload_from_string(
-        data=json.dumps(request),
-        content_type="application/json"
-    )
+    # Load the GCS folder path from the file written by generate_token.py
+    with open('gcs_request_path.txt', 'r') as f:
+        gcs_request_path = f.read().strip()
+    
+    # Extract the folder path (remove /request.json)
+    gcs_folder_path = gcs_request_path.replace('/request.json', '')
+    relative_folder_path = '/'.join(gcs_folder_path.split('/')[3:])  # Remove gs://bucket_name/
+    job_id = '/'.join(relative_folder_path.split('/')[1:])  # remove the first part which is the jobs folder
+    
+    # The request.json should already exist from generate_token.py, so we don't need to upload it again
+    # Just verify it exists
+    request_blob = bucket.blob(f"{relative_folder_path}/request.json")
+    if not request_blob.exists():
+        raise FileNotFoundError(f"Request file not found at: {gcs_request_path}")
 
     job_blobs = list(bucket.list_blobs(prefix=f"{gcp_interface.jobs_folder}/{job_id}/"))
     blob_names = [blob.name for blob in job_blobs]
     print(f"Blob names: {blob_names}")  
 
     # Test job file creation
-    assert 'jobs/group_group_scores/job_config.json' in blob_names
-    assert 'jobs/group_group_scores/metadata.json' in blob_names
-    assert 'jobs/group_group_scores/test_container.jsonl' in blob_names
-    assert 'jobs/group_group_scores/test_container_sparse.jsonl' in blob_names
+    assert f'{relative_folder_path}/job_config.json' in blob_names
+    assert f'{relative_folder_path}/metadata.json' in blob_names
+    assert f'{relative_folder_path}/test_container.jsonl' in blob_names
+    assert f'{relative_folder_path}/test_container_sparse.jsonl' in blob_names
 
     # Test get_job_results
     try:
