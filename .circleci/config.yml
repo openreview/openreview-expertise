@@ -404,7 +404,7 @@ jobs:
               -v $(pwd)/test_output:/app/output \
               --entrypoint="" \
               expertise-test:latest \
-              python -m expertise.execute_pipeline --gcs_dir "$(cat test_input.json)"
+              python -m expertise.execute_pipeline --gcs-dir "$(cat test_input.json)"
       - run:
           name: Check Group-Paper Scores
           command: |
@@ -438,7 +438,7 @@ jobs:
               -v $(pwd)/test_output:/app/output \
               --entrypoint="" \
               expertise-test:latest \
-              python -m expertise.execute_pipeline --gcs_dir "$(cat test_input.json)"
+              python -m expertise.execute_pipeline --gcs-dir "$(cat test_input.json)"
       - run:
           name: Check Group-Group Scores
           command: |
@@ -472,7 +472,7 @@ jobs:
               -v $(pwd)/test_output:/app/output \
               --entrypoint="" \
               expertise-test:latest \
-              python -m expertise.execute_pipeline --gcs_dir "$(cat test_input.json)"
+              python -m expertise.execute_pipeline --gcs-dir "$(cat test_input.json)"
       - run:
           name: Check Paper-Paper Scores
           command: |
