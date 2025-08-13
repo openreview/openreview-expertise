@@ -242,7 +242,7 @@ if __name__ == '__main__':
     print('Starting pipeline')
     parser = argparse.ArgumentParser()
     parser.add_argument('--api_request_str', help='a JSON string or file containing all other arguments')
-    parser.add_argument('--gcs-dir', help='GCS directory containing request.json')
+    parser.add_argument('--gcs_dir', help='GCS directory containing request.json')
     args = parser.parse_args()
     
     if args.gcs_dir:
