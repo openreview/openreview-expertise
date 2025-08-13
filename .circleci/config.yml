@@ -402,6 +402,8 @@ jobs:
               -e DEBUG=1 \
               -e LOG_LEVEL=DEBUG \
               -v $(pwd)/test_output:/app/output \
+              -v "$GOOGLE_APPLICATION_CREDENTIALS:$GOOGLE_APPLICATION_CREDENTIALS" \
+              -e "GOOGLE_APPLICATION_CREDENTIALS" \
               --entrypoint="" \
               expertise-test:latest \
               python -m expertise.execute_pipeline --gcs_dir "$(cat gcs_request_path.txt)"
@@ -436,6 +438,8 @@ jobs:
               -e DEBUG=1 \
               -e LOG_LEVEL=DEBUG \
               -v $(pwd)/test_output:/app/output \
+              -v "$GOOGLE_APPLICATION_CREDENTIALS:$GOOGLE_APPLICATION_CREDENTIALS" \
+              -e "GOOGLE_APPLICATION_CREDENTIALS" \
               --entrypoint="" \
               expertise-test:latest \
               python -m expertise.execute_pipeline --gcs_dir "$(cat gcs_request_path.txt)"
@@ -470,6 +474,8 @@ jobs:
               -e DEBUG=1 \
               -e LOG_LEVEL=DEBUG \
               -v $(pwd)/test_output:/app/output \
+              -v "$GOOGLE_APPLICATION_CREDENTIALS:$GOOGLE_APPLICATION_CREDENTIALS" \
+              -e "GOOGLE_APPLICATION_CREDENTIALS" \
               --entrypoint="" \
               expertise-test:latest \
               python -m expertise.execute_pipeline --gcs_dir "$(cat gcs_request_path.txt)"
@@ -478,7 +484,7 @@ jobs:
           command: |
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            cd ~/openreview-expertise && python -m tests.container_tests.verify_group_group_scores
+            cd ~/openreview-expertise && python -m tests.container_tests.verify_paper_paper_scores
 
 # Update workflow to run jobs in parallel
 workflows:
