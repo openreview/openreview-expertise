@@ -197,14 +197,15 @@ jobs:
     working_directory: ~/openreview-expertise
     environment:
       PYTHON_VERSION: 3.11
+      GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
     steps:
       - checkout
       # Setup Miniconda (duplicated from build job)
       - run:
           name: Install curl for GCP CLI
           command: |
-            apt update
-            apt install -y curl
+            sudo apt update
+            sudo apt install -y curl
       - gcp-cli/setup:
           google_project_id: GOOGLE_PROJECT_ID
           google_project_number: GOOGLE_PROJECT_NUMBER
