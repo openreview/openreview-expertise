@@ -403,6 +403,8 @@ jobs:
               -e LOG_LEVEL=DEBUG \
               -e "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" \
               -v $(pwd)/test_output:/app/output \
+              -v "$HOME/.config/gcloud:/root/.config/gcloud:ro" \
+              -v "/home/circleci:/home/circleci:ro" \
               -v "$GOOGLE_APPLICATION_CREDENTIALS:$GOOGLE_APPLICATION_CREDENTIALS" \
               -e "GOOGLE_APPLICATION_CREDENTIALS" \
               --entrypoint="" \
@@ -440,6 +442,8 @@ jobs:
               -e LOG_LEVEL=DEBUG \
               -e "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" \
               -v $(pwd)/test_output:/app/output \
+              -v "$HOME/.config/gcloud:/root/.config/gcloud:ro" \
+              -v "/home/circleci:/home/circleci:ro" \
               -v "$GOOGLE_APPLICATION_CREDENTIALS:$GOOGLE_APPLICATION_CREDENTIALS" \
               -e "GOOGLE_APPLICATION_CREDENTIALS" \
               --entrypoint="" \
@@ -477,6 +481,8 @@ jobs:
               -e LOG_LEVEL=DEBUG \
               -e "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" \
               -v $(pwd)/test_output:/app/output \
+              -v "$HOME/.config/gcloud:/root/.config/gcloud:ro" \
+              -v "/home/circleci:/home/circleci:ro" \
               -v "$GOOGLE_APPLICATION_CREDENTIALS:$GOOGLE_APPLICATION_CREDENTIALS" \
               -e "GOOGLE_APPLICATION_CREDENTIALS" \
               --entrypoint="" \
