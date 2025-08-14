@@ -94,7 +94,6 @@ def run_pipeline(
         baseurl_v1 = raw_request.pop('baseurl_v1')
         baseurl_v2 = raw_request.pop('baseurl_v2')
         destination_prefix = raw_request.pop('gcs_folder')
-        skip_artifacts = raw_request.pop('skip_artifacts', False)
         dump_embs = False if 'dump_embs' not in raw_request else raw_request.pop('dump_embs')
         dump_archives = False if 'dump_archives' not in raw_request else raw_request.pop('dump_archives')
         specter_dir = os.getenv('SPECTER_DIR')
@@ -110,9 +109,8 @@ def run_pipeline(
         _, bucket = load_gcs(destination_prefix)
         blob_prefix = '/'.join(destination_prefix.split('/')[3:])
 
-        if not skip_artifacts:
-            print('Loading model artifacts')
-            load_model_artifacts()
+        print('Loading model artifacts')
+        load_model_artifacts()
 
         print('Logging into OpenReview')
         client_v1 = openreview.Client(baseurl=baseurl_v1, token=token)

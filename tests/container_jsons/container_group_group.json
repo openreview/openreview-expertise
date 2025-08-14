@@ -19,6 +19,5 @@
       "skipSpecter": false,
       "scoreComputation": "avg",
       "useCuda": false
-    },
-    "skip_artifacts": true
+    }
   }
