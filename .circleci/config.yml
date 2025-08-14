@@ -401,6 +401,7 @@ jobs:
               -e PYTHONUNBUFFERED=1 \
               -e DEBUG=1 \
               -e LOG_LEVEL=DEBUG \
+              -e "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" \
               -v $(pwd)/test_output:/app/output \
               -v "$GOOGLE_APPLICATION_CREDENTIALS:$GOOGLE_APPLICATION_CREDENTIALS" \
               -e "GOOGLE_APPLICATION_CREDENTIALS" \
@@ -437,6 +438,7 @@ jobs:
               -e PYTHONUNBUFFERED=1 \
               -e DEBUG=1 \
               -e LOG_LEVEL=DEBUG \
+              -e "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" \
               -v $(pwd)/test_output:/app/output \
               -v "$GOOGLE_APPLICATION_CREDENTIALS:$GOOGLE_APPLICATION_CREDENTIALS" \
               -e "GOOGLE_APPLICATION_CREDENTIALS" \
@@ -473,6 +475,7 @@ jobs:
               -e PYTHONUNBUFFERED=1 \
               -e DEBUG=1 \
               -e LOG_LEVEL=DEBUG \
+              -e "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" \
               -v $(pwd)/test_output:/app/output \
               -v "$GOOGLE_APPLICATION_CREDENTIALS:$GOOGLE_APPLICATION_CREDENTIALS" \
               -e "GOOGLE_APPLICATION_CREDENTIALS" \
