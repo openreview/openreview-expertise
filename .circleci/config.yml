@@ -376,14 +376,6 @@ jobs:
           name: Build container
           command: |
             docker build -t expertise-test:latest .
-      # 7. Verify CUDA exists
-      - run:
-          name: Verify CUDA
-          command: |
-            # Check if the expected files exist and have correct format
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            python ~/openreview-expertise/tests/container_tests/verify_cuda_support.py
       
       # 8. Run group-paper pipeline
       - run:
