@@ -307,7 +307,7 @@ jobs:
             mkdir ~/openreview-py/coverage
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            pip install --force-reinstall -e ~/openreview-py
+            pip install -e ~/openreview-py
             
       # Create API directories
       - run:
