@@ -12,7 +12,9 @@ orbs:
   gcp-cli: circleci/gcp-cli@3.3.1
 
 jobs:
-  build:
+  build-test-and-containerize:
+    machine:
+      image: ubuntu-2204:2024.01.1
     resource_class: large
     parallelism: 10
     working_directory: ~/openreview-expertise
@@ -178,6 +180,31 @@ jobs:
             mkdir reports/pytest
             echo "$TEST_FILES" | circleci tests run --command="xargs python -m pytest -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise" --verbose --split-by=timings
       - run:
+          name: Build and test container locally
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            
+            # Build image locally (no push)
+            echo "Building Docker image locally..."
+            docker build -t expertise-test:${CIRCLE_SHA1:0:12} .
+            
+            # Run container tests against local image and host services
+            echo "Running container tests..."
+            docker run --network host \
+              -e PYTHONUNBUFFERED=1 \
+              -e DEBUG=1 \
+              -e LOG_LEVEL=DEBUG \
+              -e "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" \
+              -v $(pwd)/test_output:/app/output \
+              -v "$HOME/.config/gcloud:/root/.config/gcloud:ro" \
+              -v "/home/circleci:/home/circleci:ro" \
+              -v "$GOOGLE_APPLICATION_CREDENTIALS:$GOOGLE_APPLICATION_CREDENTIALS" \
+              -e "GOOGLE_APPLICATION_CREDENTIALS" \
+              --entrypoint="" \
+              expertise-test:${CIRCLE_SHA1:0:12} \
+              python -m pytest tests -v --tb=short
+      - run:
           name: Copy API logs to artifacts
           when: on_fail
           command: |
@@ -189,83 +216,9 @@ jobs:
           when: always
           path: reports
 
-  build-and-push-image:
-    machine:
-      image: ubuntu-2204:2022.10.2
-    resource_class: large
-    working_directory: ~/openreview-expertise
-    environment:
-      DOCKER_BUILDKIT: "1"
-      IMAGE_REPO: us-docker.pkg.dev/sunlit-realm-131518/openreview-docker-images/expertise-circleci
-      GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
-    steps:
-      - checkout
-      - run:
-          name: Install curl for GCP CLI
-          command: |
-            sudo apt update
-            sudo apt install -y curl ca-certificates gnupg
-      - gcp-cli/setup:
-          google_project_id: GOOGLE_PROJECT_ID
-          google_project_number: GOOGLE_PROJECT_NUMBER
-          service_account_email: SERVICE_ACCOUNT_EMAIL
-          use_oidc: true
-          workload_identity_pool_id: WORKLOAD_IDENTITY_POOL_ID
-          workload_identity_pool_provider_id: WORKLOAD_IDENTITY_POOL_PROVIDER_ID
-      - run:
-          name: "Verify Authentication"
-          command: |
-            gcloud auth list
-            gcloud projects list
-      - run:
-          name: Configure Docker authentication for Artifact Registry
-          command: |
-            gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://us-docker.pkg.dev
-      - run:
-          name: Enable buildx and prepare cache
-          command: |
-            docker buildx version || true
-            docker buildx create --name ci-builder --use --driver docker-container || docker buildx use ci-builder
-      - run:
-          name: Compute image tags
-          command: |
-            SHORT_SHA="${CIRCLE_SHA1:0:12}"
-            echo "export SHORT_SHA=$SHORT_SHA" >> $BASH_ENV
-            
-            # Build tag arguments
-            TAGS="--tag ${IMAGE_REPO}:${SHORT_SHA}"
-            echo "export BUILD_TAGS='$TAGS'" >> $BASH_ENV
-      - run:
-          name: Build and push Docker image with registry cache
-          command: |
-            source $BASH_ENV
-            docker buildx build \
-              --pull \
-              --platform linux/amd64 \
-              $BUILD_TAGS \
-              --cache-from=type=registry,ref="${IMAGE_REPO}:buildcache" \
-              --cache-to=type=registry,ref="${IMAGE_REPO}:buildcache",mode=max \
-              --push \
-              .
-            echo "Docker build and push completed successfully"
-      - run:
-          name: Verify image push and output summary
-          command: |
-            source $BASH_ENV
-            echo "=== Build Summary ==="
-            echo "SHA tag: ${IMAGE_REPO}:${SHORT_SHA}"
-            if [ "${CIRCLE_BRANCH}" = "master" ]; then
-              echo "Latest tag: ${IMAGE_REPO}:latest"
-            fi
-            echo "Build cache: ${IMAGE_REPO}:buildcache"
-            echo "Branch: $CIRCLE_BRANCH"
-            echo "Commit: $CIRCLE_SHA1"
 
 workflows:
   version: 2
   build-and-test:
     jobs:
-      - build
-      - build-and-push-image:
-          requires:
-            - build
+      - build-test-and-containerize
