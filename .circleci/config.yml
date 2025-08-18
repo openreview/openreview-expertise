@@ -213,10 +213,10 @@ jobs:
           workload_identity_pool_id: WORKLOAD_IDENTITY_POOL_ID
           workload_identity_pool_provider_id: WORKLOAD_IDENTITY_POOL_PROVIDER_ID
       - run:
-          name: Verify Authentication
+          name: "Verify Authentication"
           command: |
-            gcloud auth list --filter=status:ACTIVE --format="value(account)"
-            gcloud config set project "${GOOGLE_CLOUD_PROJECT}"
+            gcloud auth list
+            gcloud projects list
       - run:
           name: Configure Docker authentication for Artifact Registry
           command: |
