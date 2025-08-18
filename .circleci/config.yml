@@ -17,7 +17,7 @@ jobs:
       image: ubuntu-2204:2022.10.2
     # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     resource_class: large
-    parallelism: 10
+    parallelism: 1
     working_directory: ~/openreview-expertise
     environment:
       PYTHON_VERSION: 3.11
@@ -211,7 +211,7 @@ jobs:
               -e "GOOGLE_APPLICATION_CREDENTIALS" \
               --entrypoint="" \
               expertise-test:${CIRCLE_SHA1:0:12} \
-              python -m pytest tests -v --tb=short
+              sh -c "cd /app/openreview-expertise && python -m pytest tests -v --tb=short"
       - run:
           name: Copy API logs to artifacts
           when: on_fail
