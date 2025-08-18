@@ -12,9 +12,7 @@ orbs:
   gcp-cli: circleci/gcp-cli@3.3.1
 
 jobs:
-  build-test-and-containerize:
-    machine:
-      image: ubuntu-2204:2024.01.1
+  build:
     resource_class: large
     parallelism: 10
     working_directory: ~/openreview-expertise
@@ -215,10 +213,3 @@ jobs:
       - store_artifacts:
           when: always
           path: reports
-
-
-workflows:
-  version: 2
-  build-and-test:
-    jobs:
-      - build-test-and-containerize
