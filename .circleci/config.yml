@@ -188,3 +188,84 @@ jobs:
       - store_artifacts:
           when: always
           path: reports
+
+  build-and-push-image:
+    machine:
+      image: ubuntu-2204:2022.10.2
+    resource_class: large
+    working_directory: ~/openreview-expertise
+    environment:
+      DOCKER_BUILDKIT: "1"
+      IMAGE_REPO: us-docker.pkg.dev/sunlit-realm-131518/openreview-docker-images/expertise-circleci
+      GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
+    steps:
+      - checkout
+      - run:
+          name: Install curl for GCP CLI
+          command: |
+            sudo apt update
+            sudo apt install -y curl ca-certificates gnupg
+      - gcp-cli/setup:
+          google_project_id: GOOGLE_PROJECT_ID
+          google_project_number: GOOGLE_PROJECT_NUMBER
+          service_account_email: SERVICE_ACCOUNT_EMAIL
+          use_oidc: true
+          workload_identity_pool_id: WORKLOAD_IDENTITY_POOL_ID
+          workload_identity_pool_provider_id: WORKLOAD_IDENTITY_POOL_PROVIDER_ID
+      - run:
+          name: Verify Authentication
+          command: |
+            gcloud auth list --filter=status:ACTIVE --format="value(account)"
+            gcloud config set project "${GOOGLE_CLOUD_PROJECT}"
+      - run:
+          name: Configure Docker authentication for Artifact Registry
+          command: |
+            gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://us-docker.pkg.dev
+      - run:
+          name: Enable buildx and prepare cache
+          command: |
+            docker buildx version || true
+            docker buildx create --name ci-builder --use --driver docker-container || docker buildx use ci-builder
+      - run:
+          name: Compute image tags
+          command: |
+            SHORT_SHA="${CIRCLE_SHA1:0:12}"
+            echo "export SHORT_SHA=$SHORT_SHA" >> $BASH_ENV
+            
+            # Build tag arguments
+            TAGS="--tag ${IMAGE_REPO}:${SHORT_SHA}"
+            echo "export BUILD_TAGS='$TAGS'" >> $BASH_ENV
+      - run:
+          name: Build and push Docker image with registry cache
+          command: |
+            source $BASH_ENV
+            docker buildx build \
+              --pull \
+              --platform linux/amd64 \
+              $BUILD_TAGS \
+              --cache-from=type=registry,ref="${IMAGE_REPO}:buildcache" \
+              --cache-to=type=registry,ref="${IMAGE_REPO}:buildcache",mode=max \
+              --push \
+              .
+            echo "Docker build and push completed successfully"
+      - run:
+          name: Verify image push and output summary
+          command: |
+            source $BASH_ENV
+            echo "=== Build Summary ==="
+            echo "SHA tag: ${IMAGE_REPO}:${SHORT_SHA}"
+            if [ "${CIRCLE_BRANCH}" = "master" ]; then
+              echo "Latest tag: ${IMAGE_REPO}:latest"
+            fi
+            echo "Build cache: ${IMAGE_REPO}:buildcache"
+            echo "Branch: $CIRCLE_BRANCH"
+            echo "Commit: $CIRCLE_SHA1"
+
+workflows:
+  version: 2
+  build-and-test:
+    jobs:
+      - build
+      - build-and-push-image:
+          requires:
+            - build
