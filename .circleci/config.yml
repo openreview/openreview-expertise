@@ -27,6 +27,7 @@ jobs:
           transport.host: localhost
           TZ: "Etc/UTC"
     environment:
+      DOCKER_BUILDKIT: "1"
       PYTHON_VERSION: 3.11
       GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
     steps:
