@@ -174,7 +174,7 @@ jobs:
           name: Wait for API V2 to start
           shell: /bin/sh
           command: |
-            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 30 http://localhost:3001
+            wget --retry-connrefused --waitretry=2 --read-timeout=20 --timeout=15 -t 45 http://localhost:3001
             :
       - run:
           name: Run tests
