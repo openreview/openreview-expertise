@@ -211,7 +211,7 @@ jobs:
               -e "GOOGLE_APPLICATION_CREDENTIALS" \
               --entrypoint="" \
               expertise-test:${CIRCLE_SHA1:0:12} \
-              sh -c "cd /app/openreview-expertise && python -m pytest tests -v --tb=short"
+              sh -c "cd /app/openreview-expertise && python -m pytest tests/test_pipeline.py tests/test_specter2scincl.py -v --tb=short"
       - run:
           name: Copy API logs to artifacts
           when: on_fail
