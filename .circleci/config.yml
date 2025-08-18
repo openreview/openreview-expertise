@@ -139,10 +139,16 @@ jobs:
       - run:
           name: Start API V1
           command: |
+            export PATH=/usr/bin:$PATH
+            node -v
+            which node
+            whereis node
+            which npm
+            whereis npm
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview
-            npm run cleanStart
+            /usr/local/bin/npm run cleanStart
           background: true
       - run:
           name: Wait for API V1 to start
@@ -153,10 +159,16 @@ jobs:
       - run:
           name: Start API V2
           command: |
+            export PATH=/usr/bin:$PATH
+            node -v
+            which node
+            whereis node
+            which npm
+            whereis npm
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-v2
-            npm run cleanStart
+            /usr/local/bin/npm run cleanStart
           background: true
       - run:
           name: Wait for API V2 to start
