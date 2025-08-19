@@ -84,7 +84,7 @@ jobs:
           push: true
           # Push multiple tags: the version provided AND "latest"
           tags: |
-            ${{ env.IMAGE_TAG }}:${{ env.VERSION }}
+            ${{ env.IMAGE_TAG }}:${{ env.IMAGE_TAG_VERSION }}
             ${{ env.IMAGE_TAG }}:latest
           build-args: |
             OPENREVIEW_PY_VERSION=${{ env.OPENREVIEW_PY_VERSION }}
