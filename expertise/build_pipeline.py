@@ -16,7 +16,11 @@ import argparse
 from google_cloud_pipeline_components.v1.custom_job import (
     create_custom_training_job_from_component
 )
-CONFIG_FILE_PATH = 'service/config/default.cfg'
+import os
+
+# Make config path relative to this script's directory
+_BUILD_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE_PATH = os.path.join(_BUILD_DIR, 'service', 'config', 'default.cfg')
 
 def parse_config_file(config_path):
     def _coerce_numeric(value):
