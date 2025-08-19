@@ -38,7 +38,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && conda install --force-reinstall pytorch pytorch-cuda=12.4 -c pytorch -c nvidia \
     && python -m pip install --no-cache-dir -e $HOME/openreview-expertise \
     && python -m pip install --no-cache-dir -I protobuf==3.20.1 \
-    && python -m pip install openreview-py \
+    && if [ "${OPENREVIEW_PY_VERSION}" = "latest" ]; then \
+        python -m pip install -e "git+https://github.com/openreview/openreview-py.git#egg=openreview-py"; \
+    else \
+        python -m pip install -e "git+https://github.com/openreview/openreview-py.git@${OPENREVIEW_PY_VERSION}#egg=openreview-py"; \
+    fi \
     && conda clean --all -y \
     && apt-get purge -y build-essential wget curl git \
     && apt-get autoremove -y \
