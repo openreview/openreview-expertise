@@ -52,11 +52,11 @@ jobs:
             printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
       - run:
-          name: Install Node 20
+          name: Install Node 22
           command: |
             sudo apt-get remove -y nodejs
             sudo rm -f /usr/local/bin/node /usr/local/bin/npm
-            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
             sudo apt-get install -y nodejs
             export PATH=/usr/bin:$PATH
             node -v
@@ -93,7 +93,7 @@ jobs:
       - run:
           name: Initialize MongoDB
           command: |
-            docker run -d --name mongodb -p 27017:27017 mongo:6.0 --replSet rs0
+            docker run -d --name mongodb -p 27017:27017 mongo:8.0 --replSet rs0
             sleep 10
             docker exec mongodb mongosh mongodb://localhost:27017 --eval "rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]})"
       - run:
