@@ -8,9 +8,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "openreview-expertise Release Version"
-        required: false
-        default: "latest"
+        description: "openreview-expertise Release Tag"
+        required: true
         type: string
 jobs:
   deploy:
@@ -42,4 +41,6 @@ jobs:
       - name: Run deploy scripts
         run: |
           gcloud config set compute/zone us-central1-b
-          gcloud compute ssh openreview@openreview-expertise-instance --command '/bin/expertise_build.sh' --quiet
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Deploying version: $VERSION"
+          gcloud compute ssh openreview@openreview-expertise-instance --command ".github/workflows/expertise_deploy.sh $VERSION" --quiet
