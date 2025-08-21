@@ -50,9 +50,13 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       - name: Setup Docker authentication
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      - name: Get deployment configuration
+        run: |
+          gsutil cp gs://openreview-general/conf/deployment.conf ./deployment.conf
+          OPENREVIEW_TAG=$(grep 'OPENREVIEW_PY_V2_TAG=' deployment.conf | cut -d'"' -f2)
+          echo "OPENREVIEW_PY_VERSION=$OPENREVIEW_TAG" >> $GITHUB_ENV
       - name: Set Environment Variables
         run: |
-          echo "OPENREVIEW_PY_VERSION=latest" >> $GITHUB_ENV
           echo "IMAGE_TAG_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
           echo "KFP_PIPELINE_NAME=${{ env.PIPELINE_NAME }}" >> $GITHUB_ENV
           echo "IMAGE=${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
