@@ -116,18 +116,22 @@ if __name__ == '__main__':
 
     client = RegistryClient(host=f"https://{args.kfp_region}-kfp.pkg.dev/{args.project}/{args.kfp_repo}")
 
+    # Check if the pipeline with this specific tag already exists
+    version_exists = False
     try:
-        client.delete_tag(
-            package_name=args.kfp_name,
-            tag='latest'
-        )
-        print(f"Successfully deleted tag 'latest' for pipeline '{args.kfp_name}'.")
+        # Try to get the specific tag
+        existing_tag = client.get_tag(package_name=args.kfp_name, tag=args.tag)
+        if existing_tag:
+            version_exists = True
+            print(f"Pipeline '{args.kfp_name}' with tag '{args.tag}' already exists in registry")
     except Exception as e:
-        print(f"Could not delete tag 'latest' for pipeline '{args.kfp_name}' (it might not exist): {e}")
+        # Tag doesn't exist, which is expected for new versions
+        print(f"Pipeline tag '{args.tag}' does not exist, uploading new version")
 
+    if version_exists:
+        print("Exiting without uploading new pipeline version.")
+        exit(0)
     upload_tags = [args.tag]
-    if args.tag != 'latest':
-        upload_tags.append('latest')
 
     print(f"Uploading pipeline '{args.kfp_name}' with tags: {upload_tags}")
 
