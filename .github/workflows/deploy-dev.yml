@@ -132,4 +132,4 @@ jobs:
           BRANCH="${{ github.event.inputs.branch || 'master' }}"
           PY_BRANCH="${{ github.event.inputs.py_branch || 'master' }}"
           gcloud config set compute/zone us-central1-b
-          gcloud compute ssh openreview@dev-instance-1 --command '/home/openreview/bin/deploy-expertise.sh $BRANCH $PY_BRANCH' --quiet
+          gcloud compute ssh openreview@dev-instance-1 --command "bash /home/openreview/bin/deploy-expertise.sh $BRANCH $PY_BRANCH" --quiet
