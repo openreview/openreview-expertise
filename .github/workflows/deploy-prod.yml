@@ -67,15 +67,10 @@ jobs:
           IMAGE_PATH="${{ env.IMAGE_TAG }}:${{ env.IMAGE_TAG_VERSION }}"
           echo "Checking for image: ${IMAGE_PATH}"
           
-          if gcloud artifacts docker images describe "${IMAGE_PATH}" \
-             --project="${{ env.PROJECT }}" \
-             --location="${{ env.REGION }}" \
-             --format="value(name)" 2>/dev/null; then
+          if docker manifest inspect "${IMAGE_PATH}" > /dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Image already exists in registry: ${IMAGE_PATH}"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Image does not exist, will build and push: ${IMAGE_PATH}"
           fi
       - name: Setup Python 3.9
         uses: actions/setup-python@v5
