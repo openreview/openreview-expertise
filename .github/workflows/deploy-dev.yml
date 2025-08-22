@@ -54,12 +54,25 @@ jobs:
           cleanup_credentials: true
           export_environment_variables: true
       - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v1
+        uses: google-github-actions/setup-gcloud@v2
       - name: Setup Docker authentication
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
       - name: Set Environment Variables
         run: |
-          echo "IMAGE_TAG_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          # Simple: Use branch/tag name + commit SHA of the main repo
+          BRANCH="${{ github.event.inputs.branch || 'master' }}"
+          PY_BRANCH="${{ github.event.inputs.py_branch || 'master' }}"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          
+          # Clean branch name (replace / with -)
+          CLEAN_BRANCH=$(echo "$BRANCH" | sed 's/\//-/g')
+          CLEAN_PY_BRANCH=$(echo "$PY_BRANCH" | sed 's/\//-/g')
+          
+          # Create simple tag: branch-pybranch-sha
+          IMAGE_TAG_VERSION="${CLEAN_BRANCH}-${CLEAN_PY_BRANCH}-${SHORT_SHA}"
+          
+          echo "IMAGE_TAG_VERSION=$IMAGE_TAG_VERSION" >> $GITHUB_ENV
+          echo "OPENREVIEW_PY_VERSION=${{ github.event.inputs.py_branch || 'master' }}" >> $GITHUB_ENV
           echo "KFP_PIPELINE_NAME=${{ env.PIPELINE_NAME }}" >> $GITHUB_ENV
           echo "IMAGE=${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
           echo "IMAGE_TAG=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
@@ -116,5 +129,7 @@ jobs:
             --tag "${{ env.IMAGE_TAG_VERSION }}"
       - name: Run deploy script
         run: |
+          BRANCH="${{ github.event.inputs.branch || 'master' }}"
+          PY_BRANCH="${{ github.event.inputs.py_branch || 'master' }}"
           gcloud config set compute/zone us-central1-c
-          gcloud compute ssh openreview@instance-matching-server --command '/bin/expertise_build_dev.sh -b ${{ github.event.inputs.branch }} -p ${{ github.event.inputs.py_branch }}' --quiet
+          gcloud compute ssh openreview@dev-instance-1 --command '/home/openreview/bin/deploy-expertise.sh $BRANCH $PY_BRANCH' --quiet
