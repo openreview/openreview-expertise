@@ -27,8 +27,8 @@ jobs:
       - run:
           name: Install curl for GCP CLI
           command: |
-            sudo apt update
-            sudo apt install -y curl ca-certificates gnupg
+            apt update
+            apt install -y curl
       - gcp-cli/setup:
           google_project_id: GOOGLE_PROJECT_ID
           google_project_number: GOOGLE_PROJECT_NUMBER
@@ -44,9 +44,14 @@ jobs:
       - run:
           name: Setup Miniconda
           command: |
-            sudo apt update
-            sudo apt install -y wget make gcc curl build-essential git
-            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC sudo apt install -y tzdata
+            apt update
+            apt install -y wget
+            apt install -y make gcc
+            apt install -y curl
+            apt install -y build-essential
+            apt install -y git
+            apt install -y sudo
+            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
             cd $HOME
             wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
             printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
