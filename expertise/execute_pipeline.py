@@ -25,7 +25,7 @@ DEFAULT_CONFIG = {
         "use_redis": False
     }
 }
-DELETED_FIELDS = ['user_id', 'cdate', 'notes_count']
+DELETED_FIELDS = ['user_id', 'cdate', 'machine_type']
 
 def load_gcs(gcs_path):
     """Return client and bucket for a GCS path."""

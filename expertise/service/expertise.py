@@ -825,8 +825,10 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.client_v2 = client_v2
         self.cloud.set_client(client_v2)
 
-    def get_notes_count(self, client, client_v2, api_request):
+    def compute_machine_type(self, client, client_v2, api_request):
         config, _ = self._prepare_config(deepcopy(api_request), client_v1=client, client=client)
+        if config.machine_type is not None:
+            return config.machine_type
         config = config.to_json()
         dataset_config = ModelConfig(config_dict=config)
         expertise = OpenReviewExpertise(
@@ -881,7 +883,12 @@ class ExpertiseCloudService(BaseExpertiseService):
 
             note_count += len(reduced_submissions)
 
-        return note_count
+        if note_count < self.server_config.get('PIPELINE_MEDIUM_THRESHOLD'):
+            return 'small'
+        elif note_count < self.server_config.get('PIPELINE_LARGE_THRESHOLD'):
+            return 'medium'
+        else:
+            return 'large'
 
     async def worker_process(self, job, token):
         descriptions = JobDescription.VALS.value
@@ -900,7 +907,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             baseurl=config.baseurl_v2
         )
         try:
-            notes_count = self.get_notes_count(
+            machine_type = self.compute_machine_type(
                 openreview_client_v1,
                 openreview_client_v2,
                 deepcopy(request)
@@ -910,7 +917,7 @@ class ExpertiseCloudService(BaseExpertiseService):
                 deepcopy(request),
                 client=openreview_client_v2,
                 user_id = user_id,
-                notes_count=notes_count
+                machine_type=machine_type
             )
         except Exception as e:
             self.logger.error(f"Error creating cloud job for {redis_id}: {e} tr={e.__traceback__}")

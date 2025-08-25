@@ -217,7 +217,7 @@ class TestExpertiseCloudService():
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
         assert request['user_id'] == 'CLD.cc/Program_Chairs'
-        assert request['notes_count'] == 2
+        assert request['machine_type'] == 'small'
         
         setup_job_mocks()
         response = test_client.post(
@@ -300,7 +300,7 @@ class TestExpertiseCloudService():
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
         assert request['user_id'] == 'TMLR/Editors_In_Chief'
-        assert request['notes_count'] == 0
+        assert request['machine_type'] == 'small'
 
         # Upload test results to GCS
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")

@@ -179,17 +179,17 @@ if __name__ == '__main__':
     )
     def expertise_pipeline(
         gcs_request_path: str,
-        notes_count: int = 0,
+        machine_type: str = 'small'
     ):
 
         # Conditional execution based on job size
-        with If(notes_count < 1000):  # small
+        with If(machine_type == config['SMALL_NAME']):  # small
             run_small = small_expertise_job_from_file_input(
                 project=args.project,
                 location=args.kfp_region,
                 gcs_request_path=gcs_request_path
             ).set_display_name("Running Small Expertise Pipeline")
-        with Elif(notes_count < 5000): # medium
+        with Elif(machine_type == config['MEDIUM_NAME']): # medium
             run_medium = medium_expertise_job_from_file_input(
                 project=args.project,
                 location=args.kfp_region,
