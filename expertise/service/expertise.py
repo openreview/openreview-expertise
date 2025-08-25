@@ -826,7 +826,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.cloud.set_client(client_v2)
 
     def compute_machine_type(self, client, client_v2, api_request):
-        config, _ = self._prepare_config(deepcopy(api_request), client_v1=client, client=client)
+        config, _ = self._prepare_config(deepcopy(api_request), client_v1=client, client=client_v2)
         if config.machine_type is not None:
             return config.machine_type
         config = config.to_json()
