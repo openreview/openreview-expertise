@@ -1250,6 +1250,7 @@ class TestExpertiseService():
             if match_submission_id == submission_id:
                 assert score >= 0.99
 
+
     def test_request_expertise_with_model_errors(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a config with an error in the model field and return the job_id
         test_client = openreview_context['test_client']

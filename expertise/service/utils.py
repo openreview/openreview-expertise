@@ -618,6 +618,7 @@ class JobConfig(object):
             'useAbstract',
             'scoreComputation',
             'skipSpecter',
+            'useCuda',
             'percentileSelect',
             'normalizeScores'
         ]
