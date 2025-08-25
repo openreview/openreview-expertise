@@ -923,7 +923,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             self.logger.error(f"Error creating cloud job for {redis_id}: {e} tr={e.__traceback__}")
             self.logger.error(f"Error details: {traceback.format_exc()}")
             config = self.redis.load_job(redis_id, user_id)
-            if config.get('status') != JobStatus.ERROR:
+            if config.status != JobStatus.ERROR:
                 self.update_status(config, JobStatus.ERROR, f"Error creating cloud job: {e}")
             # If we fail to create the job, we should not proceed with polling
             # Re-raise exception to appear in the queue
@@ -973,7 +973,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             else:
                 self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {redis_id}.")
                 config = self.redis.load_job(redis_id, user_id)
-                if config.get('status') != JobStatus.ERROR:
+                if config.status != JobStatus.ERROR:
                     self.update_status(config, JobStatus.ERROR, f"Polling timed out after {self.max_attempts} attempts.")
                 raise TimeoutError(f"Polling timed out for job {redis_id} after {self.max_attempts} attempts.")
 
