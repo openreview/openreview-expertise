@@ -13,19 +13,12 @@ orbs:
 
 jobs:
   build:
+    machine:
+      image: ubuntu-2204:2022.10.2
+    # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     resource_class: large
-    parallelism: 10
+    parallelism: 1
     working_directory: ~/openreview-expertise
-    docker:
-      - image: ubuntu:22.04
-      - image: redislabs/redisai
-      - image: mongo:6.0
-        command: [ --replSet, rs0 ]
-      - image: docker.elastic.co/elasticsearch/elasticsearch:7.7.0
-        environment:
-          xpack.security.enabled: false
-          transport.host: localhost
-          TZ: "Etc/UTC"
     environment:
       PYTHON_VERSION: 3.11
       GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
@@ -34,8 +27,8 @@ jobs:
       - run:
           name: Install curl for GCP CLI
           command: |
-            apt update
-            apt install -y curl
+            sudo apt update
+            sudo apt install -y curl
       - gcp-cli/setup:
           google_project_id: GOOGLE_PROJECT_ID
           google_project_number: GOOGLE_PROJECT_NUMBER
@@ -51,26 +44,34 @@ jobs:
       - run:
           name: Setup Miniconda
           command: |
-            apt update
-            apt install -y wget
-            apt install -y make gcc
-            apt install -y curl
-            apt install -y build-essential
-            apt install -y git
-            apt install -y sudo
-            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y tzdata
+            sudo apt update
+            sudo apt install -y wget
+            sudo apt install -y make gcc
+            sudo apt install -y curl
+            sudo apt install -y build-essential
+            sudo apt install -y git
+            sudo apt install -y sudo
+            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC sudo apt install -y tzdata
             cd $HOME
             wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
             printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
             bash miniconda.sh -b -p $HOME/miniconda
       - run:
-          name: Install Node
+          name: Install Node 22
           command: |
-            cd ~/
-            curl -Lk https://raw.githubusercontent.com/tj/n/master/bin/n -o n
-            sudo bash n 22.14.0
-            hash -r
-            sudo npm install -g n
+            sudo apt-get remove -y nodejs
+            sudo rm -f /usr/local/bin/node /usr/local/bin/npm
+            curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            export PATH=/usr/bin:$PATH
+            node -v
+            npm -v
+            sudo ln -sf /usr/bin/node /usr/local/bin/node
+            sudo ln -sf /usr/bin/npm /usr/local/bin/npm
+            which node
+            whereis node
+            which npm
+            whereis npm
       - run:
           name: Setup environment
           command: |
@@ -95,18 +96,19 @@ jobs:
             conda install -y -c conda-forge faiss-cpu=1.7.4 "pytorch>=2.3"
             python -m pip install -I protobuf==3.20.1
       - run:
-          name: Initialize replica set
+          name: Initialize MongoDB
           command: |
-            # Source the utility functions  
-            source ~/openreview-expertise/.circleci/ci-utils.sh
-
-            retry sudo apt-get install gnupg curl
-            curl -fsSL https://pgp.mongodb.com/server-6.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor
-            echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
-            retry sudo apt-get update
-            retry sudo apt-get upgrade -y
-            retry sudo apt-get install -y mongodb-org=6.0.7
-            mongosh mongodb://localhost:27017 --eval "rs.initiate()"
+            docker run -d --name mongodb -p 27017:27017 mongo:8.0 --replSet rs0
+            sleep 10
+            docker exec mongodb mongosh mongodb://localhost:27017 --eval "rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]})"
+      - run:
+          name: Start Elasticsearch
+          command: |
+            docker run -d --name elasticsearch -p 9200:9200 -p 9300:9300 -e "xpack.security.enabled=false" -e "discovery.type=single-node" docker.elastic.co/elasticsearch/elasticsearch:7.7.0
+      - run:
+          name: Start Redis
+          command: |
+            docker run -d --name redis -p 6379:6379 redislabs/redisai
       - run:
           name: Clone OpenReview API V1 branch << pipeline.parameters.openreview-api-v1-branch >>
           command: |
@@ -142,10 +144,16 @@ jobs:
       - run:
           name: Start API V1
           command: |
+            export PATH=/usr/bin:$PATH
+            node -v
+            which node
+            whereis node
+            which npm
+            whereis npm
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview
-            npm run cleanStart
+            /usr/local/bin/npm run cleanStart
           background: true
       - run:
           name: Wait for API V1 to start
@@ -156,16 +164,22 @@ jobs:
       - run:
           name: Start API V2
           command: |
+            export PATH=/usr/bin:$PATH
+            node -v
+            which node
+            whereis node
+            which npm
+            whereis npm
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             cd ~/openreview-v2
-            npm run cleanStart
+            /usr/local/bin/npm run cleanStart
           background: true
       - run:
           name: Wait for API V2 to start
           shell: /bin/sh
           command: |
-            wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 30 http://localhost:3001
+            wget --retry-connrefused --waitretry=2 --read-timeout=20 --timeout=15 -t 45 http://localhost:3001
             :
       - run:
           name: Run tests
@@ -177,6 +191,32 @@ jobs:
             mkdir reports
             mkdir reports/pytest
             echo "$TEST_FILES" | circleci tests run --command="xargs python -m pytest -x --junitxml=reports/pytest/pytest-report.xml --ignore=expertise" --verbose --split-by=timings
+      - run:
+          name: Build and test container locally
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            
+            # Build image locally (no push)
+            echo "Building Docker image locally..."
+            docker build -t expertise-test:${CIRCLE_SHA1:0:12} .
+            
+            # Run container tests against local image
+            # Note: Services are accessible via localhost from within remote docker
+            echo "Running container tests..."
+            docker run --network host \
+              -e PYTHONUNBUFFERED=1 \
+              -e DEBUG=1 \
+              -e LOG_LEVEL=DEBUG \
+              -e "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" \
+              -v $(pwd)/test_output:/app/output \
+              -v "$HOME/.config/gcloud:/root/.config/gcloud:ro" \
+              -v "/home/circleci:/home/circleci:ro" \
+              -v "$GOOGLE_APPLICATION_CREDENTIALS:$GOOGLE_APPLICATION_CREDENTIALS" \
+              -e "GOOGLE_APPLICATION_CREDENTIALS" \
+              --entrypoint="" \
+              expertise-test:${CIRCLE_SHA1:0:12} \
+              sh -c "cd /app/openreview-expertise && python -m pytest tests/test_pipeline.py tests/test_specter2scincl.py -v --tb=short"
       - run:
           name: Copy API logs to artifacts
           when: on_fail
