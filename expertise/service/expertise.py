@@ -884,11 +884,11 @@ class ExpertiseCloudService(BaseExpertiseService):
             note_count += len(reduced_submissions)
 
         if note_count < self.server_config.get('PIPELINE_MEDIUM_THRESHOLD'):
-            return 'small'
+            return self.server_config.get('SMALL_NAME')
         elif note_count < self.server_config.get('PIPELINE_LARGE_THRESHOLD'):
-            return 'medium'
+            return self.server_config.get('MEDIUM_NAME')
         else:
-            return 'large'
+            return self.server_config.get('LARGE_NAME')
 
     async def worker_process(self, job, token):
         descriptions = JobDescription.VALS.value
