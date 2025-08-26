@@ -124,6 +124,47 @@ class TestExpertiseCloudService():
                 "config": config
             }
 
+    def test_insufficient_perm_machine_type(self, openreview_client, openreview_context_cloud):
+        # Submitting a request with machineType outside of Super User
+        abc_client = openreview.api.OpenReviewClient(
+            token=openreview_client.token
+        )
+        abc_client.impersonate('CLD.cc/Program_Chairs')
+        test_client = openreview_context_cloud['test_client']
+
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "CLD.cc/Area_Chairs",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "CLD.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
+                    },
+                    "machineType": "large"
+                }
+            ),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 403, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'forbidden' in response.json['message'].lower()
+        assert response.json['message'] == "Forbidden: Insufficient permissions to set machine type"
+
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_create_job_filesystem(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():

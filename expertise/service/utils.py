@@ -506,6 +506,9 @@ class JobConfig(object):
         config.baseurl = server_config['OPENREVIEW_BASEURL']
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
+        
+        if config.user_id not in SUPERUSER_IDS and api_request.machine_type is not None:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to set machine type')
         config.machine_type = api_request.machine_type
 
         root_dir = os.path.join(working_dir, config.job_id)
