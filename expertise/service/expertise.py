@@ -838,15 +838,6 @@ class ExpertiseCloudService(BaseExpertiseService):
         )
         note_count = 0
 
-        # Counts submissions (from one venue or both if doing paper-paper scoring)
-        # and/or alternate group publications if doing group-group scoring
-        # TODO: Decide on what count for what threshold
-
-        #if 'match_group' in config or 'reviewer_ids' in self.config:
-        #    expertise = self.retrieve_expertise()
-        #    for pubs in expertise.values():
-        #        note_count += len(pubs)
-
         if 'match_paper_invitation' in config or 'match_paper_id' in config or 'match_paper_venueid' in config or 'match_paper_content' in config:
             invitation_ids = expertise.convert_to_list(expertise.config.get('match_paper_invitation', []))
             paper_id = expertise.config.get('match_paper_id')
