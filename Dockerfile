@@ -16,6 +16,7 @@ ENV PYTHON_VERSION=3.11 \
 COPY . /app/openreview-expertise
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
     wget \
     curl \
     ca-certificates \
