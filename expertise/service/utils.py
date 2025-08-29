@@ -866,7 +866,7 @@ class GCPInterface(object):
 
             return f"{match_note_value}-{submission_note_value}"
 
-    def create_job(self, json_request: dict, user_id: str = None, client = None):
+    def create_job(self, json_request: dict, user_id: str, client, job_id: str):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -901,8 +901,9 @@ class GCPInterface(object):
 
         or_client = client if client else self.client
         api_request = APIRequest(json_request)
-        job_id = GCPInterface._generate_vertex_prefix(api_request) + '-' + datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        valid_vertex_id = job_id.replace('/','-').replace(':','-').replace('_','-').replace('.', '-').lower()[:128]
+        # job_id = GCPInterface._generate_vertex_prefix(api_request) + '-' + datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+        # valid_vertex_id = job_id.replace('/','-').replace(':','-').replace('_','-').replace('.', '-').lower()[:128]
+        valid_vertex_id = job_id
 
         folder_path = f"{self.jobs_folder}/{valid_vertex_id}"
         data = api_request.to_json()
