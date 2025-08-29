@@ -835,7 +835,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             baseurl=config.baseurl_v2
         )
 
-        cloud_id = self.cloud.create_job(deepcopy(request), client=openreview_client_v2, user_id=user_id, job_id=job.id)
+        cloud_id = self.cloud.create_job(deepcopy(request), job_id=job.id, client=openreview_client_v2, user_id=user_id)
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]

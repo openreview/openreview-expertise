@@ -1,4 +1,5 @@
 from unittest.mock import patch, MagicMock
+import shortuuid
 import pytest
 import json
 import datetime
@@ -125,7 +126,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, openreview_client):
 
     # Call the `create_job` method
     # deepcopy because APIRequest() destroys the original
-    result = gcp_interface.create_job(deepcopy(json_request))
+    result = gcp_interface.create_job(deepcopy(json_request), job_id=shortuuid.ShortUUID().random(length=5))
     assert isinstance(result, str)
     assert len(result) > 0
 

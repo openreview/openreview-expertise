@@ -866,7 +866,7 @@ class GCPInterface(object):
 
             return f"{match_note_value}-{submission_note_value}"
 
-    def create_job(self, json_request: dict, user_id: str, client, job_id: str):
+    def create_job(self, json_request: dict, job_id: str, user_id: str = None, client = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
