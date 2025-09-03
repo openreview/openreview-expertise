@@ -914,8 +914,6 @@ class GCPInterface(object):
 
         or_client = client if client else self.client
         api_request = APIRequest(json_request)
-        # job_id = GCPInterface._generate_vertex_prefix(api_request) + '-' + datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        # valid_vertex_id = job_id.replace('/','-').replace(':','-').replace('_','-').replace('.', '-').lower()[:128]
         valid_vertex_id = job_id
 
         folder_path = f"{self.jobs_folder}/{valid_vertex_id}"
