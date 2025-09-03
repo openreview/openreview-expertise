@@ -8,6 +8,7 @@ import openreview
 from copy import deepcopy
 from expertise.service.utils import GCPInterface, JobDescription, JobStatus
 from google.cloud.aiplatform_v1.types import PipelineState
+from expertise.utils.utils import generate_job_id
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -126,7 +127,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, openreview_client):
 
     # Call the `create_job` method
     # deepcopy because APIRequest() destroys the original
-    result = gcp_interface.create_job(deepcopy(json_request), job_id=shortuuid.ShortUUID().random(length=5))
+    result = gcp_interface.create_job(deepcopy(json_request), job_id=generate_job_id())
     assert isinstance(result, str)
     assert len(result) > 0
 
