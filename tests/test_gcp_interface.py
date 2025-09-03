@@ -127,7 +127,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, openreview_client):
 
     # Call the `create_job` method
     # deepcopy because APIRequest() destroys the original
-    result = gcp_interface.create_job(deepcopy(json_request), job_id=generate_job_id())
+    result = gcp_interface.create_job(deepcopy(json_request), job_id=generate_job_id(), machine_type='small')
     assert isinstance(result, str)
     assert len(result) > 0
 
@@ -161,7 +161,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, openreview_client):
         ),
         job_id=result,
         pipeline_root="gs://test-bucket/pipeline-root",
-        parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json"},
+        parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json", "machine_type": "small"},
         labels={"test": "label"}
     )
     mock_pipeline_instance.submit.assert_called_once()
