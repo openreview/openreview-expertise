@@ -66,6 +66,7 @@ class APIRequest(object):
         self.entityB = {}
         self.model = {}
         self.dataset = {}
+        self.machine_type = None
         root_key = 'request'
 
         def _get_field_from_request(field):
@@ -92,6 +93,9 @@ class APIRequest(object):
 
         # Optionally check for dataset object
         self.dataset = request.pop('dataset', {})
+
+        # Optinally check for machine type
+        self.machine_type = request.pop('machineType', None)
 
         # Check for empty request
         if len(request.keys()) > 0:
@@ -368,7 +372,8 @@ class JobConfig(object):
         paper_content=None,
         paper_id=None,
         provided_submissions=None,
-        model_params=None):
+        model_params=None,
+        machine_type=None):
         
         self.name = name
         self.user_id = user_id
@@ -401,6 +406,7 @@ class JobConfig(object):
         self.paper_id = paper_id
         self.provided_submissions = provided_submissions
         self.model_params = model_params
+        self.machine_type = machine_type
 
         self.api_request = None
 
@@ -436,7 +442,8 @@ class JobConfig(object):
             'paper_venueid',
             'paper_content',
             'paper_id',
-            'model_params'
+            'model_params',
+            'machine_type'
         ]
 
 
@@ -499,6 +506,10 @@ class JobConfig(object):
         config.baseurl = server_config['OPENREVIEW_BASEURL']
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
+        
+        if config.user_id not in SUPERUSER_IDS and api_request.machine_type is not None:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to set machine type')
+        config.machine_type = api_request.machine_type
 
         root_dir = os.path.join(working_dir, config.job_id)
         config.job_dir = root_dir
@@ -719,7 +730,8 @@ class JobConfig(object):
             paper_content = job_config.get('paper_content'),
             paper_id = job_config.get('paper_id'),
             provided_submissions = job_config.get('provided_submissions'),
-            model_params = job_config.get('model_params')
+            model_params = job_config.get('model_params'),
+            machine_type=job_config.get('machine_type')
         )
         return config
 
@@ -866,7 +878,7 @@ class GCPInterface(object):
 
             return f"{match_note_value}-{submission_note_value}"
 
-    def create_job(self, json_request: dict, user_id: str = None, client = None):
+    def create_job(self, json_request: dict, user_id: str = None, client = None, machine_type = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -919,6 +931,7 @@ class GCPInterface(object):
         #data['dump_archives'] = True
 
         # Deleted metadata fields before hitting the pipeline
+        data['machine_type'] = machine_type
         data['user_id'] = user_id if user_id else get_user_id(or_client)
         data['cdate'] = int(time.time() * 1000)
 
@@ -932,7 +945,7 @@ class GCPInterface(object):
             template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
-            parameter_values = {'gcs_request_path': gcs_request_path},
+            parameter_values = {'gcs_request_path': gcs_request_path, 'machine_type': machine_type},
             labels = self.service_label)
 
         job.submit()
