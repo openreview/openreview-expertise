@@ -273,7 +273,9 @@ class RedisDatabase(object):
         port=None,
         db=None,
         connection_pool=None,
-        sync_on_disk=True) -> None:
+        sync_on_disk=True,
+        default_ttl=None,
+        completed_ttl=None) -> None:
         if not connection_pool:
             self.db = redis.Redis(
                 host = host,
@@ -284,8 +286,25 @@ class RedisDatabase(object):
             self.db = redis.Redis(connection_pool=connection_pool)
 
         self.sync_on_disk = sync_on_disk
-    def save_job(self, job_config):
-        self.db.set(f"job:{job_config.job_id}", pickle.dumps(job_config))
+        self.default_ttl = default_ttl
+        self.completed_ttl = completed_ttl
+    def save_job(self, job_config, ttl=None):
+        key = f"job:{job_config.job_id}"
+        ex = ttl
+        if ex is None:
+            if getattr(job_config, 'status', None) in (JobStatus.COMPLETED.value, JobStatus.ERROR.value):
+                ex = self.completed_ttl
+            else:
+                ex = self.default_ttl
+
+        if ex:
+            self.db.set(key, pickle.dumps(job_config), ex=int(ex))
+        else:
+            self.db.set(key, pickle.dumps(job_config))
+    
+    def get_ttl(self, job_id):
+        """Get remaining TTL for a job"""
+        return self.db.ttl(f"job:{job_id}")
     
     def load_all_jobs(self, user_id):
         """
@@ -296,7 +315,10 @@ class RedisDatabase(object):
         configs = []
 
         for job_key in self.db.scan_iter("job:*"):
-            current_config = pickle.loads(self.db.get(job_key))
+            raw = self.db.get(job_key)
+            if not raw:  # Key expired between scan and get
+                continue
+            current_config = pickle.loads(raw)
 
             if self.sync_on_disk and not os.path.isdir(current_config.job_dir):
                 print(f"No files found {job_key} - skipping")
@@ -313,9 +335,12 @@ class RedisDatabase(object):
         """
         job_key = f"job:{job_id}"
         
-        if not self.db.exists(job_key):
-            raise openreview.OpenReviewException('Job not found')        
-        config = pickle.loads(self.db.get(job_key))
+        raw = self.db.get(job_key)
+        if not raw:
+            raise openreview.OpenReviewException('Job not found')
+        
+        config = pickle.loads(raw)
+        
         if self.sync_on_disk and not os.path.isdir(config.job_dir):
             self.remove_job(user_id, job_id)
             raise openreview.OpenReviewException('Job not found')
@@ -328,9 +353,10 @@ class RedisDatabase(object):
     def remove_job(self, user_id, job_id):
         job_key = f"job:{job_id}"
 
-        if not self.db.exists(job_key):
+        raw = self.db.get(job_key)
+        if not raw:
             raise openreview.OpenReviewException('Job not found')
-        config = pickle.loads(self.db.get(job_key))
+        config = pickle.loads(raw)
         if config.user_id != user_id and user_id not in SUPERUSER_IDS:
             raise openreview.OpenReviewException('Forbidden: Insufficient permissions to modify job')
 
