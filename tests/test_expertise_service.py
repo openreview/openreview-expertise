@@ -11,7 +11,7 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
-from expertise.service.utils import JobConfig, RedisDatabase
+from expertise.service.utils import JobConfig, RedisDatabase, JobStatus
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -236,6 +236,89 @@ class TestExpertiseService():
         assert returned_config.job_id == 'abcde'
 
         shutil.rmtree(f"./tests/jobs/")
+
+    def test_job_ttl_expiration(self):
+        """Test that jobs expire after TTL"""
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10,
+            default_ttl=1  # 1 second TTL for testing
+        )
+        config = JobConfig(job_id='test_ttl', user_id='user@test.com')
+        redis.save_job(config)
+        
+        # Verify TTL is set
+        ttl = redis.get_ttl('test_ttl')
+        assert 0 < ttl <= 1
+        
+        # Wait for expiration
+        time.sleep(1.5)
+        
+        # Verify job is expired
+        with pytest.raises(openreview.OpenReviewException) as excinfo:
+            redis.load_job('test_ttl', 'user@test.com')
+        assert 'Job not found' in str(excinfo.value)
+    
+    def test_completed_job_ttl(self):
+        """Test completed jobs get different TTL"""
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10,
+            default_ttl=1,
+            completed_ttl=5
+        )
+        config = JobConfig(
+            job_id='completed_test', 
+            user_id='user@test.com',
+            status=JobStatus.COMPLETED.value
+        )
+        redis.save_job(config)
+        
+        ttl = redis.get_ttl('completed_test')
+        assert 3 < ttl <= 5  # Should use completed_ttl
+        
+        # Clean up
+        redis.remove_job('user@test.com', 'completed_test')
+    
+    def test_no_ttl_when_none(self):
+        """Test that jobs don't expire when TTL is None"""
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10,
+            default_ttl=None  # No expiration
+        )
+        config = JobConfig(job_id='no_ttl_test', user_id='user@test.com')
+        redis.save_job(config)
+        
+        # TTL should be -1 (no expiration)
+        ttl = redis.get_ttl('no_ttl_test')
+        assert ttl == -1
+        
+        # Clean up
+        redis.remove_job('user@test.com', 'no_ttl_test')
+    
+    def test_manual_ttl_override(self):
+        """Test manual TTL override in save_job"""
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10,
+            default_ttl=10
+        )
+        config = JobConfig(job_id='manual_ttl', user_id='user@test.com')
+        
+        # Save with manual TTL override
+        redis.save_job(config, ttl=3)
+        
+        # Check TTL is the overridden value
+        ttl = redis.get_ttl('manual_ttl')
+        assert 2 <= ttl <= 3
+        
+        # Clean up
+        redis.remove_job('user@test.com', 'manual_ttl')
 
     def test_request_expertise_with_no_config(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
