@@ -14,6 +14,7 @@ from google.cloud import storage
 from google.cloud.aiplatform_v1.types import PipelineState
 from copy import deepcopy
 from expertise.config import ModelConfig
+from expertise.utils.utils import generate_job_id
 
 import re
 SUPERUSER_IDS = ['openreview.net', 'OpenReview.net', '~Super_User1']
@@ -528,7 +529,7 @@ class JobConfig(object):
         # Set metadata fields from request
         config.name = api_request.name
         config.user_id = get_user_id(openreview_client)
-        config.job_id = shortuuid.ShortUUID().random(length=5) if job_id is None else job_id
+        config.job_id = generate_job_id() if job_id is None else job_id
         config.baseurl = server_config['OPENREVIEW_BASEURL']
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
@@ -904,7 +905,7 @@ class GCPInterface(object):
 
             return f"{match_note_value}-{submission_note_value}"
 
-    def create_job(self, json_request: dict, user_id: str = None, client = None, machine_type = None):
+    def create_job(self, json_request: dict, job_id: str, user_id: str = None, client = None, machine_type = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -939,8 +940,7 @@ class GCPInterface(object):
 
         or_client = client if client else self.client
         api_request = APIRequest(json_request)
-        job_id = GCPInterface._generate_vertex_prefix(api_request) + '-' + datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        valid_vertex_id = job_id.replace('/','-').replace(':','-').replace('_','-').replace('.', '-').lower()[:128]
+        valid_vertex_id = job_id
 
         folder_path = f"{self.jobs_folder}/{valid_vertex_id}"
         data = api_request.to_json()

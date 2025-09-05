@@ -908,8 +908,9 @@ class ExpertiseCloudService(BaseExpertiseService):
 
             cloud_id = self.cloud.create_job(
                 deepcopy(request),
+                job_id=job.id,
                 client=openreview_client_v2,
-                user_id = user_id,
+                user_id=user_id,
                 machine_type=machine_type
             )
         except Exception as e:

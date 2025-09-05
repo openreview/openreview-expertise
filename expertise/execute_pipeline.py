@@ -7,6 +7,7 @@ import csv
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from expertise.service import load_model_artifacts
 from expertise.service.utils import APIRequest, JobConfig
+from expertise.utils.utils import generate_job_id
 from google.cloud import storage
 
 DEFAULT_CONFIG = {
@@ -117,7 +118,7 @@ def run_pipeline(
         client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
 
         print('Creating job ID')
-        job_id = shortuuid.ShortUUID().random(length=5)
+        job_id = generate_job_id()
         if working_dir is None:
             working_dir = f"/app/{job_id}"
         os.makedirs(working_dir, exist_ok=True)
