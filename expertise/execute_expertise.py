@@ -1,6 +1,7 @@
 from pathlib import Path
 import openreview, os, json, csv
 from .create_dataset import OpenReviewExpertise
+from .embeddings_cache import EmbeddingsCache
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
 from .utils.utils import aggregate_by_group
@@ -52,7 +53,8 @@ def execute_expertise(config):
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
             use_redis=config['model_params'].get('use_redis', False),
-            compute_paper_paper=config['model_params'].get('compute_paper_paper', False)
+            compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
+            embeddings_cache=embeddings_cache,
         )
         specter_predictor.set_archives_dataset(archives_dataset)
         specter_predictor.set_submissions_dataset(submissions_dataset)
@@ -86,7 +88,8 @@ def execute_expertise(config):
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
             venue_specific_weights=venue_specific_weights,
             percentile_select=config['model_params'].get('percentile_select', None),
-            normalize_scores=config['model_params'].get('normalize_scores', True)
+            normalize_scores=config['model_params'].get('normalize_scores', True),
+            embeddings_cache=embeddings_cache,
         )
         ens_predictor.set_archives_dataset(archives_dataset)
         ens_predictor.set_submissions_dataset(submissions_dataset)
@@ -126,7 +129,8 @@ def execute_expertise(config):
             dump_p2p=config['model_params'].get('dump_p2p', False),
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
             percentile_select=config['model_params'].get('percentile_select', None),
-            normalize_scores=config['model_params'].get('normalize_scores', True)
+            normalize_scores=config['model_params'].get('normalize_scores', True),
+            embeddings_cache=embeddings_cache,
         )
         scincl_predictor.set_archives_dataset(archives_dataset)
         scincl_predictor.set_submissions_dataset(submissions_dataset)
@@ -162,7 +166,8 @@ def execute_expertise(config):
             dump_p2p=config['model_params'].get('dump_p2p', False),
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
             percentile_select=config['model_params'].get('percentile_select', None),
-            normalize_scores=config['model_params'].get('normalize_scores', True)
+            normalize_scores=config['model_params'].get('normalize_scores', True),
+            embeddings_cache=embeddings_cache,
         )
         spec2_predictor.set_archives_dataset(archives_dataset)
         spec2_predictor.set_submissions_dataset(submissions_dataset)
@@ -226,7 +231,8 @@ def execute_expertise(config):
             merge_alpha=config['model_params'].get('merge_alpha', 0.8),
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
-            use_redis=config['model_params'].get('use_redis', False)
+            use_redis=config['model_params'].get('use_redis', False),
+            embeddings_cache=embeddings_cache,
         )
         ens_predictor.set_archives_dataset(archives_dataset)
         ens_predictor.set_submissions_dataset(submissions_dataset)

@@ -41,7 +41,7 @@ silent
 class SciNCLPredictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=False,
-                 normalize_scores=True):
+                 normalize_scores=True, embeddings_cache=None):
         self.model_name = 'scincl'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -74,6 +74,11 @@ class SciNCLPredictor(Predictor):
         self.model = AutoModel.from_pretrained('malteos/scincl')
         self.model.to(self.cuda_device)
         self.model.eval()
+        self.embeddings_cache = embeddings_cache
+        if self.embeddings_cache is not None and self.embeddings_cache.is_connected:
+            self.use_cache = True
+        else:
+            self.use_cache = False
 
     def _fetch_batches(self, dict_data, batch_size):
         iterator = iter(dict_data.items())
@@ -83,26 +88,87 @@ class SciNCLPredictor(Predictor):
                 break
             yield batch
 
+    def _get_batch_cache_info(self, batch_data):
+        # Use cache to analyze batch and get cached/uncached items
+        cached_items, uncached_items = [], []
+        if self.use_cache:
+            cached_items, uncached_items = self.embeddings_cache.get_batch_cache_info(batch_data, self.model_name)
+        else:
+            # If no cache, all items need computation
+            uncached_items = [(idx, note_id, paper_data) for idx, (note_id, paper_data) in enumerate(batch_data)]
+
+        return cached_items, uncached_items
+    
+    def _save_batch_embeddings(self, uncached_items, embeddings):
+        if not self.use_cache:
+            return True
+
+        computed_for_cache = []
+        for i, (idx, note_id, paper_data) in enumerate(uncached_items):
+            embedding = embeddings[i]
+
+            embedding_list = embedding.detach().cpu().numpy().tolist()
+            computed_for_cache.append((note_id, embedding_list, paper_data.get('mdate', 0)))
+
+        # Save computed embeddings to cache
+        if computed_for_cache:
+            self.embeddings_cache.save_batch_embeddings(computed_for_cache, self.model_name)
+
+
     def _batch_predict(self, batch_data):
         jsonl_out = []
-        text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
-        # preprocess the input
-        inputs = self.tokenizer(text_batch, padding=True, truncation=True, return_tensors="pt", max_length=512)
-        inputs = inputs.to(self.cuda_device)
-        with torch.no_grad():
-            output = self.model(**inputs)
-        # take the first token in the batch as the embedding
-        embeddings = output.last_hidden_state[:, 0, :]
 
-        for paper, embedding in zip(batch_data, embeddings):
-            paper = paper[1]
-            jsonl_out.append(self._build_embedding_jsonl(paper, embedding))
+        cached_items, uncached_items = self._get_batch_cache_info(batch_data)
 
-        # clean up batch data
-        del embeddings
-        del output
-        del inputs
-        torch.cuda.empty_cache()
+        # Handle cached items - create JSONL output from cached embeddings
+        cached_results = []
+        for idx, note_id, cached_embedding in cached_items:
+            paper_data = batch_data[idx][1]  # Get original paper data for weight info
+            paper = {
+                'paper_id': note_id,
+                'embedding': cached_embedding
+            }
+            if 'weight' in paper_data:
+                paper['weight'] = paper_data['weight']
+            
+            cached_results.append((idx, json.dumps(paper) + '\n'))
+
+        # Handle uncached items - compute embeddings
+        computed_results = []
+        
+        if uncached_items:
+            # Extract data for computation
+            uncached_papers = [(item[1], item[2]) for item in uncached_items]  # (note_id, paper_data)
+            text_batch = [paper_data['title'] + self.tokenizer.sep_token + (paper_data.get('abstract') or '') 
+                         for _, paper_data in uncached_papers]
+            
+            # Compute embeddings
+            inputs = self.tokenizer(text_batch, padding=True, truncation=True, return_tensors="pt", max_length=512)
+            inputs = inputs.to(self.cuda_device)
+            with torch.no_grad():
+                output = self.model(**inputs)
+            embeddings = output.last_hidden_state[:, 0, :]
+
+            # Process computed embeddings
+            for i, (idx, note_id, paper_data) in enumerate(uncached_items):
+                embedding = embeddings[i]
+                # Create JSONL output
+                embedding_jsonl = self._build_embedding_jsonl(paper_data, embedding)
+                computed_results.append((idx, embedding_jsonl))
+
+            self._save_batch_embeddings(uncached_items, embeddings)
+
+            # Clean up GPU memory
+            del embeddings
+            del output
+            del inputs
+            torch.cuda.empty_cache()
+
+        # Merge cached and computed results in original order
+        all_results = cached_results + computed_results
+        all_results.sort(key=lambda x: x[0])  # Sort by original batch index
+        jsonl_out = [result[1] for result in all_results]
+
         return jsonl_out
 
     def set_archives_dataset(self, archives_dataset):
