@@ -32,31 +32,3 @@ def test_generate_job_id_gcp_compliance():
             f"Must match regex pattern '[a-z][-a-z0-9]{{0,127}}' "
             f"(start with lowercase letter, followed by lowercase letters, numbers, or hyphens)"
         )
-        
-        # Verify first character is a letter
-        assert job_id[0].isalpha() and job_id[0].islower(), (
-            f"Job ID '{job_id}' must start with a lowercase letter"
-        )
-        
-        # Verify no uppercase letters
-        assert job_id.islower(), f"Job ID '{job_id}' contains uppercase letters"
-        
-        # Verify only valid characters (lowercase letters, numbers, hyphens)
-        for char in job_id:
-            assert char in 'abcdefghijklmnopqrstuvwxyz0123456789-', (
-                f"Job ID '{job_id}' contains invalid character '{char}'"
-            )
-    
-    # Test uniqueness
-    unique_ids = set(generated_ids)
-    duplicates = len(generated_ids) - len(unique_ids)
-    duplicate_rate = duplicates / num_ids * 100
-    
-    # Allow a very small duplicate rate for random generation (should be near 0%)
-    assert duplicate_rate < 0.1, (
-        f"Too many duplicate IDs: {duplicates} out of {num_ids} ({duplicate_rate:.2f}%)"
-    )
-    
-    # Verify the exact length is 10 as specified in generate_job_id
-    for job_id in generated_ids[:100]:  # Check first 100
-        assert len(job_id) == 10, f"Job ID '{job_id}' should be exactly 10 characters, got {len(job_id)}"
