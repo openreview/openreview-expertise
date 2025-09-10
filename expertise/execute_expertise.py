@@ -1,5 +1,5 @@
+import os
 from pathlib import Path
-import openreview, os, json, csv
 from .create_dataset import OpenReviewExpertise
 from .embeddings_cache import EmbeddingsCache
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
@@ -17,6 +17,15 @@ def execute_expertise(config):
         submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
     elif Path(config['dataset']['directory']).joinpath('submissions.json').exists():
         submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.json'))
+
+    embeddings_cache = None
+    if os.getenv('MONGODB_URI') and os.getenv('MONGO_EMBEDDINGS_DB') and os.getenv('MONGO_EMBEDDINGS_COLLECTION'):
+        embeddings_cache = EmbeddingsCache(
+            mongodb_uri=os.getenv('MONGODB_URI'),
+            db_name=os.getenv('MONGO_EMBEDDINGS_DB'),
+            collection_name=os.getenv('MONGO_EMBEDDINGS_COLLECTION'),
+        )
+        embeddings_cache.connect()
 
     if config['model'] == 'bm25':
         from .models import bm25

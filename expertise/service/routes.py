@@ -44,8 +44,8 @@ def get_client(token=None):
         if token is None:
             raise openreview.OpenReviewException(f'Forbidden: No authorization detected | {flask.request.headers}')
     return (
-        openreview.Client(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL']),
-        openreview.api.OpenReviewClient(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL_V2']),
+        openreview.Client(token=token, baseurl=flask.current_app.config['OPENREVIEW_API_BASEURL']),
+        openreview.api.OpenReviewClient(token=token, baseurl=flask.current_app.config['OPENREVIEW_API_BASEURL_V2']),
     )
 
 def format_error(status_code, description):
