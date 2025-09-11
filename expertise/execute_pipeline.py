@@ -101,8 +101,8 @@ def run_pipeline(
         mfr_vocab_dir = os.getenv('MFR_VOCAB_DIR')
         mfr_checkpoint_dir = os.getenv('MFR_CHECKPOINT_DIR')
         server_config ={
-            'OPENREVIEW_API_BASEURL': baseurl_v1,
-            'OPENREVIEW_API_BASEURL_V2': baseurl_v2,
+            'OPENREVIEW_BASEURL': baseurl_v1,
+            'OPENREVIEW_BASEURL_V2': baseurl_v2,
             'SPECTER_DIR': specter_dir,
             'MFR_VOCAB_DIR': mfr_vocab_dir,
             'MFR_CHECKPOINT_DIR': mfr_checkpoint_dir,

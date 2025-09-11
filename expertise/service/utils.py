@@ -504,8 +504,8 @@ class JobConfig(object):
         config.name = api_request.name
         config.user_id = get_user_id(openreview_client)
         config.job_id = generate_job_id() if job_id is None else job_id
-        config.baseurl = server_config['OPENREVIEW_API_BASEURL']
-        config.baseurl_v2 = server_config['OPENREVIEW_API_BASEURL_V2']
+        config.baseurl = server_config['OPENREVIEW_BASEURL']
+        config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
         
         if config.user_id not in SUPERUSER_IDS and api_request.machine_type is not None:
