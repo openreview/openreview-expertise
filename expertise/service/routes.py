@@ -271,7 +271,7 @@ def all_jobs():
 @BLUEPRINT.route('/expertise/<job_id>', methods=['DELETE'])
 def delete_job(job_id):
     """
-    Removes the job by deleting the job directory, the Redis entry and it's queue data.
+    Retrieves the config of a job to be deleted, and removes the job by deleting the job directory.
 
     :param token: Authorization from a logged in user, which defines the set of accessible data
     :type token: str

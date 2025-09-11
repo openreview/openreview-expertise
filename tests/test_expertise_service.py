@@ -832,12 +832,10 @@ class TestExpertiseService():
                 assert openreview_royal_scores[submission_id] > zeroed_royal_scores[submission_id]
 
 
-        # Test authentication via cookie instead of Authorization header
-        # Set cookie on the Flask test client, not in headers
         test_client.set_cookie(
-            'localhost',  # server_name (required positional argument)
-            'openreview.accessToken',  # key
-            openreview_client.token  # value
+            'localhost',
+            'openreview.accessToken',
+            openreview_client.token
         )
         
         # Make request without Authorization header
@@ -863,7 +861,6 @@ class TestExpertiseService():
             }
             ),
             content_type='application/json'
-            # Note: No headers parameter, so no Authorization header is sent
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
@@ -883,7 +880,6 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         openreview_context['job_id2'] = job_id
         
-        # Clean up: Remove the cookie after the test
         test_client.delete_cookie('localhost', 'openreview.accessToken')
 
     def test_status_all_query_params(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
