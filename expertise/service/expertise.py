@@ -776,15 +776,13 @@ class ExpertiseService(BaseExpertiseService):
 
     def del_expertise_job(self, user_id, job_id):
         """
-        Returns the filtered config of a job and deletes the job directory
-
+        Deletes job by removing job directory and Redis entry.
+        
         :param user_id: The ID of the user accessing the data
         :type user_id: str
 
         :param job_id: ID of the specific job to look up
         :type job_id: str
-
-        :returns: Filtered config of the job to be deleted
         """
         config = self.redis.load_job(job_id, user_id)
         
@@ -795,10 +793,6 @@ class ExpertiseService(BaseExpertiseService):
         else:
             self.logger.info(f"No files found - only removing Redis entry")
         self.redis.remove_job(user_id, job_id)
-
-        # Return filtered config
-        self._filter_config(config)
-        return config.to_json()
 
 class ExpertiseCloudService(BaseExpertiseService):
 
@@ -1091,15 +1085,13 @@ class ExpertiseCloudService(BaseExpertiseService):
 
     def del_expertise_job(self, user_id, job_id):
         """
-        Returns the filtered config of a job and deletes the job directory
-
+        Deletes job by removing job directory and Redis entry.
+        
         :param user_id: The ID of the user accessing the data
         :type user_id: str
 
         :param job_id: ID of the specific job to look up
         :type job_id: str
-
-        :returns: Filtered config of the job to be deleted
         """
         config = self.redis.load_job(job_id, user_id)
         
@@ -1110,7 +1102,3 @@ class ExpertiseCloudService(BaseExpertiseService):
         else:
             self.logger.info(f"No files found - only removing Redis entry")
         self.redis.remove_job(user_id, job_id)
-
-        # Return filtered config
-        self._filter_config(config)
-        return config.to_json()
