@@ -172,36 +172,36 @@ class EmbeddingsCache:
             logger.error(f"Error saving embedding for note {note_id}: {e}")
             return False
 
-    def get_embeddings(self, note_id: str, model: str = None) -> List[Dict]:
+    def get_embeddings(self, note_ids: List[str], model: str = None) -> List[Dict]:
         """
-        Get embeddings by note_id and optionally filter by model.
-        
+        Get embeddings by a list of note_ids and optionally filter by model.
+
         Args:
-            note_id: Note ID (required)
+            note_ids: List of Note IDs (required)
             model: Model name (optional filter)
-            
+
         Returns:
             List of embedding documents matching the criteria
         """
-        if not self.is_connected:
+        if not self.is_connected or not note_ids:
             return []
-            
+
         try:
             # Build query
-            query = {"noteId": note_id}
+            query = {"noteId": {"$in": note_ids}}
             if model:
                 query["model"] = model
-            
+
             # Execute query
             cursor = self.collection.find(query)
             embeddings = list(cursor)
-            
-            logger.info(f"Found {len(embeddings)} embeddings for note {note_id}" + 
-                       (f" (model: {model})" if model else ""))
+
+            logger.info(f"Found {len(embeddings)} embeddings for note_ids {note_ids}" +
+                        (f" (model: {model})" if model else ""))
             return embeddings
-            
+
         except Exception as e:
-            logger.error(f"Error retrieving embeddings for note {note_id}: {e}")
+            logger.error(f"Error retrieving embeddings for note_ids {note_ids}: {e}")
             return []
 
     def get_batch_cache_info(self, batch_data: List[tuple], model: str) -> tuple:
@@ -225,19 +225,19 @@ class EmbeddingsCache:
         cached_items = []
         uncached_items = []
         
+        # Directly create note_ids list from batch_data
+        note_ids = [note_id for note_id, _ in batch_data]
+
+        # Fetch all cached embeddings for these note_ids in one query
+        cached_embeddings = self.get_embeddings(note_ids, model)
+        cached_map = {doc['noteId']: doc for doc in cached_embeddings}
+
         for idx, (note_id, paper_data) in enumerate(batch_data):
             paper_mdate = paper_data.get('mdate', 0)
-            cached_embeddings = self.get_embeddings(note_id, model)
-            
-            # Check if we have a cached embedding with matching or newer mdate
-            cached_found = False
-            for cached_emb in cached_embeddings:
-                if cached_emb.get('mdate', 0) >= paper_mdate:
-                    cached_items.append((idx, note_id, cached_emb['embedding']))
-                    cached_found = True
-                    break
-            
-            if not cached_found:
+            cached_emb = cached_map.get(note_id)
+            if cached_emb and cached_emb.get('mdate', 0) >= paper_mdate:
+                cached_items.append((idx, note_id, cached_emb['embedding']))
+            else:
                 uncached_items.append((idx, note_id, paper_data))
         
         logger.info(f"Batch analysis: {len(cached_items)} cached, {len(uncached_items)} need computation")
