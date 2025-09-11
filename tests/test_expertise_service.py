@@ -831,6 +831,16 @@ class TestExpertiseService():
                 assert openreview_royal_scores[submission_id] > score
                 assert openreview_royal_scores[submission_id] > zeroed_royal_scores[submission_id]
 
+
+        # Test authentication via cookie instead of Authorization header
+        # Set cookie on the Flask test client, not in headers
+        test_client.set_cookie(
+            'localhost',  # server_name (required positional argument)
+            'openreview.accessToken',  # key
+            openreview_client.token  # value
+        )
+        
+        # Make request without Authorization header
         response = test_client.post(
             '/expertise',
             data=json.dumps({
@@ -852,8 +862,8 @@ class TestExpertiseService():
                 }
             }
             ),
-            content_type='application/json',
-            headers=openreview_client.headers
+            content_type='application/json'
+            # Note: No headers parameter, so no Authorization header is sent
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
@@ -872,6 +882,9 @@ class TestExpertiseService():
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['status'] == 'Completed'
         openreview_context['job_id2'] = job_id
+        
+        # Clean up: Remove the cookie after the test
+        test_client.delete_cookie('localhost', 'openreview.accessToken')
 
     def test_status_all_query_params(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
@@ -1309,9 +1322,8 @@ class TestExpertiseService():
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
         # Clean up error job by calling the delete endpoint
-        response = test_client.get('/expertise/delete', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
-        assert response['name'] == 'test_run'
-        assert response['cdate'] <= response['mdate']
+        response = test_client.delete(f'/expertise/{openreview_context["job_id"]}', headers=openreview_client.headers)
+        assert response.status_code == 200
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
     def test_request_expertise_with_no_submission_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
@@ -1372,11 +1384,22 @@ class TestExpertiseService():
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
         # Clean up error job by calling the delete endpoint
-        response = test_client.get('/expertise/delete', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
-        assert response['name'] == 'test_run'
-        assert response['cdate'] <= response['mdate']
+        response = test_client.delete(f'/expertise/{openreview_context["job_id"]}', headers=openreview_client.headers)
+        assert response.status_code == 200
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     
+    def test_delete_job_without_authorization(self, openreview_client, openreview_context):
+        """Test that DELETE endpoint returns 403 when no authorization headers are provided"""
+        test_client = openreview_context['test_client']
+        
+        # Try to delete a job without providing authorization headers
+        response = test_client.delete('/expertise/dummy_job_id')
+        
+        # Should return 403 Forbidden
+        assert response.status_code == 403
+        assert 'Error' in response.json['name']
+        assert 'forbidden' in response.json['message'].lower()
+        assert 'No authorization detected' in response.json['message']
     def test_request_journal(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
