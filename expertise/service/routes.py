@@ -41,8 +41,11 @@ def get_expertise_service(config, logger):
 def get_client(token=None):
     if not token:
         token = flask.request.headers.get('Authorization')
-        if token is None:
+        cookie_token = flask.request.cookies.get('openreview.accessToken')
+        if token is None and cookie_token is None:
             raise openreview.OpenReviewException(f'Forbidden: No authorization detected | {flask.request.headers}')
+        # Use cookie_token if token is still None
+        token = token or cookie_token
     return (
         openreview.Client(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL']),
         openreview.api.OpenReviewClient(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL_V2']),
@@ -102,14 +105,14 @@ def expertise():
     :type paper_invitation: str
     """
 
-    openreview_client, openreview_client_v2 = get_client()
-
-    user_id = get_user_id(openreview_client)
-    if not user_id:
-        flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
-
     try:
+        openreview_client, openreview_client_v2 = get_client()
+
+        user_id = get_user_id(openreview_client)
+        if not user_id:
+            flask.current_app.logger.error('No Authorization token in headers')
+            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
+
         flask.current_app.logger.info('Received expertise request')
 
         # Parse request args
@@ -174,15 +177,14 @@ def jobs():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client, openreview_client_v2 = get_client()
-
-    user_id = get_user_id(openreview_client)
-
-    if not user_id:
-        flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
-
     try:
+        openreview_client, openreview_client_v2 = get_client()
+
+        user_id = get_user_id(openreview_client)
+        if not user_id:
+            flask.current_app.logger.error('No Authorization token in headers')
+            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
+
         flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
         # Parse query parameters
         job_id = flask.request.args.get('jobId', None)
@@ -227,15 +229,13 @@ def all_jobs():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client, openreview_client_v2 = get_client()
-
-    user_id = get_user_id(openreview_client)
-
-    if not user_id:
-        flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
-
     try:
+        openreview_client, openreview_client_v2 = get_client()
+
+        user_id = get_user_id(openreview_client)
+        if not user_id:
+            flask.current_app.logger.error('No Authorization token in headers')
+            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
         # Parse query parameters
         flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
@@ -268,10 +268,10 @@ def all_jobs():
         flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
-@BLUEPRINT.route('/expertise/delete', methods=['GET'])
-def delete_job():
+@BLUEPRINT.route('/expertise/<job_id>', methods=['DELETE'])
+def delete_job(job_id):
     """
-    Retrieves the config of a job to be deleted, and removes the job by deleting the job directory.
+    Removes the job by deleting the job directory, the Redis entry and it's queue data.
 
     :param token: Authorization from a logged in user, which defines the set of accessible data
     :type token: str
@@ -279,25 +279,20 @@ def delete_job():
     :param job_id: The ID of a submitted job
     :type job_id: str
     """
-    openreview_client, _ = get_client()
-
-    user_id = get_user_id(openreview_client)
-
-    if not user_id:
-        flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
-
     try:
-        # Parse query parameters
-        job_id = flask.request.args.get('jobId', None)
-        if job_id is None or len(job_id) == 0:
-            raise openreview.OpenReviewException('Bad request: jobId is required')
+        openreview_client, _ = get_client()
+
+        user_id = get_user_id(openreview_client)
+
+        if not user_id:
+            flask.current_app.logger.error('No Authorization token in headers')
+            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
         expertise_service.set_client(openreview_client)
-        result = expertise_service.del_expertise_job(user_id, job_id)
-        flask.current_app.logger.debug('GET returns ' + str(result))
-        return flask.jsonify(result), 200
-
+        expertise_service.del_expertise_job(user_id, job_id)
+        
+        return {'status': 'ok'}, 200
+        
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle), exc_info=True)
 
@@ -333,15 +328,13 @@ def results():
     :param delete_on_get: Decide whether to keep the data on the server after getting the results
     :type delete_on_get: bool
     """
-    openreview_client, openreview_client_v2 = get_client()
-
-    user_id = get_user_id(openreview_client)
-
-    if not user_id:
-        flask.current_app.logger.error('No Authorization token in headers')
-        return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
-
     try:
+        openreview_client, openreview_client_v2 = get_client()
+
+        user_id = get_user_id(openreview_client)
+        if not user_id:
+            flask.current_app.logger.error('No Authorization token in headers')
+            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
         # Parse query parameters
         flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
         job_id = flask.request.args.get('jobId', None)
