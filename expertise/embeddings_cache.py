@@ -135,7 +135,7 @@ class EmbeddingsCache:
             True if saved/updated successfully, False otherwise
         """
         if not self.is_connected:
-            return True
+            return False
             
         try:
             # Check if document exists with same noteId and model
