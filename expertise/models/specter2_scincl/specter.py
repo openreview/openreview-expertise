@@ -91,32 +91,6 @@ class Specter2Predictor(Predictor):
                 break
             yield batch
 
-    def _get_batch_cache_info(self, batch_data):
-        # Use cache to analyze batch and get cached/uncached items
-        cached_items, uncached_items = [], []
-        if self.use_cache:
-            cached_items, uncached_items = self.embeddings_cache.get_batch_cache_info(batch_data, self.model_name)
-        else:
-            # If no cache, all items need computation
-            uncached_items = [(idx, note_id, paper_data) for idx, (note_id, paper_data) in enumerate(batch_data)]
-
-        return cached_items, uncached_items
-    
-    def _save_batch_embeddings(self, uncached_items, embeddings):
-        if not self.use_cache:
-            return True
-
-        computed_for_cache = []
-        for i, (idx, note_id, paper_data) in enumerate(uncached_items):
-            embedding = embeddings[i]
-
-            embedding_list = embedding.detach().cpu().numpy().tolist()
-            computed_for_cache.append((note_id, embedding_list, paper_data.get('mdate', 0)))
-
-        # Save computed embeddings to cache
-        if computed_for_cache:
-            self.embeddings_cache.save_batch_embeddings(computed_for_cache, self.model_name)
-
     def _batch_predict(self, batch_data):
         jsonl_out = []
 
