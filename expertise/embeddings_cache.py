@@ -255,7 +255,7 @@ class EmbeddingsCache:
             True if all saved successfully, False otherwise
         """
         if not self.is_connected:
-            return True
+            return False
             
         success_count = 0
         for note_id, embedding_list, mdate in computed_items:
