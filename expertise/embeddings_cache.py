@@ -13,6 +13,7 @@ from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 import argparse
 import logging
+from pymongo import ReplaceOne
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -120,56 +121,58 @@ class EmbeddingsCache:
             logger.error(f"Error querying MongoDB for embedding data: {e}")
             return {}
 
-    def save_embedding(self, note_id: str, model: str, embedding: List[float], mdate: int) -> bool:
+    def save_embeddings(self, embeddings_data: List[tuple], model: str) -> bool:
         """
-        Save embedding to MongoDB with the specified schema.
+        Save multiple embeddings to MongoDB efficiently using bulk_write.
         Only updates if the mdate is greater than existing document's mdate.
-        
+
         Args:
-            note_id: Note ID
-            model: Model name used to generate the embedding
-            embedding: The embedding vector
-            mdate: Modification date timestamp
-            
+            embeddings_data: List of tuples (note_id, embedding, mdate)
+            model: Model name used to generate the embeddings
+
         Returns:
-            True if saved/updated successfully, False otherwise
+            True if all saved/updated successfully, False otherwise
         """
-        if not self.is_connected:
+        if not self.is_connected or not embeddings_data:
             return False
-            
+
         try:
-            # Check if document exists with same noteId and model
-            existing_doc = self.collection.find_one({
-                "noteId": note_id,
-                "model": model
-            })
-            
-            # If document exists and has newer or equal mdate, skip update
-            if existing_doc and existing_doc.get("mdate", 0) >= mdate:
-                logger.info(f"Skipping update for note {note_id} (model: {model}) - existing mdate is newer or equal")
-                return True
-            
-            # Prepare document with correct schema
-            doc = {
-                "noteId": note_id,
-                "model": model,
-                "embedding": embedding,
-                "mdate": mdate
-            }
-            
-            # Update or insert document
-            result = self.collection.replace_one(
-                {"noteId": note_id, "model": model},
-                doc,
-                upsert=True
-            )
-            
-            action = "updated" if result.matched_count > 0 else "inserted"
-            logger.info(f"Successfully {action} embedding for note {note_id} (model: {model})")
+            # Fetch existing documents for noteIds and model
+            note_ids = [note_id for note_id, _, _ in embeddings_data]
+            existing_docs = self.get_embeddings(note_ids, model)
+            existing_map = {doc["noteId"]: doc for doc in existing_docs}
+
+
+            operations = []
+            for note_id, embedding, mdate in embeddings_data:
+                existing_doc = existing_map.get(note_id)
+                # Only update if mdate is newer
+                if existing_doc and existing_doc.get("mdate", 0) >= mdate:
+                    logger.info(f"Skipping update for note {note_id} (model: {model}) - existing mdate is newer or equal")
+                    continue
+                doc = {
+                    "noteId": note_id,
+                    "model": model,
+                    "embedding": embedding,
+                    "mdate": mdate
+                }
+                operations.append(
+                    ReplaceOne(
+                        {"noteId": note_id, "model": model},
+                        doc,
+                        upsert=True
+                    )
+                )
+
+            if operations:
+                result = self.collection.bulk_write(operations)
+                logger.info(f"Bulk write: {result.modified_count} updated, {result.upserted_count} inserted for model '{model}'")
+            else:
+                logger.info("No embeddings needed to be updated/inserted in bulk write.")
+
             return True
-            
         except Exception as e:
-            logger.error(f"Error saving embedding for note {note_id}: {e}")
+            logger.error(f"Error saving embeddings in bulk: {e}")
             return False
 
     def get_embeddings(self, note_ids: List[str], model: str = None) -> List[Dict]:
@@ -245,22 +248,14 @@ class EmbeddingsCache:
 
     def save_batch_embeddings(self, computed_items: List[tuple], model: str) -> bool:
         """
-        Save multiple computed embeddings to cache.
-        
+        Save multiple computed embeddings to cache using bulk_write.
+
         Args:
             computed_items: List of tuples (note_id, embedding_list, mdate)
             model: Model name
-            
+
         Returns:
             True if all saved successfully, False otherwise
         """
-        if not self.is_connected:
-            return False
-            
-        success_count = 0
-        for note_id, embedding_list, mdate in computed_items:
-            if self.save_embedding(note_id, model, embedding_list, mdate):
-                success_count += 1
-        
-        logger.info(f"Saved {success_count}/{len(computed_items)} embeddings to cache")
-        return success_count == len(computed_items)
+        # Directly call save_embeddings for bulk efficiency
+        return self.save_embeddings(computed_items, model)
