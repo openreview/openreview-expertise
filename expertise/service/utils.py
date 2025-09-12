@@ -316,10 +316,10 @@ class RedisDatabase(object):
         configs = []
 
         for job_key in self.db.scan_iter("job:*"):
-            raw = self.db.get(job_key)
-            if not raw:  # Key expired between scan and get
+            pickled_config = self.db.get(job_key)
+            if not pickled_config:  # Key expired between scan and get
                 continue
-            current_config = pickle.loads(raw)
+            current_config = pickle.loads(pickled_config)
 
             if self.sync_on_disk and not os.path.isdir(current_config.job_dir):
                 print(f"No files found {job_key} - skipping")
@@ -336,11 +336,11 @@ class RedisDatabase(object):
         """
         job_key = f"job:{job_id}"
         
-        raw = self.db.get(job_key)
-        if not raw:
+        pickled_config = self.db.get(job_key)
+        if not pickled_config:
             raise openreview.OpenReviewException('Job not found')
         
-        config = pickle.loads(raw)
+        config = pickle.loads(pickled_config)
         
         if self.sync_on_disk and not os.path.isdir(config.job_dir):
             self.remove_job(user_id, job_id)
@@ -354,10 +354,10 @@ class RedisDatabase(object):
     def remove_job(self, user_id, job_id):
         job_key = f"job:{job_id}"
 
-        raw = self.db.get(job_key)
-        if not raw:
+        pickled_config = self.db.get(job_key)
+        if not pickled_config:
             raise openreview.OpenReviewException('Job not found')
-        config = pickle.loads(raw)
+        config = pickle.loads(pickled_config)
         if config.user_id != user_id and user_id not in SUPERUSER_IDS:
             raise openreview.OpenReviewException('Forbidden: Insufficient permissions to modify job')
 
