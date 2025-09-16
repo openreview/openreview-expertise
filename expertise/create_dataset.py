@@ -480,8 +480,9 @@ class OpenReviewExpertise(object):
             all_papers = all_papers + filtered_papers
 
         # Dump publications by profile id
-        with open(self.root.joinpath('publications_by_profile_id.json'), 'w') as f:
-            json.dump(publications_by_profile_id, f, indent=2)
+        if self.root.is_dir():
+            with open(self.root.joinpath('publications_by_profile_id.json'), 'w') as f:
+                json.dump(publications_by_profile_id, f, indent=2)
         
         return all_papers
     
