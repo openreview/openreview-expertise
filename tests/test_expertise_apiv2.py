@@ -98,7 +98,7 @@ class TestExpertiseV2():
             "WORKING_DIR": './tests/jobs',
             "REDIS_ADDR": 'localhost',
             "REDIS_PORT": 6379,
-            "REDIS_CONFIG_DB": 10,
+            "REDIS_CONFIG_DB": 8,
             "CHECK_EVERY": 3600,
             "DELETE_AFTER": 3600,
             "IN_TEST": True
