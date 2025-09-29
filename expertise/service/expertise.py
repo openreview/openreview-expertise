@@ -930,15 +930,14 @@ class ExpertiseCloudService(BaseExpertiseService):
             self.logger.info(f"In polling worker...")
             for attempt in range(self.max_attempts):
                 self.logger.info(f"{redis_id} - attempt {attempt + 1} of {self.max_attempts}...")
-                status = self.cloud.get_job_status_by_job_id(user_id, cloud_id)
+                config = self.redis.load_job(redis_id, user_id)
+                status = self.cloud.get_job_status_by_job_id(user_id, config)
                 self.logger.info(f"Invoked get_job_status_by_job_id for {redis_id} - status: {status}")
 
                 # Check status validity
                 self.logger.info(f"INFO: before status check")
                 if status and isinstance(status, dict) and 'status' in status and 'description' in status:
                     self.logger.info(f"INFO: after status check")
-                    config = self.redis.load_job(redis_id, user_id)
-                    self.logger.info(f"INFO: after load job")
                     # Only update non-stale status
                     if config.status != status['status'] or config.description != status['description']:
                         self.logger.info(f"INFO: before update status")
@@ -1064,9 +1063,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
         redis_job = self.redis.load_job(job_id, user_id)
-        if redis_job.cloud_id is None:
-            raise openreview.OpenReviewException(f"Not Found error: Job {job_id} has not requested resources")
-        cloud_return = self.cloud.get_job_status_by_job_id(user_id, redis_job.cloud_id)
+        cloud_return = self.cloud.get_job_status_by_job_id(user_id, redis_job)
         cloud_return['name'] = redis_job.name
         cloud_return['jobId'] = redis_job.job_id
         return cloud_return

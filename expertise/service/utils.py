@@ -952,7 +952,22 @@ class GCPInterface(object):
 
         return valid_vertex_id
 
-    def get_job_status_by_job_id(self, user_id, job_id):
+    def get_job_status_by_job_id(self, user_id, config):
+        job_id = config.cloud_id
+
+        if job_id is None:
+            # Return just information in Redis
+            return {
+                'name': config.name,
+                'tauthor': config.user_id,
+                'jobId': config.job_id,
+                'status': config.status,
+                'description': config.description,
+                'cdate': config.cdate,
+                'mdate': config.mdate,
+                'request': config.api_request.to_json()
+            }
+
         job_blobs = self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}")
         self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}")
         all_requests = [
