@@ -6,13 +6,16 @@ from expertise.service import model_ready, artifact_loading_started
 from expertise.service.utils import GCPInterface
 import openreview
 import json
-from openreview.openreview import OpenReviewException
 from .utils import get_user_id
 import flask
+from flask import g
 from copy import deepcopy
 from flask_cors import CORS
 from multiprocessing import Value
 from csv import reader
+
+from .auth import require_auth
+from .responses import format_error
 
 BLUEPRINT = flask.Blueprint('expertise', __name__)
 CORS(BLUEPRINT, supports_credentials=True)
@@ -38,49 +41,6 @@ def get_expertise_service(config, logger):
     flask.current_app.logger.info('Using local')
     return ExpertiseService(config, logger)
 
-def get_client(token=None):
-    if not token:
-        token = flask.request.headers.get('Authorization')
-        cookie_token = flask.request.cookies.get('openreview.accessToken')
-        if token is None and cookie_token is None:
-            raise openreview.OpenReviewException(f'Forbidden: No authorization detected | {flask.request.headers}')
-        # Use cookie_token if token is still None
-        token = token or cookie_token
-    return (
-        openreview.Client(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL']),
-        openreview.api.OpenReviewClient(token=token, baseurl=flask.current_app.config['OPENREVIEW_BASEURL_V2']),
-    )
-
-def format_error(status_code, description):
-    '''
-    Formulates an error that is in the same format as the OpenReview API errors
-
-    :param status_code: The status code determined by looking at the description
-    :type status_code: int
-
-    :param description: Useful information about the error
-    :type description: str
-
-    :returns template: A dictionary that zips all the information into a proper format
-    '''
-    # Parse status code
-    error_name = ''
-    if status_code == 400:
-        error_name = 'BadRequestError'
-    elif status_code == 403:
-        error_name = 'ForbiddenError'
-    elif status_code == 404:
-        error_name = 'NotFoundError'
-    elif status_code == 500:
-        error_name = 'InternalServerError'
-
-    template = {
-        'name': error_name,
-        'message': description,
-    }
-
-    return template
-
 @BLUEPRINT.route('/expertise/test')
 def test():
     """Test endpoint."""
@@ -88,6 +48,7 @@ def test():
     return 'OpenReview Expertise (test)'
 
 @BLUEPRINT.route('/expertise', methods=['POST'])
+@require_auth
 def expertise():
     """
     Submit a job to create a dataset and execute an expertise model based on the submitted configuration
@@ -106,12 +67,8 @@ def expertise():
     """
 
     try:
-        openreview_client, openreview_client_v2 = get_client()
-
-        user_id = get_user_id(openreview_client)
-        if not user_id:
-            flask.current_app.logger.error('No Authorization token in headers')
-            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
+        openreview_client = g.or_client
+        openreview_client_v2 = g.or_client_v2
 
         flask.current_app.logger.info('Received expertise request')
 
@@ -167,6 +124,7 @@ def expertise():
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/status', methods=['GET'])
+@require_auth
 def jobs():
     """
     Only retrieves the status of the job with that job_id
@@ -178,19 +136,16 @@ def jobs():
     :type job_id: str
     """
     try:
-        openreview_client, openreview_client_v2 = get_client()
-
-        user_id = get_user_id(openreview_client)
-        if not user_id:
-            flask.current_app.logger.error('No Authorization token in headers')
-            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
+        openreview_client = g.or_client
+        openreview_client_v2 = g.or_client_v2
+        user_id = g.user_id
 
         flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
         # Parse query parameters
         job_id = flask.request.args.get('jobId', None)
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
         expertise_service.set_client(openreview_client)
-        expertise_service.set_client_v2(openreview_client)
+        expertise_service.set_client_v2(openreview_client_v2)
         if job_id is None or len(job_id) == 0:
             result = expertise_service.get_expertise_all_status(user_id, flask.request.args)
         else:
@@ -219,6 +174,7 @@ def jobs():
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/status/all', methods=['GET'])
+@require_auth
 def all_jobs():
     """
     Query all submitted jobs associated with the logged in user
@@ -230,12 +186,8 @@ def all_jobs():
     :type job_id: str
     """
     try:
-        openreview_client, openreview_client_v2 = get_client()
-
-        user_id = get_user_id(openreview_client)
-        if not user_id:
-            flask.current_app.logger.error('No Authorization token in headers')
-            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
+        openreview_client = g.or_client
+        user_id = g.user_id
         # Parse query parameters
         flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
@@ -269,6 +221,7 @@ def all_jobs():
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/<job_id>', methods=['DELETE'])
+@require_auth
 def delete_job(job_id):
     """
     Retrieves the config of a job to be deleted, and removes the job by deleting the job directory.
@@ -280,18 +233,14 @@ def delete_job(job_id):
     :type job_id: str
     """
     try:
-        openreview_client, _ = get_client()
+        openreview_client = g.or_client
+        user_id = g.user_id
 
-        user_id = get_user_id(openreview_client)
-
-        if not user_id:
-            flask.current_app.logger.error('No Authorization token in headers')
-            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
         expertise_service.set_client(openreview_client)
-        expertise_service.del_expertise_job(user_id, job_id)
-        
-        return {'status': 'ok'}, 200
+        result = expertise_service.del_expertise_job(user_id, job_id)
+
+        return flask.jsonify(result), 200
         
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle), exc_info=True)
@@ -314,6 +263,7 @@ def delete_job(job_id):
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
 @BLUEPRINT.route('/expertise/results', methods=['GET'])
+@require_auth
 def results():
     """
     Get the results of a single submitted job with the associated job_id
@@ -329,12 +279,9 @@ def results():
     :type delete_on_get: bool
     """
     try:
-        openreview_client, openreview_client_v2 = get_client()
-
-        user_id = get_user_id(openreview_client)
-        if not user_id:
-            flask.current_app.logger.error('No Authorization token in headers')
-            return flask.jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
+        openreview_client = g.or_client
+        openreview_client_v2 = g.or_client_v2
+        user_id = g.user_id
         # Parse query parameters
         flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
         job_id = flask.request.args.get('jobId', None)
@@ -344,6 +291,7 @@ def results():
 
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
         expertise_service.set_client(openreview_client)
+        expertise_service.set_client_v2(openreview_client_v2)
         result = expertise_service.get_expertise_results(user_id, job_id, delete_on_get)
         
         # Check if result is a generator (for streaming) or a regular dict
