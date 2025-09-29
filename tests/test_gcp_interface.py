@@ -883,7 +883,7 @@ def test_get_job_status_by_job_id_returns_redis_when_no_cloud_id(mock_storage_cl
     result = gcp.get_job_status_by_job_id("openreview.net", cfg)
 
     # Assert
-    assert result["name"] == "test_fallback"
+    assert result["name"] == "test"
     assert result["tauthor"] == "openreview.net"
     assert result["jobId"] == "job_no_cloud"
     assert result["status"] == JobStatus.QUEUED
