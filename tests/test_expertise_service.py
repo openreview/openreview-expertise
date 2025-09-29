@@ -1395,7 +1395,7 @@ class TestExpertiseService():
         assert response.status_code == 403
         assert 'Error' in response.json['name']
         assert 'forbidden' in response.json['message'].lower()
-        assert 'No authorization detected' in response.json['message']
+        assert 'No Authorization token in headers' in response.json['message']
     def test_request_journal(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
