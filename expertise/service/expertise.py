@@ -327,7 +327,7 @@ class BaseExpertiseService:
         running_config.baseurl_v2 = None
         running_config.user_id = None
 
-    def _prepare_config(self, request, job_id=None, client_v1=None, client=None, save=True) -> dict:
+    def _prepare_config(self, request=None, job_id=None, client_v1=None, client=None) -> dict:
         """
         Overwrites/add specific key-value pairs in the submitted job config
         :param request: Contains the initial request from the user
@@ -347,8 +347,8 @@ class BaseExpertiseService:
 
         if job_id:
             try:
-                job = self.redis.load_job(job_id, get_user_id(self.client_v2))
-                return job, self.client.token
+                job = self.redis.load_job(job_id, get_user_id(client))
+                return job, client_v1.token
             except Exception as e:
                 if 'not found' not in str(e):
                     raise e
@@ -371,14 +371,13 @@ class BaseExpertiseService:
         self.logger.info(f"Config validation passed - {config.to_json()}")
 
         # Create directory and config file
-        if save:
-            if not os.path.isdir(config.dataset['directory']):
-                os.makedirs(config.dataset['directory'])
-            with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
-                json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
-            if not self.containerized:
-                self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
-                self.redis.save_job(config)
+        if not os.path.isdir(config.dataset['directory']):
+            os.makedirs(config.dataset['directory'])
+        with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
+            json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
+        if not self.containerized:
+            self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
+            self.redis.save_job(config)
 
         return config, or_client.token
 
@@ -829,12 +828,11 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.client_v2 = client_v2
         self.cloud.set_client(client_v2)
 
-    def compute_machine_type(self, client, client_v2, api_request):
+    def compute_machine_type(self, client, client_v2, job_id):
         config, _ = self._prepare_config(
-            deepcopy(api_request),
+            job_id=job_id,
             client_v1=client,
-            client=client_v2,
-            save=False
+            client=client_v2
         )
         if config.machine_type is not None:
             return config.machine_type
@@ -910,7 +908,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             machine_type = self.compute_machine_type(
                 openreview_client_v1,
                 openreview_client_v2,
-                deepcopy(request)
+                job_id=redis_id
             )
 
             cloud_id = self.cloud.create_job(
