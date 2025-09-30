@@ -275,8 +275,7 @@ class RedisDatabase(object):
         db=None,
         connection_pool=None,
         sync_on_disk=True,
-        default_ttl=None,
-        completed_ttl=None) -> None:
+        job_ttl=None) -> None:
         if not connection_pool:
             self.db = redis.Redis(
                 host = host,
@@ -287,25 +286,12 @@ class RedisDatabase(object):
             self.db = redis.Redis(connection_pool=connection_pool)
 
         self.sync_on_disk = sync_on_disk
-        self.default_ttl = default_ttl
-        self.completed_ttl = completed_ttl
+        self.job_ttl = job_ttl
+
     def save_job(self, job_config, ttl=None):
         key = f"job:{job_config.job_id}"
-        ex = ttl
-        if ex is None:
-            if getattr(job_config, 'status', None) in (JobStatus.COMPLETED.value, JobStatus.ERROR.value):
-                ex = self.completed_ttl
-            else:
-                ex = self.default_ttl
-
-        if ex:
-            self.db.set(key, pickle.dumps(job_config), ex=int(ex))
-        else:
-            self.db.set(key, pickle.dumps(job_config))
-    
-    def get_ttl(self, job_id):
-        """Get remaining TTL for a job"""
-        return self.db.ttl(f"job:{job_id}")
+        job_ttl = ttl if ttl is not None else self.job_ttl
+        self.db.set(key, pickle.dumps(job_config), ex=job_ttl)
     
     def load_all_jobs(self, user_id):
         """

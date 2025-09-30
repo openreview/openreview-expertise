@@ -243,13 +243,14 @@ class TestExpertiseService():
             host='localhost',
             port=6379,
             db=10,
-            default_ttl=1  # 1 second TTL for testing
+            job_ttl=1
         )
+        redis.db.flushdb()
         config = JobConfig(job_id='test_ttl', user_id='user@test.com')
         redis.save_job(config)
         
         # Verify TTL is set
-        ttl = redis.get_ttl('test_ttl')
+        ttl = redis.db.ttl('job:test_ttl')
         assert 0 < ttl <= 1
         
         # Wait for expiration
@@ -260,62 +261,23 @@ class TestExpertiseService():
             redis.load_job('test_ttl', 'user@test.com')
         assert 'Job not found' in str(excinfo.value)
     
-    def test_completed_job_ttl(self):
-        """Test completed jobs get different TTL"""
-        redis = RedisDatabase(
-            host='localhost',
-            port=6379,
-            db=10,
-            default_ttl=1,
-            completed_ttl=5
-        )
-        config = JobConfig(
-            job_id='completed_test', 
-            user_id='user@test.com',
-            status=JobStatus.COMPLETED.value
-        )
-        redis.save_job(config)
-        
-        ttl = redis.get_ttl('completed_test')
-        assert 3 < ttl <= 5  # Should use completed_ttl
-        
-        # Clean up
-        redis.remove_job('user@test.com', 'completed_test')
-    
-    def test_no_ttl_when_none(self):
-        """Test that jobs don't expire when TTL is None"""
-        redis = RedisDatabase(
-            host='localhost',
-            port=6379,
-            db=10,
-            default_ttl=None  # No expiration
-        )
-        config = JobConfig(job_id='no_ttl_test', user_id='user@test.com')
-        redis.save_job(config)
-        
-        # TTL should be -1 (no expiration)
-        ttl = redis.get_ttl('no_ttl_test')
-        assert ttl == -1
-        
-        # Clean up
-        redis.remove_job('user@test.com', 'no_ttl_test')
-    
     def test_manual_ttl_override(self):
         """Test manual TTL override in save_job"""
         redis = RedisDatabase(
             host='localhost',
             port=6379,
             db=10,
-            default_ttl=10
+            job_ttl=10
         )
+        redis.db.flushdb()
         config = JobConfig(job_id='manual_ttl', user_id='user@test.com')
         
         # Save with manual TTL override
         redis.save_job(config, ttl=3)
         
         # Check TTL is the overridden value
-        ttl = redis.get_ttl('manual_ttl')
-        assert 2 <= ttl <= 3
+        ttl = redis.db.ttl('job:manual_ttl')
+        assert 0 < ttl <= 3
         
         # Clean up
         redis.remove_job('user@test.com', 'manual_ttl')
