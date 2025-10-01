@@ -6,6 +6,19 @@ name: prod-deployment
 on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      version:
+        description: "openreview-expertise Release Tag"
+        required: true
+        type: string
+env:
+  REGION: us
+  KFP_REGION: us-central1
+  KFP_REPO: openreview-kfp
+  REPO: openreview-docker-images
+  PROJECT: sunlit-realm-131518
+  PIPELINE_NAME: openreview-expertise-production
+  IMAGE_NAME: expertise-production
 jobs:
   deploy:
     # Allow the job to fetch a GitHub ID token
@@ -14,7 +27,9 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version }}
       - name: Add SSH key
         run: |
           mkdir -p /home/runner/.ssh
@@ -24,7 +39,7 @@ jobs:
           chmod 600 /home/runner/.ssh/google_compute_engine.pub
       - name: Authenticate with Google Cloud
         id: auth
-        uses: google-github-actions/auth@v1
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
@@ -32,8 +47,69 @@ jobs:
           cleanup_credentials: true
           export_environment_variables: true
       - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v1
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Setup Docker authentication
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      - name: Get deployment configuration
+        run: |
+          gsutil cp gs://openreview-general/conf/deployment.conf ./deployment.conf
+          OPENREVIEW_TAG=$(grep 'OPENREVIEW_PY_V2_TAG=' deployment.conf | cut -d'"' -f2)
+          echo "OPENREVIEW_PY_VERSION=$OPENREVIEW_TAG" >> $GITHUB_ENV
+      - name: Set Environment Variables
+        run: |
+          echo "IMAGE_TAG_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          echo "KFP_PIPELINE_NAME=${{ env.PIPELINE_NAME }}" >> $GITHUB_ENV
+          echo "IMAGE=${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
+      - name: Check if image exists
+        id: image_check
+        run: |
+          IMAGE_PATH="${{ env.IMAGE_TAG }}:${{ env.IMAGE_TAG_VERSION }}"
+          echo "Checking for image: ${IMAGE_PATH}"
+          
+          if docker manifest inspect "${IMAGE_PATH}" > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install kfp google-cloud-pipeline-components
+      - name: Set up Docker Buildx
+        if: steps.image_check.outputs.exists == 'false'
+        uses: docker/setup-buildx-action@v3
+      - name: Build and push image
+        if: steps.image_check.outputs.exists == 'false'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          # Push multiple tags: the version provided
+          tags: |
+            ${{ env.IMAGE_TAG }}:${{ env.IMAGE_TAG_VERSION }}
+          build-args: |
+            OPENREVIEW_PY_VERSION=${{ env.OPENREVIEW_PY_VERSION }}
+          cache-from: type=registry,ref=${{ env.IMAGE_TAG }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_TAG }}:buildcache,mode=max
+      - name: Build and push Kubeflow pipeline
+        run: |
+          python expertise/build_pipeline.py \
+            --region "${{ env.REGION }}" \
+            --kfp_region "${{ env.KFP_REGION }}" \
+            --project "${{ env.PROJECT }}" \
+            --repo "${{ env.REPO }}" \
+            --kfp_repo "${{ env.KFP_REPO }}" \
+            --kfp_name "${{ env.KFP_PIPELINE_NAME }}" \
+            --image "${{ env.IMAGE }}" \
+            --tag "${{ env.IMAGE_TAG_VERSION }}"
       - name: Run deploy scripts
         run: |
           gcloud config set compute/zone us-central1-b
-          gcloud compute ssh openreview@openreview-expertise-instance --command '/bin/expertise_build.sh' --quiet
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Deploying version: $VERSION"
+          gcloud compute ssh openreview@openreview-expertise-instance --command "/bin/expertise_build.sh $VERSION" --quiet

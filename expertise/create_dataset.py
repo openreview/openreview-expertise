@@ -98,11 +98,20 @@ class OpenReviewExpertise(object):
             ## Papers allowed: accepted papers from an OpenReview venue
             ## not in_openreview: DBLP papers (venueid =/= domain) and non-accepted papers (domain not in venue_list)
 
+            has_prefix_match = 'prefix' in venue_spec and venueid.startswith(venue_spec['prefix'])
+            has_exact_value_match = 'value' in venue_spec and venueid == venue_spec['value']
+            submitted_to_openreview = (
+                'articleSubmittedToOpenReview' in venue_spec and in_openreview and venue_spec['articleSubmittedToOpenReview']
+            )
+            not_submitted_to_openreview = (
+                'articleSubmittedToOpenReview' in venue_spec and not in_openreview and not venue_spec['articleSubmittedToOpenReview']
+            )
+            
             return (
-                ('prefix' in venue_spec and in_openreview and venueid.startswith(venue_spec['prefix'])) or
-                ('value' in venue_spec and in_openreview and venueid == venue_spec['value']) or
-                ('articleSubmittedToOpenReview' in venue_spec and in_openreview and venue_spec['articleSubmittedToOpenReview']) or
-                ('articleSubmittedToOpenReview' in venue_spec and not in_openreview and not venue_spec['articleSubmittedToOpenReview'])
+                has_prefix_match or
+                has_exact_value_match or
+                submitted_to_openreview or
+                not_submitted_to_openreview
             )
         
         # Get domain from either domain field or invitation prefix
@@ -586,6 +595,7 @@ class OpenReviewExpertise(object):
         paper_id = self.config.get('match_paper_id')
         paper_venueid = self.config.get('match_paper_venueid', None)
         paper_content = self.config.get('match_paper_content', None)
+        provided_submissions = self.config.get('match_provided_submissions', [])
 
         reduced_submissions = self.get_submissions_helper(
             invitation_ids=invitation_ids,
@@ -593,6 +603,20 @@ class OpenReviewExpertise(object):
             paper_venueid=paper_venueid,
             paper_content=paper_content
         )
+
+        if provided_submissions:
+            print('adding records from provided submissions ')
+            for submission in provided_submissions:
+                paper_id = submission['id']
+                title = submission['title']
+                abstract = submission['abstract']
+                reduced_submissions[paper_id] = {
+                    'id': paper_id,
+                    'content': {
+                        'title': title,
+                        'abstract': abstract
+                    }
+                }
 
         self._validate_paper_data(
             reduced_submissions,
@@ -611,6 +635,7 @@ class OpenReviewExpertise(object):
         paper_venueid = self.config.get('paper_venueid', None)
         paper_content = self.config.get('paper_content', None)
         submission_groups = self.convert_to_list(self.config.get('alternate_match_group', []))
+        provided_submissions = self.config.get('provided_submissions', [])
 
         reduced_submissions = self.get_submissions_helper(
             invitation_ids=invitation_ids,
@@ -636,6 +661,20 @@ class OpenReviewExpertise(object):
                             'abstract': abstract
                         }
                     }
+
+        if provided_submissions:
+            print('adding records from provided submissions ')
+            for submission in provided_submissions:
+                paper_id = submission['id']
+                title = submission['title']
+                abstract = submission['abstract']
+                reduced_submissions[paper_id] = {
+                    'id': paper_id,
+                    'content': {
+                        'title': title,
+                        'abstract': abstract
+                    }
+                }
 
         self._validate_paper_data(
             reduced_submissions,
@@ -676,7 +715,7 @@ class OpenReviewExpertise(object):
                     for paper in pubs:
                         f.write(json.dumps(paper) + '\n')
 
-        if 'match_paper_invitation' in self.config or 'match_paper_id' in self.config or 'match_paper_venueid' in self.config:
+        if 'match_paper_invitation' in self.config or 'match_paper_id' in self.config or 'match_paper_venueid' in self.config or 'match_provided_submissions' in self.config:
             self.archive_dir = self.dataset_dir.joinpath('archives')
             if not self.archive_dir.is_dir():
                 self.archive_dir.mkdir()
@@ -689,7 +728,16 @@ class OpenReviewExpertise(object):
         group_group_matching = 'alternate_match_group' in self.config.keys()
 
         # if invitation ID is supplied, collect records for each submission
-        if 'paper_invitation' in self.config or 'csv_submissions' in self.config or 'paper_id' in self.config or 'paper_venueid' in self.config or group_group_matching:
+        # Check if any submission source is specified in the config
+        submission_sources = [
+            'paper_invitation',
+            'csv_submissions',
+            'paper_id',
+            'paper_venueid',
+            'provided_submissions'
+        ]
+        has_submission_source = any(key in self.config for key in submission_sources) or group_group_matching
+        if has_submission_source:
             submissions = self.get_submissions()
             with open(self.root.joinpath('submissions.json'), 'w') as f:
                 json.dump(submissions, f, indent=2)

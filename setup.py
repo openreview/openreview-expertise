@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='openreview-expertise',
-    version='2.0.6',
+    version='2.0.17',
     description='OpenReview paper-reviewer affinity modeling',
     url='https://github.com/openreview/openreview-expertise',
     author='OpenReview',
@@ -33,7 +33,7 @@ setup(
         'rank_bm25',
         'pytest==7.3.0',
         'overrides==3.1.0',
-        'flask==2.2.2',
+        'flask==2.2.5',
         'flask-cors==6.0.0',
         'cffi>=1.0.0',
         'celery==5.3.0',
