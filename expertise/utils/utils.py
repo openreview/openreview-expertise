@@ -16,6 +16,9 @@ from collections import defaultdict
 import math, random
 import ipdb
 import numpy as np
+import shortuuid
+
+JOB_ID_ALPHABET = "123456789abcdefghijkmnopqrstuvwxyz"
 
 def fixedwidth(item_list, list_len, pad_val=0):
     '''
@@ -567,3 +570,10 @@ def ft_embed(ft_model, kps_list):
         embeds[idx, :] = emb_avg
     return embeds
 
+def generate_job_id():
+    # Generate IDs that always start with a letter for GCP Vertex AI compliance
+    # First character from letters-only, remaining 9 from full alphabet
+    letters_only = ''.join(c for c in JOB_ID_ALPHABET if c.isalpha())
+    su_letters = shortuuid.ShortUUID(alphabet=letters_only)
+    su_full = shortuuid.ShortUUID(alphabet=JOB_ID_ALPHABET)
+    return su_letters.random(length=1) + su_full.random(length=9)

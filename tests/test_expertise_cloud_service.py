@@ -124,6 +124,47 @@ class TestExpertiseCloudService():
                 "config": config
             }
 
+    def test_insufficient_perm_machine_type(self, openreview_client, openreview_context_cloud):
+        # Submitting a request with machineType outside of Super User
+        abc_client = openreview.api.OpenReviewClient(
+            token=openreview_client.token
+        )
+        abc_client.impersonate('CLD.cc/Program_Chairs')
+        test_client = openreview_context_cloud['test_client']
+
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "CLD.cc/Area_Chairs",
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "CLD.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
+                    },
+                    "machineType": "large"
+                }
+            ),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 403, f'{response.json}'
+        assert 'Error' in response.json['name']
+        assert 'forbidden' in response.json['message'].lower()
+        assert response.json['message'] == "Forbidden: Insufficient permissions to set machine type"
+
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_create_job_filesystem(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
@@ -202,7 +243,7 @@ class TestExpertiseCloudService():
         time.sleep(LATENCY_OFFSET)
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
-        assert response['name'] == 'test_run'
+        assert response['name'] == 'test_run', f"Job name: {response['name']}, status: {response}"
         assert response['status'] != 'Error'
 
         # Let request process
@@ -217,6 +258,7 @@ class TestExpertiseCloudService():
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
         assert request['user_id'] == 'CLD.cc/Program_Chairs'
+        assert request['machine_type'] == 'small'
         
         setup_job_mocks()
         response = test_client.post(
@@ -299,6 +341,7 @@ class TestExpertiseCloudService():
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
         assert request['user_id'] == 'TMLR/Editors_In_Chief'
+        assert request['machine_type'] == 'small'
 
         # Upload test results to GCS
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
@@ -574,6 +617,140 @@ class TestExpertiseCloudService():
         assert response.json["results"] == [
             {"match_submission": "abcd","submission": "edfg","score": 0.987},
             {"match_submission": "hijk","submission": "lmno","score": 0.987}
+        ]
+
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
+    def test_submissions_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
+        def setup_job_mocks():
+            # Setup mock PipelineJob
+            mock_pipeline_instance = MagicMock()
+            mock_pipeline_job.return_value = mock_pipeline_instance
+
+            # Mock PipelineJob.get()
+            mock_pipeline_running = MagicMock()
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
+            mock_pipeline_running.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_succeeded = MagicMock()
+            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
+            mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+
+            return mock_pipeline_instance
+
+        MAX_TIMEOUT = 300
+        redis = RedisDatabase(
+            host=openreview_context_cloud['config']['REDIS_ADDR'],
+            port=openreview_context_cloud['config']['REDIS_PORT'],
+            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
+            sync_on_disk=False
+        )
+
+        # Submit first job as CLD.cc/Program_Chairs
+        abc_client = openreview.api.OpenReviewClient(
+            token=openreview_client.token
+        )
+        abc_client.impersonate('CLD.cc/Program_Chairs')
+
+        # Submit a working job and return the job ID
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context_cloud['test_client']
+
+        # Make a request
+        setup_job_mocks()
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'reviewerIds': [
+                            "~Harold_Rice1",
+                            "~Zonia_Willms1",
+                            "~Royal_Toy1",
+                            "~C.V._Lastname1",
+                        ]
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'submissions': [
+                            {
+                                "id": "ASDFASDF",
+                                "title": "Test Submission",
+                                "abstract": "Test Abstract",
+                            },
+                            {
+                                "id": "SFGSDFGSDFG",
+                                "title": "Test Submission 2",
+                                "abstract": "Test Abstract 2",
+                            }
+                        ]
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'max'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0,
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+
+        # Let request process
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
+
+        ## Expect 1*5 calls from the worker thread, 1*1 call from /expertise/status and 0 calls from /expertise/status/all
+        assert len(mock_pipeline_job.get.call_args_list) == 6
+
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
+
+        responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={'status': 'Completed'}).json['results']
+
+        job = [r for r in responses if r['jobId'] == job_id][0]
+        assert job['status'] == 'Completed'
+        assert job['name'] == 'test_run'
+        assert job['description'] == 'Job is complete and the computed scores are ready'
+
+        # Build mock scores
+
+        # Fetch the job config
+        ## Convert current mocking to using file system
+        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        
+        # Check proper user ID
+        request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
+        assert request_blob.exists(), "Request file should exist in GCS"
+        request = json.loads(request_blob.download_as_text())
+        assert request['user_id'] == 'CLD.cc/Program_Chairs'
+
+        # Upload test results to GCS
+        metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
+        metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
+
+        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
+        scores_blob.upload_from_string('{"submission": "ASDFASDF","user": "~Harold_Rice1","score": 0.987}\n{"submission": "ASDFASDF","user": "~Zonia_Willms1","score": 0.987}')
+
+        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
+        scores_sparse_blob.upload_from_string('{"submission": "ASDFASDF","user": "~Harold_Rice1","score": 0.987}\n{"submission": "ASDFASDF","user": "~Zonia_Willms1","score": 0.987}')
+
+        # Searches for journal results from the given job_id assuming the job has completed
+        response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
+        assert response.json["metadata"] == {"meta": "data"}
+        assert response.json["results"] == [
+            {"submission": "ASDFASDF","user": "~Harold_Rice1","score": 0.987},
+            {"submission": "ASDFASDF","user": "~Zonia_Willms1","score": 0.987}
         ]
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform

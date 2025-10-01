@@ -41,7 +41,8 @@ silent
 """
 class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=None):
+                 sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=None,
+                 normalize_scores=True):
         self.model_name = 'specter2'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -65,6 +66,7 @@ class Specter2Predictor(Predictor):
         self.dump_p2p = dump_p2p
         self.compute_paper_paper = compute_paper_paper
         self.venue_specific_weights = venue_specific_weights
+        self.normalize_scores = normalize_scores
         print(f"SPECTER2 venue_specific_weights: {venue_specific_weights}")
 
         self.percentile_select = percentile_select
@@ -255,9 +257,14 @@ class Specter2Predictor(Predictor):
                 json.dump(p2p_dict, f, indent=4)
         
         # Normalize all scores
-        min_val = p2p_aff.min()
-        max_val = p2p_aff.max()
-        p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+        if self.normalize_scores:
+            print("Normalizing scores...")
+            min_val = p2p_aff.min()
+            max_val = p2p_aff.max()
+            p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+        else:
+            print("Skipping normalization of scores...")
+            p2p_aff_norm = p2p_aff
 
         csv_scores = []
         self.preliminary_scores = []
