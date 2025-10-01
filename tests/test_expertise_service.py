@@ -831,14 +831,6 @@ class TestExpertiseService():
                 assert openreview_royal_scores[submission_id] > score
                 assert openreview_royal_scores[submission_id] > zeroed_royal_scores[submission_id]
 
-
-        test_client.set_cookie(
-            'localhost',
-            'openreview.accessToken',
-            openreview_client.token
-        )
-        
-        # Make request without Authorization header
         response = test_client.post(
             '/expertise',
             data=json.dumps({
@@ -860,7 +852,8 @@ class TestExpertiseService():
                 }
             }
             ),
-            content_type='application/json'
+            content_type='application/json',
+            headers=openreview_client.headers
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
@@ -879,8 +872,6 @@ class TestExpertiseService():
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['status'] == 'Completed'
         openreview_context['job_id2'] = job_id
-        
-        test_client.delete_cookie('localhost', 'openreview.accessToken')
 
     def test_status_all_query_params(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']

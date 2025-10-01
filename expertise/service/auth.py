@@ -22,11 +22,9 @@ def require_auth(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         token = request.headers.get('Authorization')
-        cookie_token = request.cookies.get('openreview.accessToken')
-        if token is None and cookie_token is None:
+        if token is None:
             current_app.logger.error('No Authorization token in headers')
             return jsonify(format_error(403, 'Forbidden: No Authorization token in headers')), 403
-        token = token or cookie_token
 
         try:
             or_client, or_client_v2 = get_client(token)
