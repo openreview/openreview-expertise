@@ -828,19 +828,19 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.client_v2 = client_v2
         self.cloud.set_client(client_v2)
 
-    def compute_machine_type(self, client, client_v2, job_id):
+    def compute_machine_type(self, client_v1, client, job_id):
         config, _ = self._prepare_config(
             job_id=job_id,
-            client_v1=client,
-            client=client_v2
+            client_v1=client_v1,
+            client=client
         )
         if config.machine_type is not None:
             return config.machine_type
         config = config.to_json()
         dataset_config = ModelConfig(config_dict=config)
         expertise = OpenReviewExpertise(
+            client_v1,
             client,
-            client_v2,
             dataset_config
         )
         note_count = 0
