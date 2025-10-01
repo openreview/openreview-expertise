@@ -125,7 +125,7 @@ def expertise():
             raise openreview.OpenReviewException("Request already in process")
 
         try:
-            job_id = expertise_service.start_expertise(user_request)
+            job_id = expertise_service.start_expertise(user_request, openreview_client, openreview_client_v2)
             expertise_service.redis.db.delete(request_key)
         except Exception as error_handle:
             expertise_service.redis.db.delete(request_key)
@@ -352,9 +352,49 @@ def results():
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
         expertise_service.set_client(openreview_client)
         result = expertise_service.get_expertise_results(user_id, job_id, delete_on_get)
+        
+        # Check if result is a generator (for streaming) or a regular dict
+        if hasattr(result, '__iter__') and not isinstance(result, (dict, list)):
+            # It's a generator - use streaming response
+            flask.current_app.logger.debug('Using streaming response')
+            
+            def generate():
+                try:
+                    # Start with an opening bracket for a JSON array
+                    yield '{"results":['
+                    
+                    first_chunk = True
+                    metadata = None
+                    
+                    for chunk in result:
+                        # Save metadata for later
+                        if chunk.get('metadata') is not None:
+                            metadata = chunk['metadata']
+                        
+                        # Stream results
+                        if chunk.get('results'):
+                            for result_item in chunk['results']:
+                                if not first_chunk:
+                                    yield ','
+                                yield json.dumps(result_item)
+                                first_chunk = False
+                    
+                    # Close the results array and add metadata
+                    yield '],'
+                    yield f'"metadata":{json.dumps(metadata or {})}'
+                    yield '}'
+                    
+                except Exception as e:
+                    flask.current_app.logger.error(f"Error in streaming: {str(e)}", exc_info=True)
+                    # If an error occurs during streaming, we need to yield a valid JSON
+                    yield '[],"error":"Error during streaming"}'
 
-        flask.current_app.logger.debug('GET returns code 200')
-        return flask.jsonify(result), 200
+            flask.current_app.logger.debug('Streaming response started')
+            return flask.Response(generate(), mimetype='application/json')
+        else:
+            # It's a regular dictionary - use standard JSON response
+            flask.current_app.logger.debug('Using standard JSON response')
+            return flask.jsonify(result), 200
 
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle), exc_info=True)

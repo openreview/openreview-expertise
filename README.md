@@ -46,12 +46,12 @@ The following table is partially taken from Stelmakh et al., where SPECTER2, Sci
 
 ## Installation
 
-This repository only supports Python 3.6 and above. Python 3.8 and above is required to run SPECTER2
+This repository only supports Python 3.8 and above (Python 3.11 is recommended). Python 3.8 and above is required to run SPECTER2
 Clone this repository and install the package using pip as follows. You may use the `pip` command in a conda environment as long as you first run all the pip installs and then conda installs. Just follow the order of the commands shown below and it should work. You may read more about this [here](https://www.anaconda.com/using-pip-in-a-conda-environment/).
 
 Run this command only if you are using conda:
 ```
-conda create -n affinity python=3.8
+conda create -n affinity python=3.11
 conda activate affinity
 conda install pip
 ```
@@ -68,19 +68,10 @@ pip install -e <location of this repository>
 
 Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use SPECTER, Multifacet-Recommender (MFR), SPECTER+MFR, SPECTER2+SciNCL with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
 
-If you plan to use SPECTER / SPECTER+MFR, with the conda environment `affinity` active:
+If you plan to use GPU acceleration SPECTER / SPECTER+MFR, with the conda environment `affinity` active:
 ```
-git clone https://github.com/allenai/specter.git
-cd specter
-
-wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
-tar -xzvf archive.tar.gz
-
 conda install pytorch cudatoolkit=10.1 -c pytorch 
 pip install -r requirements.txt
-python setup.py install
-conda install filelock
-cd ..
 pip install -I protobuf==3.20.1
 pip install numpy==1.24.4 --force-reinstall
 ```
@@ -111,24 +102,16 @@ conda create -n expertise python=$PYTHON_VERSION -c conda-forge
 conda activate expertise
 mkdir ../expertise-utils
 cd ../expertise-utils
-git clone https://github.com/allenai/specter.git
-cd specter
-wget https://ai2-s2-research-public.s3-us-west-2.amazonaws.com/specter/archive.tar.gz
-tar -xzvf archive.tar.gz
-conda install pytorch cudatoolkit=10.1 -c pytorch 
-pip install -r requirements.txt
-python setup.py install
+conda install "pytorch>=2.3" pytorch-cuda=12.4 -c pytorch -c nvidia
 conda install -y filelock
-cd ..
 wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
 tar -xzvf mfr.tar.gz
 mv ./multifacet_recommender_data ./multifacet_recommender
 cd ~/openreview-expertise
-pip install -e .
+python -m pip install -e .
 conda install -y intel-openmp==2019.4
-conda install -y faiss-cpu==1.7.3 -c pytorch
-pip install -I protobuf==3.20.1
-pip install numpy==1.24.4 --force-reinstall
+conda install -y -c conda-forge faiss-cpu=1.7.4 "pytorch>=2.3"
+python -m pip install -I protobuf==3.20.1
 ```
 ## Affinity Scores
 
@@ -170,11 +153,6 @@ python -m expertise.service --host localhost --port 5000
 ```
 
 By default, the app will run on `http://localhost:5000`. The endpoint `/expertise/test` should show a simple page indicating that Flask is running. Accessing the `/expertise` endpoint to compute affinity scores **requires** valid authentication in the headers of the request (i.e submitted from a logged in Python client)
-
-In order to start the Celery queue worker, use: 
-```
-celery --app expertise.service.server.celery_app worker
-```
 
 By default, if using SPECTER and/or MFR, the server config expects the checkpoints to be placed in the following directories:
 ```
@@ -224,6 +202,8 @@ This parameters could be included in a separate file, like `dataset-config.json`
 - `paper_invitation`: (optional) String or array of strings with the submission invitations. This is the invitation for Submissions, all the submissions in OpenReview for a particular venue have an invitation and that is how they are grouped together.
 - `paper_venueid`: (optional) String with the submission venue id. In API2, submissions may have multiple invitations which accumulate as the submission is modified. The venue id is a way of grouping submissions in API2 using a singular value.
 - `paper_id`: (optional) String with the submission ID. All submissions in OpenReview have an associated unique ID that can be used to fetch the paper.
+- `paper_content`: (optional) Dictionary mapping from a content field to the target value that the field should be. The primary use case is to perform affinity scoring for a subset of submissions matching a specific track, but this can be generalized to any content field
+- `match_paper_invitation`, `match_paper_venueid`, `match_paper_id`, `match_paper_content`: (optional) Equivalents of the previously mentioned paper config fields, but these are used to fetch submissions into the `match_submissions.jsonl` archives file to enable scoring between papers.
 - `exclusion_inv` (optional): String or array of strings with the exclusion invitations. Reviewers (and Area Chairs) can choose to exclude some of their papers before the affinity scores are calculated so that they get papers that are more aligned to their current expertise/interest. Papers included here will not be taken into consideration when calculating the affinity scores.
 - `csv_submissions`: (optional) String with the relative path from `dataset.directory` to a csv file containing the submissions in the following format: "submission_id","title","abstract". This can be added on top of `paper_invitation`, the values will be combined.
 - `bid_inv` (optional): String or array of strings with the bid invitations. Bids are used by the reviewers in OpenReview to select papers that they would or would not like to review. These bids are then used to compute a final affinity score to be more fair with the reviewers.
@@ -316,6 +296,7 @@ These parameters could be included in a separate file, like `affinity-config.jso
 - `model_params.use_title`: Boolean that indicates whether to use the title for the affinity scores or not. If this is `true` and `model_params.use_abstract` is also `true`, then, whenever a Submission or Publication does not have an abstract, it will fallback to the title.
 - `model_params.use_abstract`: Boolean that indicates whether to use the abstract for the affinity scores or not. If this is `true` and `model_params.use_title` is also `true`, then, whenever a Submission or Publication does not have an abstract, it will fallback to the title.
 - `model_params.sparse_value` (optional): Numerical value. If passed, instead of returning all the possible reviewer-submission combinations, only the top scores will be returned. The number of top scores will be determined by the `sparse_value`. That does not mean that the number of scores per submission will be equal to the `sparse_value`. Here is an example, if there are only 10 submissions and 5 reviewers, there would be a total of 50 scores. If we set the `sparse_value` to 5, each reviewer will get the top 5 submissions that are most similar to their publications. However, there might be a submission (or more submissions) that is not among the top 5 of any reviewer. In order to ensure that all submissions also have reviewers, the top 5 reviewers are assigned to each submission. As you can imagine, some reviewers will have more than 5 submissions assigned because of this reason.
+- `model_params.compute_paper_paper`: (optional) Boolean that indicates if you want to compute and output scores between papers. This must be set along with passing a `match_paper_*` field to ensure both steps are aware of the context.
 - `dataset.directory`: This is the directory where the data will be read from. If `create_dataset` is used, then the files will have the required format. If, however, the data does not come from OpenReview, then the dataset should be compliant with the format specified in the Datasets section.
 - `dataset.with_title` (optional): Boolean to indicate if only publications in OpenReview with title should be included.
 - `dataset.with_abstract` (optional): Boolean to indicate if only publications in OpenReview with abstract should be included.

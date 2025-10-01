@@ -1,5 +1,7 @@
 FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
 
+ARG OPENREVIEW_PY_VERSION=master
+
 WORKDIR /app
 
 ENV PYTHON_VERSION=3.11 \
@@ -14,6 +16,7 @@ ENV PYTHON_VERSION=3.11 \
 COPY . /app/openreview-expertise
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
     wget \
     curl \
     ca-certificates \
@@ -32,12 +35,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     \
     && . $HOME/miniconda/etc/profile.d/conda.sh \
     && conda activate expertise \
-    && conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia \
     && conda install -y filelock intel-openmp faiss-cpu -c pytorch \
+    && conda install --force-reinstall pytorch pytorch-cuda=12.4 -c pytorch -c nvidia \
     && python -m pip install --no-cache-dir -e $HOME/openreview-expertise \
     && python -m pip install --no-cache-dir -I protobuf==3.20.1 \
-    && python -m pip install --no-cache-dir numpy==1.26.4 --force-reinstall \
-    && python -m pip install openreview-py --force-reinstall \
+    && python -m pip install -e "git+https://github.com/openreview/openreview-py.git@${OPENREVIEW_PY_VERSION}#egg=openreview-py" \
     && conda clean --all -y \
     && apt-get purge -y build-essential wget curl git \
     && apt-get autoremove -y \

@@ -2,19 +2,19 @@ from setuptools import setup
 
 setup(
     name='openreview-expertise',
-    version='1.0',
+    version='2.0.17',
     description='OpenReview paper-reviewer affinity modeling',
-    url='https://github.com/iesl/openreview-evidence',
-    author='Michael Spector, Carlos Mondragon',
-    author_email='spector@cs.umass.edu, carlos@openreview.net',
+    url='https://github.com/openreview/openreview-expertise',
+    author='OpenReview',
+    author_email='harold@openreview.net, carlos@openreview.net',
     license='MIT',
     packages=[
         'expertise'
     ],
     install_requires=[
         'setuptools>=75.6.0',
-        'openreview-py>=1.0.1',
-        'numpy==1.26.4',
+        'openreview-py>=1.50',
+        'numpy<2.3,>=1.26',
         'scipy',
         'adapter-transformers',
         'pandas',

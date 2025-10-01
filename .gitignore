@@ -3,4 +3,6 @@ openreview_expertise.egg-info
 __pycache__
 
 /tmp
-*.log
+*.log*
+test_pipeline/
+tests/jobs/
