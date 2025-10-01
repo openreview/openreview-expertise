@@ -34,7 +34,7 @@ setup(
         'pytest==7.3.0',
         'overrides==3.1.0',
         'flask==2.2.5',
-        'flask-cors==3.0.9',
+        'flask-cors==6.0.0',
         'cffi>=1.0.0',
         'celery==5.3.0',
         "kombu>=5.3.0,<6.0",
