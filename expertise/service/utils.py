@@ -14,6 +14,7 @@ from google.cloud import storage
 from google.cloud.aiplatform_v1.types import PipelineState
 from copy import deepcopy
 from expertise.config import ModelConfig
+from expertise.utils.utils import generate_job_id
 
 import re
 SUPERUSER_IDS = ['openreview.net', 'OpenReview.net', '~Super_User1']
@@ -66,6 +67,7 @@ class APIRequest(object):
         self.entityB = {}
         self.model = {}
         self.dataset = {}
+        self.machine_type = None
         root_key = 'request'
 
         def _get_field_from_request(field):
@@ -92,6 +94,9 @@ class APIRequest(object):
 
         # Optionally check for dataset object
         self.dataset = request.pop('dataset', {})
+
+        # Optinally check for machine type
+        self.machine_type = request.pop('machineType', None)
 
         # Check for empty request
         if len(request.keys()) > 0:
@@ -129,6 +134,8 @@ class APIRequest(object):
                 target_entity['withVenueid'] = _get_from_entity('withVenueid')
             elif 'id' in source_entity.keys():
                 target_entity['id'] = _get_from_entity('id')
+            elif 'submissions' in source_entity.keys():
+                target_entity['submissions'] = _get_from_entity('submissions')
             else:
                 raise openreview.OpenReviewException(f"Bad request: no valid {type} properties in {entity_id}")
             
@@ -158,6 +165,105 @@ class APIRequest(object):
                 body['dataset'] = self.dataset
 
         return body
+    
+    @staticmethod
+    def extract_from_entity(
+        entity,
+        get_value=False,
+        get_prefix=False,
+        return_as_list=False,
+        separator=':'
+    ):
+        if not get_value and not get_prefix and not return_as_list:
+            raise ValueError("At least one of get_value get_prefix must be True")
+        if get_value and get_prefix:
+            raise ValueError("Cannot set both get_value and get_prefix to True")
+        
+        entity_type = entity.get('type', None)
+        if entity_type is None:
+            raise openreview.OpenReviewException("'type' is required for Entity objects")
+        
+        all_values = []
+        
+        if entity_type == 'Group':
+            if 'memberOf' in entity:
+                if return_as_list:
+                    all_values.append(entity['memberOf'])
+                else:
+                    return entity['memberOf']
+            if 'reviewerIds' in entity:
+                ## no option, actual data is too large
+                if return_as_list:
+                    all_values.append(
+                        f"reviewers{separator}{len(entity['reviewerIds'])}"
+                    )
+                else:
+                    return f"reviewers{separator}{len(entity['reviewerIds'])}"
+            if not 'memberOf' in entity and not 'reviewerIds' in entity:
+                if return_as_list:
+                    all_values.append('unknownGroup')
+                else:
+                    return 'unknownGroup'
+        elif entity_type == 'Note':
+            if 'id' in entity:
+                if get_value:
+                    if return_as_list:
+                        all_values.append(entity['id'])
+                    else:
+                        return entity['id']
+                elif get_prefix:
+                    if return_as_list:
+                        all_values.append(f"pid-{entity['id']}")
+                    else:
+                        return f"pid-{entity['id']}"
+            if 'invitation' in entity:
+                if get_value:
+                    if return_as_list:
+                        all_values.append(entity['invitation'])
+                    else:
+                        return entity['invitation']
+                elif get_prefix:
+                    if return_as_list:
+                        all_values.append('inv')
+                    else:
+                        return 'inv'
+            if 'withVenueid' in entity:
+                if get_value:
+                    if return_as_list:
+                        all_values.append(entity['withVenueid'])
+                    else:
+                        return entity['withVenueid']
+                elif get_prefix:
+                    if return_as_list:
+                        all_values.append('venueid')
+                    else:
+                        return 'venueid'
+            if 'withContent' in entity and entity.get('withContent') and return_as_list:
+                if get_value:
+                    for key, value in entity.get('withContent', {}).items():
+                        all_values.append(f"{key}:{value}")
+                elif get_prefix:
+                    all_values.append('withContent')
+            if 'submissions' in entity:
+                ## no option, actual data is too large
+                if return_as_list:
+                    all_values.append(
+                        f"submissions{separator}{len(entity['submissions'])}"
+                    )
+                else:
+                    return f"submissions{separator}{len(entity['submissions'])}"
+            if not ('id' in entity or \
+                    'invitation' in entity or \
+                    'withVenueid' in entity or \
+                    'submissions' in entity
+                ):
+                if return_as_list:
+                    all_values.append('unknownNote')
+                else:
+                    return 'unknownNote'
+                
+        return all_values
+        
 
 class RedisDatabase(object):
     """
@@ -253,6 +359,7 @@ class JobConfig(object):
         match_paper_venueid=None,
         match_paper_id=None,
         match_paper_content=None,
+        match_provided_submissions=None,
         alternate_match_group=None,
         reviewer_ids=None,
         dataset=None,
@@ -265,7 +372,9 @@ class JobConfig(object):
         paper_venueid=None,
         paper_content=None,
         paper_id=None,
-        model_params=None):
+        provided_submissions=None,
+        model_params=None,
+        machine_type=None):
         
         self.name = name
         self.user_id = user_id
@@ -283,6 +392,7 @@ class JobConfig(object):
         self.match_paper_venueid = match_paper_venueid
         self.match_paper_id = match_paper_id
         self.match_paper_content = match_paper_content
+        self.match_provided_submissions = match_provided_submissions
         self.alternate_match_group = alternate_match_group
         self.reviewer_ids = reviewer_ids
         self.dataset = dataset
@@ -295,7 +405,9 @@ class JobConfig(object):
         self.paper_venueid = paper_venueid
         self.paper_content = paper_content
         self.paper_id = paper_id
+        self.provided_submissions = provided_submissions
         self.model_params = model_params
+        self.machine_type = machine_type
 
         self.api_request = None
 
@@ -319,6 +431,8 @@ class JobConfig(object):
             'match_paper_content',
             'alternate_match_group',
             'reviewer_ids',
+            'match_provided_submissions',
+            'provided_submissions',
             'dataset',
             'model',
             'exclusion_inv',
@@ -329,7 +443,8 @@ class JobConfig(object):
             'paper_venueid',
             'paper_content',
             'paper_id',
-            'model_params'
+            'model_params',
+            'machine_type'
         ]
 
 
@@ -357,7 +472,7 @@ class JobConfig(object):
             return re.sub('([a-z0-9])([A-Z])', r'\1_\2', camel_str).lower()
 
         def _populate_note_fields(entity, config, paper_paper_scoring=False):
-            inv, id, venueid, content = entity.get('invitation', None), entity.get('id', None), entity.get('withVenueid', None), entity.get('withContent', None)
+            inv, id, venueid, content, submissions = entity.get('invitation', None), entity.get('id', None), entity.get('withVenueid', None), entity.get('withContent', None), entity.get('submissions', None)
 
             if paper_paper_scoring:
                 if inv:
@@ -368,6 +483,8 @@ class JobConfig(object):
                     config.match_paper_venueid = venueid
                 if content:
                     config.match_paper_content = content
+                if submissions:
+                    config.match_provided_submissions = submissions
             else:
                 if inv:
                     config.paper_invitation = inv
@@ -377,6 +494,8 @@ class JobConfig(object):
                     config.paper_venueid = venueid
                 if content:
                     config.paper_content = content
+                if submissions:
+                    config.provided_submissions = submissions
 
         descriptions = JobDescription.VALS.value
         config = JobConfig()
@@ -384,10 +503,14 @@ class JobConfig(object):
         # Set metadata fields from request
         config.name = api_request.name
         config.user_id = get_user_id(openreview_client)
-        config.job_id = shortuuid.ShortUUID().random(length=5) if job_id is None else job_id
+        config.job_id = generate_job_id() if job_id is None else job_id
         config.baseurl = server_config['OPENREVIEW_BASEURL']
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
+        
+        if config.user_id not in SUPERUSER_IDS and api_request.machine_type is not None:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to set machine type')
+        config.machine_type = api_request.machine_type
 
         root_dir = os.path.join(working_dir, config.job_id)
         config.job_dir = root_dir
@@ -507,7 +630,9 @@ class JobConfig(object):
             'useAbstract',
             'scoreComputation',
             'skipSpecter',
-            'percentileSelect'
+            'useCuda',
+            'percentileSelect',
+            'normalizeScores'
         ]
         config.model = deepcopy(starting_config.get('model', None))
         model_params = deepcopy(starting_config.get('model_params', {}))
@@ -523,6 +648,7 @@ class JobConfig(object):
         config.model_params['use_cuda'] = model_params.get('use_cuda', False)
         config.model_params['use_redis'] = model_params.get('use_redis', False)
         config.model_params['percentile_select'] = model_params.get('percentile_select', None)
+        config.model_params['normalize_scores'] = model_params.get('normalize_scores', True)
         # Attempt to load any API request model params
         api_model = api_request.model
         if api_model:
@@ -591,6 +717,7 @@ class JobConfig(object):
             match_paper_invitation = job_config.get('match_paper_invitation'),
             match_paper_venueid = job_config.get('match_paper_venueid'),
             match_paper_id = job_config.get('match_paper_id'),
+            match_paper_content = job_config.get('match_paper_content'),
             alternate_match_group=job_config.get('alternate_match_group'),
             reviewer_ids=job_config.get('reviewer_ids'),
             dataset = job_config.get('dataset'),
@@ -603,7 +730,9 @@ class JobConfig(object):
             paper_venueid = job_config.get('paper_venueid'),
             paper_content = job_config.get('paper_content'),
             paper_id = job_config.get('paper_id'),
-            model_params = job_config.get('model_params')
+            provided_submissions = job_config.get('provided_submissions'),
+            model_params = job_config.get('model_params'),
+            machine_type=job_config.get('machine_type')
         )
         return config
 
@@ -719,28 +848,38 @@ class GCPInterface(object):
         elif key == 'Group-Note' or key == 'Note-Group':
             note_entity = api_request.entityA if api_request.entityA['type'] == 'Note' else api_request.entityB
             group_entity = api_request.entityA if api_request.entityA['type'] == 'Group' else api_request.entityB
-            if 'invitation' in note_entity:
-                return f"inv-{group_entity['memberOf']}"
-            elif 'withVenueid' in note_entity:
-                return f"venueid-{group_entity['memberOf']}"
-            elif 'id' in note_entity:
-                return f"pid-{note_entity['id']}-{group_entity['memberOf']}"
+
+            note_value = APIRequest.extract_from_entity(
+                note_entity,
+                get_prefix=True,
+                separator='-'
+            )
+            grp_value = APIRequest.extract_from_entity(
+                group_entity,
+                get_prefix=True,
+                separator='-'
+            )
+
+            return f"{note_value}-{grp_value}"
             
         elif key == 'Note-Note':
             match_note_entity = api_request.entityA
             submission_note_entity = api_request.entityB
-            note_fields = ['invitation', 'withVenueid', 'id']
 
-            match_prefix, submission_prefix = None, None
-            for field in note_fields:
-                if field in match_note_entity:
-                    match_prefix = match_note_entity[field]
-                if field in submission_note_entity:
-                    submission_prefix = submission_note_entity[field]
+            match_note_value = APIRequest.extract_from_entity(
+                match_note_entity,
+                get_value=True,
+                separator='-'
+            )
+            submission_note_value = APIRequest.extract_from_entity(
+                submission_note_entity,
+                get_value=True,
+                separator='-'
+            )
 
-            return f"{match_prefix}-{submission_prefix}"
+            return f"{match_note_value}-{submission_note_value}"
 
-    def create_job(self, json_request: dict, user_id: str = None, client = None):
+    def create_job(self, json_request: dict, job_id: str, user_id: str = None, client = None, machine_type = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -775,8 +914,7 @@ class GCPInterface(object):
 
         or_client = client if client else self.client
         api_request = APIRequest(json_request)
-        job_id = GCPInterface._generate_vertex_prefix(api_request) + '-' + datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        valid_vertex_id = job_id.replace('/','-').replace(':','-').replace('_','-').replace('.', '-').lower()
+        valid_vertex_id = job_id + '-' + str(int(time.time() * 1000))
 
         folder_path = f"{self.jobs_folder}/{valid_vertex_id}"
         data = api_request.to_json()
@@ -793,17 +931,21 @@ class GCPInterface(object):
         #data['dump_archives'] = True
 
         # Deleted metadata fields before hitting the pipeline
+        data['machine_type'] = machine_type
         data['user_id'] = user_id if user_id else get_user_id(or_client)
         data['cdate'] = int(time.time() * 1000)
 
         write_json_to_gcs(self.bucket_name, folder_path, self.request_fname, data)
+
+        # Pass GCS path instead of JSON data to avoid parameter size limits
+        gcs_request_path = f"gs://{self.bucket_name}/{folder_path}/{self.request_fname}"
 
         job = aip.PipelineJob(
             display_name = valid_vertex_id,
             template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
-            parameter_values = {'job_config': json.dumps(data)},
+            parameter_values = {'gcs_request_path': gcs_request_path, 'machine_type': machine_type},
             labels = self.service_label)
 
         job.submit()

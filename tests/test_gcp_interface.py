@@ -1,4 +1,5 @@
 from unittest.mock import patch, MagicMock
+import shortuuid
 import pytest
 import json
 import datetime
@@ -7,6 +8,7 @@ import openreview
 from copy import deepcopy
 from expertise.service.utils import GCPInterface, JobDescription, JobStatus
 from google.cloud.aiplatform_v1.types import PipelineState
+from expertise.utils.utils import generate_job_id
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -73,9 +75,13 @@ def _setup_abc_cc(clean_start_conference, client, openreview_client):
     )
 
 # Test case for the `create_job` method
+@patch("expertise.service.utils.time.time")  # Mock time.time()
 @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
-def test_create_job(mock_storage_client, mock_pipeline_job, openreview_client):
+def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openreview_client):
+    # Mock time.time() to return a fixed value
+    mock_time.return_value = 1234567890.123  # Fixed timestamp for testing
+    
     # Setup mock storage client
     mock_bucket = MagicMock()
     mock_blob = MagicMock()
@@ -123,11 +129,19 @@ def test_create_job(mock_storage_client, mock_pipeline_job, openreview_client):
         }
     }
 
+    # Generate a test job_id
+    test_job_id = generate_job_id()
+    
     # Call the `create_job` method
     # deepcopy because APIRequest() destroys the original
-    result = gcp_interface.create_job(deepcopy(json_request))
+    result = gcp_interface.create_job(deepcopy(json_request), job_id=test_job_id, machine_type='small')
+    
+    expected_timestamp_ms = int(1234567890.123 * 1000)  # 1234567890123
+    expected_valid_vertex_id = f"{test_job_id}-{expected_timestamp_ms}"
+    assert result == expected_valid_vertex_id
     assert isinstance(result, str)
     assert len(result) > 0
+    assert result.startswith(test_job_id)
 
     # Assertions
     # 1. Verify folder creation in GCS
@@ -149,6 +163,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, openreview_client):
     assert submitted_json['baseurl_v2'] == 'http://localhost:3001'
     assert submitted_json['gcs_folder'] == f"gs://test-bucket/{expected_folder_path}"
     assert submitted_json['user_id'] == 'openreview.net'
+    assert submitted_json['cdate'] == expected_timestamp_ms  # Verify timestamp is stored
 
     # 3. Verify PipelineJob submission
     mock_pipeline_job.assert_called_once_with(
@@ -159,7 +174,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, openreview_client):
         ),
         job_id=result,
         pipeline_root="gs://test-bucket/pipeline-root",
-        parameter_values={"job_config": json.dumps(submitted_json)},
+        parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json", "machine_type": "small"},
         labels={"test": "label"}
     )
     mock_pipeline_instance.submit.assert_called_once()
