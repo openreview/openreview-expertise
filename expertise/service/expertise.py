@@ -520,12 +520,12 @@ class ExpertiseService(BaseExpertiseService):
             config=config,
             logger=logger,
             containerized=containerized,
-            sync_on_disk=config['SYNC_ON_DISK'],            # We want to store jobs on disk
+            sync_on_disk=True,            # We want to store jobs on disk
             worker_attempts=config['WORKER_ATTEMPTS'],
             worker_backoff_delay=config['WORKER_BACKOFF_DELAY'],
             worker_concurrency=config['ACTIVE_JOBS'],
             worker_lock_duration=config['LOCK_DURATION'],
-            worker_autorun=False
+            worker_autorun=False         # If that is what you originally had
         )
 
     async def worker_process(self, job, token):
@@ -606,8 +606,10 @@ class ExpertiseService(BaseExpertiseService):
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
 
-        # Persist to disk/redis after setting queue status
-        self.logger.info('Persisting validated config')
+        # Config has passed validation - add it to the user index
+        self.logger.info('just before submitting')
+
+        self.logger.info(f"\nconf: {config.to_json()}\n")
         self._save_config(config)
 
         future = asyncio.run_coroutine_threadsafe(
@@ -800,12 +802,12 @@ class ExpertiseCloudService(BaseExpertiseService):
             config=config,
             logger=logger,
             containerized=containerized,
-            sync_on_disk=config['SYNC_ON_DISK'],            # We want to store jobs on disk
+            sync_on_disk=True,            # We want to store jobs on disk
             worker_attempts=config['WORKER_ATTEMPTS'],
             worker_backoff_delay=config['WORKER_BACKOFF_DELAY'],
             worker_concurrency=config['ACTIVE_JOBS'],
             worker_lock_duration=config['LOCK_DURATION'],
-            worker_autorun=False
+            worker_autorun=False         # If that is what you originally had
         )
         self.poll_interval = config['POLL_INTERVAL']
         self.max_attempts = config['POLL_MAX_ATTEMPTS']

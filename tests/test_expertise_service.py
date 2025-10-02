@@ -195,8 +195,7 @@ class TestExpertiseService():
         redis = RedisDatabase(
             host='localhost',
             port=6379,
-            db=10,
-            sync_on_disk=True
+            db=10
         )
 
         # Find job using all jobs
@@ -216,8 +215,7 @@ class TestExpertiseService():
         redis = RedisDatabase(
             host='localhost',
             port=6379,
-            db=10,
-            sync_on_disk=False
+            db=10
         )
 
         # Find job using all jobs
