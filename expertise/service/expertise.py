@@ -327,22 +327,13 @@ class BaseExpertiseService:
         running_config.baseurl_v2 = None
         running_config.user_id = None
 
-    def _prepare_config(self, request=None, job_id=None, client_v1=None, client=None) -> dict:
+    def _validate_request(self, request=None, job_id=None, client_v1=None, client=None):
         """
-        Overwrites/add specific key-value pairs in the submitted job config
-        :param request: Contains the initial request from the user
-        :type request: dict
+        Validate and build a JobConfig for a request.
 
-        :param job_id: If provided, use this job ID instead of generating a new one
-        :type job_id: str
-
-        :param save: If True, save the job config to Redis and disk after preparing it
-        :type save: bool
-
-        :returns config: A modified version of config with the server-required fields
-
-        :raises Exception: Raises exceptions when a required field is missing, or when a parameter is provided
-                        when it is not expected
+        :param request: Submitted job request
+        :param job_id: Optional job id to reuse
+        :returns: (JobConfig, token)
         """
 
         if job_id:
@@ -353,7 +344,7 @@ class BaseExpertiseService:
                 if 'not found' not in str(e):
                     raise e
 
-        # Validate fields
+        # Resolve clients
         or_client_v1 = client_v1 if client_v1 else self.client
         or_client = client if client else self.client_v2
 
@@ -369,8 +360,10 @@ class BaseExpertiseService:
             working_dir = self.working_dir
         )
         self.logger.info(f"Config validation passed - {config.to_json()}")
+        return config, or_client.token
 
-        # Create directory and config file
+    def _save_config(self, config: JobConfig):
+        """Create job directory, write config.json, and save to Redis."""
         if not os.path.isdir(config.dataset['directory']):
             os.makedirs(config.dataset['directory'])
         with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
@@ -378,8 +371,7 @@ class BaseExpertiseService:
         if not self.containerized:
             self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
             self.redis.save_job(config)
-
-        return config, or_client.token
+        return config
 
     def _get_subdirs(self, user_id):
         """
@@ -533,7 +525,7 @@ class ExpertiseService(BaseExpertiseService):
             worker_backoff_delay=config['WORKER_BACKOFF_DELAY'],
             worker_concurrency=config['ACTIVE_JOBS'],
             worker_lock_duration=config['LOCK_DURATION'],
-            worker_autorun=False         # If that is what you originally had
+            worker_autorun=False
         )
 
     async def worker_process(self, job, token):
@@ -605,7 +597,7 @@ class ExpertiseService(BaseExpertiseService):
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
-        config, token = self._prepare_config(request, client_v1=client_v1, client=client)
+        config, token = self._validate_request(request, client_v1=client_v1, client=client)
         job_id = config.job_id
 
         config_log = self._get_log_from_config(config)
@@ -614,11 +606,9 @@ class ExpertiseService(BaseExpertiseService):
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
 
-        # Config has passed validation - add it to the user index
-        self.logger.info('just before submitting')
-
-        self.logger.info(f"\nconf: {config.to_json()}\n")
-        self.redis.save_job(config)
+        # Persist to disk/redis after setting queue status
+        self.logger.info('Persisting validated config')
+        self._save_config(config)
 
         future = asyncio.run_coroutine_threadsafe(
             self.queue.add(
@@ -815,7 +805,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             worker_backoff_delay=config['WORKER_BACKOFF_DELAY'],
             worker_concurrency=config['ACTIVE_JOBS'],
             worker_lock_duration=config['LOCK_DURATION'],
-            worker_autorun=False         # If that is what you originally had
+            worker_autorun=False
         )
         self.poll_interval = config['POLL_INTERVAL']
         self.max_attempts = config['POLL_MAX_ATTEMPTS']
@@ -829,7 +819,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.cloud.set_client(client_v2)
 
     def compute_machine_type(self, client_v1, client, job_id):
-        config, _ = self._prepare_config(
+        config, _ = self._validate_request(
             job_id=job_id,
             client_v1=client_v1,
             client=client
@@ -1010,11 +1000,13 @@ class ExpertiseCloudService(BaseExpertiseService):
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
-        config, _ = self._prepare_config(deepcopy(request), client_v1=client_v1, client=client)
+        config, _ = self._validate_request(deepcopy(request), client_v1=client_v1, client=client)
+        self._save_config(config) # Save initialized
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
-        self.redis.save_job(config)
+        # Persist to disk/redis after setting queue status
+        self._save_config(config)
 
         config_log = self._get_log_from_config(config)
         self.logger.info(f"Adding job {config.job_id} to queue")
