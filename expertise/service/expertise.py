@@ -442,6 +442,15 @@ class BaseExpertiseService:
         """Remove job artifacts from disk and Redis, returning a sanitized config."""
         config = self.redis.load_job(job_id, user_id)
 
+        # Only allow deletion when job has completed or errored out
+        allowed_states = {
+            JobStatus.COMPLETED, JobStatus.ERROR
+        }
+        if config.status not in allowed_states:
+            raise openreview.OpenReviewException(
+                f"Bad request: cannot delete job in status {config.status}"
+            )
+
         self.logger.info(f"Deleting {config.job_dir} for {user_id}")
         if os.path.isdir(config.job_dir):
             shutil.rmtree(config.job_dir)
