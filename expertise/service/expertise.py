@@ -598,6 +598,7 @@ class ExpertiseService(BaseExpertiseService):
                 raise openreview.OpenReviewException("Request already in queue")
 
         config, token = self._validate_request(request, client_v1=client_v1, client=client)
+        self._save_config(config) # Save initialized
         job_id = config.job_id
 
         config_log = self._get_log_from_config(config)
