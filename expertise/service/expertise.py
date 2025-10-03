@@ -327,7 +327,7 @@ class BaseExpertiseService:
         running_config.baseurl_v2 = None
         running_config.user_id = None
 
-    def _validate_request(self, client_v1, client, request, job_id=None):
+    def _validate_request(self, client_v1, client, request):
         """
         Validate and build a JobConfig for a request.
 
@@ -344,7 +344,6 @@ class BaseExpertiseService:
         validated_request = APIRequest(request)
         config = JobConfig.from_request(
             api_request = validated_request,
-            job_id=job_id,
             starting_config = self.default_expertise_config,
             openreview_client= or_client_v1,
             openreview_client_v2= or_client,
