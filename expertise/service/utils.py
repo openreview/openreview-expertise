@@ -778,6 +778,10 @@ class GCPInterface(object):
             self.bucket_name = config['GCP_BUCKET_NAME']
             self.jobs_folder = config['GCP_JOBS_FOLDER']
             self.service_label = config['GCP_SERVICE_LABEL']
+            self.mongodb_secret_id = config.get('MONGODB_SECRET_ID')
+            self.mongodb_secret_version = config.get('MONGODB_SECRET_VERSION', 'latest')
+            self.mongo_embeddings_db = config.get('MONGO_EMBEDDINGS_DB')
+            self.mongo_embeddings_collection = config.get('MONGO_EMBEDDINGS_COLLECTION')
         else:
             self.project_id = project_id
             self.project_number = project_number
@@ -789,6 +793,10 @@ class GCPInterface(object):
             self.bucket_name = bucket_name
             self.jobs_folder = jobs_folder
             self.service_label = service_label
+            self.mongodb_secret_id = None
+            self.mongodb_secret_version = 'latest'
+            self.mongo_embeddings_db = None
+            self.mongo_embeddings_collection = None
 
         required_fields = [
             self.project_id,
@@ -940,12 +948,25 @@ class GCPInterface(object):
         # Pass GCS path instead of JSON data to avoid parameter size limits
         gcs_request_path = f"gs://{self.bucket_name}/{folder_path}/{self.request_fname}"
 
+        parameter_values = {
+            'gcs_request_path': gcs_request_path,
+            'machine_type': machine_type,
+        }
+        if self.mongodb_secret_id:
+            parameter_values['mongodb_secret_id'] = self.mongodb_secret_id
+        if self.mongodb_secret_version:
+            parameter_values['secret_version'] = self.mongodb_secret_version
+        if self.mongo_embeddings_db:
+            parameter_values['mongodb_db'] = self.mongo_embeddings_db
+        if self.mongo_embeddings_collection:
+            parameter_values['mongodb_collection'] = self.mongo_embeddings_collection
+
         job = aip.PipelineJob(
             display_name = valid_vertex_id,
             template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
-            parameter_values = {'gcs_request_path': gcs_request_path, 'machine_type': machine_type},
+            parameter_values = parameter_values,
             labels = self.service_label)
 
         job.submit()
