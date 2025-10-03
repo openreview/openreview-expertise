@@ -327,7 +327,7 @@ class BaseExpertiseService:
         running_config.baseurl_v2 = None
         running_config.user_id = None
 
-    def _validate_request(self, request=None, job_id=None, client_v1=None, client=None):
+    def _validate_request(self, client_v1, client, request):
         """
         Validate and build a JobConfig for a request.
 
@@ -335,14 +335,6 @@ class BaseExpertiseService:
         :param job_id: Optional job id to reuse
         :returns: (JobConfig, token)
         """
-
-        if job_id:
-            try:
-                job = self.redis.load_job(job_id, get_user_id(client))
-                return job, client_v1.token
-            except Exception as e:
-                if 'not found' not in str(e):
-                    raise e
 
         # Resolve clients
         or_client_v1 = client_v1 if client_v1 else self.client
@@ -360,7 +352,7 @@ class BaseExpertiseService:
             working_dir = self.working_dir
         )
         self.logger.info(f"Config validation passed - {config.to_json()}")
-        return config, or_client.token
+        return config
 
     def _save_config(self, config: JobConfig):
         """Create job directory, write config.json, and save to Redis."""
@@ -597,7 +589,11 @@ class ExpertiseService(BaseExpertiseService):
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
-        config, token = self._validate_request(request, client_v1=client_v1, client=client)
+        config = self._validate_request(
+            client_v1,
+            client,
+            request
+        )
         self._save_config(config) # Save initialized
         job_id = config.job_id
 
@@ -620,7 +616,7 @@ class ExpertiseService(BaseExpertiseService):
                     "job_id": job_id,
                     "request_key": request_key,
                     "user_id": config.user_id,
-                    "token": token
+                    "token": client.token
                 },
                 {
                     'jobId': job_id,
@@ -822,11 +818,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.cloud.set_client(client_v2)
 
     def compute_machine_type(self, client_v1, client, job_id):
-        config, _ = self._validate_request(
-            job_id=job_id,
-            client_v1=client_v1,
-            client=client
-        )
+        config = self.redis.load_job(job_id, get_user_id(client))
         if config.machine_type is not None:
             return config.machine_type
         config = config.to_json()
@@ -1003,7 +995,11 @@ class ExpertiseCloudService(BaseExpertiseService):
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
-        config, _ = self._validate_request(deepcopy(request), client_v1=client_v1, client=client)
+        config = self._validate_request(
+            client_v1,
+            client,
+            deepcopy(request)
+        )
         self._save_config(config) # Save initialized
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
