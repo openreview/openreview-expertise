@@ -954,8 +954,8 @@ class GCPInterface(object):
         }
         if self.mongodb_secret_id:
             parameter_values['mongodb_secret_id'] = self.mongodb_secret_id
-        if self.mongodb_secret_version:
-            parameter_values['secret_version'] = self.mongodb_secret_version
+            if self.mongodb_secret_version:
+                parameter_values['secret_version'] = self.mongodb_secret_version
         if self.mongo_embeddings_db:
             parameter_values['mongodb_db'] = self.mongo_embeddings_db
         if self.mongo_embeddings_collection:
