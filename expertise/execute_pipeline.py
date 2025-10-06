@@ -100,6 +100,13 @@ def run_pipeline(
         specter_dir = os.getenv('SPECTER_DIR')
         mfr_vocab_dir = os.getenv('MFR_VOCAB_DIR')
         mfr_checkpoint_dir = os.getenv('MFR_CHECKPOINT_DIR')
+        # Log whether Mongo env vars are present (do not print secret values)
+        mongo_db = os.getenv('MONGO_EMBEDDINGS_DB')
+        mongo_coll = os.getenv('MONGO_EMBEDDINGS_COLLECTION')
+        mongo_uri_set = 'yes' if os.getenv('MONGODB_URI') else 'no'
+        print(f"Mongo env vars -> MONGODB_URI set: {mongo_uri_set}, "
+              f"MONGO_EMBEDDINGS_DB: '{mongo_db or ''}', "
+              f"MONGO_EMBEDDINGS_COLLECTION: '{mongo_coll or ''}'")
         server_config ={
             'OPENREVIEW_BASEURL': baseurl_v1,
             'OPENREVIEW_BASEURL_V2': baseurl_v2,

@@ -19,13 +19,23 @@ def execute_expertise(config):
         submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.json'))
 
     embeddings_cache = None
-    if os.getenv('MONGODB_URI') and os.getenv('MONGO_EMBEDDINGS_DB') and os.getenv('MONGO_EMBEDDINGS_COLLECTION'):
+    mongo_uri = os.getenv('MONGODB_URI')
+    mongo_db = os.getenv('MONGO_EMBEDDINGS_DB')
+    mongo_coll = os.getenv('MONGO_EMBEDDINGS_COLLECTION')
+    if mongo_uri and mongo_db and mongo_coll:
+        print(f"Initializing EmbeddingsCache (db='{mongo_db}', collection='{mongo_coll}')")
         embeddings_cache = EmbeddingsCache(
-            mongodb_uri=os.getenv('MONGODB_URI'),
-            db_name=os.getenv('MONGO_EMBEDDINGS_DB'),
-            collection_name=os.getenv('MONGO_EMBEDDINGS_COLLECTION'),
+            mongodb_uri=mongo_uri,
+            db_name=mongo_db,
+            collection_name=mongo_coll,
         )
-        embeddings_cache.connect()
+        if embeddings_cache.connect():
+            print("EmbeddingsCache connected")
+        else:
+            print("EmbeddingsCache connection failed; proceeding without cache")
+            embeddings_cache = None
+    else:
+        print("EmbeddingsCache disabled: Mongo env vars not fully set")
 
     if config['model'] == 'bm25':
         from .models import bm25
