@@ -180,7 +180,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
     mock_pipeline_instance.submit.assert_called_once()
 
 
-# New test: verify Mongo secret and DB params are passed to pipeline when provided in config
+# New test: verify Mongo secret/DB params and service account are passed to pipeline when provided in config
 @patch("expertise.service.utils.time.time")  # Mock time.time()
 @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
@@ -210,6 +210,7 @@ def test_create_job_with_mongo_params(mock_storage_client, mock_pipeline_job, mo
         'GCP_BUCKET_NAME': 'test-bucket',
         'GCP_JOBS_FOLDER': 'jobs',
         'GCP_SERVICE_LABEL': {'test': 'label'},
+        'GCP_SERVICE_ACCOUNT': 'sa-under-test@test-project.iam.gserviceaccount.com',
         # New config keys
         'MONGODB_SECRET_ID': 'mongodb-uri',
         'MONGODB_SECRET_VERSION': '5',
@@ -248,6 +249,11 @@ def test_create_job_with_mongo_params(mock_storage_client, mock_pipeline_job, mo
     assert params["secret_version"] == '5'
     assert params["mongodb_db"] == 'openreview_test'
     assert params["mongodb_collection"] == 'openreview_embeddings'
+    # Service account gets forwarded as a parameter too
+    assert params["service_account"] == 'sa-under-test@test-project.iam.gserviceaccount.com'
+
+    # 4. Verify SA is set on PipelineJob kwargs
+    assert kwargs['service_account'] == 'sa-under-test@test-project.iam.gserviceaccount.com'
 
 # Test case for the `get_job_status_by_job_id` method
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
