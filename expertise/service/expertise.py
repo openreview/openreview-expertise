@@ -606,7 +606,6 @@ class ExpertiseService(BaseExpertiseService):
         self.logger.info('just before submitting')
 
         self.logger.info(f"\nconf: {config.to_json()}\n")
-        self._save_config(config)
 
         future = asyncio.run_coroutine_threadsafe(
             self.queue.add(
@@ -1003,8 +1002,6 @@ class ExpertiseCloudService(BaseExpertiseService):
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
-        # Persist to disk/redis after setting queue status
-        self._save_config(config)
 
         config_log = self._get_log_from_config(config)
         self.logger.info(f"Adding job {config.job_id} to queue")
