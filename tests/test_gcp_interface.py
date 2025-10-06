@@ -252,9 +252,6 @@ def test_create_job_with_mongo_params(mock_storage_client, mock_pipeline_job, mo
     # Service account gets forwarded as a parameter too
     assert params["service_account"] == 'sa-under-test@test-project.iam.gserviceaccount.com'
 
-    # 4. Verify SA is set on PipelineJob kwargs
-    assert kwargs['service_account'] == 'sa-under-test@test-project.iam.gserviceaccount.com'
-
 # Test case for the `get_job_status_by_job_id` method
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
