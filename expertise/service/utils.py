@@ -764,7 +764,8 @@ class GCPInterface(object):
         openreview_client=None,
         pipeline_tag='latest',
         logger=None,
-        gcs_client=None
+        gcs_client=None,
+        service_account=None
     ):
 
         if config is not None:
@@ -782,6 +783,7 @@ class GCPInterface(object):
             self.mongodb_secret_version = config.get('MONGODB_SECRET_VERSION', 'latest')
             self.mongo_embeddings_db = config.get('MONGO_EMBEDDINGS_DB')
             self.mongo_embeddings_collection = config.get('MONGO_EMBEDDINGS_COLLECTION')
+            self.service_account = config.get('GCP_SERVICE_ACCOUNT')
         else:
             self.project_id = project_id
             self.project_number = project_number
@@ -797,6 +799,7 @@ class GCPInterface(object):
             self.mongodb_secret_version = 'latest'
             self.mongo_embeddings_db = None
             self.mongo_embeddings_collection = None
+            self.service_account = service_account
 
         required_fields = [
             self.project_id,
@@ -961,13 +964,23 @@ class GCPInterface(object):
         if self.mongo_embeddings_collection:
             parameter_values['mongodb_collection'] = self.mongo_embeddings_collection
 
-        job = aip.PipelineJob(
+        # Build PipelineJob kwargs and parameters
+        job_kwargs = dict(
             display_name = valid_vertex_id,
             template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
             parameter_values = parameter_values,
-            labels = self.service_label)
+            labels = self.service_label
+        )
+
+        # If a service account is configured, submit the pipeline run with it
+        if self.service_account is not None:
+            job_kwargs['service_account'] = self.service_account
+            # Also pass it through as a pipeline parameter so downstream components can use it
+            job_kwargs['parameter_values']['service_account'] = self.service_account
+
+        job = aip.PipelineJob(**job_kwargs)
 
         job.submit()
 

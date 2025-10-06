@@ -205,7 +205,8 @@ if __name__ == '__main__':
         mongodb_db: str,
         mongodb_collection: str,
         machine_type: str = 'small',
-        secret_version: str = 'latest'
+        secret_version: str = 'latest',
+        service_account: str = ''
     ):
 
         # Conditional execution based on job size
@@ -218,7 +219,8 @@ if __name__ == '__main__':
                 mongodb_db=mongodb_db,
                 mongodb_collection=mongodb_collection,
                 secret_version=secret_version,
-                project_id=args.project
+                project_id=args.project,
+                service_account=service_account
             ).set_display_name("Running Small Expertise Pipeline")
         with Elif(machine_type == config['MEDIUM_NAME']): # medium
             run_medium = medium_expertise_job_from_file_input(
@@ -229,7 +231,8 @@ if __name__ == '__main__':
                 mongodb_db=mongodb_db,
                 mongodb_collection=mongodb_collection,
                 secret_version=secret_version,
-                project_id=args.project
+                project_id=args.project,
+                service_account=service_account
             ).set_display_name("Running Medium Expertise Pipeline")
         with Else():  # large
             run_large = large_expertise_job_from_file_input(
@@ -240,7 +243,8 @@ if __name__ == '__main__':
                 mongodb_db=mongodb_db,
                 mongodb_collection=mongodb_collection,
                 secret_version=secret_version,
-                project_id=args.project
+                project_id=args.project,
+                service_account=service_account
           ).set_display_name("Running Large Expertise Pipeline")
 
     compiler.Compiler().compile(
