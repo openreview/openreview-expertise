@@ -963,6 +963,8 @@ class GCPInterface(object):
             parameter_values['mongodb_db'] = self.mongo_embeddings_db
         if self.mongo_embeddings_collection:
             parameter_values['mongodb_collection'] = self.mongo_embeddings_collection
+        if self.service_account is not None:
+            parameter_values['service_account'] = self.service_account
 
         # Build PipelineJob kwargs and parameters
         job_kwargs = dict(
@@ -974,14 +976,7 @@ class GCPInterface(object):
             labels = self.service_label
         )
 
-        # If a service account is configured, submit the pipeline run with it
-        if self.service_account is not None:
-            job_kwargs['service_account'] = self.service_account
-            # Also pass it through as a pipeline parameter so downstream components can use it
-            job_kwargs['parameter_values']['service_account'] = self.service_account
-
         job = aip.PipelineJob(**job_kwargs)
-
         job.submit()
 
         return valid_vertex_id
