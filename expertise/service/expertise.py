@@ -196,9 +196,7 @@ class BaseExpertiseService:
 
         config.mdate = int(time.time() * 1000)
 
-        # Save job if we have a Redis instance
-        if not self.containerized:
-            self.redis.save_job(config)
+        self._save_config(config)
 
     def get_expertise_all_status(self, user_id, query_params):
         """
@@ -912,7 +910,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
         config.cloud_id = cloud_id
-        self.redis.save_job(config)
+        self._save_config(config)
 
         try:
             self.logger.info(f"In polling worker...")
