@@ -438,6 +438,30 @@ class BaseExpertiseService:
 
         return file_dir, metadata_dir
 
+    def del_expertise_job(self, user_id, job_id):
+        """Remove job artifacts from disk and Redis, returning a sanitized config."""
+        config = self.redis.load_job(job_id, user_id)
+
+        # Only allow deletion when job has completed or errored out
+        allowed_states = {
+            JobStatus.COMPLETED, JobStatus.ERROR
+        }
+        if config.status not in allowed_states:
+            raise openreview.OpenReviewException(
+                f"Bad request: cannot delete job in status {config.status}"
+            )
+
+        self.logger.info(f"Deleting {config.job_dir} for {user_id}")
+        if os.path.isdir(config.job_dir):
+            shutil.rmtree(config.job_dir)
+        else:
+            self.logger.info("No files found - only removing Redis entry")
+
+        self.redis.remove_job(user_id, job_id)
+
+        self._filter_config(config)
+        return config.to_json()
+
     def _get_job_name(self, request):
         job_name_parts = [request.get('name', 'No name provided')]
         entities = []
@@ -774,32 +798,6 @@ class ExpertiseService(BaseExpertiseService):
 
         return result
 
-    def del_expertise_job(self, user_id, job_id):
-        """
-        Returns the filtered config of a job and deletes the job directory
-
-        :param user_id: The ID of the user accessing the data
-        :type user_id: str
-
-        :param job_id: ID of the specific job to look up
-        :type job_id: str
-
-        :returns: Filtered config of the job to be deleted
-        """
-        config = self.redis.load_job(job_id, user_id)
-        
-        # Clear directory and Redis entry
-        self.logger.info(f"Deleting {config.job_dir} for {user_id}")
-        if os.path.isdir(config.job_dir):
-            shutil.rmtree(config.job_dir)
-        else:
-            self.logger.info(f"No files found - only removing Redis entry")
-        self.redis.remove_job(user_id, job_id)
-
-        # Return filtered config
-        self._filter_config(config)
-        return config.to_json()
-
 class ExpertiseCloudService(BaseExpertiseService):
 
     def __init__(self, config, logger, containerized = False):
@@ -1089,29 +1087,3 @@ class ExpertiseCloudService(BaseExpertiseService):
         """
         redis_job = self.redis.load_job(job_id, user_id)
         return self.cloud.get_job_results(user_id, redis_job.cloud_id, delete_on_get)
-
-    def del_expertise_job(self, user_id, job_id):
-        """
-        Returns the filtered config of a job and deletes the job directory
-
-        :param user_id: The ID of the user accessing the data
-        :type user_id: str
-
-        :param job_id: ID of the specific job to look up
-        :type job_id: str
-
-        :returns: Filtered config of the job to be deleted
-        """
-        config = self.redis.load_job(job_id, user_id)
-        
-        # Clear directory and Redis entry
-        self.logger.info(f"Deleting {config.job_dir} for {user_id}")
-        if os.path.isdir(config.job_dir):
-            shutil.rmtree(config.job_dir)
-        else:
-            self.logger.info(f"No files found - only removing Redis entry")
-        self.redis.remove_job(user_id, job_id)
-
-        # Return filtered config
-        self._filter_config(config)
-        return config.to_json()
