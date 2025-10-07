@@ -207,10 +207,8 @@ class TestExpertiseService():
         # Find job using job id
         test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com')
         redis.save_job(test_config)
-        try:
+        with pytest.raises(openreview.OpenReviewException, match="Job not found"):
             returned_configs = redis.load_job(test_config.job_id, 'test_user1@mail.com')
-        except openreview.OpenReviewException as e:
-            assert str(e) == 'Job not found'
 
     def test_on_redis_on_disk(self):
         # Load an example config and store it in Redis with no files
@@ -236,6 +234,11 @@ class TestExpertiseService():
         assert returned_config.job_id == 'abcde'
 
         shutil.rmtree(f"./tests/jobs/")
+
+        # Clean up Redis job
+        redis.remove_job(
+            'test_user1@mail.com', test_config.job_id
+        )
 
     def test_request_expertise_with_no_config(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
@@ -639,6 +642,16 @@ class TestExpertiseService():
                     assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
 
         assert upweighted_note_id not in all_publication_ids
+
+        # Check that all configs are completed
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10
+        )
+        returned_configs = redis.load_all_jobs('openreview.net')
+        for config in returned_configs:
+            assert config.status == 'Completed', f"Found job with status {config.status}: {config.job_id}"
 
         # Make a request with weight specification, use articleSubmittedToOpenReview
         response = test_client.post(
