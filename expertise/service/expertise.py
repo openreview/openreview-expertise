@@ -542,9 +542,14 @@ class ExpertiseService(BaseExpertiseService):
         )
 
     async def worker_process(self, job, token):
+        descriptions = JobDescription.VALS.value
         job_id = job.data['job_id']
         user_id = job.data['user_id']
         config = self.redis.load_job(job_id, user_id)
+        config.mdate = int(time.time() * 1000)
+        config.status = JobStatus.QUEUED
+        config.description = descriptions[JobStatus.QUEUED]
+        self._save_config(config)
         or_token = job.data['token']
         openreview_client = openreview.Client(
             token=or_token,
@@ -619,10 +624,6 @@ class ExpertiseService(BaseExpertiseService):
         job_id = config.job_id
 
         config_log = self._get_log_from_config(config)
-
-        config.mdate = int(time.time() * 1000)
-        config.status = JobStatus.QUEUED
-        config.description = descriptions[JobStatus.QUEUED]
 
         # Config has passed validation - add it to the user index
         self.logger.info('just before submitting')
@@ -875,6 +876,9 @@ class ExpertiseCloudService(BaseExpertiseService):
         or_token = job.data['token']
 
         config = self.redis.load_job(redis_id, user_id)
+        config.mdate = int(time.time() * 1000)
+        config.status = JobStatus.QUEUED
+        config.description = descriptions[JobStatus.QUEUED]
         openreview_client_v1 = openreview.Client(
             token=or_token,
             baseurl=config.baseurl
@@ -897,6 +901,8 @@ class ExpertiseCloudService(BaseExpertiseService):
                 user_id=user_id,
                 machine_type=machine_type
             )
+            config.cloud_id = cloud_id
+            self._save_config(config)
         except Exception as e:
             self.logger.error(f"Error creating cloud job for {redis_id}: {e} tr={e.__traceback__}")
             self.logger.error(f"Error details: {traceback.format_exc()}")
@@ -906,11 +912,6 @@ class ExpertiseCloudService(BaseExpertiseService):
             # If we fail to create the job, we should not proceed with polling
             # Re-raise exception to appear in the queue
             raise e.with_traceback(e.__traceback__)
-        config.mdate = int(time.time() * 1000)
-        config.status = JobStatus.QUEUED
-        config.description = descriptions[JobStatus.QUEUED]
-        config.cloud_id = cloud_id
-        self._save_config(config)
 
         try:
             self.logger.info(f"In polling worker...")
