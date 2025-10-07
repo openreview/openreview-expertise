@@ -38,7 +38,6 @@ class Predictor:
             # If no cache, all items need computation
             uncached_items = [(idx, note_id, paper_data) for idx, (note_id, paper_data) in enumerate(batch_data)]
 
-        print(f"Loaded {len(cached_items)} cached embeddings, need to compute {len(uncached_items)} embeddings")
         return cached_items, uncached_items
     
     def _save_batch_embeddings(self, uncached_items, embeddings):

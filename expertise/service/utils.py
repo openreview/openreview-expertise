@@ -967,7 +967,7 @@ class GCPInterface(object):
             parameter_values['service_account'] = self.service_account
 
         # Build PipelineJob kwargs and parameters
-        job_kwargs = dict(
+        job = aip.PipelineJob(
             display_name = valid_vertex_id,
             template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
@@ -976,7 +976,6 @@ class GCPInterface(object):
             labels = self.service_label
         )
 
-        job = aip.PipelineJob(**job_kwargs)
         job.submit()
 
         return valid_vertex_id
