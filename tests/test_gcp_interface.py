@@ -212,7 +212,7 @@ def test_create_job_with_mongo_params(mock_storage_client, mock_pipeline_job, mo
         'GCP_SERVICE_LABEL': {'test': 'label'},
         'GCP_SERVICE_ACCOUNT': 'sa-under-test@test-project.iam.gserviceaccount.com',
         # New config keys
-        'MONGODB_SECRET_ID': 'mongodb-uri',
+        'MONGO_URI_SECRET_ID': 'mongodb-uri',
         'MONGODB_SECRET_VERSION': '5',
         'MONGO_EMBEDDINGS_DB': 'openreview_test',
         'MONGO_EMBEDDINGS_COLLECTION': 'openreview_embeddings'
@@ -245,7 +245,7 @@ def test_create_job_with_mongo_params(mock_storage_client, mock_pipeline_job, mo
     assert params["gcs_request_path"] == f"gs://test-bucket/{expected_folder_path}/request.json"
     assert params["machine_type"] == "small"
     # New fields
-    assert params["mongodb_secret_id"] == 'mongodb-uri'
+    assert params["mongo_uri_secret_id"] == 'mongodb-uri'
     assert params["secret_version"] == '5'
     assert params["mongodb_db"] == 'openreview_test'
     assert params["mongodb_collection"] == 'openreview_embeddings'
