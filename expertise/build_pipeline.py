@@ -147,9 +147,6 @@ if __name__ == '__main__':
         import os
         from google.cloud import secretmanager
 
-        # Fetch MongoDB URI secret at runtime
-        if not project_id:
-            raise RuntimeError("project_id must be provided to access Secret Manager")
         sm_client = secretmanager.SecretManagerServiceClient()
         secret_name = f"projects/{project_id}/secrets/{mongodb_secret_id}/versions/{secret_version}"
         resp = sm_client.access_secret_version(request={"name": secret_name})
