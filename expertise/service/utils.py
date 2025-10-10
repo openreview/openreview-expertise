@@ -779,7 +779,7 @@ class GCPInterface(object):
             self.bucket_name = config['GCP_BUCKET_NAME']
             self.jobs_folder = config['GCP_JOBS_FOLDER']
             self.service_label = config['GCP_SERVICE_LABEL']
-            self.mongo_uri_secret_id = config.get('MONGO_URI_SECRET_ID')
+            self.mongodb_uri_secret_id = config.get('MONGODB_URI_SECRET_ID')
             self.mongodb_secret_version = config.get('MONGODB_SECRET_VERSION', 'latest')
             self.mongo_embeddings_db = config.get('MONGO_EMBEDDINGS_DB')
             self.mongo_embeddings_collection = config.get('MONGO_EMBEDDINGS_COLLECTION')
@@ -795,7 +795,7 @@ class GCPInterface(object):
             self.bucket_name = bucket_name
             self.jobs_folder = jobs_folder
             self.service_label = service_label
-            self.mongo_uri_secret_id = None
+            self.mongodb_uri_secret_id = None
             self.mongodb_secret_version = 'latest'
             self.mongo_embeddings_db = None
             self.mongo_embeddings_collection = None
@@ -955,8 +955,8 @@ class GCPInterface(object):
             'gcs_request_path': gcs_request_path,
             'machine_type': machine_type,
         }
-        if self.mongo_uri_secret_id:
-            parameter_values['mongo_uri_secret_id'] = self.mongo_uri_secret_id
+        if self.mongodb_uri_secret_id:
+            parameter_values['mongodb_uri_secret_id'] = self.mongodb_uri_secret_id
             if self.mongodb_secret_version:
                 parameter_values['secret_version'] = self.mongodb_secret_version
         if self.mongo_embeddings_db:

@@ -138,7 +138,7 @@ if __name__ == '__main__':
     )
     def execute_expertise_pipeline_op(
         gcs_request_path: str,
-        mongo_uri_secret_id: str,
+        mongodb_uri_secret_id: str,
         mongodb_db: str,
         mongodb_collection: str,
         secret_version: str = "latest",
@@ -148,7 +148,7 @@ if __name__ == '__main__':
         from google.cloud import secretmanager
 
         sm_client = secretmanager.SecretManagerServiceClient()
-        secret_name = f"projects/{project_id}/secrets/{mongo_uri_secret_id}/versions/{secret_version}"
+        secret_name = f"projects/{project_id}/secrets/{mongodb_uri_secret_id}/versions/{secret_version}"
         resp = sm_client.access_secret_version(request={"name": secret_name})
         mongodb_uri = resp.payload.data.decode("utf-8")
 
@@ -198,7 +198,7 @@ if __name__ == '__main__':
     )
     def expertise_pipeline(
         gcs_request_path: str,
-        mongo_uri_secret_id: str,
+        mongodb_uri_secret_id: str,
         mongodb_db: str,
         mongodb_collection: str,
         machine_type: str = 'small',
@@ -212,7 +212,7 @@ if __name__ == '__main__':
                 project=args.project,
                 location=args.kfp_region,
                 gcs_request_path=gcs_request_path,
-                mongo_uri_secret_id=mongo_uri_secret_id,
+                mongodb_uri_secret_id=mongodb_uri_secret_id,
                 mongodb_db=mongodb_db,
                 mongodb_collection=mongodb_collection,
                 secret_version=secret_version,
@@ -224,7 +224,7 @@ if __name__ == '__main__':
                 project=args.project,
                 location=args.kfp_region,
                 gcs_request_path=gcs_request_path,
-                mongo_uri_secret_id=mongo_uri_secret_id,
+                mongodb_uri_secret_id=mongodb_uri_secret_id,
                 mongodb_db=mongodb_db,
                 mongodb_collection=mongodb_collection,
                 secret_version=secret_version,
@@ -236,7 +236,7 @@ if __name__ == '__main__':
                 project=args.project,
                 location=args.kfp_region,
                 gcs_request_path=gcs_request_path,
-                mongo_uri_secret_id=mongo_uri_secret_id,
+                mongodb_uri_secret_id=mongodb_uri_secret_id,
                 mongodb_db=mongodb_db,
                 mongodb_collection=mongodb_collection,
                 secret_version=secret_version,
