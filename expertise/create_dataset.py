@@ -569,6 +569,7 @@ class OpenReviewExpertise(object):
         reduced_submissions = {}
         for paper in tqdm(submissions, total=len(submissions)):
             paper_id = paper.id
+            tmdate = getattr(paper, 'tmdate', None)
 
             if self.match_content(paper.content, paper_content):
 
@@ -583,6 +584,7 @@ class OpenReviewExpertise(object):
 
                 reduced_submissions[paper_id] = {
                     'id': paper_id,
+                    'mdate': tmdate,
                     'content': {
                         'title': paper_title,
                         'abstract': paper_abstr
@@ -609,10 +611,12 @@ class OpenReviewExpertise(object):
             print('adding records from provided submissions ')
             for submission in provided_submissions:
                 paper_id = submission['id']
+                mdate = submission.get('mdate', None)
                 title = submission['title']
                 abstract = submission['abstract']
                 reduced_submissions[paper_id] = {
                     'id': paper_id,
+                    'mdate': mdate,
                     'content': {
                         'title': title,
                         'abstract': abstract
@@ -667,10 +671,12 @@ class OpenReviewExpertise(object):
             print('adding records from provided submissions ')
             for submission in provided_submissions:
                 paper_id = submission['id']
+                mdate = submission.get('mdate', None)
                 title = submission['title']
                 abstract = submission['abstract']
                 reduced_submissions[paper_id] = {
                     'id': paper_id,
+                    'mdate': mdate,
                     'content': {
                         'title': title,
                         'abstract': abstract
