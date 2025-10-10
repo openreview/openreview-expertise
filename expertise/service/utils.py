@@ -764,7 +764,8 @@ class GCPInterface(object):
         openreview_client=None,
         pipeline_tag='latest',
         logger=None,
-        gcs_client=None
+        gcs_client=None,
+        service_account=None
     ):
 
         if config is not None:
@@ -778,6 +779,11 @@ class GCPInterface(object):
             self.bucket_name = config['GCP_BUCKET_NAME']
             self.jobs_folder = config['GCP_JOBS_FOLDER']
             self.service_label = config['GCP_SERVICE_LABEL']
+            self.mongodb_uri_secret_id = config.get('MONGODB_URI_SECRET_ID')
+            self.mongodb_secret_version = config.get('MONGODB_SECRET_VERSION', 'latest')
+            self.mongo_embeddings_db = config.get('MONGO_EMBEDDINGS_DB')
+            self.mongo_embeddings_collection = config.get('MONGO_EMBEDDINGS_COLLECTION')
+            self.service_account = config.get('GCP_SERVICE_ACCOUNT')
         else:
             self.project_id = project_id
             self.project_number = project_number
@@ -789,6 +795,11 @@ class GCPInterface(object):
             self.bucket_name = bucket_name
             self.jobs_folder = jobs_folder
             self.service_label = service_label
+            self.mongodb_uri_secret_id = None
+            self.mongodb_secret_version = 'latest'
+            self.mongo_embeddings_db = None
+            self.mongo_embeddings_collection = None
+            self.service_account = service_account
 
         required_fields = [
             self.project_id,
@@ -940,13 +951,30 @@ class GCPInterface(object):
         # Pass GCS path instead of JSON data to avoid parameter size limits
         gcs_request_path = f"gs://{self.bucket_name}/{folder_path}/{self.request_fname}"
 
+        parameter_values = {
+            'gcs_request_path': gcs_request_path,
+            'machine_type': machine_type,
+        }
+        if self.mongodb_uri_secret_id:
+            parameter_values['mongodb_uri_secret_id'] = self.mongodb_uri_secret_id
+            if self.mongodb_secret_version:
+                parameter_values['secret_version'] = self.mongodb_secret_version
+        if self.mongo_embeddings_db:
+            parameter_values['mongodb_db'] = self.mongo_embeddings_db
+        if self.mongo_embeddings_collection:
+            parameter_values['mongodb_collection'] = self.mongo_embeddings_collection
+        if self.service_account is not None:
+            parameter_values['service_account'] = self.service_account
+
+        # Build PipelineJob kwargs and parameters
         job = aip.PipelineJob(
             display_name = valid_vertex_id,
             template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
-            parameter_values = {'gcs_request_path': gcs_request_path, 'machine_type': machine_type},
-            labels = self.service_label)
+            parameter_values = parameter_values,
+            labels = self.service_label
+        )
 
         job.submit()
 
