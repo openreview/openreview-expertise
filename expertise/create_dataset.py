@@ -114,10 +114,14 @@ class OpenReviewExpertise(object):
                 not_submitted_to_openreview
             )
         
-        # Get domain from either domain field or invitation prefix
+        # Get domain from either domain field or invitation/invitations prefix
         domain = getattr(pub, 'domain', None)
         if domain is None:
-            domain = pub.invitation.split('/-/')[0]
+            if hasattr(pub, 'invitation'):
+                domain = pub.invitation.split('/-/')[0]
+            else:
+                # Older API2 notes may not have 'domain' and use 'invitations'
+                domain = pub.invitations[0].split('/-/')[0]
             
         # Find matching weight specification
         matching_weight, matching_priority = 1, -1 ## Default weight one
@@ -480,8 +484,9 @@ class OpenReviewExpertise(object):
             all_papers = all_papers + filtered_papers
 
         # Dump publications by profile id
-        with open(self.root.joinpath('publications_by_profile_id.json'), 'w') as f:
-            json.dump(publications_by_profile_id, f, indent=2)
+        if self.root.is_dir():
+            with open(self.root.joinpath('publications_by_profile_id.json'), 'w') as f:
+                json.dump(publications_by_profile_id, f, indent=2)
         
         return all_papers
     

@@ -11,7 +11,7 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
-from expertise.service.utils import JobConfig, RedisDatabase
+from expertise.service.utils import JobConfig, RedisDatabase, JobStatus, JobDescription
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -207,10 +207,8 @@ class TestExpertiseService():
         # Find job using job id
         test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com')
         redis.save_job(test_config)
-        try:
+        with pytest.raises(openreview.OpenReviewException, match="Job not found"):
             returned_configs = redis.load_job(test_config.job_id, 'test_user1@mail.com')
-        except openreview.OpenReviewException as e:
-            assert str(e) == 'Job not found'
 
     def test_on_redis_on_disk(self):
         # Load an example config and store it in Redis with no files
@@ -236,6 +234,11 @@ class TestExpertiseService():
         assert returned_config.job_id == 'abcde'
 
         shutil.rmtree(f"./tests/jobs/")
+
+        # Clean up Redis job
+        redis.remove_job(
+            'test_user1@mail.com', test_config.job_id
+        )
 
     def test_request_expertise_with_no_config(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
@@ -639,6 +642,16 @@ class TestExpertiseService():
                     assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
 
         assert upweighted_note_id not in all_publication_ids
+
+        # Check that all configs are completed
+        redis = RedisDatabase(
+            host='localhost',
+            port=6379,
+            db=10
+        )
+        returned_configs = redis.load_all_jobs('openreview.net')
+        for config in returned_configs:
+            assert config.status == 'Completed', f"Found job with status {config.status}: {config.job_id}"
 
         # Make a request with weight specification, use articleSubmittedToOpenReview
         response = test_client.post(
@@ -1309,9 +1322,8 @@ class TestExpertiseService():
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
         # Clean up error job by calling the delete endpoint
-        response = test_client.get('/expertise/delete', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
-        assert response['name'] == 'test_run'
-        assert response['cdate'] <= response['mdate']
+        response = test_client.delete(f'/expertise/{openreview_context["job_id"]}', headers=openreview_client.headers)
+        assert response.status_code == 200
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
     def test_request_expertise_with_no_submission_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
@@ -1372,11 +1384,156 @@ class TestExpertiseService():
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
         # Clean up error job by calling the delete endpoint
-        response = test_client.get('/expertise/delete', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
-        assert response['name'] == 'test_run'
-        assert response['cdate'] <= response['mdate']
+        response = test_client.delete(f'/expertise/{openreview_context["job_id"]}', headers=openreview_client.headers)
+        assert response.status_code == 200
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
     
+    def test_delete_job_without_authorization(self, openreview_client, openreview_context):
+        """Test that DELETE endpoint returns 403 when no authorization headers are provided"""
+        test_client = openreview_context['test_client']
+        
+        # Try to delete a job without providing authorization headers
+        response = test_client.delete('/expertise/dummy_job_id')
+        
+        # Should return 403 Forbidden
+        assert response.status_code == 403
+        assert 'Error' in response.json['name']
+        assert 'forbidden' in response.json['message'].lower()
+        assert 'No Authorization token in headers' in response.json['message']
+
+    def test_delete_non_existing_job_id(self, openreview_client, openreview_context):
+        """Try to delete a job with a non-existing job id."""
+        test_client = openreview_context['test_client']
+
+        response = test_client.delete('/expertise/nonexistent_job_id_xyz', headers=openreview_client.headers)
+        assert response.status_code == 404
+        assert 'Error' in response.json['name']
+        assert 'not found' in response.json['message'].lower()
+        assert response.json['message'] == 'Job not found'
+
+    def test_delete_job_already_running(self, openreview_client, openreview_context):
+        """Try to delete a job that is already running."""
+        config = openreview_context['config']
+        redis = RedisDatabase(
+            host=config['REDIS_ADDR'],
+            port=config['REDIS_PORT'],
+            db=config['REDIS_CONFIG_DB'],
+            sync_on_disk=False
+        )
+
+        job_id = 'running_job_' + str(random.randint(10000, 99999))
+        job_dir = f"./tests/jobs/{job_id}"
+        os.makedirs(job_dir, exist_ok=True)
+
+        running_config = JobConfig(
+            name='test_running_delete',
+            user_id=config['OPENREVIEW_USERNAME'],
+            job_id=job_id,
+            job_dir=job_dir,
+            status=JobStatus.RUN_EXPERTISE,
+            description=JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
+        )
+        redis.save_job(running_config)
+
+        test_client = openreview_context['test_client']
+        response = test_client.delete(f'/expertise/{job_id}', headers=openreview_client.headers)
+        # Deletion should be prevented while running
+        assert response.status_code == 400
+        assert 'Error' in response.json['name']
+        assert 'bad request' in response.json['message'].lower()
+        assert 'cannot delete job' in response.json['message'].lower()
+
+        # Directory and Redis entry should still exist
+        assert os.path.isdir(job_dir)
+        loaded = redis.load_job(job_id, config['OPENREVIEW_USERNAME'])
+        assert loaded.job_id == job_id
+
+        redis.remove_job(config['OPENREVIEW_USERNAME'], job_id)
+        shutil.rmtree(job_dir, ignore_errors=True)
+
+        # Delete on job completed
+        completed_job_id = 'completed_job_' + str(random.randint(10000, 99999))
+        completed_dir = f"./tests/jobs/{completed_job_id}"
+        os.makedirs(completed_dir, exist_ok=True)
+        completed_config = JobConfig(
+            name='test_completed_delete',
+            user_id=config['OPENREVIEW_USERNAME'],
+            job_id=completed_job_id,
+            job_dir=completed_dir,
+            status=JobStatus.COMPLETED,
+            description=JobDescription.VALS.value[JobStatus.COMPLETED]
+        )
+        redis.save_job(completed_config)
+
+        response = test_client.delete(f'/expertise/{completed_job_id}', headers=openreview_client.headers)
+        assert response.status_code == 200, response.json
+        assert not os.path.isdir(completed_dir)
+        with pytest.raises(openreview.OpenReviewException, match='Job not found'):
+            redis.load_job(completed_job_id, config['OPENREVIEW_USERNAME'])
+
+        # Delete on job error
+        error_job_id = 'error_job_' + str(random.randint(10000, 99999))
+        error_dir = f"./tests/jobs/{error_job_id}"
+        os.makedirs(error_dir, exist_ok=True)
+        error_config = JobConfig(
+            name='test_error_delete',
+            user_id=config['OPENREVIEW_USERNAME'],
+            job_id=error_job_id,
+            job_dir=error_dir,
+            status=JobStatus.ERROR,
+            description=JobDescription.VALS.value[JobStatus.ERROR]
+        )
+        redis.save_job(error_config)
+
+        response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
+        assert response.status_code == 200, response.json
+        assert not os.path.isdir(error_dir)
+        with pytest.raises(openreview.OpenReviewException, match='Job not found'):
+            redis.load_job(error_job_id, config['OPENREVIEW_USERNAME'])
+
+    def test_delete_job_with_different_user(self, openreview_client, openreview_context):
+        """Try to delete a job with a different user than the job owner."""
+        config = openreview_context['config']
+        redis = RedisDatabase(
+            host=config['REDIS_ADDR'],
+            port=config['REDIS_PORT'],
+            db=config['REDIS_CONFIG_DB']
+        )
+
+        job_id = 'owned_job_' + str(random.randint(10000, 99999))
+        job_dir = f"./tests/jobs/{job_id}"
+        os.makedirs(job_dir, exist_ok=True)
+
+        owned_config = JobConfig(
+            name='test_owned_delete',
+            user_id=config['OPENREVIEW_USERNAME'],
+            job_id=job_id,
+            job_dir=job_dir,
+            status=JobStatus.QUEUED,
+            description=JobDescription.VALS.value[JobStatus.QUEUED]
+        )
+        redis.save_job(owned_config)
+
+        with open(os.path.join(job_dir, 'config.json'), 'w') as f:
+            json.dump(owned_config.to_json(), f)
+
+        other_client = openreview.api.OpenReviewClient(token=openreview_client.token)
+        other_client.impersonate('ABC.cc/Program_Chairs')
+
+        test_client = openreview_context['test_client']
+        response = test_client.delete(f'/expertise/{job_id}', headers=other_client.headers)
+        assert response.status_code == 403
+        assert 'Error' in response.json['name']
+        assert 'forbidden' in response.json['message'].lower()
+        assert response.json['message'] == 'Forbidden: Insufficient permissions to access job'
+
+        # Job should still exist on disk and in Redis
+        assert os.path.isdir(job_dir)
+        loaded = redis.load_job(job_id, config['OPENREVIEW_USERNAME'])
+        assert loaded.job_id == job_id
+
+        redis.remove_job(config['OPENREVIEW_USERNAME'], job_id)
+        shutil.rmtree(job_dir, ignore_errors=True)
     def test_request_journal(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes

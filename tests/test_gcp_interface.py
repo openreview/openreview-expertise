@@ -6,7 +6,7 @@ import datetime
 import time
 import openreview
 from copy import deepcopy
-from expertise.service.utils import GCPInterface, JobDescription, JobStatus
+from expertise.service.utils import GCPInterface, JobDescription, JobStatus, JobConfig, APIRequest
 from google.cloud.aiplatform_v1.types import PipelineState
 from expertise.utils.utils import generate_job_id
 
@@ -291,7 +291,33 @@ def test_get_job_status_by_job_id(mock_storage_client, mock_pipeline_job_get, op
     # Call the `get_job_status_by_job_id` method
     user_id = "openreview.net"
     job_id = "test_job"
-    result = gcp_interface.get_job_status_by_job_id(user_id, job_id)
+    config = JobConfig(
+        cloud_id = job_id
+    )
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": { 
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission" 
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False, 
+                    'useAbstract': True, 
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
+    result = gcp_interface.get_job_status_by_job_id(user_id, config)
 
     # Assertions
     assert result["name"] == job_id
@@ -332,8 +358,34 @@ def test_get_job_status_by_job_id_job_not_found(mock_storage_client, openreview_
     )
 
     # Verify that an exception is raised when no job is found
+    config = JobConfig(
+        cloud_id = "test_job"
+    )
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": { 
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission" 
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False, 
+                    'useAbstract': True, 
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
     with pytest.raises(openreview.OpenReviewException, match="Job not found"):
-        gcp_interface.get_job_status_by_job_id("test_user", "test_job")
+        gcp_interface.get_job_status_by_job_id("test_user", config)
 
 # Test case for insufficient permissions
 @patch("expertise.service.utils.storage.Client")
@@ -363,8 +415,34 @@ def test_get_job_status_by_job_id_insufficient_permissions(mock_storage_client, 
     )
 
     # Verify that an exception is raised for insufficient permissions
+    config = JobConfig(
+        cloud_id = 'test_job'
+    )
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": { 
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission" 
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False, 
+                    'useAbstract': True, 
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
     with pytest.raises(openreview.OpenReviewException, match="Forbidden: Insufficient permissions to access job"):
-        gcp_interface.get_job_status_by_job_id("test_user", "test_job")
+        gcp_interface.get_job_status_by_job_id("test_user", config)
 
 # Test case for multiple requests found
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
@@ -401,8 +479,34 @@ def test_get_job_status_by_job_id_multiple_requests(mock_storage_client, mock_pi
     )
 
     # Verify that an exception is raised for multiple requests
+    config = JobConfig(
+        cloud_id = 'test_job'
+    )
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": { 
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission" 
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False, 
+                    'useAbstract': True, 
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
     with pytest.raises(openreview.OpenReviewException, match="Internal Error: Multiple requests found for job"):
-        gcp_interface.get_job_status_by_job_id("openreview.net", "test_job")
+        gcp_interface.get_job_status_by_job_id("openreview.net", config)
 
 # Test case for the `get_job_status` method
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
@@ -812,3 +916,55 @@ def test_get_job_results_group_scoring(mock_storage_client):
     mock_storage_client.return_value.bucket.return_value.list_blobs.assert_called_once_with(prefix="jobs/job_1/")
     mock_metadata_blob.download_as_string.assert_called_once()
     mock_group_score_blob.open.assert_called_once_with('r')
+
+@patch("expertise.service.utils.aip.PipelineJob.get")
+@patch("expertise.service.utils.storage.Client")
+def test_get_job_status_by_job_id_returns_redis_when_no_cloud_id(mock_storage_client, mock_pipeline_job_get, openreview_client):
+    from expertise.service.utils import APIRequest, JobConfig, GCPInterface, JobStatus, JobDescription
+    # Minimal request and config with no cloud_id
+    api_req = APIRequest({
+        "name": "test_job",
+        "entityA": {"type": "Group", "memberOf": "Some.Venue/Reviewers"},
+        "entityB": {"type": "Note", "invitation": "Some.Venue/-/Submission"}
+    })
+    cfg = JobConfig(
+        name="test",
+        user_id="openreview.net",
+        job_id="job_no_cloud",
+        cloud_id=None,
+        cdate=1234567890000,
+        mdate=1234567890000,
+        status=JobStatus.QUEUED,
+        description=JobDescription.VALS.value[JobStatus.QUEUED],
+    )
+    cfg.api_request = api_req
+
+    gcp = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        openreview_client=openreview_client,
+        service_label={"test": "label"},
+    )
+
+    # Early return
+    result = gcp.get_job_status_by_job_id("openreview.net", cfg)
+
+    # Assert
+    assert result["name"] == "test"
+    assert result["tauthor"] == "openreview.net"
+    assert result["jobId"] == "job_no_cloud"
+    assert result["status"] == JobStatus.QUEUED
+    assert result["description"] == JobDescription.VALS.value[JobStatus.QUEUED]
+    assert result["cdate"] == 1234567890000
+    assert result["mdate"] == 1234567890000
+    assert result["request"] == api_req.to_json()
+
+    # No cloud lookups
+    mock_storage_client.return_value.bucket.return_value.list_blobs.assert_not_called()
+    mock_pipeline_job_get.assert_not_called()

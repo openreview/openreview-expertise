@@ -474,6 +474,23 @@ def test_weights_applied_by_venue(client, openreview_client):
         if publication['id'] == archive_note_id:
             assert publication['content']['weight'] == 10
 
+def test_get_pub_weight_invitations(client, openreview_client):
+    """Checks domain falls back to invitations[0] when domain and invitation are missing"""
+    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+
+    or_expertise.venue_list = {'LEGACY.cc'}
+
+    class OldAPI2:
+        def __init__(self):
+            # No 'domain' and no 'invitation' attributes; only 'invitations'
+            self.invitations = ['LEGACY.cc/-/Submission']
+    pub = OldAPI2()
+
+    # LEGACY.cc in venue_list, assert weight correctly chosen
+    spec = [{ 'articleSubmittedToOpenReview': True, 'weight': 2 }]
+    weight = or_expertise.get_pub_weight('LEGACY.cc', pub=pub, weight_specification=spec)
+    assert weight == 2
+
     # Post new publication to archive with a venue outside OpenReview and check its weight
     submission = openreview.api.Note(
         pdate=1554819115,
