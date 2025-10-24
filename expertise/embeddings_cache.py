@@ -70,57 +70,6 @@ class EmbeddingsCache:
             self.client.close()
             logger.info("MongoDB connection closed")
     
-    def get_existing_embeddings(self, model_name: str) -> Set[str]:
-        """
-        Get set of note IDs that already have embeddings for the given model.
-        
-        Args:
-            model_name: Name of the embedding model
-            
-        Returns:
-            Set of note IDs that have embeddings
-        """
-        if not self.is_connected:
-            return set()
-            
-        try:
-            # Query for documents with the specific model
-            cursor = self.collection.find(
-                {"model": model_name},
-                {"noteId": 1, "_id": 0}
-            )
-            existing_ids = {doc["noteId"] for doc in cursor}
-            logger.info(f"Found {len(existing_ids)} existing embeddings for model '{model_name}'")
-            return existing_ids
-        except Exception as e:
-            logger.error(f"Error querying MongoDB: {e}")
-            return set()
-            
-    def get_existing_embedding_data(self, model_name: str) -> Dict[str, Dict]:
-        """
-        Get note IDs and their embeddings for the given model.
-        
-        Args:
-            model_name: Name of the embedding model
-            
-        Returns:
-            Dictionary mapping note IDs to their complete embedding data
-        """
-        if not self.is_connected:
-            return {}
-            
-        try:
-            # Query for documents with the specific model
-            cursor = self.collection.find(
-                {"model": model_name}
-            )
-            embedding_data = {doc["noteId"]: doc for doc in cursor}
-            logger.info(f"Retrieved {len(embedding_data)} embeddings for model '{model_name}'")
-            return embedding_data
-        except Exception as e:
-            logger.error(f"Error querying MongoDB for embedding data: {e}")
-            return {}
-
     def save_embeddings(self, embeddings_data: List[tuple], model: str) -> bool:
         """
         Save multiple embeddings to MongoDB efficiently using bulk_write.
