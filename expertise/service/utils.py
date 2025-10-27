@@ -1219,38 +1219,70 @@ class GCPInterface(object):
             metadata = json.loads(metadata_files[0].download_as_string())
             yield {'metadata': metadata, 'results': []}
 
-            if skip_sparse:
-                score_files = [blob for blob in score_files if 'sparse' not in blob.name]
-            else:
-                score_files = [blob for blob in score_files if 'sparse' in blob.name]
-
-            if len(score_files) != 1:
-                raise openreview.OpenReviewException(f"Internal Error: incorrect score files found expected [1] found {len(score_files)}")
-
-            # Stream the sparse scores in chunks
-            downloader = score_files[0].open('r')
-            chunk = downloader.readline()
-            results_chunk = []
-            chunk_size = 1000  # Adjust this number based on your data size
-            
-            while chunk:
-                if isinstance(chunk, bytes):
-                    chunk = chunk.decode('utf-8')
-                if chunk.strip():
-                    results_chunk.append(json.loads(chunk.strip()))
+            # Then stream the scores
+            if not skip_sparse:
+                sparse_score_files = [
+                    blob for blob in score_files if 'sparse' in blob.name
+                ]
+                if len(sparse_score_files) != 1:
+                    raise openreview.OpenReviewException(f"Internal Error: incorrect sparse score files found expected [1] found {len(sparse_score_files)}")
                 
-                # Yield chunks of results
-                if len(results_chunk) >= chunk_size:
-                    yield {'results': results_chunk, 'metadata': None}
-                    results_chunk = []
-                
+                # Stream the sparse scores in chunks
+                downloader = sparse_score_files[0].open('r')
                 chunk = downloader.readline()
-            
-            # Yield any remaining results
-            if results_chunk:
-                yield {'results': results_chunk, 'metadata': None}
+                results_chunk = []
+                chunk_size = 1000  # Adjust this number based on your data size
                 
-            downloader.close()
+                while chunk:
+                    if isinstance(chunk, bytes):
+                        chunk = chunk.decode('utf-8')
+                    if chunk.strip():
+                        results_chunk.append(json.loads(chunk.strip()))
+                    
+                    # Yield chunks of results
+                    if len(results_chunk) >= chunk_size:
+                        yield {'results': results_chunk, 'metadata': None}
+                        results_chunk = []
+                    
+                    chunk = downloader.readline()
+                
+                # Yield any remaining results
+                if results_chunk:
+                    yield {'results': results_chunk, 'metadata': None}
+                    
+                downloader.close()
+            else:
+                non_sparse_score_files = [
+                    blob for blob in score_files if 'sparse' not in blob.name
+                ]
+                if len(non_sparse_score_files) != 1:
+                    scoring_type_string = 'group' if group_scoring else 'paper'
+                    raise openreview.OpenReviewException(f"Internal Error: incorrect {scoring_type_string} score files found expected [1] found {len(non_sparse_score_files)}")
+                
+                # Stream the non-sparse scores in chunks
+                downloader = non_sparse_score_files[0].open('r')
+                chunk = downloader.readline()
+                results_chunk = []
+                chunk_size = 1000  # Adjust this number based on your data size
+                
+                while chunk:
+                    if isinstance(chunk, bytes):
+                        chunk = chunk.decode('utf-8')
+                    if chunk.strip():
+                        results_chunk.append(json.loads(chunk.strip()))
+                    
+                    # Yield chunks of results
+                    if len(results_chunk) >= chunk_size:
+                        yield {'results': results_chunk, 'metadata': None}
+                        results_chunk = []
+                    
+                    chunk = downloader.readline()
+                
+                # Yield any remaining results
+                if results_chunk:
+                    yield {'results': results_chunk, 'metadata': None}
+                
+                downloader.close()
     
         # Main function implementation
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
