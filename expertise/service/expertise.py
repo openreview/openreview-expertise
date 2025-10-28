@@ -382,36 +382,28 @@ class BaseExpertiseService:
 
         return filtered_dirs
 
-    def _get_score_and_metadata_dir(self, search_dir, group_scoring=False, paper_scoring=False):
+    def _get_score_and_metadata_dir(self, search_dir):
         """
         Searches the given directory for a possible score file and the metadata file
 
         :param search_dir: The root directory to search in
         :type search_dir: str
 
-        :param group_scoring: Indicate if scoring between groups, if so skip sparse scores
-        :type group_scoring: bool
-
-        :param paper_scoring: Indicate if scoring between papers, if so skip sparse scores
-        :type paper_scoring: bool
-
         :returns file_dir: The directory of the score file, if it exists, starting from the given directory
         :returns metadata_dir: The directory of the metadata file, if it exists, starting from the given directory
         """
         # Search for scores files (if sparse scores exist, retrieve by default)
         file_dir, metadata_dir = None, None
-        skip_sparse = group_scoring or paper_scoring
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
             config = JobConfig.from_json(json.load(f))
 
         # Look for files
         if os.path.isfile(os.path.join(search_dir, f"{config.name}.csv")):
             file_dir = os.path.join(search_dir, f"{config.name}.csv")
-            if not skip_sparse:
-                if 'sparse_value' in config.model_params.keys() and os.path.isfile(os.path.join(search_dir, f"{config.name}_sparse.csv")):
-                    file_dir = os.path.join(search_dir, f"{config.name}_sparse.csv")
-                else:
-                    raise OpenReviewException("Sparse score file not found for job {job_id}".format(job_id=config.job_id))    
+            if 'sparse_value' in config.model_params.keys() and os.path.isfile(os.path.join(search_dir, f"{config.name}_sparse.csv")):
+                file_dir = os.path.join(search_dir, f"{config.name}_sparse.csv")
+            else:
+                raise OpenReviewException("Sparse score file not found for job {job_id}".format(job_id=config.job_id))
         else:
             raise OpenReviewException("Score file not found for job {job_id}".format(job_id=config.job_id))
 
@@ -736,7 +728,7 @@ class ExpertiseService(BaseExpertiseService):
             self.logger.info(f"Retrieving scores from {config.job_dir}")
             if group_group_matching:
                 # If group-group matching, report results using "*_member" keys
-                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir, group_scoring=True)
+                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
                 with open(file_dir, 'r') as csv_file:
                     data_reader = reader(csv_file)
                     for row in data_reader:
@@ -748,7 +740,7 @@ class ExpertiseService(BaseExpertiseService):
                 result['results'] = ret_list
             elif paper_paper_matching:
                 # If paper-paper matching, report results using submission keywords
-                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir, paper_scoring=True)
+                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
                 with open(file_dir, 'r') as csv_file:
                     data_reader = reader(csv_file)
                     for row in data_reader:
