@@ -1186,7 +1186,7 @@ class GCPInterface(object):
 
     def get_job_results(self, user_id, job_id, delete_on_get=False):
 
-        def _get_scores_and_metadata_streaming(all_blobs, job_id, group_scoring=False, paper_scoring=False):
+        def _get_scores_and_metadata_streaming(all_blobs, job_id):
             """
             Extracts the scores and metadata from the GCS bucket and returns a generator that yields
             chunks of results to enable streaming
@@ -1195,10 +1195,6 @@ class GCPInterface(object):
             :type all_blobs: list
             :param job_id: Unique job ID
             :type job_id: str
-            :param group_scoring: Indicator for scores between groups
-            :type group_scoring: bool
-            :param paper_scoring: Indicator for scores between papers
-            :type paper_scoring: bool
 
             :returns generator: A generator that yields chunks of scores and finally the metadata
             """
@@ -1208,7 +1204,6 @@ class GCPInterface(object):
             score_files = [
                 blob for blob in all_blobs if '.jsonl' in blob.name and job_id in blob.name
             ]
-            skip_sparse = group_scoring or paper_scoring
 
             if len(metadata_files) != 1:
                 raise openreview.OpenReviewException(f"Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}")
@@ -1219,71 +1214,49 @@ class GCPInterface(object):
             metadata = json.loads(metadata_files[0].download_as_string())
             yield {'metadata': metadata, 'results': []}
 
-            # Then stream the scores
-            if not skip_sparse:
-                sparse_score_files = [
-                    blob for blob in score_files if 'sparse' in blob.name
-                ]
-                if len(sparse_score_files) != 1:
-                    raise openreview.OpenReviewException(f"Internal Error: incorrect sparse score files found expected [1] found {len(sparse_score_files)}")
-                
-                # Stream the sparse scores in chunks
-                downloader = sparse_score_files[0].open('r')
+            # Helper function to stream scores from a blob file
+            def stream_score_file(blob):
+                downloader = blob.open('r')
                 chunk = downloader.readline()
                 results_chunk = []
                 chunk_size = 1000  # Adjust this number based on your data size
-                
+
                 while chunk:
                     if isinstance(chunk, bytes):
                         chunk = chunk.decode('utf-8')
                     if chunk.strip():
                         results_chunk.append(json.loads(chunk.strip()))
-                    
+
                     # Yield chunks of results
                     if len(results_chunk) >= chunk_size:
                         yield {'results': results_chunk, 'metadata': None}
                         results_chunk = []
-                    
+
                     chunk = downloader.readline()
-                
+
                 # Yield any remaining results
                 if results_chunk:
                     yield {'results': results_chunk, 'metadata': None}
-                    
+
                 downloader.close()
+
+            # Determine whether to use sparse or non-sparse score files
+            sparse_score_files = [
+                blob for blob in score_files if 'sparse' in blob.name
+            ]
+
+            # Then stream the scores
+            if len(sparse_score_files) == 1:
+                yield from stream_score_file(sparse_score_files[0])
             else:
                 non_sparse_score_files = [
                     blob for blob in score_files if 'sparse' not in blob.name
                 ]
                 if len(non_sparse_score_files) != 1:
-                    scoring_type_string = 'group' if group_scoring else 'paper'
-                    raise openreview.OpenReviewException(f"Internal Error: incorrect {scoring_type_string} score files found expected [1] found {len(non_sparse_score_files)}")
-                
-                # Stream the non-sparse scores in chunks
-                downloader = non_sparse_score_files[0].open('r')
-                chunk = downloader.readline()
-                results_chunk = []
-                chunk_size = 1000  # Adjust this number based on your data size
-                
-                while chunk:
-                    if isinstance(chunk, bytes):
-                        chunk = chunk.decode('utf-8')
-                    if chunk.strip():
-                        results_chunk.append(json.loads(chunk.strip()))
-                    
-                    # Yield chunks of results
-                    if len(results_chunk) >= chunk_size:
-                        yield {'results': results_chunk, 'metadata': None}
-                        results_chunk = []
-                    
-                    chunk = downloader.readline()
-                
-                # Yield any remaining results
-                if results_chunk:
-                    yield {'results': results_chunk, 'metadata': None}
-                
-                downloader.close()
-    
+                    raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
+
+                yield from stream_score_file(non_sparse_score_files[0])
+
         # Main function implementation
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
         self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}/")
@@ -1301,9 +1274,5 @@ class GCPInterface(object):
         if len(authenticated_requests) > 1:
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
-        request = authenticated_requests[0]
-        group_group_matching = request.get('entityA', {}).get('type', '') == 'Group' and request.get('entityB', {}).get('type', '') == 'Group'
-        paper_paper_matching = request.get('entityA', {}).get('type', '') == 'Note' and request.get('entityB', {}).get('type', '') == 'Note'
-
-        return _get_scores_and_metadata_streaming(job_blobs, job_id, group_scoring=group_group_matching, paper_scoring=paper_paper_matching)
+        return _get_scores_and_metadata_streaming(job_blobs, job_id)
 
