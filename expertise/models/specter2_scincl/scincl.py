@@ -123,7 +123,7 @@ class SciNCLPredictor(Predictor):
             embeddings = output.last_hidden_state[:, 0, :]
 
             # Process computed embeddings
-            for i, (idx, note_id, paper_data) in enumerate(uncached_items):
+            for i, (idx, note_id, paper_data, content_hash) in enumerate(uncached_items):
                 embedding = embeddings[i]
                 # Create JSONL output
                 embedding_jsonl = self._build_embedding_jsonl(paper_data, embedding)

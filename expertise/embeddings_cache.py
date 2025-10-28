@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Dict, List, Set
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
-import argparse
 import logging
 from pymongo import ReplaceOne
+import time
+import xxhash
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -69,14 +70,33 @@ class EmbeddingsCache:
         if self.client and self.is_connected:
             self.client.close()
             logger.info("MongoDB connection closed")
+
+    @staticmethod
+    def compute_content_hash(title: str, abstract: str) -> str:
+        """
+        Compute a hash of the concatenated title and abstract.
+        Uses xxHash (fastest) if available, otherwise falls back to MD5.
+
+        Args:
+            title: Document title
+            abstract: Document abstract
+
+        Returns:
+            Hash of the concatenated content (xxHash or MD5)
+        """
+        content = f"{title}{abstract}"
+        content_bytes = content.encode('utf-8')
+
+        # xxHash is much faster than cryptographic hashes
+        return xxhash.xxh64(content_bytes).hexdigest()
     
     def save_embeddings(self, embeddings_data: List[tuple], model: str) -> bool:
         """
         Save multiple embeddings to MongoDB efficiently using bulk_write.
-        Only updates if the mdate is greater than existing document's mdate.
+        Only updates if the contentHash differs from existing document's contentHash.
 
         Args:
-            embeddings_data: List of tuples (note_id, embedding, mdate)
+            embeddings_data: List of tuples (note_id, embedding, content_hash)
             model: Model name used to generate the embeddings
 
         Returns:
@@ -91,19 +111,20 @@ class EmbeddingsCache:
             existing_docs = self.get_embeddings(note_ids, model)
             existing_map = {doc["noteId"]: doc for doc in existing_docs}
 
-
+            current_time = int(time.time())
             operations = []
-            for note_id, embedding, mdate in embeddings_data:
+            for note_id, embedding, content_hash in embeddings_data:
                 existing_doc = existing_map.get(note_id)
-                # Only update if mdate is newer
-                if existing_doc and existing_doc.get("mdate", 0) >= mdate:
-                    logger.info(f"Skipping update for note {note_id} (model: {model}) - existing mdate is newer or equal")
+                # Only update if contentHash differs
+                if existing_doc and existing_doc.get("contentHash") == content_hash:
+                    logger.info(f"Skipping update for note {note_id} (model: {model}) - content unchanged")
                     continue
                 doc = {
                     "noteId": note_id,
                     "model": model,
                     "embedding": embedding,
-                    "mdate": mdate
+                    "contentHash": content_hash,
+                    "mdate": current_time
                 }
                 operations.append(
                     ReplaceOne(
@@ -159,24 +180,29 @@ class EmbeddingsCache:
     def get_batch_cache_info(self, batch_data: List[tuple], model: str) -> tuple:
         """
         Analyze a batch to determine which items need computation vs can use cache.
-        
+
         Args:
             batch_data: List of tuples (note_id, paper_data_dict)
             model: Model name to check cache for
-            
+
         Returns:
             Tuple of (cached_items, uncached_items) where:
             - cached_items: List of (index, note_id, cached_embedding)
-            - uncached_items: List of (index, note_id, paper_data)
+            - uncached_items: List of (index, note_id, paper_data, content_hash)
         """
         if not self.is_connected:
             # If not connected, all items need computation
-            uncached_items = [(idx, note_id, paper_data) for idx, (note_id, paper_data) in enumerate(batch_data)]
+            uncached_items = []
+            for idx, (note_id, paper_data) in enumerate(batch_data):
+                title = paper_data.get('title', '')
+                abstract = paper_data.get('abstract', '')
+                content_hash = self.compute_content_hash(title, abstract)
+                uncached_items.append((idx, note_id, paper_data, content_hash))
             return [], uncached_items
-            
+
         cached_items = []
         uncached_items = []
-        
+
         # Directly create note_ids list from batch_data
         note_ids = [note_id for note_id, _ in batch_data]
 
@@ -185,13 +211,16 @@ class EmbeddingsCache:
         cached_map = {doc['noteId']: doc for doc in cached_embeddings}
 
         for idx, (note_id, paper_data) in enumerate(batch_data):
-            paper_mdate = paper_data.get('mdate', 0)
+            title = paper_data.get('title', '')
+            abstract = paper_data.get('abstract', '')
+            content_hash = self.compute_content_hash(title, abstract)
+
             cached_emb = cached_map.get(note_id)
-            if cached_emb and cached_emb.get('mdate', 0) >= paper_mdate:
+            if cached_emb and cached_emb.get('contentHash') == content_hash:
                 cached_items.append((idx, note_id, cached_emb['embedding']))
             else:
-                uncached_items.append((idx, note_id, paper_data))
-        
+                uncached_items.append((idx, note_id, paper_data, content_hash))
+
         logger.info(f"Batch analysis: {len(cached_items)} cached, {len(uncached_items)} need computation")
         return cached_items, uncached_items
 
@@ -200,7 +229,7 @@ class EmbeddingsCache:
         Save multiple computed embeddings to cache using bulk_write.
 
         Args:
-            computed_items: List of tuples (note_id, embedding_list, mdate)
+            computed_items: List of tuples (note_id, embedding_list, content_hash)
             model: Model name
 
         Returns:
