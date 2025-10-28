@@ -4,7 +4,7 @@ from .create_dataset import OpenReviewExpertise
 from .embeddings_cache import EmbeddingsCache
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
-from .utils.utils import aggregate_by_group
+from .utils.utils import aggregate_by_group, generate_sparse_scores
 
 # Move run.py functionality to a function that accepts a config dict
 def execute_expertise(config):
@@ -29,7 +29,7 @@ def execute_expertise(config):
 
     if config['model'] == 'bm25':
         from .models import bm25
-        bm25Model = bm25.Model(
+        predictor = bm25.Model(
             use_title=config['model_params'].get('use_title', False),
             use_abstract=config['model_params'].get('use_abstract', True),
             workers=config['model_params'].get('workers', 1),
@@ -37,23 +37,18 @@ def execute_expertise(config):
             max_score=config['model_params'].get('max_score', True),
             sparse_value=config['model_params'].get('sparse_value')
         )
-        bm25Model.set_archives_dataset(archives_dataset)
-        bm25Model.set_submissions_dataset(submissions_dataset)
+        predictor.set_archives_dataset(archives_dataset)
+        predictor.set_submissions_dataset(submissions_dataset)
 
         if not config['model_params'].get('skip_bm25', False):
-            bm25Model.all_scores(
+            predictor.all_scores(
                 preliminary_scores_path=Path(config['model_params']['scores_path']).joinpath('preliminary_scores.pkl'),
                 scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
-            )
-        if config['model_params'].get('sparse_value'):
-            bm25Model.sparse_scores(
-                preliminary_scores_path=Path(config['model_params']['scores_path']).joinpath('preliminary_scores.pkl'),
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
             )
 
     if config['model'] == 'specter':
         from .models import multifacet_recommender
-        specter_predictor = multifacet_recommender.SpecterPredictor(
+        predictor = multifacet_recommender.SpecterPredictor(
             specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
             work_dir=config['model_params'].get('work_dir', "./"),
             average_score=config['model_params'].get('average_score', False),
@@ -65,28 +60,23 @@ def execute_expertise(config):
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
             embeddings_cache=embeddings_cache,
         )
-        specter_predictor.set_archives_dataset(archives_dataset)
-        specter_predictor.set_submissions_dataset(submissions_dataset)
+        predictor.set_archives_dataset(archives_dataset)
+        predictor.set_submissions_dataset(submissions_dataset)
         if not config['model_params'].get('skip_specter', False):
             publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
             if config['model_params'].get('use_redis', False):
                 publication_path = None
-            specter_predictor.embed_publications(publications_path=publication_path)
-            specter_predictor.embed_submissions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'))
-        specter_predictor.all_scores(
+            predictor.embed_publications(publications_path=publication_path)
+            predictor.embed_submissions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'))
+        predictor.all_scores(
             publications_path=publication_path,
             submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
         )
 
-        if config['model_params'].get('sparse_value'):
-            specter_predictor.sparse_scores(
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
-            )
-
     if config['model'] == 'specter2+scincl':
         from .models import specter2_scincl
-        ens_predictor = specter2_scincl.EnsembleModel(
+        predictor = specter2_scincl.EnsembleModel(
             specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
             work_dir=config['model_params'].get('work_dir', "./"),
             average_score=config['model_params'].get('average_score', False),
@@ -100,19 +90,19 @@ def execute_expertise(config):
             normalize_scores=config['model_params'].get('normalize_scores', True),
             embeddings_cache=embeddings_cache,
         )
-        ens_predictor.set_archives_dataset(archives_dataset)
-        ens_predictor.set_submissions_dataset(submissions_dataset)
+        predictor.set_archives_dataset(archives_dataset)
+        predictor.set_submissions_dataset(submissions_dataset)
         specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_specter.jsonl')
         scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_scincl.jsonl')
-        ens_predictor.embed_publications(
+        predictor.embed_publications(
             specter_publications_path=specter_publication_path,
             scincl_publications_path=scincl_publication_path
         )
-        ens_predictor.embed_submissions(
+        predictor.embed_submissions(
             specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
             scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl')
         )
-        ens_predictor.all_scores(
+        predictor.all_scores(
             specter_publications_path=specter_publication_path,
             scincl_publications_path=scincl_publication_path,
             specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
@@ -120,14 +110,9 @@ def execute_expertise(config):
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
         )
 
-        if config['model_params'].get('sparse_value'):
-            ens_predictor.sparse_scores(
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
-            )
-
     if config['model'] == 'scincl':
         from .models import specter2_scincl
-        scincl_predictor = specter2_scincl.SciNCLPredictor(
+        predictor = specter2_scincl.SciNCLPredictor(
             specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
             work_dir=config['model_params'].get('work_dir', "./"),
             average_score=config['model_params'].get('average_score', False),
@@ -141,30 +126,25 @@ def execute_expertise(config):
             normalize_scores=config['model_params'].get('normalize_scores', True),
             embeddings_cache=embeddings_cache,
         )
-        scincl_predictor.set_archives_dataset(archives_dataset)
-        scincl_predictor.set_submissions_dataset(submissions_dataset)
+        predictor.set_archives_dataset(archives_dataset)
+        predictor.set_submissions_dataset(submissions_dataset)
         scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
-        scincl_predictor.embed_publications(
+        predictor.embed_publications(
             scincl_publication_path
         )
-        scincl_predictor.embed_submissions(
+        predictor.embed_submissions(
             Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
         )
-        scincl_predictor.all_scores(
+        predictor.all_scores(
             scincl_publication_path,
             Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
             Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'),
             p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
         )
 
-        if config['model_params'].get('sparse_value'):
-            scincl_predictor.sparse_scores(
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
-            )
-
     if config['model'] == 'specter2':
         from .models import specter2_scincl
-        spec2_predictor = specter2_scincl.Specter2Predictor(
+        predictor = specter2_scincl.Specter2Predictor(
             specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
             work_dir=config['model_params'].get('work_dir', "./"),
             average_score=config['model_params'].get('average_score', False),
@@ -178,30 +158,25 @@ def execute_expertise(config):
             normalize_scores=config['model_params'].get('normalize_scores', True),
             embeddings_cache=embeddings_cache,
         )
-        spec2_predictor.set_archives_dataset(archives_dataset)
-        spec2_predictor.set_submissions_dataset(submissions_dataset)
+        predictor.set_archives_dataset(archives_dataset)
+        predictor.set_submissions_dataset(submissions_dataset)
         specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
-        spec2_predictor.embed_publications(
+        predictor.embed_publications(
             specter_publication_path
         )
-        spec2_predictor.embed_submissions(
+        predictor.embed_submissions(
             Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
         )
-        spec2_predictor.all_scores(
+        predictor.all_scores(
             specter_publication_path,
             Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
             Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'),
             p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
         )
 
-        if config['model_params'].get('sparse_value'):
-            spec2_predictor.sparse_scores(
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
-            )
-
     if config['model'] == 'mfr':
         from .models import multifacet_recommender
-        mfr_predictor = multifacet_recommender.MultiFacetRecommender(
+        predictor = multifacet_recommender.MultiFacetRecommender(
             work_dir=config['model_params'].get('work_dir', "./"),
             feature_vocab_file=config['model_params'].get('feature_vocab_file', "./feature/dictionary_index"),
             model_checkpoint_dir=config['model_params'].get('model_checkpoint_dir', "./"),
@@ -210,24 +185,19 @@ def execute_expertise(config):
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value')
         )
-        mfr_predictor.set_archives_dataset(archives_dataset)
-        mfr_predictor.set_submissions_dataset(submissions_dataset)
-        mfr_predictor.embed_publications(publications_path=None)
-        mfr_predictor.embed_submissions(submissions_path=None)
-        mfr_predictor.all_scores(
+        predictor.set_archives_dataset(archives_dataset)
+        predictor.set_submissions_dataset(submissions_dataset)
+        predictor.embed_publications(publications_path=None)
+        predictor.embed_submissions(submissions_path=None)
+        predictor.all_scores(
             publications_path=None,
             submissions_path=None,
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
         )
 
-        if config['model_params'].get('sparse_value'):
-            mfr_predictor.sparse_scores(
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
-            )
-
     if config['model'] == 'specter+mfr':
         from .models import multifacet_recommender
-        ens_predictor = multifacet_recommender.EnsembleModel(
+        predictor = multifacet_recommender.EnsembleModel(
             specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
             mfr_feature_vocab_file=config['model_params'].get('mfr_feature_vocab_file', "./feature/dictionary_index"),
             mfr_checkpoint_dir=config['model_params'].get('mfr_checkpoint_dir', "./"),
@@ -243,19 +213,19 @@ def execute_expertise(config):
             use_redis=config['model_params'].get('use_redis', False),
             embeddings_cache=embeddings_cache,
         )
-        ens_predictor.set_archives_dataset(archives_dataset)
-        ens_predictor.set_submissions_dataset(submissions_dataset)
+        predictor.set_archives_dataset(archives_dataset)
+        predictor.set_submissions_dataset(submissions_dataset)
         specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
         if config['model_params'].get('use_redis', False):
             specter_publication_path = None
-        ens_predictor.embed_publications(
+        predictor.embed_publications(
             specter_publications_path=specter_publication_path,
             mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False)
         )
-        ens_predictor.embed_submissions(
+        predictor.embed_submissions(
             specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
             mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
-        ens_predictor.all_scores(
+        predictor.all_scores(
             specter_publications_path=specter_publication_path,
             mfr_publications_path=None,
             specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
@@ -263,13 +233,15 @@ def execute_expertise(config):
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
         )
 
-        if config['model_params'].get('sparse_value'):
-            ens_predictor.sparse_scores(
-                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
-            )
-
     if 'alternate_match_group' in config.keys():
-        aggregate_by_group(config)
+        preliminary_scores = aggregate_by_group(config)
+    else:
+        preliminary_scores = predictor.preliminary_scores
+
+    if config['model_params'].get('sparse_value'):
+        sparse_value = config['model_params']['sparse_value']
+        scores_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
+        generate_sparse_scores(preliminary_scores, sparse_value, scores_path)
 
 def execute_create_dataset(client, client_v2, config=None):
 
