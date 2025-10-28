@@ -856,7 +856,6 @@ class TestExpertiseV2():
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']
-        print('Results:', results)
         assert len(results) == 25 # 5 submissions x 5 submissions/publications from Raia/Kyunghyun
 
         sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
@@ -915,7 +914,6 @@ class TestExpertiseV2():
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
         sparse_results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']
-        print('Sparse Results:', sparse_results)
         assert len(sparse_results) == total_submissions # Sparse value of 1
 
         sorted_sparse_results = sorted(sparse_results, key=lambda x: x['score'], reverse=True)
