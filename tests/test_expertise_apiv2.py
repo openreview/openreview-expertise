@@ -855,8 +855,13 @@ class TestExpertiseV2():
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
-        results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']       
+        results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']
+        print('Results:', results)
         assert len(results) == 25 # 5 submissions x 5 submissions/publications from Raia/Kyunghyun
+
+        sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
+
+        total_submissions = len(openreview_client.get_notes(content={'venueid': 'TMLR/Submitted'}))
 
         # Make a request that is supported by the model
         response = test_client.post(
@@ -909,8 +914,16 @@ class TestExpertiseV2():
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
-        results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']       
-        assert len(results) == 5 # Sparse value of 1
+        sparse_results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']
+        print('Sparse Results:', sparse_results)
+        assert len(sparse_results) == total_submissions # Sparse value of 1
+
+        sorted_sparse_results = sorted(sparse_results, key=lambda x: x['score'], reverse=True)
+
+        for i in range(len(sorted_sparse_results)):
+            assert sorted_sparse_results[i]['submission'] == sorted_results[i]['submission']
+            assert sorted_sparse_results[i]['match_submission'] == sorted_results[i]['match_submission']
+            assert abs(sorted_sparse_results[i]['score'] - sorted_results[i]['score']) < 0.0001
 
     def test_specter2_scincl(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
