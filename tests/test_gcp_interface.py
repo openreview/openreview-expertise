@@ -704,6 +704,70 @@ def test_get_job_results(mock_storage_client, openreview_client):
     mock_metadata_blob.download_as_string.assert_called_once()
     mock_sparse_score_blob.open.assert_called_once_with('r')
 
+# Test case for CSV streaming
+@patch("expertise.service.utils.storage.Client")  # Mock GCS Client
+def test_get_job_results_csv_streaming(mock_storage_client, openreview_client):
+    mock_metadata_blob = MagicMock()
+    mock_metadata_blob.name = "jobs/job_1/metadata.json"
+    mock_metadata_blob.download_as_string.return_value = json.dumps({"meta": "data"})
+
+    mock_sparse_csv_blob = MagicMock()
+    mock_sparse_csv_blob.name = "jobs/job_1/scores_sparse.csv"
+    mock_sparse_csv_file = MagicMock()
+    mock_sparse_csv_file.read.side_effect = [
+        "submission,user,0.9\n",
+        ""
+    ]
+    mock_sparse_csv_file.close.return_value = None
+    mock_sparse_csv_blob.open.return_value = mock_sparse_csv_file
+
+    mock_score_blob = MagicMock()
+    mock_score_blob.name = "jobs/job_1/scores.jsonl"
+    mock_score_blob.download_as_string.return_value = '{"submission": "abcde","user": "user_user1","score": 0.987}'
+
+    mock_request_blob = MagicMock()
+    mock_request_blob.name = "jobs/job_1/request.json"
+    mock_request_blob.download_as_string.return_value = json.dumps({
+        "user_id": "test_user",
+        "entityA": {"type": "Group"},
+        "entityB": {"type": "Note"}
+    })
+
+    mock_storage_client.return_value.bucket.return_value.list_blobs.return_value = [
+        mock_metadata_blob,
+        mock_sparse_csv_blob,
+        mock_score_blob,
+        mock_request_blob
+    ]
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
+    )
+
+    user_id = "test_user"
+    job_id = "job_1"
+    result_generator = gcp_interface.get_job_results(user_id, job_id, as_csv=True)
+
+    first_chunk = next(result_generator)
+    assert first_chunk["metadata"] == {"meta": "data"}
+    csv_output = ''.join(chunk["results"] for chunk in result_generator)
+    assert "submission,user,0.9" in csv_output
+
+    mock_sparse_csv_blob.open.assert_called_once_with('r')
+    # read should be invoked with the configured chunk size
+    read_call = mock_sparse_csv_file.read.call_args_list[0]
+    assert read_call.args[0] == 1024 * 1024
+    mock_sparse_csv_file.close.assert_called_once()
+
 # Test case for missing metadata file
 @patch("expertise.service.utils.storage.Client")
 def test_get_job_results_missing_metadata(mock_storage_client, openreview_client):

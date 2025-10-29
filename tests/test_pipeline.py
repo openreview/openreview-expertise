@@ -123,6 +123,15 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     assert metadata_content["submission_count"] == 2
     assert metadata_content["no_publications_count"] == 0
 
+    # Verify CSV artifacts are uploaded
+    sparse_csv_blob = bucket.blob(f"{prefix}scores_sparse.csv")
+    assert sparse_csv_blob.exists()
+    assert "test_user,note1,0.5" in sparse_csv_blob.download_as_text()
+
+    dense_csv_blob = bucket.blob(f"{prefix}scores.csv")
+    assert dense_csv_blob.exists()
+    assert "test_user,note1,0.5" in dense_csv_blob.download_as_text()
+
     # Check for pub2vec.jsonl file
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
@@ -224,6 +233,14 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     assert metadata_content["submission_count"] == 2
     assert metadata_content["no_publications_count"] == 0
 
+    sparse_csv_blob = bucket.blob(f"{prefix}scores_sparse.csv")
+    assert sparse_csv_blob.exists()
+    assert "test_user,note1,0.5" in sparse_csv_blob.download_as_text()
+
+    dense_csv_blob = bucket.blob(f"{prefix}scores.csv")
+    assert dense_csv_blob.exists()
+    assert "test_user,note1,0.5" in dense_csv_blob.download_as_text()
+
     # Check for pub2vec.jsonl file
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
@@ -315,6 +332,14 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     assert metadata_content["submission_count"] == 7
     assert metadata_content["no_publications_count"] == 0
 
+    dense_csv_blob = bucket.blob(f"{prefix}scores.csv")
+    assert dense_csv_blob.exists()
+    assert "test_user,sub_user,0.5" in dense_csv_blob.download_as_text()
+
+    sparse_csv_blob = bucket.blob(f"{prefix}scores_sparse.csv")
+    if sparse_csv_blob.exists():
+        assert "test_user,sub_user,0.5" in sparse_csv_blob.download_as_text()
+
     # Check for pub2vec.jsonl file
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
@@ -398,6 +423,14 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     metadata_content = json.loads(metadata_blob.download_as_text())
     assert metadata_content["submission_count"] == 2
     assert metadata_content["no_publications_count"] == 0
+
+    dense_csv_blob = bucket.blob(f"{prefix}scores.csv")
+    assert dense_csv_blob.exists()
+    assert "sub_one,sub_two,0.5" in dense_csv_blob.download_as_text()
+
+    sparse_csv_blob = bucket.blob(f"{prefix}scores_sparse.csv")
+    if sparse_csv_blob.exists():
+        assert "sub_one,sub_two,0.5" in sparse_csv_blob.download_as_text()
 
     shutil.rmtree(working_dir)  # Clean up
 
