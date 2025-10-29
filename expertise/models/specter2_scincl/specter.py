@@ -91,62 +91,31 @@ class Specter2Predictor(Predictor):
                 break
             yield batch
 
-    def _batch_predict(self, batch_data):
-        jsonl_out = []
+    def _compute_embeddings_for_batch(self, uncached_items):
+        """
+        Compute SPECTER2 embeddings for a batch of uncached items.
 
-        cached_items, uncached_items = self._get_batch_cache_info(batch_data)
+        Args:
+            uncached_items: List of tuples (idx, note_id, paper_data, content_hash)
 
-        # Handle cached items - create JSONL output from cached embeddings
-        cached_results = []
-        for idx, note_id, cached_embedding in cached_items:
-            paper_data = batch_data[idx][1]  # Get original paper data for weight info
-            paper = {
-                'paper_id': note_id,
-                'embedding': cached_embedding
-            }
-            if 'weight' in paper_data:
-                paper['weight'] = paper_data['weight']
-            
-            cached_results.append((idx, json.dumps(paper) + '\n'))
+        Returns:
+            Tuple of (embeddings, cleanup_objects)
+        """
+        # Extract data for computation
+        uncached_papers = [(item[1], item[2]) for item in uncached_items]  # (note_id, paper_data)
+        text_batch = [paper_data['title'] + self.tokenizer.sep_token + (paper_data.get('abstract') or '')
+                     for _, paper_data in uncached_papers]
 
-        # Handle uncached items - compute embeddings
-        computed_results = []
-        
-        if uncached_items:
-            # Extract data for computation
-            uncached_papers = [(item[1], item[2]) for item in uncached_items]  # (note_id, paper_data)
-            text_batch = [paper_data['title'] + self.tokenizer.sep_token + (paper_data.get('abstract') or '') 
-                         for _, paper_data in uncached_papers]
-            
-            # Compute embeddings
-            inputs = self.tokenizer(text_batch, padding=True, truncation=True,
-                                            return_tensors="pt", return_token_type_ids=False, max_length=512)
-            inputs = inputs.to(self.cuda_device)
-            with torch.no_grad():
-                output = self.model(**inputs)
-            embeddings = output.last_hidden_state[:, 0, :]
+        # Compute embeddings
+        inputs = self.tokenizer(text_batch, padding=True, truncation=True,
+                                        return_tensors="pt", return_token_type_ids=False, max_length=512)
+        inputs = inputs.to(self.cuda_device)
+        with torch.no_grad():
+            output = self.model(**inputs)
+        embeddings = output.last_hidden_state[:, 0, :]
 
-            # Process computed embeddings
-            for i, (idx, note_id, paper_data, content_hash) in enumerate(uncached_items):
-                embedding = embeddings[i]
-                # Create JSONL output
-                embedding_jsonl = self._build_embedding_jsonl(paper_data, embedding)
-                computed_results.append((idx, embedding_jsonl))
-
-            self._save_batch_embeddings(uncached_items, embeddings)
-
-            # Clean up GPU memory
-            del embeddings
-            del output
-            del inputs
-            torch.cuda.empty_cache()
-
-        # Merge cached and computed results in original order
-        all_results = cached_results + computed_results
-        all_results.sort(key=lambda x: x[0])  # Sort by original batch index
-        jsonl_out = [result[1] for result in all_results]
-
-        return jsonl_out
+        # Return embeddings and objects to cleanup
+        return embeddings, [embeddings, output, inputs]
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
