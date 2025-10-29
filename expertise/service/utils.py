@@ -1221,7 +1221,6 @@ class GCPInterface(object):
                 blob for blob in all_blobs
                 if score_extension in blob.name
             ]
-            skip_sparse = group_scoring or paper_scoring
 
             if len(metadata_files) != 1:
                 raise openreview.OpenReviewException(f"Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}")
@@ -1327,6 +1326,49 @@ class GCPInterface(object):
                 finally:
                     downloader.close()
     
+            # Helper function to stream scores from a blob file
+            def stream_score_file(blob):
+                downloader = blob.open('r')
+                chunk = downloader.readline()
+                results_chunk = []
+                chunk_size = 1000  # Adjust this number based on your data size
+
+                while chunk:
+                    if isinstance(chunk, bytes):
+                        chunk = chunk.decode('utf-8')
+                    if chunk.strip():
+                        results_chunk.append(json.loads(chunk.strip()))
+
+                    # Yield chunks of results
+                    if len(results_chunk) >= chunk_size:
+                        yield {'results': results_chunk, 'metadata': None}
+                        results_chunk = []
+
+                    chunk = downloader.readline()
+
+                # Yield any remaining results
+                if results_chunk:
+                    yield {'results': results_chunk, 'metadata': None}
+
+                downloader.close()
+
+            # Determine whether to use sparse or non-sparse score files
+            sparse_score_files = [
+                blob for blob in score_files if 'sparse' in blob.name
+            ]
+
+            # Then stream the scores
+            if len(sparse_score_files) == 1:
+                yield from stream_score_file(sparse_score_files[0])
+            else:
+                non_sparse_score_files = [
+                    blob for blob in score_files if 'sparse' not in blob.name
+                ]
+                if len(non_sparse_score_files) != 1:
+                    raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
+
+                yield from stream_score_file(non_sparse_score_files[0])
+
         # Main function implementation
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
         self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}/")
