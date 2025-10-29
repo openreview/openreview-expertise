@@ -21,16 +21,17 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingsCache:
-    """Cache for existing document embeddings."""
-    
-    def __init__(self, mongodb_uri: str, db_name: str, collection_name: str):
+    """Cache for existing document embeddings with buffering support."""
+
+    def __init__(self, mongodb_uri: str, db_name: str, collection_name: str, buffer_flush_size: int = 200):
         """
         Initialize the embeddings cache.
-        
+
         Args:
             mongodb_uri: MongoDB connection URI
             db_name: Database name
             collection_name: Collection name where embeddings are stored
+            buffer_flush_size: Number of embeddings to accumulate before flushing to DB
         """
         self.mongodb_uri = mongodb_uri
         self.db_name = db_name
@@ -39,6 +40,8 @@ class EmbeddingsCache:
         self.db = None
         self.collection = None
         self.is_connected = False
+        self.buffer_flush_size = buffer_flush_size
+        self.embeddings_buffer = {}  # Dict[model_name, List[tuple]]
     
     def connect(self) -> bool:
         """
@@ -226,14 +229,75 @@ class EmbeddingsCache:
 
     def save_batch_embeddings(self, computed_items: List[tuple], model: str) -> bool:
         """
-        Save multiple computed embeddings to cache using bulk_write.
+        Accumulate embeddings to buffer and flush when threshold is reached.
 
         Args:
             computed_items: List of tuples (note_id, embedding_list, content_hash)
             model: Model name
 
         Returns:
-            True if all saved successfully, False otherwise
+            True if accumulation/flush succeeded, False otherwise
         """
-        # Directly call save_embeddings for bulk efficiency
-        return self.save_embeddings(computed_items, model)
+        if not self.is_connected:
+            return False
+
+        # Initialize buffer for this model if needed
+        if model not in self.embeddings_buffer:
+            self.embeddings_buffer[model] = []
+
+        # Add items to buffer
+        self.embeddings_buffer[model].extend(computed_items)
+        logger.info(f"Added {len(computed_items)} embeddings to buffer for model '{model}' "
+                   f"(buffer size: {len(self.embeddings_buffer[model])})")
+
+        # Auto-flush if buffer is large enough
+        if len(self.embeddings_buffer[model]) >= self.buffer_flush_size:
+            return self.flush_buffer(model)
+
+        return True
+
+    def flush_buffer(self, model: str = None, force: bool = False) -> bool:
+        """
+        Flush accumulated embeddings to MongoDB.
+
+        Args:
+            model: Model name to flush (if None, flushes all models)
+            force: If True, flush regardless of buffer size
+
+        Returns:
+            True if flush succeeded, False otherwise
+        """
+        if not self.is_connected:
+            return True
+
+        # Determine which models to flush
+        models_to_flush = [model] if model else list(self.embeddings_buffer.keys())
+
+        success = True
+        for model_name in models_to_flush:
+            if model_name not in self.embeddings_buffer or not self.embeddings_buffer[model_name]:
+                continue
+
+            buffer_size = len(self.embeddings_buffer[model_name])
+
+            # Only flush if forced or buffer is large enough
+            if not force and buffer_size < self.buffer_flush_size:
+                continue
+
+            logger.info(f"Flushing {buffer_size} embeddings for model '{model_name}'...")
+
+            try:
+                # Use the existing save_embeddings method for actual DB write
+                result = self.save_embeddings(self.embeddings_buffer[model_name], model_name)
+                if result:
+                    # Clear buffer after successful flush
+                    self.embeddings_buffer[model_name] = []
+                    logger.info(f"Successfully flushed {buffer_size} embeddings for model '{model_name}'")
+                else:
+                    success = False
+                    logger.error(f"Failed to flush embeddings for model '{model_name}'")
+            except Exception as e:
+                success = False
+                logger.error(f"Error flushing embeddings for model '{model_name}': {e}")
+
+        return success

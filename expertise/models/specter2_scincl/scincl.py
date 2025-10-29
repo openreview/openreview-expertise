@@ -42,7 +42,14 @@ class SciNCLPredictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=False,
                  normalize_scores=True, embeddings_cache=None):
-        self.model_name = 'scincl'
+        # Initialize parent class with cache settings
+        use_cache = embeddings_cache is not None and (embeddings_cache.is_connected if hasattr(embeddings_cache, 'is_connected') else False)
+        super().__init__(
+            embeddings_cache=embeddings_cache,
+            model_name='scincl',
+            use_cache=use_cache
+        )
+
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
@@ -74,11 +81,6 @@ class SciNCLPredictor(Predictor):
         self.model = AutoModel.from_pretrained('malteos/scincl')
         self.model.to(self.cuda_device)
         self.model.eval()
-        self.embeddings_cache = embeddings_cache
-        if self.embeddings_cache is not None and self.embeddings_cache.is_connected:
-            self.use_cache = True
-        else:
-            self.use_cache = False
 
     def _fetch_batches(self, dict_data, batch_size):
         iterator = iter(dict_data.items())
@@ -184,6 +186,10 @@ class SciNCLPredictor(Predictor):
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             sub_jsonl.extend(self._batch_predict(batch_data))
 
+        # Flush any remaining embeddings in cache buffer
+        if self.use_cache:
+            self.embeddings_cache.flush_buffer(model=self.model_name, force=True)
+
         with open(submissions_path, 'w') as f:
             f.writelines(sub_jsonl)
 
@@ -200,6 +206,10 @@ class SciNCLPredictor(Predictor):
         pub_jsonl = []
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             pub_jsonl.extend(self._batch_predict(batch_data))
+
+        # Flush any remaining embeddings in cache buffer
+        if self.use_cache:
+            self.embeddings_cache.flush_buffer(model=self.model_name, force=True)
 
         with open(publications_path, 'w') as f:
             f.writelines(pub_jsonl)

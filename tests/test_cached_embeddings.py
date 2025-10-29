@@ -382,6 +382,192 @@ class TestGetBatchCacheInfo:
             assert item[3] is not None, "Should have content_hash even when disconnected"
 
 
+class TestCacheBuffering:
+    """Test the EmbeddingsCache buffering functionality"""
+
+    def test_buffer_initialization(self, check_mongodb):
+        """Test that cache initializes with buffer correctly"""
+        cache = EmbeddingsCache(
+            mongodb_uri=MONGODB_URI,
+            db_name=TEST_DB_NAME,
+            collection_name=TEST_COLLECTION_NAME,
+            buffer_flush_size=50
+        )
+
+        assert cache.embeddings_buffer == {}
+        assert cache.buffer_flush_size == 50
+
+    def test_buffer_accumulation(self, clean_cache):
+        """Test that embeddings accumulate in buffer before flushing"""
+        # Configure with large buffer so it doesn't auto-flush
+        clean_cache.buffer_flush_size = 100
+
+        # Add 5 items - should accumulate in buffer
+        embeddings_data = []
+        for i in range(5):
+            note_id = f"test_note_{i}"
+            embedding = [0.1 * i, 0.2 * i, 0.3 * i]
+            content_hash = f"hash_{i}"
+            embeddings_data.append((note_id, embedding, content_hash))
+
+        # Save batch - should accumulate in buffer
+        result = clean_cache.save_batch_embeddings(embeddings_data, "test_model")
+        assert result == True
+
+        # Verify buffer has items
+        assert "test_model" in clean_cache.embeddings_buffer
+        assert len(clean_cache.embeddings_buffer["test_model"]) == 5
+
+        # Verify items are NOT yet in MongoDB
+        note_ids = [f"test_note_{i}" for i in range(5)]
+        saved_docs = clean_cache.get_embeddings(note_ids, "test_model")
+        assert len(saved_docs) == 0
+
+    def test_auto_flush_on_threshold(self, clean_cache):
+        """Test that buffer auto-flushes when threshold is reached"""
+        # Configure with small buffer for testing
+        clean_cache.buffer_flush_size = 3
+
+        # Add 3 items - should trigger auto-flush
+        embeddings_data = []
+        for i in range(3):
+            note_id = f"test_note_{i}"
+            embedding = [0.1 * i, 0.2 * i, 0.3 * i]
+            content_hash = f"hash_{i}"
+            embeddings_data.append((note_id, embedding, content_hash))
+
+        # Save batch - should trigger flush
+        result = clean_cache.save_batch_embeddings(embeddings_data, "test_model")
+        assert result == True
+
+        # Verify buffer is now empty
+        assert len(clean_cache.embeddings_buffer.get("test_model", [])) == 0
+
+        # Verify items ARE in MongoDB
+        note_ids = [f"test_note_{i}" for i in range(3)]
+        saved_docs = clean_cache.get_embeddings(note_ids, "test_model")
+        assert len(saved_docs) == 3
+
+    def test_manual_flush_with_force(self, clean_cache):
+        """Test that force flush works regardless of buffer size"""
+        # Configure with large buffer
+        clean_cache.buffer_flush_size = 100
+
+        # Add only 3 items (below threshold)
+        embeddings_data = []
+        for i in range(3):
+            note_id = f"test_note_{i}"
+            embedding = [0.1 * i, 0.2 * i, 0.3 * i]
+            content_hash = f"hash_{i}"
+            embeddings_data.append((note_id, embedding, content_hash))
+
+        # Save batch - should accumulate only
+        clean_cache.save_batch_embeddings(embeddings_data, "test_model")
+
+        # Verify buffer has items
+        assert len(clean_cache.embeddings_buffer["test_model"]) == 3
+
+        # Force flush
+        result = clean_cache.flush_buffer(model="test_model", force=True)
+        assert result == True
+
+        # Verify buffer is now empty
+        assert len(clean_cache.embeddings_buffer.get("test_model", [])) == 0
+
+        # Verify items ARE in MongoDB
+        note_ids = [f"test_note_{i}" for i in range(3)]
+        saved_docs = clean_cache.get_embeddings(note_ids, "test_model")
+        assert len(saved_docs) == 3
+
+    def test_flush_without_force_below_threshold(self, clean_cache):
+        """Test that flush without force doesn't flush if below threshold"""
+        # Configure with large buffer
+        clean_cache.buffer_flush_size = 100
+
+        # Add only 3 items
+        embeddings_data = []
+        for i in range(3):
+            note_id = f"test_note_{i}"
+            embedding = [0.1 * i, 0.2 * i, 0.3 * i]
+            content_hash = f"hash_{i}"
+            embeddings_data.append((note_id, embedding, content_hash))
+
+        # Save batch
+        clean_cache.save_batch_embeddings(embeddings_data, "test_model")
+
+        # Try to flush without force
+        result = clean_cache.flush_buffer(model="test_model", force=False)
+        assert result == True
+
+        # Buffer should still have items (not flushed)
+        assert len(clean_cache.embeddings_buffer["test_model"]) == 3
+
+        # Items should NOT be in MongoDB
+        note_ids = [f"test_note_{i}" for i in range(3)]
+        saved_docs = clean_cache.get_embeddings(note_ids, "test_model")
+        assert len(saved_docs) == 0
+
+    def test_multiple_models_buffering(self, clean_cache):
+        """Test that different models have separate buffers"""
+        clean_cache.buffer_flush_size = 100
+
+        # Add items for model1
+        embeddings_data_1 = [("note_1a", [0.1, 0.2], "hash1a"), ("note_1b", [0.3, 0.4], "hash1b")]
+        clean_cache.save_batch_embeddings(embeddings_data_1, "model1")
+
+        # Add items for model2
+        embeddings_data_2 = [("note_2a", [0.5, 0.6], "hash2a"), ("note_2b", [0.7, 0.8], "hash2b")]
+        clean_cache.save_batch_embeddings(embeddings_data_2, "model2")
+
+        # Verify both models have separate buffers
+        assert len(clean_cache.embeddings_buffer["model1"]) == 2
+        assert len(clean_cache.embeddings_buffer["model2"]) == 2
+
+        # Flush only model1
+        clean_cache.flush_buffer(model="model1", force=True)
+
+        # model1 buffer should be empty, model2 should still have items
+        assert len(clean_cache.embeddings_buffer.get("model1", [])) == 0
+        assert len(clean_cache.embeddings_buffer["model2"]) == 2
+
+        # Verify only model1 items are in database
+        assert len(clean_cache.get_embeddings(["note_1a", "note_1b"], "model1")) == 2
+        assert len(clean_cache.get_embeddings(["note_2a", "note_2b"], "model2")) == 0
+
+    def test_flush_all_models(self, clean_cache):
+        """Test flushing all models at once"""
+        clean_cache.buffer_flush_size = 100
+
+        # Add items for multiple models
+        clean_cache.save_batch_embeddings([("note_1", [0.1], "hash1")], "model1")
+        clean_cache.save_batch_embeddings([("note_2", [0.2], "hash2")], "model2")
+
+        # Flush all models
+        result = clean_cache.flush_buffer(model=None, force=True)
+        assert result == True
+
+        # All buffers should be empty
+        assert len(clean_cache.embeddings_buffer.get("model1", [])) == 0
+        assert len(clean_cache.embeddings_buffer.get("model2", [])) == 0
+
+        # All items should be in database
+        assert len(clean_cache.get_embeddings(["note_1"], "model1")) == 1
+        assert len(clean_cache.get_embeddings(["note_2"], "model2")) == 1
+
+    def test_flush_empty_buffer(self, clean_cache):
+        """Test that flushing empty buffer works without error"""
+        result = clean_cache.flush_buffer(model="test_model", force=True)
+        assert result == True
+
+    def test_buffer_with_disconnected_cache(self, disconnected_cache):
+        """Test that buffering handles disconnected cache gracefully"""
+        embeddings_data = [("note_1", [0.1, 0.2], "hash1")]
+
+        # Should return False since not connected
+        result = disconnected_cache.save_batch_embeddings(embeddings_data, "test_model")
+        assert result == False
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 

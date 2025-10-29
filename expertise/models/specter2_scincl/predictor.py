@@ -3,7 +3,20 @@ import json
 import torch
 from expertise.embeddings_cache import EmbeddingsCache
 
+
 class Predictor:
+    def __init__(self, embeddings_cache=None, model_name=None, use_cache=False):
+        """
+        Initialize the Predictor base class.
+
+        Args:
+            embeddings_cache: EmbeddingsCache instance
+            model_name: Name of the model (e.g., 'specter2', 'scincl')
+            use_cache: Whether to use embeddings cache
+        """
+        self.embeddings_cache = embeddings_cache
+        self.model_name = model_name
+        self.use_cache = use_cache
     def _build_embedding_jsonl(self, paper, embedding):
         data = {
             'paper_id': paper['paper_id'],
@@ -32,19 +45,23 @@ class Predictor:
         return cached_items, uncached_items
 
     def _save_batch_embeddings(self, uncached_items, embeddings):
+        """
+        Save computed embeddings to cache (delegates to cache's buffering logic).
+        """
         if not self.use_cache:
             return True
 
         computed_for_cache = []
         for i, (idx, note_id, paper_data, content_hash) in enumerate(uncached_items):
             embedding = embeddings[i]
-
             embedding_list = embedding.detach().cpu().numpy().tolist()
             computed_for_cache.append((note_id, embedding_list, content_hash))
 
-        # Save computed embeddings to cache
+        # Save to cache (cache handles buffering internally)
         if computed_for_cache:
             self.embeddings_cache.save_batch_embeddings(computed_for_cache, self.model_name)
+
+        return True
 
     def _compute_embeddings_for_batch(self, uncached_items):
         """

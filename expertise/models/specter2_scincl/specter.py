@@ -43,7 +43,14 @@ class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=None,
                  normalize_scores=True, embeddings_cache=None):
-        self.model_name = 'specter2'
+        # Initialize parent class with cache settings
+        use_cache = embeddings_cache is not None and (embeddings_cache.is_connected if hasattr(embeddings_cache, 'is_connected') else False)
+        super().__init__(
+            embeddings_cache=embeddings_cache,
+            model_name='specter2',
+            use_cache=use_cache
+        )
+
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
@@ -68,11 +75,6 @@ class Specter2Predictor(Predictor):
         self.venue_specific_weights = venue_specific_weights
         self.normalize_scores = normalize_scores
         print(f"SPECTER2 venue_specific_weights: {venue_specific_weights}")
-        self.embeddings_cache = embeddings_cache
-        if self.embeddings_cache is not None and self.embeddings_cache.is_connected:
-            self.use_cache = True
-        else:
-            self.use_cache = False
 
         self.percentile_select = percentile_select
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
@@ -187,6 +189,10 @@ class Specter2Predictor(Predictor):
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             sub_jsonl.extend(self._batch_predict(batch_data))
 
+        # Flush any remaining embeddings in cache buffer
+        if self.use_cache:
+            self.embeddings_cache.flush_buffer(model=self.model_name, force=True)
+
         with open(submissions_path, 'w') as f:
             f.writelines(sub_jsonl)
 
@@ -203,6 +209,10 @@ class Specter2Predictor(Predictor):
         pub_jsonl = []
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             pub_jsonl.extend(self._batch_predict(batch_data))
+
+        # Flush any remaining embeddings in cache buffer
+        if self.use_cache:
+            self.embeddings_cache.flush_buffer(model=self.model_name, force=True)
 
         with open(publications_path, 'w') as f:
             f.writelines(pub_jsonl)
