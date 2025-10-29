@@ -1184,9 +1184,15 @@ class GCPInterface(object):
                 )
         return result
 
-    def get_job_results(self, user_id, job_id, delete_on_get=False):
+    def get_job_results(self, user_id, job_id, delete_on_get=False, as_csv=False):
 
-        def _get_scores_and_metadata_streaming(all_blobs, job_id, group_scoring=False, paper_scoring=False):
+        def _get_scores_and_metadata_streaming(
+            all_blobs,
+            job_id,
+            group_scoring=False,
+            paper_scoring=False,
+            response_format='jsonl'
+        ):
             """
             Extracts the scores and metadata from the GCS bucket and returns a generator that yields
             chunks of results to enable streaming
@@ -1199,14 +1205,21 @@ class GCPInterface(object):
             :type group_scoring: bool
             :param paper_scoring: Indicator for scores between papers
             :type paper_scoring: bool
+            :param response_format: Target streaming format ('jsonl' or 'csv')
+            :type response_format: str
 
             :returns generator: A generator that yields chunks of scores and finally the metadata
             """
             metadata_files = [
                 blob for blob in all_blobs if 'metadata.json' in blob.name
             ]
+            if response_format not in {'jsonl', 'csv'}:
+                raise openreview.OpenReviewException(f"Internal Error: unsupported response format {response_format}")
+
+            score_extension = '.jsonl' if response_format == 'jsonl' else '.csv'
             score_files = [
-                blob for blob in all_blobs if '.jsonl' in blob.name and job_id in blob.name
+                blob for blob in all_blobs
+                if score_extension in blob.name
             ]
             skip_sparse = group_scoring or paper_scoring
 
@@ -1220,69 +1233,99 @@ class GCPInterface(object):
             yield {'metadata': metadata, 'results': []}
 
             # Then stream the scores
-            if not skip_sparse:
-                sparse_score_files = [
-                    blob for blob in score_files if 'sparse' in blob.name
-                ]
-                if len(sparse_score_files) != 1:
-                    raise openreview.OpenReviewException(f"Internal Error: incorrect sparse score files found expected [1] found {len(sparse_score_files)}")
-                
-                # Stream the sparse scores in chunks
-                downloader = sparse_score_files[0].open('r')
-                chunk = downloader.readline()
-                results_chunk = []
-                chunk_size = 1000  # Adjust this number based on your data size
-                
-                while chunk:
-                    if isinstance(chunk, bytes):
-                        chunk = chunk.decode('utf-8')
-                    if chunk.strip():
-                        results_chunk.append(json.loads(chunk.strip()))
+            if response_format == 'jsonl':
+                if not skip_sparse:
+                    sparse_score_files = [
+                        blob for blob in score_files if 'sparse' in blob.name
+                    ]
+                    if len(sparse_score_files) != 1:
+                        raise openreview.OpenReviewException(f"Internal Error: incorrect sparse score files found expected [1] found {len(sparse_score_files)}")
                     
-                    # Yield chunks of results
-                    if len(results_chunk) >= chunk_size:
-                        yield {'results': results_chunk, 'metadata': None}
-                        results_chunk = []
-                    
+                    # Stream the sparse scores in chunks
+                    downloader = sparse_score_files[0].open('r')
                     chunk = downloader.readline()
-                
-                # Yield any remaining results
-                if results_chunk:
-                    yield {'results': results_chunk, 'metadata': None}
+                    results_chunk = []
+                    chunk_size = 1000  # Adjust this number based on your data size
                     
-                downloader.close()
+                    while chunk:
+                        if isinstance(chunk, bytes):
+                            chunk = chunk.decode('utf-8')
+                        if chunk.strip():
+                            results_chunk.append(json.loads(chunk.strip()))
+                        
+                        # Yield chunks of results
+                        if len(results_chunk) >= chunk_size:
+                            yield {'results': results_chunk, 'metadata': None}
+                            results_chunk = []
+                        
+                        chunk = downloader.readline()
+                    
+                    # Yield any remaining results
+                    if results_chunk:
+                        yield {'results': results_chunk, 'metadata': None}
+                        
+                    downloader.close()
+                else:
+                    non_sparse_score_files = [
+                        blob for blob in score_files if 'sparse' not in blob.name
+                    ]
+                    if len(non_sparse_score_files) != 1:
+                        scoring_type_string = 'group' if group_scoring else 'paper'
+                        raise openreview.OpenReviewException(f"Internal Error: incorrect {scoring_type_string} score files found expected [1] found {len(non_sparse_score_files)}")
+                    
+                    # Stream the non-sparse scores in chunks
+                    downloader = non_sparse_score_files[0].open('r')
+                    chunk = downloader.readline()
+                    results_chunk = []
+                    chunk_size = 1000  # Adjust this number based on your data size
+                    
+                    while chunk:
+                        if isinstance(chunk, bytes):
+                            chunk = chunk.decode('utf-8')
+                        if chunk.strip():
+                            results_chunk.append(json.loads(chunk.strip()))
+                        
+                        # Yield chunks of results
+                        if len(results_chunk) >= chunk_size:
+                            yield {'results': results_chunk, 'metadata': None}
+                            results_chunk = []
+                        
+                        chunk = downloader.readline()
+                    
+                    # Yield any remaining results
+                    if results_chunk:
+                        yield {'results': results_chunk, 'metadata': None}
+                    
+                    downloader.close()
             else:
-                non_sparse_score_files = [
-                    blob for blob in score_files if 'sparse' not in blob.name
-                ]
-                if len(non_sparse_score_files) != 1:
-                    scoring_type_string = 'group' if group_scoring else 'paper'
-                    raise openreview.OpenReviewException(f"Internal Error: incorrect {scoring_type_string} score files found expected [1] found {len(non_sparse_score_files)}")
-                
-                # Stream the non-sparse scores in chunks
-                downloader = non_sparse_score_files[0].open('r')
-                chunk = downloader.readline()
-                results_chunk = []
-                chunk_size = 1000  # Adjust this number based on your data size
-                
-                while chunk:
-                    if isinstance(chunk, bytes):
-                        chunk = chunk.decode('utf-8')
-                    if chunk.strip():
-                        results_chunk.append(json.loads(chunk.strip()))
-                    
-                    # Yield chunks of results
-                    if len(results_chunk) >= chunk_size:
-                        yield {'results': results_chunk, 'metadata': None}
-                        results_chunk = []
-                    
-                    chunk = downloader.readline()
-                
-                # Yield any remaining results
-                if results_chunk:
-                    yield {'results': results_chunk, 'metadata': None}
-                
-                downloader.close()
+                if not skip_sparse:
+                    sparse_score_files = [
+                        blob for blob in score_files if 'sparse' in blob.name
+                    ]
+                    if len(sparse_score_files) != 1:
+                        raise openreview.OpenReviewException(f"Internal Error: incorrect sparse score files found expected [1] found {len(sparse_score_files)}")
+                    target_blob = sparse_score_files[0]
+                else:
+                    non_sparse_score_files = [
+                        blob for blob in score_files if 'sparse' not in blob.name
+                    ]
+                    if len(non_sparse_score_files) != 1:
+                        scoring_type_string = 'group' if group_scoring else 'paper'
+                        raise openreview.OpenReviewException(f"Internal Error: incorrect {scoring_type_string} score files found expected [1] found {len(non_sparse_score_files)}")
+                    target_blob = non_sparse_score_files[0]
+
+                downloader = target_blob.open('r')
+                chunk_size_bytes = 1024 * 1024  # 1MB default chunk size for CSV streaming
+                chunk = downloader.read(chunk_size_bytes)
+
+                try:
+                    while chunk:
+                        if isinstance(chunk, bytes):
+                            chunk = chunk.decode('utf-8')
+                        yield {'results': chunk, 'metadata': None}
+                        chunk = downloader.read(chunk_size_bytes)
+                finally:
+                    downloader.close()
     
         # Main function implementation
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
@@ -1305,5 +1348,11 @@ class GCPInterface(object):
         group_group_matching = request.get('entityA', {}).get('type', '') == 'Group' and request.get('entityB', {}).get('type', '') == 'Group'
         paper_paper_matching = request.get('entityA', {}).get('type', '') == 'Note' and request.get('entityB', {}).get('type', '') == 'Note'
 
-        return _get_scores_and_metadata_streaming(job_blobs, job_id, group_scoring=group_group_matching, paper_scoring=paper_paper_matching)
-
+        response_format = 'csv' if as_csv else 'jsonl'
+        return _get_scores_and_metadata_streaming(
+            job_blobs,
+            job_id,
+            group_scoring=group_group_matching,
+            paper_scoring=paper_paper_matching,
+            response_format=response_format
+        )

@@ -696,7 +696,7 @@ class ExpertiseService(BaseExpertiseService):
             'request': config.api_request.to_json()
         }
 
-    def get_expertise_results(self, user_id, job_id, delete_on_get=False):
+    def get_expertise_results(self, user_id, job_id, delete_on_get=False, return_csv=None):
         """
         Gets the scores of a given job
         If delete_on_get is set, delete the directory after the scores are fetched
@@ -708,6 +708,9 @@ class ExpertiseService(BaseExpertiseService):
         :type job_id: str
 
         :param delete_on_get: A flag indicating whether or not to clean up the directory after it is fetched
+        :type delete_on_get: bool
+
+        :param delete_on_get: A flag indicating whether or not to return CSV format (not implemented for local service)
         :type delete_on_get: bool
 
         :returns: A dictionary that contains the calculated scores and metadata
@@ -1059,7 +1062,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         cloud_return['jobId'] = redis_job.job_id
         return cloud_return
 
-    def get_expertise_results(self, user_id, job_id, delete_on_get=False):
+    def get_expertise_results(self, user_id, job_id, delete_on_get=False, return_csv=False):
         """
         Gets the scores of a given job
         If delete_on_get is set, delete the directory after the scores are fetched
@@ -1076,4 +1079,4 @@ class ExpertiseCloudService(BaseExpertiseService):
         :returns: A dictionary that contains the calculated scores and metadata
         """
         redis_job = self.redis.load_job(job_id, user_id)
-        return self.cloud.get_job_results(user_id, redis_job.cloud_id, delete_on_get)
+        return self.cloud.get_job_results(user_id, redis_job.cloud_id, delete_on_get, as_csv=return_csv)
