@@ -49,7 +49,9 @@ setup(
         'google-cloud',
         'google-cloud-storage',
         'google-cloud-aiplatform',
-        'bullmq==2.11.0'
+        'bullmq==2.11.0',
+        'pymongo==4.14.1',
+        'xxhash==3.6.0',
     ],
     zip_safe=False
 )
