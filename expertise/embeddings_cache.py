@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class EmbeddingsCache:
     """Cache for existing document embeddings with buffering support."""
 
-    def __init__(self, mongodb_uri: str, db_name: str, collection_name: str, buffer_flush_size: int = 200):
+    def __init__(self, mongodb_uri: str, db_name: str, collection_name: str, buffer_flush_size: int = 10000):
         """
         Initialize the embeddings cache.
 
