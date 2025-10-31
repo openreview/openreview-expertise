@@ -1231,143 +1231,74 @@ class GCPInterface(object):
             metadata = json.loads(metadata_files[0].download_as_string())
             yield {'metadata': metadata, 'results': []}
 
+            # Helper function to stream scores from a blob file
+            def stream_score_file(blob, as_csv=False):
+                if as_csv:
+                    downloader = blob.open('r')
+                    chunk_size_bytes = 1024 * 1024  # 1MB default chunk size for CSV streaming
+                    chunk = downloader.read(chunk_size_bytes)
+
+                    try:
+                        while chunk:
+                            if isinstance(chunk, bytes):
+                                chunk = chunk.decode('utf-8')
+                            yield {'results': chunk, 'metadata': None}
+                            chunk = downloader.read(chunk_size_bytes)
+                    finally:
+                        downloader.close()
+                else:
+                    downloader = blob.open('r')
+                    chunk = downloader.readline()
+                    results_chunk = []
+                    chunk_size = 1000  # Adjust this number based on your data size
+
+                    while chunk:
+                        if isinstance(chunk, bytes):
+                            chunk = chunk.decode('utf-8')
+                        if chunk.strip():
+                            results_chunk.append(json.loads(chunk.strip()))
+
+                        # Yield chunks of results
+                        if len(results_chunk) >= chunk_size:
+                            yield {'results': results_chunk, 'metadata': None}
+                            results_chunk = []
+
+                        chunk = downloader.readline()
+
+                    # Yield any remaining results
+                    if results_chunk:
+                        yield {'results': results_chunk, 'metadata': None}
+
+                    downloader.close()
+
             # Then stream the scores
             if response_format == 'jsonl':
-                if not skip_sparse:
-                    sparse_score_files = [
-                        blob for blob in score_files if 'sparse' in blob.name
-                    ]
-                    if len(sparse_score_files) != 1:
-                        raise openreview.OpenReviewException(f"Internal Error: incorrect sparse score files found expected [1] found {len(sparse_score_files)}")
-                    
-                    # Stream the sparse scores in chunks
-                    downloader = sparse_score_files[0].open('r')
-                    chunk = downloader.readline()
-                    results_chunk = []
-                    chunk_size = 1000  # Adjust this number based on your data size
-                    
-                    while chunk:
-                        if isinstance(chunk, bytes):
-                            chunk = chunk.decode('utf-8')
-                        if chunk.strip():
-                            results_chunk.append(json.loads(chunk.strip()))
-                        
-                        # Yield chunks of results
-                        if len(results_chunk) >= chunk_size:
-                            yield {'results': results_chunk, 'metadata': None}
-                            results_chunk = []
-                        
-                        chunk = downloader.readline()
-                    
-                    # Yield any remaining results
-                    if results_chunk:
-                        yield {'results': results_chunk, 'metadata': None}
-                        
-                    downloader.close()
-                else:
-                    non_sparse_score_files = [
-                        blob for blob in score_files if 'sparse' not in blob.name
-                    ]
-                    if len(non_sparse_score_files) != 1:
-                        scoring_type_string = 'group' if group_scoring else 'paper'
-                        raise openreview.OpenReviewException(f"Internal Error: incorrect {scoring_type_string} score files found expected [1] found {len(non_sparse_score_files)}")
-                    
-                    # Stream the non-sparse scores in chunks
-                    downloader = non_sparse_score_files[0].open('r')
-                    chunk = downloader.readline()
-                    results_chunk = []
-                    chunk_size = 1000  # Adjust this number based on your data size
-                    
-                    while chunk:
-                        if isinstance(chunk, bytes):
-                            chunk = chunk.decode('utf-8')
-                        if chunk.strip():
-                            results_chunk.append(json.loads(chunk.strip()))
-                        
-                        # Yield chunks of results
-                        if len(results_chunk) >= chunk_size:
-                            yield {'results': results_chunk, 'metadata': None}
-                            results_chunk = []
-                        
-                        chunk = downloader.readline()
-                    
-                    # Yield any remaining results
-                    if results_chunk:
-                        yield {'results': results_chunk, 'metadata': None}
-                    
-                    downloader.close()
-            else:
-                if not skip_sparse:
-                    sparse_score_files = [
-                        blob for blob in score_files if 'sparse' in blob.name
-                    ]
-                    if len(sparse_score_files) != 1:
-                        raise openreview.OpenReviewException(f"Internal Error: incorrect sparse score files found expected [1] found {len(sparse_score_files)}")
-                    target_blob = sparse_score_files[0]
-                else:
-                    non_sparse_score_files = [
-                        blob for blob in score_files if 'sparse' not in blob.name
-                    ]
-                    if len(non_sparse_score_files) != 1:
-                        scoring_type_string = 'group' if group_scoring else 'paper'
-                        raise openreview.OpenReviewException(f"Internal Error: incorrect {scoring_type_string} score files found expected [1] found {len(non_sparse_score_files)}")
-                    target_blob = non_sparse_score_files[0]
-
-                downloader = target_blob.open('r')
-                chunk_size_bytes = 1024 * 1024  # 1MB default chunk size for CSV streaming
-                chunk = downloader.read(chunk_size_bytes)
-
-                try:
-                    while chunk:
-                        if isinstance(chunk, bytes):
-                            chunk = chunk.decode('utf-8')
-                        yield {'results': chunk, 'metadata': None}
-                        chunk = downloader.read(chunk_size_bytes)
-                finally:
-                    downloader.close()
-    
-            # Helper function to stream scores from a blob file
-            def stream_score_file(blob):
-                downloader = blob.open('r')
-                chunk = downloader.readline()
-                results_chunk = []
-                chunk_size = 1000  # Adjust this number based on your data size
-
-                while chunk:
-                    if isinstance(chunk, bytes):
-                        chunk = chunk.decode('utf-8')
-                    if chunk.strip():
-                        results_chunk.append(json.loads(chunk.strip()))
-
-                    # Yield chunks of results
-                    if len(results_chunk) >= chunk_size:
-                        yield {'results': results_chunk, 'metadata': None}
-                        results_chunk = []
-
-                    chunk = downloader.readline()
-
-                # Yield any remaining results
-                if results_chunk:
-                    yield {'results': results_chunk, 'metadata': None}
-
-                downloader.close()
-
-            # Determine whether to use sparse or non-sparse score files
-            sparse_score_files = [
-                blob for blob in score_files if 'sparse' in blob.name
-            ]
-
-            # Then stream the scores
-            if len(sparse_score_files) == 1:
-                yield from stream_score_file(sparse_score_files[0])
-            else:
-                non_sparse_score_files = [
-                    blob for blob in score_files if 'sparse' not in blob.name
+                sparse_score_files = [
+                    blob for blob in score_files if 'sparse' in blob.name
                 ]
-                if len(non_sparse_score_files) != 1:
-                    raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
-
-                yield from stream_score_file(non_sparse_score_files[0])
+                if len(sparse_score_files) == 1:
+                    yield from stream_score_file(sparse_score_files[0])
+                else:
+                    non_sparse_score_files = [
+                        blob for blob in score_files if 'sparse' not in blob.name
+                    ]
+                    if len(non_sparse_score_files) != 1:
+                        raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
+                    
+                    yield from stream_score_file(non_sparse_score_files[0])
+            elif response_format == 'csv':
+                sparse_score_files = [
+                    blob for blob in score_files if 'sparse' in blob.name
+                ]
+                if len(sparse_score_files) == 1:
+                    yield from stream_score_file(sparse_score_files[0], as_csv=True)
+                else:
+                    non_sparse_score_files = [
+                        blob for blob in score_files if 'sparse' not in blob.name
+                    ]
+                    if len(non_sparse_score_files) != 1:
+                        raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
+                    yield from stream_score_file(non_sparse_score_files[0], as_csv=True)
 
         # Main function implementation
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
