@@ -288,7 +288,16 @@ def results():
         if job_id is None or len(job_id) == 0:
             raise openreview.OpenReviewException('Bad request: jobId is required')
         delete_on_get = flask.request.args.get('deleteOnGet', 'False').lower() == 'true'
-        return_csv = flask.request.args.get('returnCsv', 'False').lower() == 'true'
+        
+        # Check Accept header to determine response format
+        accept_header = flask.request.headers.get('Accept', '')
+        flask.current_app.logger.debug(f'Accept header: {accept_header}')
+        # Check if Accept header contains text/csv or application/csv
+        return_csv = 'text/csv' in accept_header or 'application/csv' in accept_header
+        if return_csv:
+            flask.current_app.logger.debug('Format selection: CSV (from Accept header)')
+        else:
+            flask.current_app.logger.debug('Format selection: JSONL (default or from Accept header)')
 
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
         expertise_service.set_client(openreview_client)
@@ -358,7 +367,9 @@ def results():
                     yield '[],"error":"Error during streaming"}'
 
             flask.current_app.logger.debug('Streaming response started')
-            return flask.Response(generate(), mimetype='application/json')
+            # Set Content-Type based on format
+            content_type = 'text/csv' if return_csv else 'application/json'
+            return flask.Response(generate(), mimetype=content_type)
         else:
             # It's a regular dictionary - use standard JSON response
             flask.current_app.logger.debug('Using standard JSON response')

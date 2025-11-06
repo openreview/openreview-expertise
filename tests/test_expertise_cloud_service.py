@@ -365,7 +365,7 @@ class TestExpertiseCloudService():
             {"submission": "abcde","user": "user_user2","score": 0.987}
         ]
 
-        csv_response = test_client.get('/expertise/results', headers=tmlr_client.headers, query_string={'jobId': job_id, 'returnCsv': True})
+        csv_response = test_client.get('/expertise/results', headers={**tmlr_client.headers, 'Accept': 'text/csv'}, query_string={'jobId': job_id})
         assert csv_response.status_code == 200
         assert csv_response.json["metadata"] == {"meta": "data"}
         csv_body = csv_response.json['results']
