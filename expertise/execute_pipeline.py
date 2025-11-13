@@ -168,7 +168,8 @@ def run_pipeline(
     for csv_file in [d for d in os.listdir(config.job_dir) if '.csv' in d]:
         result = []
         destination_blob = f"{blob_prefix}/{csv_file.replace('.csv', '.jsonl')}"
-        with open(os.path.join(config.job_dir, csv_file), 'r') as f:
+        csv_path = os.path.join(config.job_dir, csv_file)
+        with open(csv_path, 'r', newline='') as f:
             reader = csv.reader(f)
             for row in reader:
                 if group_group_matching:
@@ -189,7 +190,8 @@ def run_pipeline(
                         'user': row[1],
                         'score': float(row[2])
                     })
-                    
+        csv_blob = bucket.blob(f"{blob_prefix}/{csv_file}")
+        csv_blob.upload_from_filename(csv_path, content_type='text/csv')
         blob = bucket.blob(destination_blob)
         contents = '\n'.join([json.dumps(r) for r in result])
         blob.upload_from_string(contents)
