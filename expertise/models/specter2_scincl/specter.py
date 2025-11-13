@@ -42,8 +42,15 @@ silent
 class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=None,
-                 normalize_scores=True):
-        self.model_name = 'specter2'
+                 normalize_scores=True, embeddings_cache=None):
+        # Initialize parent class with cache settings
+        use_cache = embeddings_cache is not None and (embeddings_cache.is_connected if hasattr(embeddings_cache, 'is_connected') else False)
+        super().__init__(
+            embeddings_cache=embeddings_cache,
+            model_name='specter2',
+            use_cache=use_cache
+        )
+
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
@@ -86,28 +93,31 @@ class Specter2Predictor(Predictor):
                 break
             yield batch
 
-    def _batch_predict(self, batch_data):
-        jsonl_out = []
-        text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
-        # preprocess the input
+    def _compute_embeddings_for_batch(self, uncached_items):
+        """
+        Compute SPECTER2 embeddings for a batch of uncached items.
+
+        Args:
+            uncached_items: List of tuples (idx, note_id, paper_data, content_hash)
+
+        Returns:
+            Tuple of (embeddings, cleanup_objects)
+        """
+        # Extract data for computation
+        uncached_papers = [(item[1], item[2]) for item in uncached_items]  # (note_id, paper_data)
+        text_batch = [paper_data['title'] + self.tokenizer.sep_token + (paper_data.get('abstract') or '')
+                     for _, paper_data in uncached_papers]
+
+        # Compute embeddings
         inputs = self.tokenizer(text_batch, padding=True, truncation=True,
                                         return_tensors="pt", return_token_type_ids=False, max_length=512)
         inputs = inputs.to(self.cuda_device)
         with torch.no_grad():
             output = self.model(**inputs)
-        # take the first token in the batch as the embedding
         embeddings = output.last_hidden_state[:, 0, :]
 
-        for paper, embedding in zip(batch_data, embeddings):
-            paper = paper[1]
-            jsonl_out.append(self._build_embedding_jsonl(paper, embedding))
-
-        # clean up batch data
-        del embeddings
-        del output
-        del inputs
-        torch.cuda.empty_cache()
-        return jsonl_out
+        # Return embeddings and objects to cleanup
+        return embeddings, [embeddings, output, inputs]
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
@@ -179,6 +189,10 @@ class Specter2Predictor(Predictor):
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             sub_jsonl.extend(self._batch_predict(batch_data))
 
+        # Flush any remaining embeddings in cache buffer
+        if self.use_cache:
+            self.embeddings_cache.flush_buffer(model=self.model_name, force=True)
+
         with open(submissions_path, 'w') as f:
             f.writelines(sub_jsonl)
 
@@ -195,6 +209,10 @@ class Specter2Predictor(Predictor):
         pub_jsonl = []
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             pub_jsonl.extend(self._batch_predict(batch_data))
+
+        # Flush any remaining embeddings in cache buffer
+        if self.use_cache:
+            self.embeddings_cache.flush_buffer(model=self.model_name, force=True)
 
         with open(publications_path, 'w') as f:
             f.writelines(pub_jsonl)
