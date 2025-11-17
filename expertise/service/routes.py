@@ -367,9 +367,7 @@ def results():
                     yield '[],"error":"Error during streaming"}'
 
             flask.current_app.logger.debug('Streaming response started')
-            # Set Content-Type based on format
-            content_type = 'text/csv' if return_csv else 'application/json'
-            return flask.Response(generate(), mimetype=content_type)
+            return flask.Response(generate(), mimetype='application/json')
         else:
             # It's a regular dictionary - use standard JSON response
             flask.current_app.logger.debug('Using standard JSON response')
