@@ -973,7 +973,7 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
     # Should only have one paper with this title (the best one: paper4 - newest date with abstract)
     assert len(papers_with_test_title) == 1, f"Expected 1 paper, got {len(papers_with_test_title)}"
     kept_paper = papers_with_test_title[0]
-    kept_abstract = kept_paper['content']['abstract']['value']
+    kept_abstract = kept_paper['content']['abstract']
     assert kept_abstract == 'This is the best abstract with the newest date.'
     assert kept_paper.get('pdate') == 1640995200  # Should be paper4
     
@@ -991,7 +991,7 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
     # Should only have one paper with this title (the best one)
     assert len(papers_with_test_title_group) == 1, f"Expected 1 paper in get_papers_from_group, got {len(papers_with_test_title_group)}"
     kept_paper_group = papers_with_test_title_group[0]
-    group_abstract = kept_paper_group.content['abstract']['value']
+    group_abstract = kept_paper_group.content['abstract']
     assert group_abstract == 'This is the best abstract with the newest date.'
     assert getattr(kept_paper_group, 'pdate', None) == 1640995200  # Should be paper4
     
