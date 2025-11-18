@@ -313,29 +313,15 @@ def results():
                 try:
                     # Branch streaming format based on return_csv
                     if return_csv:
-                        # Stream a single JSON string by concatenating CSV chunks
-                        yield '{"results":"'
-
-                        metadata = None
                         for chunk in result:
-                            # Save metadata for later
-                            if chunk.get('metadata') is not None:
-                                metadata = chunk['metadata']
-
-                            # Stream CSV chunks (strings) safely escaped for JSON
+                            # Stream CSV chunks (strings)
                             if chunk.get('results'):
                                 csv_chunk = chunk['results']
                                 if isinstance(csv_chunk, str):
-                                    # Append without outer quotes
-                                    yield json.dumps(csv_chunk)[1:-1]
+                                    yield csv_chunk
                                 else:
                                     # Fallback: stringify non-str results
-                                    yield json.dumps(str(csv_chunk))[1:-1]
-
-                        # Close the results string and add metadata
-                        yield '",'
-                        yield f'"metadata":{json.dumps(metadata or {})}'
-                        yield '}'
+                                    yield str(csv_chunk)
                     else:
                         # JSONL: Stream an array of JSON objects
                         yield '{"results":['
@@ -367,7 +353,8 @@ def results():
                     yield '[],"error":"Error during streaming"}'
 
             flask.current_app.logger.debug('Streaming response started')
-            return flask.Response(generate(), mimetype='application/json')
+            mimetype = 'text/csv' if return_csv else 'application/json'
+            return flask.Response(generate(), mimetype=mimetype)
         else:
             # It's a regular dictionary - use standard JSON response
             flask.current_app.logger.debug('Using standard JSON response')
