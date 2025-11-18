@@ -888,6 +888,36 @@ def test_expertise_inclusion(client, openreview_client, helpers, clean_start_con
 def test_paperhash_deduplication_priority(client, openreview_client, helpers):
     author_id = '~Harold_Rice1'
     test_title = "Test Paperhash"
+
+    # Make abstract optional in openreview.net/Archive/-/Direct_Upload invitation
+    openreview_client.post_invitation_edit(
+        invitations='openreview.net/Archive/-/Edit',
+        readers=['openreview.net'],
+        writers=['openreview.net'],
+        signatures=['openreview.net'],
+        invitation=openreview.api.Invitation(
+            id='openreview.net/Archive/-/Direct_Upload',
+            edit={
+                'note': {
+                    'content': {
+                        "abstract": {
+                            "order": 4,
+                            "description": "Abstract of paper. Add TeX formulas using the following formats: $In-line Formula$ or $$Block Formula$$.",
+                            "value": {
+                                "param": {
+                                    "type": "string",
+                                    "maxLength": 5000,
+                                    "markdown": True,
+                                    "input": "textarea",
+                                    "optional": True
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    )
     
     # Paper 1: Older date, no abstract
     paper1 = openreview.api.Note(
@@ -936,6 +966,16 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
         pdate=1640995200,  # Newest date (2022-01-01)
         license='CC BY-SA 4.0'
     )
+    # Paper 5: Newest date, abstract not in content
+    paper5 = openreview.api.Note(
+        content={
+            "title": {'value': test_title},
+            "authors": {'value': ['Harold Rice']},
+            "authorids": {'value': [author_id]},
+        },
+        pdate=1640995200,  # Newest date (2022-01-01)
+        license='CC BY-SA 4.0'
+    )
     
     # Post all papers
     paper1_edit = openreview_client.post_note_edit(
@@ -958,7 +998,12 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
         signatures=['~SomeTest_User1'],
         note=paper4
     )
-    
+    paper5_edit = openreview_client.post_note_edit(
+        invitation='openreview.net/Archive/-/Direct_Upload',
+        signatures=['~SomeTest_User1'],
+        note=paper5
+    )
+
     config = {
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers'
@@ -976,6 +1021,9 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
     kept_abstract = kept_paper['content']['abstract']
     assert kept_abstract == 'This is the best abstract with the newest date.'
     assert kept_paper.get('pdate') == 1640995200  # Should be paper4
+    # Verify paper5 (missing abstract field) was not selected
+    paper5_id = paper5_edit['note']['id']
+    assert kept_paper['id'] != paper5_id, "Paper5 (missing abstract field) should not be selected over paper4 (has abstract)"
     
     # Test get_papers_from_group for group-group scoring
     # Reuse existing DEF.cc/Reviewers group (author should already be a member)
@@ -994,9 +1042,11 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
     group_abstract = kept_paper_group.content['abstract']
     assert group_abstract == 'This is the best abstract with the newest date.'
     assert getattr(kept_paper_group, 'pdate', None) == 1640995200  # Should be paper4
+    # Verify paper5 (missing abstract field) was not selected in get_papers_from_group
+    assert kept_paper_group.id != paper5_id, "Paper5 (missing abstract field) should not be selected over paper4 (has abstract) in get_papers_from_group"
     
     # Clean up test papers
-    for edit in [paper1_edit, paper2_edit, paper3_edit, paper4_edit]:
+    for edit in [paper1_edit, paper2_edit, paper3_edit, paper4_edit, paper5_edit]:
         openreview_client.post_note_edit(
             invitation='openreview.net/-/Edit',
             readers=['openreview.net'],
