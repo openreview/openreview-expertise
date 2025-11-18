@@ -90,6 +90,80 @@ class OpenReviewExpertise(object):
 
         return deduplicated
     
+    def _get_paper_date(self, paper):
+        """
+        Extract date from paper.
+        Priority: pdate or odate (equal priority), fallback to cdate.
+        Returns 0 if none available.
+        """
+        # Handle dict format
+        if isinstance(paper, dict):
+            # Check for pdate or odate in dict
+            pdate = paper.get('pdate')
+            odate = paper.get('odate')
+            if pdate is not None:
+                return pdate
+            if odate is not None:
+                return odate
+            return paper.get('cdate', 0)
+        
+        # Handle Note
+        pdate = getattr(paper, 'pdate', None)
+        odate = getattr(paper, 'odate', None)
+        if pdate is not None:
+            return pdate
+        if odate is not None:
+            return odate
+        return getattr(paper, 'cdate', 0)
+    
+    def _has_nonzero_abstract(self, paper):
+        """
+        Check if paper has non-zero length abstract.
+        Handles both dicts and Notes
+        """
+        abstract = None
+        
+        # Handle dict format
+        if isinstance(paper, dict):
+            abstract = paper.get('content', {}).get('abstract', '')
+        else:
+            # Handle Note object format
+            abstract = paper.content.get('abstract', '')
+        
+        if isinstance(abstract, dict):
+            abstract = abstract.get('value', '')
+        
+        # Check if abstract exists and has non-zero length
+        return bool(abstract and len(str(abstract).strip()) > 0)
+    
+    def _is_better_paper(self, new_paper, existing_paper):
+        """
+        Compare two papers and return True if new_paper is better than existing_paper.
+        Priority 1: Abstract presence (non-zero abstract wins)
+        Priority 2: Date (more recent wins)
+        If equal: return False (keep existing, arbitrary tie-break)
+        """
+        new_has_abstract = self._has_nonzero_abstract(new_paper)
+        existing_has_abstract = self._has_nonzero_abstract(existing_paper)
+        
+        # Priority 1: Abstract presence
+        if new_has_abstract and not existing_has_abstract:
+            return True
+        if not new_has_abstract and existing_has_abstract:
+            return False
+        
+        # Priority 2: Date (more recent wins)
+        new_date = self._get_paper_date(new_paper)
+        existing_date = self._get_paper_date(existing_paper)
+        
+        if new_date > existing_date:
+            return True
+        if new_date < existing_date:
+            return False
+        
+        # If equal: keep existing (arbitrary tie-break)
+        return False
+    
     def get_pub_weight(self, venueid, pub=None, weight_specification=[]):
         rule_precedence = {'articleSubmittedToOpenReview': 0, 'value': 1, 'prefix': 2}
 
@@ -197,6 +271,13 @@ class OpenReviewExpertise(object):
                     'venueid': pub_venueid
                 }
             }
+
+            pdate = getattr(publication, 'pdate', None)
+            odate = getattr(publication, 'odate', None)
+            if pdate is not None:
+                reduced_publication['pdate'] = pdate
+            if odate is not None:
+                reduced_publication['odate'] = odate
 
             if weight_specification:
                 reduced_publication['content']['weight'] = pub_weight
@@ -360,8 +441,7 @@ class OpenReviewExpertise(object):
         if 'inclusion_inv' in self.config and len(self.included_ids_by_user[member]) > 0 and not any(paper['id'] in self.included_ids_by_user[member] for paper in member_papers):
             include_all_papers = True
 
-        seen_keys = set()
-        filtered_papers = []
+        seen_papers = {}  # Maps paperhash -> paper
 
         print(f"{member} include/exclude")
         print(self.included_ids_by_user.get(member))
@@ -369,15 +449,27 @@ class OpenReviewExpertise(object):
 
         for n in member_papers:
             paper_title = openreview.tools.get_paperhash('', n['content']['title'])
+            if not paper_title:
+                continue
+            
             if 'inclusion_inv' in self.config:
                 # The paper must be included or the user has included no papers
-                if paper_title and ((n['id'] in self.included_ids_by_user[member] or len(self.included_ids_by_user[member]) == 0) or include_all_papers):
-                    filtered_papers.append(n)
+                if (n['id'] in self.included_ids_by_user[member] or len(self.included_ids_by_user[member]) == 0) or include_all_papers:
+                    if paper_title not in seen_papers:
+                        seen_papers[paper_title] = n
+                    else:
+                        if self._is_better_paper(n, seen_papers[paper_title]):
+                            seen_papers[paper_title] = n
             else:
-                if paper_title and n['id'] not in self.excluded_ids_by_user[member] and paper_title not in seen_keys:
-                    filtered_papers.append(n)
-            seen_keys.add(paper_title)
+                # Exclusion logic
+                if n['id'] not in self.excluded_ids_by_user[member]:
+                    if paper_title not in seen_papers:
+                        seen_papers[paper_title] = n
+                    else:
+                        if self._is_better_paper(n, seen_papers[paper_title]):
+                            seen_papers[paper_title] = n
 
+        filtered_papers = list(seen_papers.values())
         return member, email, filtered_papers
 
 
@@ -465,21 +557,31 @@ class OpenReviewExpertise(object):
 
         for future in futures:
             result = future.result()
-            # Convert publications to json
-            papers_json_list = []
-            filtered_papers = []
-            seen_keys = set()
+            seen_papers = {}  # Maps paperhash -> paper_note
+            
             for paper_note in result['papers']:
                 paper_hash = openreview.tools.get_paperhash('', paper_note.content['title'])
+                if not paper_hash:
+                    continue
+                
                 if 'alternate_inclusion_inv' in self.config:
-                    if paper_hash and (paper_note.id in self.alternate_included_ids_by_user[result['profile_id']] or len(self.alternate_included_ids_by_user[result['profile_id']]) == 0):
-                        filtered_papers.append(paper_note)
-                        papers_json_list.append(paper_note.to_json())
+                    if paper_note.id in self.alternate_included_ids_by_user[result['profile_id']] or len(self.alternate_included_ids_by_user[result['profile_id']]) == 0:
+                        if paper_hash not in seen_papers:
+                            seen_papers[paper_hash] = paper_note
+                        else:
+                            if self._is_better_paper(paper_note, seen_papers[paper_hash]):
+                                seen_papers[paper_hash] = paper_note
                 else:
-                    if paper_hash and paper_note.id not in self.alternate_excluded_ids_by_user[result['profile_id']] and paper_hash not in seen_keys:
-                        filtered_papers.append(paper_note)
-                        papers_json_list.append(paper_note.to_json())
-                seen_keys.add(paper_hash)
+                    if paper_note.id not in self.alternate_excluded_ids_by_user[result['profile_id']]:
+                        if paper_hash not in seen_papers:
+                            seen_papers[paper_hash] = paper_note
+                        else:
+                            if self._is_better_paper(paper_note, seen_papers[paper_hash]):
+                                seen_papers[paper_hash] = paper_note
+            
+            # Build filtered_papers and papers_json_list from seen_papers values
+            filtered_papers = list(seen_papers.values())
+            papers_json_list = [paper.to_json() for paper in seen_papers.values()]
             publications_by_profile_id[result['profile_id']] = papers_json_list
             all_papers = all_papers + filtered_papers
 
