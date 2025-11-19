@@ -1,6 +1,7 @@
+import os
 from pathlib import Path
-import openreview, os, json, csv
 from .create_dataset import OpenReviewExpertise
+from .embeddings_cache import EmbeddingsCache
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
 from .utils.utils import aggregate_by_group, generate_sparse_scores
@@ -16,6 +17,15 @@ def execute_expertise(config):
         submissions_dataset = SubmissionsDataset(submissions_path=Path(config['dataset']['directory']).joinpath('submissions'))
     elif Path(config['dataset']['directory']).joinpath('submissions.json').exists():
         submissions_dataset = SubmissionsDataset(submissions_file=Path(config['dataset']['directory']).joinpath('submissions.json'))
+
+    embeddings_cache = None
+    if os.getenv('MONGODB_URI') and os.getenv('MONGO_EMBEDDINGS_DB') and os.getenv('MONGO_EMBEDDINGS_COLLECTION'):
+        embeddings_cache = EmbeddingsCache(
+            mongodb_uri=os.getenv('MONGODB_URI'),
+            db_name=os.getenv('MONGO_EMBEDDINGS_DB'),
+            collection_name=os.getenv('MONGO_EMBEDDINGS_COLLECTION'),
+        )
+        embeddings_cache.connect()
 
     if config['model'] == 'bm25':
         from .models import bm25
@@ -47,7 +57,8 @@ def execute_expertise(config):
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
             use_redis=config['model_params'].get('use_redis', False),
-            compute_paper_paper=config['model_params'].get('compute_paper_paper', False)
+            compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
+            embeddings_cache=embeddings_cache,
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
@@ -76,7 +87,8 @@ def execute_expertise(config):
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
             venue_specific_weights=venue_specific_weights,
             percentile_select=config['model_params'].get('percentile_select', None),
-            normalize_scores=config['model_params'].get('normalize_scores', True)
+            normalize_scores=config['model_params'].get('normalize_scores', True),
+            embeddings_cache=embeddings_cache,
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
@@ -111,7 +123,8 @@ def execute_expertise(config):
             dump_p2p=config['model_params'].get('dump_p2p', False),
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
             percentile_select=config['model_params'].get('percentile_select', None),
-            normalize_scores=config['model_params'].get('normalize_scores', True)
+            normalize_scores=config['model_params'].get('normalize_scores', True),
+            embeddings_cache=embeddings_cache,
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
@@ -142,7 +155,8 @@ def execute_expertise(config):
             dump_p2p=config['model_params'].get('dump_p2p', False),
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
             percentile_select=config['model_params'].get('percentile_select', None),
-            normalize_scores=config['model_params'].get('normalize_scores', True)
+            normalize_scores=config['model_params'].get('normalize_scores', True),
+            embeddings_cache=embeddings_cache,
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
@@ -196,7 +210,8 @@ def execute_expertise(config):
             merge_alpha=config['model_params'].get('merge_alpha', 0.8),
             use_cuda=config['model_params'].get('use_cuda', False),
             sparse_value=config['model_params'].get('sparse_value'),
-            use_redis=config['model_params'].get('use_redis', False)
+            use_redis=config['model_params'].get('use_redis', False),
+            embeddings_cache=embeddings_cache,
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)

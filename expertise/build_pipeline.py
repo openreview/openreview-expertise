@@ -133,11 +133,30 @@ if __name__ == '__main__':
     config = parse_config_file(CONFIG_FILE_PATH)
 
     @component(
-        base_image=f"{args.region}-docker.pkg.dev/{args.project}/{args.repo}/{args.image}:{args.tag}"
+        base_image=f"{args.region}-docker.pkg.dev/{args.project}/{args.repo}/{args.image}:{args.tag}",
+        packages_to_install=["google-cloud-secret-manager"]
     )
     def execute_expertise_pipeline_op(
-        gcs_request_path: str
+        gcs_request_path: str,
+        mongodb_uri_secret_id: str,
+        mongodb_db: str,
+        mongodb_collection: str,
+        secret_version: str = "latest",
+        project_id: str = ""
     ) -> None:
+        import os
+        from google.cloud import secretmanager
+
+        sm_client = secretmanager.SecretManagerServiceClient()
+        secret_name = f"projects/{project_id}/secrets/{mongodb_uri_secret_id}/versions/{secret_version}"
+        resp = sm_client.access_secret_version(request={"name": secret_name})
+        mongodb_uri = resp.payload.data.decode("utf-8")
+
+        # Set env variables
+        os.environ["MONGODB_URI"] = mongodb_uri
+        os.environ["MONGO_EMBEDDINGS_DB"] = mongodb_db
+        os.environ["MONGO_EMBEDDINGS_COLLECTION"] = mongodb_collection
+
         from expertise.execute_pipeline import run_pipeline
         run_pipeline(
             gcs_dir=gcs_request_path
@@ -179,7 +198,12 @@ if __name__ == '__main__':
     )
     def expertise_pipeline(
         gcs_request_path: str,
-        machine_type: str = 'small'
+        mongodb_uri_secret_id: str,
+        mongodb_db: str,
+        mongodb_collection: str,
+        machine_type: str = 'small',
+        secret_version: str = 'latest',
+        service_account: str = ''
     ):
 
         # Conditional execution based on job size
@@ -187,19 +211,37 @@ if __name__ == '__main__':
             run_small = small_expertise_job_from_file_input(
                 project=args.project,
                 location=args.kfp_region,
-                gcs_request_path=gcs_request_path
+                gcs_request_path=gcs_request_path,
+                mongodb_uri_secret_id=mongodb_uri_secret_id,
+                mongodb_db=mongodb_db,
+                mongodb_collection=mongodb_collection,
+                secret_version=secret_version,
+                project_id=args.project,
+                service_account=service_account
             ).set_display_name("Running Small Expertise Pipeline")
         with Elif(machine_type == config['MEDIUM_NAME']): # medium
             run_medium = medium_expertise_job_from_file_input(
                 project=args.project,
                 location=args.kfp_region,
-                gcs_request_path=gcs_request_path
+                gcs_request_path=gcs_request_path,
+                mongodb_uri_secret_id=mongodb_uri_secret_id,
+                mongodb_db=mongodb_db,
+                mongodb_collection=mongodb_collection,
+                secret_version=secret_version,
+                project_id=args.project,
+                service_account=service_account
             ).set_display_name("Running Medium Expertise Pipeline")
         with Else():  # large
             run_large = large_expertise_job_from_file_input(
                 project=args.project,
                 location=args.kfp_region,
-                gcs_request_path=gcs_request_path
+                gcs_request_path=gcs_request_path,
+                mongodb_uri_secret_id=mongodb_uri_secret_id,
+                mongodb_db=mongodb_db,
+                mongodb_collection=mongodb_collection,
+                secret_version=secret_version,
+                project_id=args.project,
+                service_account=service_account
           ).set_display_name("Running Large Expertise Pipeline")
 
     compiler.Compiler().compile(
