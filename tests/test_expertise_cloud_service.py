@@ -354,9 +354,6 @@ class TestExpertiseCloudService():
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}')
 
-        scores_sparse_csv_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.csv")
-        scores_sparse_csv_blob.upload_from_string('abcde,user_user1,0.987\nabcde,user_user2,0.987', content_type='text/csv')
-
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=tmlr_client.headers, query_string={'jobId': job_id})
         assert response.json["metadata"] == {"meta": "data"}

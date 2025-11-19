@@ -1216,11 +1216,7 @@ class GCPInterface(object):
             if response_format not in {'jsonl', 'csv'}:
                 raise openreview.OpenReviewException(f"Internal Error: unsupported response format {response_format}")
 
-            score_extension = '.jsonl' if response_format == 'jsonl' else '.csv'
-            score_files = [
-                blob for blob in all_blobs
-                if score_extension in blob.name
-            ]
+            score_files = [blob for blob in all_blobs if '.jsonl' in blob.name and job_id in blob.name]
 
             if len(metadata_files) != 1:
                 raise openreview.OpenReviewException(f"Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}")
@@ -1231,74 +1227,92 @@ class GCPInterface(object):
             metadata = json.loads(metadata_files[0].download_as_string())
             yield {'metadata': metadata, 'results': []}
 
+            def json_to_csv_row(obj, group_scoring=False, paper_scoring=False):
+                if group_scoring:
+                    return f"{obj.get('match_member', '')},{obj.get('submission_member', '')},{obj.get('score', '')}"
+                elif paper_scoring:
+                    return f"{obj.get('match_submission', '')},{obj.get('submission', '')},{obj.get('score', '')}"
+                else:
+                    return f"{obj.get('submission', '')},{obj.get('user', '')},{obj.get('score', '')}"
+
             # Helper function to stream scores from a blob file
-            def stream_score_file(blob, as_csv=False):
+            def stream_score_file(blob, as_csv=False, group_scoring=False, paper_scoring=False):
+                downloader = blob.open('r')
+                chunk = downloader.readline()
+                
                 if as_csv:
-                    downloader = blob.open('r')
-                    chunk_size_bytes = 1024 * 1024  # 1MB default chunk size for CSV streaming
-                    chunk = downloader.read(chunk_size_bytes)
+                    csv_buffer = []
+                    buffer_size = 1000
+                    
+                    try:
+                        while chunk:
+                            if isinstance(chunk, bytes):
+                                chunk = chunk.decode('utf-8')
+                            if chunk.strip():
+                                obj = json.loads(chunk.strip())
+                                csv_line = json_to_csv_row(obj, group_scoring, paper_scoring)
+                                csv_buffer.append(csv_line)
+                                
+                                # Yield chunks of CSV lines
+                                if len(csv_buffer) >= buffer_size:
+                                    yield {'results': '\n'.join(csv_buffer) + '\n', 'metadata': None}
+                                    csv_buffer = []
+                            
+                            chunk = downloader.readline()
+                        
+                        # Yield any remaining CSV lines
+                        if csv_buffer:
+                            yield {'results': '\n'.join(csv_buffer), 'metadata': None}
+                    finally:
+                        downloader.close()
+                else:
+                    results_chunk = []
+                    chunk_size = 1000  # Adjust this number based on your data size
 
                     try:
                         while chunk:
                             if isinstance(chunk, bytes):
                                 chunk = chunk.decode('utf-8')
-                            yield {'results': chunk, 'metadata': None}
-                            chunk = downloader.read(chunk_size_bytes)
+                            if chunk.strip():
+                                results_chunk.append(json.loads(chunk.strip()))
+
+                            # Yield chunks of results
+                            if len(results_chunk) >= chunk_size:
+                                yield {'results': results_chunk, 'metadata': None}
+                                results_chunk = []
+
+                            chunk = downloader.readline()
+
+                        # Yield any remaining results
+                        if results_chunk:
+                            yield {'results': results_chunk, 'metadata': None}
                     finally:
                         downloader.close()
-                else:
-                    downloader = blob.open('r')
-                    chunk = downloader.readline()
-                    results_chunk = []
-                    chunk_size = 1000  # Adjust this number based on your data size
 
-                    while chunk:
-                        if isinstance(chunk, bytes):
-                            chunk = chunk.decode('utf-8')
-                        if chunk.strip():
-                            results_chunk.append(json.loads(chunk.strip()))
-
-                        # Yield chunks of results
-                        if len(results_chunk) >= chunk_size:
-                            yield {'results': results_chunk, 'metadata': None}
-                            results_chunk = []
-
-                        chunk = downloader.readline()
-
-                    # Yield any remaining results
-                    if results_chunk:
-                        yield {'results': results_chunk, 'metadata': None}
-
-                    downloader.close()
-
-            # Then stream the scores
-            if response_format == 'jsonl':
-                sparse_score_files = [
-                    blob for blob in score_files if 'sparse' in blob.name
+            # Then stream the scores (always from JSONL files)
+            sparse_score_files = [
+                blob for blob in score_files if 'sparse' in blob.name
+            ]
+            if len(sparse_score_files) == 1:
+                yield from stream_score_file(
+                    sparse_score_files[0],
+                    as_csv=(response_format == 'csv'),
+                    group_scoring=group_scoring,
+                    paper_scoring=paper_scoring
+                )
+            else:
+                non_sparse_score_files = [
+                    blob for blob in score_files if 'sparse' not in blob.name
                 ]
-                if len(sparse_score_files) == 1:
-                    yield from stream_score_file(sparse_score_files[0])
-                else:
-                    non_sparse_score_files = [
-                        blob for blob in score_files if 'sparse' not in blob.name
-                    ]
-                    if len(non_sparse_score_files) != 1:
-                        raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
-                    
-                    yield from stream_score_file(non_sparse_score_files[0])
-            elif response_format == 'csv':
-                sparse_score_files = [
-                    blob for blob in score_files if 'sparse' in blob.name
-                ]
-                if len(sparse_score_files) == 1:
-                    yield from stream_score_file(sparse_score_files[0], as_csv=True)
-                else:
-                    non_sparse_score_files = [
-                        blob for blob in score_files if 'sparse' not in blob.name
-                    ]
-                    if len(non_sparse_score_files) != 1:
-                        raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
-                    yield from stream_score_file(non_sparse_score_files[0], as_csv=True)
+                if len(non_sparse_score_files) != 1:
+                    raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
+                
+                yield from stream_score_file(
+                    non_sparse_score_files[0],
+                    as_csv=(response_format == 'csv'),
+                    group_scoring=group_scoring,
+                    paper_scoring=paper_scoring
+                )
 
         # Main function implementation
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
