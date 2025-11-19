@@ -884,3 +884,176 @@ def test_expertise_inclusion(client, openreview_client, helpers, clean_start_con
             ddate = 1554819115,
         )
     )
+
+def test_paperhash_deduplication_priority(client, openreview_client, helpers):
+    author_id = '~Harold_Rice1'
+    test_title = "Test Paperhash"
+
+    # Make abstract optional in openreview.net/Archive/-/Direct_Upload invitation
+    openreview_client.post_invitation_edit(
+        invitations='openreview.net/Archive/-/Edit',
+        readers=['openreview.net'],
+        writers=['openreview.net'],
+        signatures=['openreview.net'],
+        invitation=openreview.api.Invitation(
+            id='openreview.net/Archive/-/Direct_Upload',
+            edit={
+                'note': {
+                    'content': {
+                        "abstract": {
+                            "order": 4,
+                            "description": "Abstract of paper. Add TeX formulas using the following formats: $In-line Formula$ or $$Block Formula$$.",
+                            "value": {
+                                "param": {
+                                    "type": "string",
+                                    "maxLength": 5000,
+                                    "markdown": True,
+                                    "input": "textarea",
+                                    "optional": True
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    )
+    
+    # Paper 1: Older date, no abstract
+    paper1 = openreview.api.Note(
+        content={
+            "title": {'value': test_title},
+            "abstract": {'value': ''},  # Empty abstract
+            "authors": {'value': ['Harold Rice']},
+            "authorids": {'value': [author_id]},
+        },
+        pdate=1554819115,  # Older date
+        license='CC BY-SA 4.0'
+    )
+    
+    # Paper 2: Newer date, no abstract
+    paper2 = openreview.api.Note(
+        content={
+            "title": {'value': test_title},
+            "abstract": {'value': ''},  # Empty abstract
+            "authors": {'value': ['Harold Rice']},
+            "authorids": {'value': [author_id]},
+        },
+        pdate=1609459200,  # Newer date (2021-01-01)
+        license='CC BY-SA 4.0'
+    )
+    
+    # Paper 3: Older date, with abstract
+    paper3 = openreview.api.Note(
+        content={
+            "title": {'value': test_title},
+            "abstract": {'value': 'This is a test abstract for deduplication testing.'},  # Has abstract
+            "authors": {'value': ['Harold Rice']},
+            "authorids": {'value': [author_id]},
+        },
+        pdate=1554819115,  # Older date
+        license='CC BY-SA 4.0'
+    )
+    
+    # Paper 4: Newest date, with abstract (should be kept)
+    paper4 = openreview.api.Note(
+        content={
+            "title": {'value': test_title},
+            "abstract": {'value': 'This is the best abstract with the newest date.'},  # Has abstract
+            "authors": {'value': ['Harold Rice']},
+            "authorids": {'value': [author_id]},
+        },
+        pdate=1640995200,  # Newest date (2022-01-01)
+        license='CC BY-SA 4.0'
+    )
+    # Paper 5: Newest date, abstract not in content
+    paper5 = openreview.api.Note(
+        content={
+            "title": {'value': test_title},
+            "authors": {'value': ['Harold Rice']},
+            "authorids": {'value': [author_id]},
+        },
+        pdate=1640995200,  # Newest date (2022-01-01)
+        license='CC BY-SA 4.0'
+    )
+    
+    # Post all papers
+    paper1_edit = openreview_client.post_note_edit(
+        invitation='openreview.net/Archive/-/Direct_Upload',
+        signatures=['~SomeTest_User1'],
+        note=paper1
+    )
+    paper2_edit = openreview_client.post_note_edit(
+        invitation='openreview.net/Archive/-/Direct_Upload',
+        signatures=['~SomeTest_User1'],
+        note=paper2
+    )
+    paper3_edit = openreview_client.post_note_edit(
+        invitation='openreview.net/Archive/-/Direct_Upload',
+        signatures=['~SomeTest_User1'],
+        note=paper3
+    )
+    paper4_edit = openreview_client.post_note_edit(
+        invitation='openreview.net/Archive/-/Direct_Upload',
+        signatures=['~SomeTest_User1'],
+        note=paper4
+    )
+    paper5_edit = openreview_client.post_note_edit(
+        invitation='openreview.net/Archive/-/Direct_Upload',
+        signatures=['~SomeTest_User1'],
+        note=paper5
+    )
+
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers'
+    }
+    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    expertise = or_expertise.retrieve_expertise()
+    
+    # Find papers for the test author
+    author_papers = expertise.get(author_id, [])
+    papers_with_test_title = [p for p in author_papers if p['content']['title'] == test_title]
+    
+    # Should only have one paper with this title (the best one: paper4 - newest date with abstract)
+    assert len(papers_with_test_title) == 1, f"Expected 1 paper, got {len(papers_with_test_title)}"
+    kept_paper = papers_with_test_title[0]
+    kept_abstract = kept_paper['content']['abstract']
+    assert kept_abstract == 'This is the best abstract with the newest date.'
+    assert kept_paper.get('pdate') == 1640995200  # Should be paper4
+    # Verify paper5 (missing abstract field) was not selected
+    paper5_id = paper5_edit['note']['id']
+    assert kept_paper['id'] != paper5_id, "Paper5 (missing abstract field) should not be selected over paper4 (has abstract)"
+    
+    # Test get_papers_from_group for group-group scoring
+    # Reuse existing DEF.cc/Reviewers group (author should already be a member)
+    config_group = {
+        'alternate_match_group': 'DEF.cc/Reviewers'
+    }
+    or_expertise_group = OpenReviewExpertise(client, openreview_client, config_group)
+    all_papers = or_expertise_group.get_papers_from_group('DEF.cc/Reviewers')
+    
+    # Find papers with test title
+    papers_with_test_title_group = [p for p in all_papers if p.content.get('title') == test_title or (isinstance(p.content.get('title'), dict) and p.content.get('title', {}).get('value') == test_title)]
+    
+    # Should only have one paper with this title (the best one)
+    assert len(papers_with_test_title_group) == 1, f"Expected 1 paper in get_papers_from_group, got {len(papers_with_test_title_group)}"
+    kept_paper_group = papers_with_test_title_group[0]
+    group_abstract = kept_paper_group.content['abstract']
+    assert group_abstract == 'This is the best abstract with the newest date.'
+    assert getattr(kept_paper_group, 'pdate', None) == 1640995200  # Should be paper4
+    # Verify paper5 (missing abstract field) was not selected in get_papers_from_group
+    assert kept_paper_group.id != paper5_id, "Paper5 (missing abstract field) should not be selected over paper4 (has abstract) in get_papers_from_group"
+    
+    # Clean up test papers
+    for edit in [paper1_edit, paper2_edit, paper3_edit, paper4_edit, paper5_edit]:
+        openreview_client.post_note_edit(
+            invitation='openreview.net/-/Edit',
+            readers=['openreview.net'],
+            writers=['openreview.net'],
+            signatures=['openreview.net'],
+            note=openreview.api.Note(
+                id=edit['note']['id'],
+                ddate=1554819115,
+            )
+        )
