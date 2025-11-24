@@ -1184,15 +1184,9 @@ class GCPInterface(object):
                 )
         return result
 
-    def get_job_results(self, user_id, job_id, delete_on_get=False, as_csv=False):
+    def get_job_results(self, user_id, job_id, delete_on_get=False):
 
-        def _get_scores_and_metadata_streaming(
-            all_blobs,
-            job_id,
-            group_scoring=False,
-            paper_scoring=False,
-            response_format='jsonl'
-        ):
+        def _get_scores_and_metadata_streaming(all_blobs, job_id):
             """
             Extracts the scores and metadata from the GCS bucket and returns a generator that yields
             chunks of results to enable streaming
@@ -1201,21 +1195,12 @@ class GCPInterface(object):
             :type all_blobs: list
             :param job_id: Unique job ID
             :type job_id: str
-            :param group_scoring: Indicator for scores between groups
-            :type group_scoring: bool
-            :param paper_scoring: Indicator for scores between papers
-            :type paper_scoring: bool
-            :param response_format: Target streaming format ('jsonl' or 'csv')
-            :type response_format: str
 
             :returns generator: A generator that yields chunks of scores and finally the metadata
             """
             metadata_files = [
                 blob for blob in all_blobs if 'metadata.json' in blob.name
             ]
-            if response_format not in {'jsonl', 'csv'}:
-                raise openreview.OpenReviewException(f"Internal Error: unsupported response format {response_format}")
-
             score_files = [blob for blob in all_blobs if '.jsonl' in blob.name and job_id in blob.name]
 
             if len(metadata_files) != 1:
@@ -1227,79 +1212,39 @@ class GCPInterface(object):
             metadata = json.loads(metadata_files[0].download_as_string())
             yield {'metadata': metadata, 'results': []}
 
-            def json_to_csv_row(obj, group_scoring=False, paper_scoring=False):
-                if group_scoring:
-                    return f"{obj.get('match_member', '')},{obj.get('submission_member', '')},{obj.get('score', '')}"
-                elif paper_scoring:
-                    return f"{obj.get('match_submission', '')},{obj.get('submission', '')},{obj.get('score', '')}"
-                else:
-                    return f"{obj.get('submission', '')},{obj.get('user', '')},{obj.get('score', '')}"
-
             # Helper function to stream scores from a blob file
-            def stream_score_file(blob, as_csv=False, group_scoring=False, paper_scoring=False):
+            def stream_score_file(blob):
                 downloader = blob.open('r')
                 chunk = downloader.readline()
-                
-                if as_csv:
-                    csv_buffer = []
-                    buffer_size = 1000
-                    
-                    try:
-                        while chunk:
-                            if isinstance(chunk, bytes):
-                                chunk = chunk.decode('utf-8')
-                            if chunk.strip():
-                                obj = json.loads(chunk.strip())
-                                csv_line = json_to_csv_row(obj, group_scoring, paper_scoring)
-                                csv_buffer.append(csv_line)
-                                
-                                # Yield chunks of CSV lines
-                                if len(csv_buffer) >= buffer_size:
-                                    yield {'results': '\n'.join(csv_buffer) + '\n', 'metadata': None}
-                                    csv_buffer = []
-                            
-                            chunk = downloader.readline()
-                        
-                        # Yield any remaining CSV lines
-                        if csv_buffer:
-                            yield {'results': '\n'.join(csv_buffer), 'metadata': None}
-                    finally:
-                        downloader.close()
-                else:
-                    results_chunk = []
-                    chunk_size = 1000  # Adjust this number based on your data size
+                results_chunk = []
+                chunk_size = 1000  # Adjust this number based on your data size
 
-                    try:
-                        while chunk:
-                            if isinstance(chunk, bytes):
-                                chunk = chunk.decode('utf-8')
-                            if chunk.strip():
-                                results_chunk.append(json.loads(chunk.strip()))
+                try:
+                    while chunk:
+                        if isinstance(chunk, bytes):
+                            chunk = chunk.decode('utf-8')
+                        if chunk.strip():
+                            results_chunk.append(json.loads(chunk.strip()))
 
-                            # Yield chunks of results
-                            if len(results_chunk) >= chunk_size:
-                                yield {'results': results_chunk, 'metadata': None}
-                                results_chunk = []
-
-                            chunk = downloader.readline()
-
-                        # Yield any remaining results
-                        if results_chunk:
+                        # Yield chunks of results
+                        if len(results_chunk) >= chunk_size:
                             yield {'results': results_chunk, 'metadata': None}
-                    finally:
-                        downloader.close()
+                            results_chunk = []
+
+                        chunk = downloader.readline()
+
+                    # Yield any remaining results
+                    if results_chunk:
+                        yield {'results': results_chunk, 'metadata': None}
+                finally:
+                    downloader.close()
 
             # Then stream the scores (always from JSONL files)
             sparse_score_files = [
                 blob for blob in score_files if 'sparse' in blob.name
             ]
             if len(sparse_score_files) == 1:
-                yield from stream_score_file(
-                    sparse_score_files[0],
-                    as_csv=(response_format == 'csv'),
-                    group_scoring=group_scoring,
-                    paper_scoring=paper_scoring
-                )
+                yield from stream_score_file(sparse_score_files[0])
             else:
                 non_sparse_score_files = [
                     blob for blob in score_files if 'sparse' not in blob.name
@@ -1307,12 +1252,7 @@ class GCPInterface(object):
                 if len(non_sparse_score_files) != 1:
                     raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
                 
-                yield from stream_score_file(
-                    non_sparse_score_files[0],
-                    as_csv=(response_format == 'csv'),
-                    group_scoring=group_scoring,
-                    paper_scoring=paper_scoring
-                )
+                yield from stream_score_file(non_sparse_score_files[0])
 
         # Main function implementation
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
@@ -1331,15 +1271,4 @@ class GCPInterface(object):
         if len(authenticated_requests) > 1:
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
-        request = authenticated_requests[0]
-        group_group_matching = request.get('entityA', {}).get('type', '') == 'Group' and request.get('entityB', {}).get('type', '') == 'Group'
-        paper_paper_matching = request.get('entityA', {}).get('type', '') == 'Note' and request.get('entityB', {}).get('type', '') == 'Note'
-
-        response_format = 'csv' if as_csv else 'jsonl'
-        return _get_scores_and_metadata_streaming(
-            job_blobs,
-            job_id,
-            group_scoring=group_group_matching,
-            paper_scoring=paper_paper_matching,
-            response_format=response_format
-        )
+        return _get_scores_and_metadata_streaming(job_blobs, job_id)

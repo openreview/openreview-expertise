@@ -704,9 +704,9 @@ def test_get_job_results(mock_storage_client, openreview_client):
     mock_metadata_blob.download_as_string.assert_called_once()
     mock_sparse_score_blob.open.assert_called_once_with('r')
 
-# Test case for CSV streaming
+# Test case for JSON streaming
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
-def test_get_job_results_csv_streaming(mock_storage_client, openreview_client):
+def test_get_job_results_json_streaming(mock_storage_client, openreview_client):
     mock_metadata_blob = MagicMock()
     mock_metadata_blob.name = "jobs/job_1/metadata.json"
     mock_metadata_blob.download_as_string.return_value = json.dumps({"meta": "data"})
@@ -756,14 +756,28 @@ def test_get_job_results_csv_streaming(mock_storage_client, openreview_client):
 
     user_id = "test_user"
     job_id = "job_1"
-    result_generator = gcp_interface.get_job_results(user_id, job_id, as_csv=True)
+    result_generator = gcp_interface.get_job_results(user_id, job_id)
 
+    # First chunk should contain metadata
     first_chunk = next(result_generator)
     assert first_chunk["metadata"] == {"meta": "data"}
-    csv_output = ''.join(chunk["results"] for chunk in result_generator)
-    assert "abcde,user_user1,0.987" in csv_output
-    assert "abcde,user_user2,0.987" in csv_output
-    assert csv_output == "abcde,user_user1,0.987\nabcde,user_user2,0.987"
+    assert first_chunk["results"] == []
+    
+    # Subsequent chunks should contain JSON objects
+    result_chunks = list(result_generator)
+    assert len(result_chunks) > 0
+    # Flatten all results from chunks
+    all_results = []
+    for chunk in result_chunks:
+        all_results.extend(chunk.get('results', []))
+    
+    assert len(all_results) == 2
+    assert all_results[0]['submission'] == 'abcde'
+    assert all_results[0]['user'] == 'user_user1'
+    assert all_results[0]['score'] == 0.987
+    assert all_results[1]['submission'] == 'abcde'
+    assert all_results[1]['user'] == 'user_user2'
+    assert all_results[1]['score'] == 0.987
 
     mock_sparse_jsonl_blob.open.assert_called_once_with('r')
     mock_jsonl_file.close.assert_called_once()

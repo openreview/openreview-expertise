@@ -302,7 +302,20 @@ def results():
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
         expertise_service.set_client(openreview_client)
         expertise_service.set_client_v2(openreview_client_v2)
-        result = expertise_service.get_expertise_results(user_id, job_id, delete_on_get, return_csv=return_csv)
+        result = expertise_service.get_expertise_results(user_id, job_id, delete_on_get)
+        
+        # Helper function to convert JSON object to CSV row
+        def json_to_csv_row(obj):
+            """
+            Convert a JSON object to a CSV row based on the object structure.
+            Detects the scoring type by inspecting the object keys.
+            """
+            if 'match_member' in obj and 'submission_member' in obj:
+                return f"{obj.get('match_member', '')},{obj.get('submission_member', '')},{obj.get('score', '')}"
+            elif 'match_submission' in obj and 'submission' in obj and 'user' not in obj:
+                return f"{obj.get('match_submission', '')},{obj.get('submission', '')},{obj.get('score', '')}"
+            else:
+                return f"{obj.get('submission', '')},{obj.get('user', '')},{obj.get('score', '')}"
         
         # Check if result is a generator (for streaming) or a regular dict
         if hasattr(result, '__iter__') and not isinstance(result, (dict, list)):
@@ -313,15 +326,13 @@ def results():
                 try:
                     # Branch streaming format based on return_csv
                     if return_csv:
+                        # CSV: Convert JSON chunks to CSV rows
                         for chunk in result:
                             # Stream CSV chunks (strings)
                             if chunk.get('results'):
-                                csv_chunk = chunk['results']
-                                if isinstance(csv_chunk, str):
-                                    yield csv_chunk
-                                else:
-                                    # Fallback: stringify non-str results
-                                    yield str(csv_chunk)
+                                for result_item in chunk['results']:
+                                    csv_row = json_to_csv_row(result_item)
+                                    yield csv_row
                     else:
                         # JSONL: Stream an array of JSON objects
                         yield '{"results":['
@@ -349,8 +360,11 @@ def results():
 
                 except Exception as e:
                     flask.current_app.logger.error(f"Error in streaming: {str(e)}", exc_info=True)
-                    # If an error occurs during streaming, we need to yield a valid JSON
-                    yield '[],"error":"Error during streaming"}'
+                    # Yield on error
+                    if return_csv:
+                        yield ''
+                    else:
+                        yield '[],"error":"Error during streaming"}'
 
             flask.current_app.logger.debug('Streaming response started')
             mimetype = 'text/csv' if return_csv else 'application/json'
