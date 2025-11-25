@@ -327,12 +327,16 @@ def results():
                     # Branch streaming format based on return_csv
                     if return_csv:
                         # CSV: Convert JSON chunks to CSV rows
+                        first_row = True
                         for chunk in result:
                             # Stream CSV chunks (strings)
                             if chunk.get('results'):
                                 for result_item in chunk['results']:
+                                    if not first_row:
+                                        yield '\n'
                                     csv_row = json_to_csv_row(result_item)
                                     yield csv_row
+                                    first_row = False
                     else:
                         # JSONL: Stream an array of JSON objects
                         yield '{"results":['
