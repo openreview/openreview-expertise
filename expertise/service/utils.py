@@ -1236,6 +1236,12 @@ class GCPInterface(object):
                     # Yield any remaining results
                     if results_chunk:
                         yield {'results': results_chunk, 'metadata': None}
+                except Exception as error:
+                    self.logger.error(
+                        f"Error while streaming score file '{blob.name}' for job '{job_id}': {error}",
+                        exc_info=True
+                    )
+                    raise
                 finally:
                     downloader.close()
 
