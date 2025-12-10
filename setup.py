@@ -44,7 +44,7 @@ setup(
         'redisai',
         'python-dotenv',
         'importlib-metadata==4.13.0',
-        'werkzeug==3.0.6',
+        'werkzeug==3.1.4',
         'adapter-transformers',
         'google-cloud',
         'google-cloud-storage',
