@@ -179,6 +179,67 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
     )
     mock_pipeline_instance.submit.assert_called_once()
 
+# Test service account is passed to pipeline when provided in config
+@patch("expertise.service.utils.time.time")  # Mock time.time()
+@patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob
+@patch("expertise.service.utils.storage.Client")  # Mock GCS Client
+def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job, mock_time, openreview_client):
+    mock_time.return_value = 1234567890.123
+
+    # Setup mock storage client
+    mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+    mock_bucket.blob.return_value = mock_blob
+    mock_blob.upload_from_string.return_value = None
+
+    # Setup mock PipelineJob
+    mock_pipeline_instance = MagicMock()
+    mock_pipeline_job.return_value = mock_pipeline_instance
+
+    config = {
+        'GCP_PROJECT_ID': 'test_project',
+        'GCP_PROJECT_NUMBER': '123456',
+        'GCP_REGION': 'us-central1',
+        'GCP_PIPELINE_ROOT': 'pipeline-root',
+        'GCP_PIPELINE_NAME': 'test-pipeline',
+        'GCP_PIPELINE_REPO': 'test-repo',
+        'GCP_PIPELINE_TAG': 'latest',
+        'GCP_BUCKET_NAME': 'test-bucket',
+        'GCP_JOBS_FOLDER': 'jobs',
+        'GCP_SERVICE_LABEL': {'test': 'label'},
+        'GCP_SERVICE_ACCOUNT': 'sa-under-test@test-project.iam.gserviceaccount.com',
+    }
+    gcp_interface = GCPInterface(
+        config=config,
+        openreview_client=openreview_client
+    )
+
+    json_request = {
+        "name": "test_run2",
+        "entityA": {'type': "Group", 'memberOf': "GCP.cc/Reviewers"},
+        "entityB": {'type': "Note", 'invitation': "GCP.cc/-/Submission"},
+        "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'}
+    }
+    test_job_id = generate_job_id()
+    result = gcp_interface.create_job(deepcopy(json_request), job_id=test_job_id, machine_type='small')
+
+    expected_timestamp_ms = int(1234567890.123 * 1000)
+    expected_valid_vertex_id = f"{test_job_id}-{expected_timestamp_ms}"
+    expected_folder_path = f"jobs/{expected_valid_vertex_id}"
+
+    # 3. Verify PipelineJob submission includes new params
+    _, kwargs = mock_pipeline_job.call_args
+    assert kwargs['display_name'] == expected_valid_vertex_id
+    assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/test_project/")
+    assert kwargs['job_id'] == expected_valid_vertex_id
+    assert kwargs['pipeline_root'] == "gs://test-bucket/pipeline-root"
+    params = kwargs['parameter_values']
+    assert params["gcs_request_path"] == f"gs://test-bucket/{expected_folder_path}/request.json"
+    assert params["machine_type"] == "small"
+    # Service account gets forwarded as a parameter
+    assert params["service_account"] == 'sa-under-test@test-project.iam.gserviceaccount.com'
+
 # Test case for the `get_job_status_by_job_id` method
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
