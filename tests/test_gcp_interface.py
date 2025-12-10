@@ -177,7 +177,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
         parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json", "machine_type": "small"},
         labels={"test": "label"}
     )
-    mock_pipeline_instance.submit.assert_called_once()
+    mock_pipeline_instance.submit.assert_called_once_with(service_account=None)
 
 # Test service account is passed to pipeline when provided in config
 @patch("expertise.service.utils.time.time")  # Mock time.time()
@@ -239,6 +239,11 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     assert params["machine_type"] == "small"
     # Service account gets forwarded as a parameter
     assert params["service_account"] == 'sa-under-test@test-project.iam.gserviceaccount.com'
+    
+    # Verify submit() is called with the service account
+    mock_pipeline_instance.submit.assert_called_once_with(
+        service_account='sa-under-test@test-project.iam.gserviceaccount.com'
+    )
 
 # Test case for the `get_job_status_by_job_id` method
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get

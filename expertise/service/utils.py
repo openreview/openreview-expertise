@@ -959,7 +959,9 @@ class GCPInterface(object):
             parameter_values = parameter_values,
             labels = self.service_label)
 
-        job.submit()
+        job.submit(
+            service_account=self.service_account
+        )
 
         return valid_vertex_id
 
