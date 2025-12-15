@@ -15,6 +15,10 @@ on:
         description: 'openreview-py branch or tag to deploy'
         required: false
         default: 'master'
+      gcp_instance:
+        description: 'GCloud instance to deploy to'
+        required: false
+        default: 'dev-instance-1'
   # Triggers the workflow on push events but only for the master branch
   push:
     branches: [ master ]
@@ -130,5 +134,6 @@ jobs:
         run: |
           BRANCH="${{ github.event.inputs.branch || 'master' }}"
           PY_BRANCH="${{ github.event.inputs.py_branch || 'master' }}"
+          GCP_INSTANCE="${{ github.event.inputs.gcp_instance || 'dev-instance-1' }}"
           gcloud config set compute/zone us-central1-b
-          gcloud compute ssh --tunnel-through-iap openreview@dev-instance-1 --command "bash /home/openreview/bin/deploy-expertise.sh $BRANCH $PY_BRANCH" --quiet
+          gcloud compute ssh --tunnel-through-iap openreview@${GCP_INSTANCE} --command "bash /home/openreview/bin/deploy-expertise.sh $BRANCH $PY_BRANCH" --quiet
