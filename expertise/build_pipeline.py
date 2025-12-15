@@ -179,8 +179,7 @@ if __name__ == '__main__':
     )
     def expertise_pipeline(
         gcs_request_path: str,
-        machine_type: str = 'small',
-        service_account: str = ''
+        machine_type: str = 'small'
     ):
 
         # Conditional execution based on job size
@@ -188,22 +187,19 @@ if __name__ == '__main__':
             run_small = small_expertise_job_from_file_input(
                 project=args.project,
                 location=args.kfp_region,
-                gcs_request_path=gcs_request_path,
-                service_account=service_account
+                gcs_request_path=gcs_request_path
             ).set_display_name("Running Small Expertise Pipeline")
         with Elif(machine_type == config['MEDIUM_NAME']): # medium
             run_medium = medium_expertise_job_from_file_input(
                 project=args.project,
                 location=args.kfp_region,
-                gcs_request_path=gcs_request_path,
-                service_account=service_account
+                gcs_request_path=gcs_request_path
             ).set_display_name("Running Medium Expertise Pipeline")
         with Else():  # large
             run_large = large_expertise_job_from_file_input(
                 project=args.project,
                 location=args.kfp_region,
-                gcs_request_path=gcs_request_path,
-                service_account=service_account
+                gcs_request_path=gcs_request_path
           ).set_display_name("Running Large Expertise Pipeline")
 
     compiler.Compiler().compile(
