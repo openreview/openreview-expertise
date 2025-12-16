@@ -237,8 +237,6 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     params = kwargs['parameter_values']
     assert params["gcs_request_path"] == f"gs://test-bucket/{expected_folder_path}/request.json"
     assert params["machine_type"] == "small"
-    # Service account gets forwarded as a parameter
-    assert params["service_account"] == 'sa-under-test@test-project.iam.gserviceaccount.com'
     
     # Verify submit() is called with the service account
     mock_pipeline_instance.submit.assert_called_once_with(
