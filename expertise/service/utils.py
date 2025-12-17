@@ -947,8 +947,6 @@ class GCPInterface(object):
             'gcs_request_path': gcs_request_path,
             'machine_type': machine_type,
         }
-        if self.service_account is not None:
-            parameter_values['service_account'] = self.service_account
 
         # Build PipelineJob kwargs and parameters
         job = aip.PipelineJob(
@@ -959,7 +957,9 @@ class GCPInterface(object):
             parameter_values = parameter_values,
             labels = self.service_label)
 
-        job.submit()
+        job.submit(
+            service_account=self.service_account
+        )
 
         return valid_vertex_id
 
