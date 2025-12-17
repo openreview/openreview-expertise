@@ -134,6 +134,23 @@ jobs:
         run: |
           BRANCH="${{ github.event.inputs.branch || 'master' }}"
           PY_BRANCH="${{ github.event.inputs.py_branch || 'master' }}"
-          GCP_INSTANCE="${{ github.event.inputs.gcp_instance || 'dev-instance-1' }}"
-          gcloud config set compute/zone us-central1-b
-          gcloud compute ssh --tunnel-through-iap openreview@${GCP_INSTANCE} --command "bash /home/openreview/bin/deploy-expertise.sh $BRANCH $PY_BRANCH" --quiet
+          instance_prefix='openreview-dev-'
+
+          instances=$(gcloud compute instances list | grep "$instance_prefix" | grep RUNNING | tr -s ' ' | cut -d' ' -f1,2)
+
+          instances_arr=(${instances// / })
+
+          instance_names=()
+          zones=()
+          for i in ${!instances_arr[@]}; do
+            if echo "${instances_arr[$i]}" | grep -q "$instance_prefix"; then
+              instance_names+=(${instances_arr[$i]})
+            else
+              zones+=(${instances_arr[$i]})
+            fi
+          done
+
+          for i in ${!instance_names[@]}; do
+            echo Deploying to ${instance_names[$i]}
+            gcloud compute ssh --zone ${zones[$i]} --tunnel-through-iap openreview@${instance_names[$i]} --command "bash /home/openreview/bin/deploy-expertise.sh $BRANCH $PY_BRANCH" --quiet
+          done
