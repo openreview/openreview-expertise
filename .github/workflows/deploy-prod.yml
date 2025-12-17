@@ -41,13 +41,6 @@ jobs:
           docker system prune -af || true
           docker builder prune -af || true
           df -h
-      - name: Add SSH key
-        run: |
-          mkdir -p /home/runner/.ssh
-          echo "${{ secrets.GCLOUD_SSH_KEY }}" > /home/runner/.ssh/google_compute_engine
-          echo "${{ secrets.GCLOUD_SSH_KEY_PUB }}" > /home/runner/.ssh/google_compute_engine.pub
-          chmod 600 /home/runner/.ssh/google_compute_engine
-          chmod 600 /home/runner/.ssh/google_compute_engine.pub
       - name: Authenticate with Google Cloud
         id: auth
         uses: google-github-actions/auth@v2
@@ -123,4 +116,4 @@ jobs:
           gcloud config set compute/zone us-central1-b
           VERSION="${{ github.event.inputs.version }}"
           echo "Deploying version: $VERSION"
-          gcloud compute ssh openreview@openreview-expertise-instance --command "/bin/expertise_build.sh $VERSION" --quiet
+          gcloud compute ssh --tunnel-through-iap openreview@openreview-expertise-instance --command "/bin/expertise_build.sh $VERSION" --quiet
