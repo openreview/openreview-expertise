@@ -288,11 +288,34 @@ def results():
         if job_id is None or len(job_id) == 0:
             raise openreview.OpenReviewException('Bad request: jobId is required')
         delete_on_get = flask.request.args.get('deleteOnGet', 'False').lower() == 'true'
+        
+        # Check Accept header to determine response format
+        accept_header = flask.request.headers.get('Accept', '')
+        flask.current_app.logger.debug(f'Accept header: {accept_header}')
+        # Check if Accept header contains text/csv or application/csv
+        return_csv = 'text/csv' in accept_header or 'application/csv' in accept_header
+        if return_csv:
+            flask.current_app.logger.debug('Format selection: CSV (from Accept header)')
+        else:
+            flask.current_app.logger.debug('Format selection: JSONL (default or from Accept header)')
 
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
         expertise_service.set_client(openreview_client)
         expertise_service.set_client_v2(openreview_client_v2)
         result = expertise_service.get_expertise_results(user_id, job_id, delete_on_get)
+        
+        # Helper function to convert JSON object to CSV row
+        def json_to_csv_row(obj):
+            """
+            Convert a JSON object to a CSV row based on the object structure.
+            Detects the scoring type by inspecting the object keys.
+            """
+            if 'match_member' in obj and 'submission_member' in obj:
+                return f"{obj.get('match_member', '')},{obj.get('submission_member', '')},{obj.get('score', '')}"
+            elif 'match_submission' in obj and 'submission' in obj and 'user' not in obj:
+                return f"{obj.get('match_submission', '')},{obj.get('submission', '')},{obj.get('score', '')}"
+            else:
+                return f"{obj.get('submission', '')},{obj.get('user', '')},{obj.get('score', '')}"
         
         # Check if result is a generator (for streaming) or a regular dict
         if hasattr(result, '__iter__') and not isinstance(result, (dict, list)):
@@ -301,37 +324,55 @@ def results():
             
             def generate():
                 try:
-                    # Start with an opening bracket for a JSON array
-                    yield '{"results":['
-                    
-                    first_chunk = True
-                    metadata = None
-                    
-                    for chunk in result:
-                        # Save metadata for later
-                        if chunk.get('metadata') is not None:
-                            metadata = chunk['metadata']
-                        
-                        # Stream results
-                        if chunk.get('results'):
-                            for result_item in chunk['results']:
-                                if not first_chunk:
-                                    yield ','
-                                yield json.dumps(result_item)
-                                first_chunk = False
-                    
-                    # Close the results array and add metadata
-                    yield '],'
-                    yield f'"metadata":{json.dumps(metadata or {})}'
-                    yield '}'
-                    
+                    # Branch streaming format based on return_csv
+                    if return_csv:
+                        # CSV: Convert JSON chunks to CSV rows
+                        first_row = True
+                        for chunk in result:
+                            # Stream CSV chunks (strings)
+                            if chunk.get('results'):
+                                for result_item in chunk['results']:
+                                    if not first_row:
+                                        yield '\n'
+                                    csv_row = json_to_csv_row(result_item)
+                                    yield csv_row
+                                    first_row = False
+                    else:
+                        # JSONL: Stream an array of JSON objects
+                        yield '{"results":['
+
+                        first_chunk = True
+                        metadata = None
+
+                        for chunk in result:
+                            # Save metadata for later
+                            if chunk.get('metadata') is not None:
+                                metadata = chunk['metadata']
+
+                            # Stream results as individual JSON items
+                            if chunk.get('results'):
+                                for result_item in chunk['results']:
+                                    if not first_chunk:
+                                        yield ','
+                                    yield json.dumps(result_item)
+                                    first_chunk = False
+
+                        # Close the results array and add metadata
+                        yield '],'
+                        yield f'"metadata":{json.dumps(metadata or {})}'
+                        yield '}'
+
                 except Exception as e:
                     flask.current_app.logger.error(f"Error in streaming: {str(e)}", exc_info=True)
-                    # If an error occurs during streaming, we need to yield a valid JSON
-                    yield '[],"error":"Error during streaming"}'
+                    # Yield on error
+                    if return_csv:
+                        yield ''
+                    else:
+                        yield '[],"error":"Error during streaming"}'
 
             flask.current_app.logger.debug('Streaming response started')
-            return flask.Response(generate(), mimetype='application/json')
+            mimetype = 'text/csv' if return_csv else 'application/json'
+            return flask.Response(generate(), mimetype=mimetype)
         else:
             # It's a regular dictionary - use standard JSON response
             flask.current_app.logger.debug('Using standard JSON response')

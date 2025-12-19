@@ -1212,9 +1212,7 @@ class GCPInterface(object):
             metadata_files = [
                 blob for blob in all_blobs if 'metadata.json' in blob.name
             ]
-            score_files = [
-                blob for blob in all_blobs if '.jsonl' in blob.name and job_id in blob.name
-            ]
+            score_files = [blob for blob in all_blobs if '.jsonl' in blob.name and job_id in blob.name]
 
             if len(metadata_files) != 1:
                 raise openreview.OpenReviewException(f"Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}")
@@ -1232,31 +1230,36 @@ class GCPInterface(object):
                 results_chunk = []
                 chunk_size = 1000  # Adjust this number based on your data size
 
-                while chunk:
-                    if isinstance(chunk, bytes):
-                        chunk = chunk.decode('utf-8')
-                    if chunk.strip():
-                        results_chunk.append(json.loads(chunk.strip()))
+                try:
+                    while chunk:
+                        if isinstance(chunk, bytes):
+                            chunk = chunk.decode('utf-8')
+                        if chunk.strip():
+                            results_chunk.append(json.loads(chunk.strip()))
 
-                    # Yield chunks of results
-                    if len(results_chunk) >= chunk_size:
+                        # Yield chunks of results
+                        if len(results_chunk) >= chunk_size:
+                            yield {'results': results_chunk, 'metadata': None}
+                            results_chunk = []
+
+                        chunk = downloader.readline()
+
+                    # Yield any remaining results
+                    if results_chunk:
                         yield {'results': results_chunk, 'metadata': None}
-                        results_chunk = []
+                except Exception as error:
+                    self.logger.error(
+                        f"Error while streaming score file '{blob.name}' for job '{job_id}': {error}",
+                        exc_info=True
+                    )
+                    raise
+                finally:
+                    downloader.close()
 
-                    chunk = downloader.readline()
-
-                # Yield any remaining results
-                if results_chunk:
-                    yield {'results': results_chunk, 'metadata': None}
-
-                downloader.close()
-
-            # Determine whether to use sparse or non-sparse score files
+            # Then stream the scores (always from JSONL files)
             sparse_score_files = [
                 blob for blob in score_files if 'sparse' in blob.name
             ]
-
-            # Then stream the scores
             if len(sparse_score_files) == 1:
                 yield from stream_score_file(sparse_score_files[0])
             else:
@@ -1265,7 +1268,7 @@ class GCPInterface(object):
                 ]
                 if len(non_sparse_score_files) != 1:
                     raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
-
+                
                 yield from stream_score_file(non_sparse_score_files[0])
 
         # Main function implementation
@@ -1286,4 +1289,3 @@ class GCPInterface(object):
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
         return _get_scores_and_metadata_streaming(job_blobs, job_id)
-

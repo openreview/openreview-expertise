@@ -362,6 +362,15 @@ class TestExpertiseCloudService():
             {"submission": "abcde","user": "user_user2","score": 0.987}
         ]
 
+        csv_response = test_client.get('/expertise/results', headers={**tmlr_client.headers, 'Accept': 'text/csv'}, query_string={'jobId': job_id})
+        assert csv_response.status_code == 200
+        assert csv_response.mimetype == 'text/csv'
+        csv_body = csv_response.get_data(as_text=True)
+        assert "abcde,user_user1,0.987" in csv_body
+        assert "abcde,user_user2,0.987" in csv_body
+        # assert entire value of csv_body
+        assert csv_body == "abcde,user_user1,0.987\nabcde,user_user2,0.987"
+
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_group_group_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
