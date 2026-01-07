@@ -667,7 +667,13 @@ class JobConfig(object):
                     continue
 
                 if param == 'name':
-                    config.model = api_model.get('name', config.model)
+                    api_model_name = api_model.get('name')
+                    # if None provided in name, write to stored request, config already has default
+                    if api_model_name is None:
+                        api_request.model['name'] = config.model
+                    else:
+                        config.model = api_model_name
+                        
                 
                 # Handle general case
                 if param not in allowed_model_params:

@@ -515,6 +515,55 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: model specter+mfr does not support weighting by venue"
 
+    def test_request_expertise_with_no_model(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        """Test that requests without a model parameter default to 'specter2+scincl'"""
+        test_client = openreview_context['test_client']
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        # Request without model parameter should not return 500 error
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                'name': 'test_no_model',
+                'entityA': {
+                    'type': 'Group',
+                    'memberOf': 'ABC.cc/Reviewers'
+                },
+                'entityB': {
+                    'type': 'Note',
+                    'invitation': 'ABC.cc/-/Submission'
+                },
+                'model': {
+                    'name': None ## equivalent to passing None to request_expertise()
+                }
+                # No 'model' field - should default to 'specter2+scincl'
+            }),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        # Should not be a 500 Internal Server Error
+        assert response.status_code != 500, f'Server error when model not provided: {response.json}'
+        # Should either succeed (200) or fail validation for other reasons (400), but not crash
+        assert response.status_code == 200, f'Unexpected status: {response.status_code}'
+
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_no_model'
+        assert response['request']['model']['name'] == 'specter2+scincl'
+        assert response['status'] != 'Error'
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+
     def test_request_expertise_with_valid_parameters(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -790,7 +839,7 @@ class TestExpertiseService():
 
         # Check that the search returns both job beforejobs the new job is completed when searching for completed
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
-        assert len(response) == 2
+        assert len(response) == 3
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -823,7 +872,7 @@ class TestExpertiseService():
 
         # After completion, check for non-empty completed list
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
-        assert len(response) == 3
+        assert len(response) == 4
         assert response[0]['status'] == 'Completed'
         assert response[0]['name'] == 'test_run'
 
@@ -890,7 +939,7 @@ class TestExpertiseService():
         test_client = openreview_context['test_client']
         # Test for status query
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
-        assert len(response) == 4
+        assert len(response) == 5
         assert response[0]['status'] == 'Completed'
         assert response[1]['status'] == 'Completed'
         assert response[2]['status'] == 'Completed'
@@ -899,7 +948,7 @@ class TestExpertiseService():
 
         # Test for member query
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'memberOf': 'ABC'}).json['results']
-        assert len(response) == 4
+        assert len(response) == 5
         assert response[0]['request']['entityA']['memberOf'] == 'ABC.cc/Reviewers'
         assert response[1]['request']['entityA']['memberOf'] == 'ABC.cc/Reviewers'
         assert response[2]['request']['entityA']['memberOf'] == 'ABC.cc/Reviewers'
@@ -908,7 +957,7 @@ class TestExpertiseService():
 
         # Test for invitation query
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'invitation': 'ABC.cc'}).json['results']
-        assert len(response) == 4
+        assert len(response) == 5
         assert response[0]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response[1]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response[2]['request']['entityB']['invitation'] == 'ABC.cc/-/Submission'
@@ -918,7 +967,7 @@ class TestExpertiseService():
 
         # Test for combination
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed', 'memberOf': 'ABC'}).json['results']
-        assert len(response) == 4
+        assert len(response) == 5
         assert response[0]['status'] == 'Completed'
         assert response[1]['status'] == 'Completed'
         assert response[2]['status'] == 'Completed'
@@ -1168,7 +1217,7 @@ class TestExpertiseService():
         # Assert that there are two completed jobs belonging to this user
         test_client = openreview_context['test_client']
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={}).json['results']
-        assert len(response) == 7
+        assert len(response) == 8
         for job_dict in response:
             assert job_dict['status'] == 'Completed'
 
