@@ -535,16 +535,11 @@ class TestExpertiseService():
                 'model': {
                     'name': None ## equivalent to passing None to request_expertise()
                 }
-                # No 'model' field - should default to 'specter2+scincl'
             }),
             content_type='application/json',
             headers=openreview_client.headers
         )
-        # Should not be a 500 Internal Server Error
         assert response.status_code != 500, f'Server error when model not provided: {response.json}'
-        # Should either succeed (200) or fail validation for other reasons (400), but not crash
-        assert response.status_code == 200, f'Unexpected status: {response.status_code}'
-
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(2)
