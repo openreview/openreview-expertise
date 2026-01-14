@@ -1015,7 +1015,11 @@ class GCPInterface(object):
             try:
                 error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
                 if error_message:
-                    description = json.loads(error_message)['error']
+                    error_data = json.loads(error_message)
+                    description = error_data.get('error', descriptions[status])
+                    # Check if this was an expected error (e.g., no publications found)
+                    if error_data.get('expected', False):
+                        status = JobStatus.COMPLETED_WITH_ERROR
                 else:
                     description = descriptions[status]
             except Exception as e:
