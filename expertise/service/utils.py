@@ -38,6 +38,14 @@ def _get_required_field(req, superkey, key):
         raise openreview.OpenReviewException(f"Bad request: required field missing in {superkey}: {key}")
     return field
 
+class ExpectedDataError(Exception):
+    """
+    Raised when a known/expected data condition prevents job completion.
+    Jobs that fail with this exception should be marked as COMPLETED_WITH_ERROR
+    rather than ERROR, and will not be retried by the job queue.
+    """
+    pass
+
 class JobStatus(str, Enum):
     INITIALIZED = 'Initialized'
     QUEUED = 'Queued'
@@ -45,6 +53,7 @@ class JobStatus(str, Enum):
     EXPERTISE_QUEUED = 'Queued for Expertise'
     RUN_EXPERTISE = 'Running Expertise'
     COMPLETED = 'Completed'
+    COMPLETED_WITH_ERROR = 'Completed with Error'
     ERROR = 'Error'
 
 class JobDescription(dict, Enum):
@@ -55,6 +64,7 @@ class JobDescription(dict, Enum):
         JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
+        JobStatus.COMPLETED_WITH_ERROR: 'Job completed but encountered a known issue that prevented score calculation',
         JobStatus.ERROR: 'Job has encountered an error and has failed to complete',
     }
 class APIRequest(object):
