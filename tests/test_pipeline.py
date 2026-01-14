@@ -458,7 +458,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     try:
         run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
     except Exception as e:
-        assert str(e) == 'Not Found Error: No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
+        assert str(e) == 'No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
 
     # Assertions
     # Check that blobs were created and data was uploaded to GCS
@@ -469,6 +469,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     error_blob = bucket.blob(f"{prefix}error.json")
     assert error_blob.exists()
     error_content = json.loads(error_blob.download_as_text())
-    assert error_content["error"] == 'Not Found Error: No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
+    assert error_content["error"] == 'No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
+    assert error_content["expected"] == True  # This is an expected data error
 
     shutil.rmtree(working_dir)  # Clean up
