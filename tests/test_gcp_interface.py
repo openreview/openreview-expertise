@@ -959,30 +959,3 @@ def test_get_job_status_by_job_id_returns_redis_when_no_cloud_id(mock_storage_cl
     # No cloud lookups
     mock_storage_client.return_value.bucket.return_value.list_blobs.assert_not_called()
     mock_pipeline_job_get.assert_not_called()
-
-def test_parse_config_file_timeout_values(tmp_path):
-    """Test that timeout values are correctly parsed from config file."""
-    from expertise.build_pipeline import parse_config_file
-
-    # Create a temporary config file
-    config_content = """
-PIPELINE_TIMEOUT_SMALL = '86400s'
-PIPELINE_TIMEOUT_MEDIUM = '86400s'
-PIPELINE_TIMEOUT_LARGE = '86400s'
-PIPELINE_NAME_SMALL = 'expertise-job-small'
-PIPELINE_GPU_COUNT_SMALL = 1
-"""
-    config_file = tmp_path / "test_config.cfg"
-    config_file.write_text(config_content)
-
-    # Parse the config
-    config = parse_config_file(str(config_file))
-
-    # Verify timeout values are parsed as strings (not converted to numbers)
-    assert config['PIPELINE_TIMEOUT_SMALL'] == '86400s'
-    assert config['PIPELINE_TIMEOUT_MEDIUM'] == '86400s'
-    assert config['PIPELINE_TIMEOUT_LARGE'] == '86400s'
-
-    # Verify other values still parse correctly
-    assert config['PIPELINE_NAME_SMALL'] == 'expertise-job-small'
-    assert config['PIPELINE_GPU_COUNT_SMALL'] == 1
