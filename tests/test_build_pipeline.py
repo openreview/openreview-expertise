@@ -1,14 +1,10 @@
-"""
-Tests for build_pipeline.py - Pipeline compilation and configuration tests.
-"""
 import pytest
 import yaml
 
 
 def test_pipeline_compilation_includes_timeout(tmp_path):
     """
-    End-to-end test that compiles the pipeline and verifies timeout is in the YAML.
-    This replicates the pipeline construction from build_pipeline.py without uploading.
+    Replicates the pipeline construction from build_pipeline.py without uploading.
     """
     from kfp import compiler
     from kfp.dsl import pipeline, component, If, Elif, Else
@@ -65,14 +61,12 @@ def test_pipeline_compilation_includes_timeout(tmp_path):
         with Else():
             large_job(project='test', location='us-central1', gcs_request_path=gcs_request_path)
 
-    # Compile the pipeline
     yaml_path = tmp_path / 'test_pipeline.yaml'
     compiler.Compiler().compile(
         pipeline_func=test_pipeline,
         package_path=str(yaml_path)
     )
 
-    # Read and verify the YAML
     yaml_content = yaml_path.read_text()
 
     # Assert timeout values are present in compiled YAML
