@@ -9,6 +9,7 @@ import numpy as np
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import specter2_scincl
 import redisai
+from expertise.utils.utils import generate_sparse_scores
 
 
 def compute_score_statistics(scores, label=""):
@@ -148,9 +149,7 @@ def test_sparse_scores(tmp_path, create_specncl):
     )
 
     if config['model_params'].get('sparse_value'):
-        all_scores = specnclModel.sparse_scores(
-            scores_path=scores_path.joinpath(config['name'] + '_sparse.csv')
-        )
+        all_scores = generate_sparse_scores(all_scores, config['model_params']['sparse_value'], scores_path.joinpath(config['name'] + '_sparse.csv'))
 
     assert len(all_scores) == 8
     for row in all_scores:

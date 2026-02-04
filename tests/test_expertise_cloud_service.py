@@ -14,6 +14,7 @@ from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.service.utils import JobConfig, RedisDatabase, get_user_id
 from google.cloud.aiplatform_v1.types import PipelineState
 from conftest import GCSTestHelper
+from expertise.service.utils import RedisDatabase, JobConfig, JobStatus, JobDescription, APIRequest
 
 GCS_TEST_BUCKET = GCSTestHelper.GCS_TEST_BUCKET
 GCS_PROJECT = GCSTestHelper.GCS_PROJECT
@@ -967,3 +968,57 @@ class TestExpertiseCloudService():
         assert response['name'] == 'test_run'
         assert response['status'] == 'Error'
         assert response['description'] == "Not Found Error: No papers found for: invitation_ids: ['CLD_ERR.cc/-/Submission']"
+
+    def test_status_returns_redis_when_no_cloud_id(self, openreview_client, openreview_context_cloud):
+
+        cfg = openreview_context_cloud["config"]
+        test_client = openreview_context_cloud["test_client"]
+
+        # Use the same Redis config as the service
+        redis = RedisDatabase(
+            host=cfg["REDIS_ADDR"],
+            port=cfg["REDIS_PORT"],
+            db=cfg["REDIS_CONFIG_DB"],
+            sync_on_disk=False,
+        )
+
+        # Prepare a job with no cloud_id and ensure job_dir exists so load_job passes
+        job_id = f"job_no_cloud_{int(time.time())}"
+        job_dir = os.path.join(cfg["WORKING_DIR"], job_id)
+        os.makedirs(job_dir, exist_ok=True)
+
+        api_req = APIRequest({
+            "name": "test_no_cloud",
+            "entityA": {"type": "Group", "memberOf": "CLD.cc/Area_Chairs"},
+            "entityB": {"type": "Note", "invitation": "CLD.cc/-/Submission"},
+        })
+
+        config = JobConfig(
+            name="test_no_cloud",
+            user_id=cfg["OPENREVIEW_USERNAME"],
+            job_id=job_id,
+            cloud_id=None,
+            job_dir=job_dir,
+            cdate=1234567890000,
+            mdate=1234567890000,
+            status=JobStatus.QUEUED,
+            description=JobDescription.VALS.value[JobStatus.QUEUED],
+        )
+        config.api_request = api_req
+        redis.save_job(config)
+
+        # Use a client with the default token (openreview.net)
+        user_client = openreview.api.OpenReviewClient(token=openreview_client.token)
+
+        # Hit the status endpoint; should return Redis-backed values without error
+        resp = test_client.get(
+            "/expertise/status",
+            headers=user_client.headers,
+            query_string={"jobId": job_id},
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["jobId"] == job_id
+        assert body["status"] == JobStatus.QUEUED
+        assert body["description"] == JobDescription.VALS.value[JobStatus.QUEUED]
+        assert body["request"] == api_req.to_json()
