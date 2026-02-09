@@ -62,21 +62,27 @@ class Helpers:
     @staticmethod
     def await_queue(super_client=None):
         if super_client is None:
-            super_client = openreview.api.OpenReviewClient(baseurl='http://localhost:3001', username='openreview.net', password=Helpers.strong_password)
-            assert super_client is not None, 'Super Client is none'
-
+            super_client = openreview.Client(baseurl='http://localhost:3000', username='openreview.net', password=Helpers.strong_password)
+        counter = 0
+        wait_time = 0.5
+        cycles = 60 * 1 / wait_time # print every 1 minutes
         while True:
             jobs = super_client.get_jobs_status()
             jobCount = 0
             for jobName, job in jobs.items():
+                if jobName == 'fileUploaderQueueMQStatus' or jobName == 'fileDeletionQueueMQStatus':
+                    continue
                 jobCount += job.get('waiting', 0) + job.get('active', 0) + job.get('delayed', 0)
 
             if jobCount == 0:
                 break
 
-            time.sleep(0.5)
+            time.sleep(wait_time)
+            if counter % cycles == 0:
+                print(f'Jobs in API 1 queue: {jobCount}')
+            counter += 1
 
-        assert not super_client.get_process_logs(status='error')
+        assert not [l for l in super_client.get_process_logs(status='error') if l['executedOn'] == 'openreview-api-1']        
 
     @staticmethod
     def await_queue_edit(super_client, edit_id=None, invitation=None, count=1, error=False):
