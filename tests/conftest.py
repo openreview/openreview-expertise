@@ -483,25 +483,28 @@ def clean_start_conference(client, openreview_client, test_google_user):
             
             # Post expertise selection
             # { '~Harold_Rice1': 'Include' }
-            
+            client_v2 = openreview.api.OpenReviewClient(
+                baseurl = 'http://localhost:3001', username='openreview.net', password=Helpers.strong_password
+            )
+
             def _populate_groups(committee_name):
                 with open('tests/data/fakeData.json') as json_file:
                     data = json.load(json_file)
-                group = openreview.tools.get_group(client, f'{conference_id}/{committee_name}')
+                group = openreview.tools.get_group(client_v2, f'{conference_id}/{committee_name}')
                 if len(group.members) == 0:
-                    Helpers.post_profiles(client, data)
+                    Helpers.post_profiles(client_v2, data)
                     members = data['groups'][f'{fake_data_source_id}/{committee_name}']['members']
-                    client.add_members_to_group(f'{conference_id}/{committee_name}', members)
+                    client_v2.add_members_to_group(f'{conference_id}/{committee_name}', members)
             
             def _post_publications(group_members):
                 with open('tests/data/fakeData.json') as json_file:
                     data = json.load(json_file)
-                Helpers.post_publications(client, client_v2, data, group_members)
+                Helpers.post_publications(client, client_v2, data, group_members, api_version=2)
 
             def _post_submissions():
                 with open('tests/data/fakeData.json') as json_file:
                     data = json.load(json_file)
-                Helpers.post_submissions(data, f'{conference_id}/-/Submission', datasource_invitation=f'{fake_data_source_id}/-/Submission')
+                Helpers.post_submissions(data, f'{conference_id}/-/Submission', datasource_invitation=f'{fake_data_source_id}/-/Submission', api_version=2)
 
             def _post_expertise_selection():
                 for user, label in post_expertise_selection.items():
@@ -510,12 +513,9 @@ def clean_start_conference(client, openreview_client, test_google_user):
                         user,
                         conference_id,
                         edge_label=label,
-                        api_version=1
+                        api_version=2
                     )
 
-            client_v2 = openreview.api.OpenReviewClient(
-                baseurl = 'http://localhost:3001', username='openreview.net', password=Helpers.strong_password
-            )
 
             if openreview.tools.get_invitation(client, f'openreview.net/-/paper') is None:
                 # Archival/publication invitation
@@ -595,19 +595,19 @@ def clean_start_conference(client, openreview_client, test_google_user):
             pc_name = f'{conf_prefix.upper()}Chair'
             pc_id = f'~Program_{pc_name}1'
             
+            Helpers.create_user(
+                pc_email,
+                'Program',
+                pc_name
+            )
+            pc_client= openreview.Client(
+                baseurl = 'http://localhost:3000', username=pc_email, password=Helpers.strong_password
+            )
+
             if conference is None:
                 now = datetime.datetime.utcnow()
                 due_date = now + datetime.timedelta(days=3)
                 first_date = now + datetime.timedelta(days=1)
-
-                Helpers.create_user(
-                    pc_email,
-                    'Program',
-                    pc_name
-                )
-                pc_client= openreview.Client(
-                    baseurl = 'http://localhost:3000', username=pc_email, password=Helpers.strong_password
-                )
 
                 request_form_note = pc_client.post_note(openreview.Note(
                     invitation='openreview.net/Support/-/Request_Form',
@@ -642,6 +642,7 @@ def clean_start_conference(client, openreview_client, test_google_user):
                         'include_expertise_selection': 'No' if exclude_expertise else 'Yes',
                         'submission_reviewer_assignment': 'Automatic',
                         'submission_license': ['CC BY-SA 4.0'],
+                        'api_version': '2',
                         'venue_organizer_agreement': [
                             'OpenReview natively supports a wide variety of reviewing workflow configurations. However, if we want significant reviewing process customizations or experiments, we will detail these requests to the OpenReview staff at least three months in advance.',
                             'We will ask authors and reviewers to create an OpenReview Profile at least two weeks in advance of the paper submission deadlines.',
@@ -669,23 +670,19 @@ def clean_start_conference(client, openreview_client, test_google_user):
 
                 print(request_form_note)
 
-            pc_client = openreview.Client(
-                baseurl = 'http://localhost:3000', username=pc_email, password=Helpers.strong_password
-            )
-
             if post_reviewers:
                 _populate_groups('Reviewers')
-                reviewers = pc_client.get_group(f'{conference_id}/Reviewers')
+                reviewers = client_v2.get_group(f'{conference_id}/Reviewers')
                 if post_publications:
                     _post_publications(reviewers.members)
             if post_area_chairs:
                 _populate_groups('Area_Chairs')
-                area_chairs = pc_client.get_group(f'{conference_id}/Area_Chairs')
+                area_chairs = client_v2.get_group(f'{conference_id}/Area_Chairs')
                 if post_publications:
                     _post_publications(area_chairs.members)
             if post_senior_area_chairs:
                 _populate_groups('Senior_Area_Chairs')
-                senior_area_chairs = pc_client.get_group(f'{conference_id}/Senior_Area_Chairs')
+                senior_area_chairs = client_v2.get_group(f'{conference_id}/Senior_Area_Chairs')
                 if post_publications:
                     _post_publications(senior_area_chairs.members)
 
