@@ -35,9 +35,9 @@ def _setup_tmlr(clean_start_journal, client, openreview_client):
     )
 
 @pytest.fixture(scope="module", autouse=True)
-def _setup_abc_cc(clean_start_conference_v2, client, openreview_client):
-    clean_start_conference_v2(
-        openreview_client,
+def _setup_abc_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
         DEFAULT_CONF_ID,
         post_reviewers=DEFAULT_POST_REVIEWERS,
         post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
@@ -47,9 +47,9 @@ def _setup_abc_cc(clean_start_conference_v2, client, openreview_client):
     )
 
 @pytest.fixture(scope="module", autouse=True)
-def _setup_hij_cc(clean_start_conference_v2, client, openreview_client):
-    clean_start_conference_v2(
-        openreview_client,
+def _setup_hij_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
         'HIJ.cc',
         fake_data_source_id=DEFAULT_CONF_ID,
         exclude_expertise=False,
@@ -88,9 +88,9 @@ def _setup_provided_submissions(clean_start_journal, client, openreview_client):
 EXCLUSION_CONF_ID = 'EXCLUSION.cc'
 EXPERTISE_SELECTION_POSTING = False
 @pytest.fixture(scope="module", autouse=True)
-def _setup_exclusion_cc(clean_start_conference_v2, client, openreview_client):
-    clean_start_conference_v2(
-        openreview_client,
+def _setup_exclusion_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
         EXCLUSION_CONF_ID,
         fake_data_source_id=DEFAULT_CONF_ID,
         post_reviewers=DEFAULT_POST_REVIEWERS,
@@ -105,9 +105,9 @@ def _setup_exclusion_cc(clean_start_conference_v2, client, openreview_client):
 
 INCLUSION_CONF_ID = 'INCLUSION.cc'
 @pytest.fixture(scope="module", autouse=True)
-def _setup_include_cc(clean_start_conference_v2, client, openreview_client):
-    clean_start_conference_v2(
-        openreview_client,
+def _setup_include_cc(clean_start_conference, client, openreview_client):
+    clean_start_conference(
+        client,
         INCLUSION_CONF_ID,
         exclude_expertise=False,
         fake_data_source_id=DEFAULT_CONF_ID,
