@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/openreview/openreview-expertise.svg?style=svg)](https://circleci.com/gh/openreview/openreview-expertise)
+
 # Paper-reviewer affinity modeling for OpenReview
 
 A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
