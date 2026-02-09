@@ -13,9 +13,9 @@ DEFAULT_POST_SUBMISSIONS = True
 DEFAULT_POST_PUBLICATIONS = True
 
 @pytest.fixture(scope="module", autouse=True)
-def _setup_create_dataset_conference(clean_start_conference, client, openreview_client):
-    clean_start_conference(
-        client,
+def _setup_create_dataset_conference(clean_start_conference_v2, client, openreview_client):
+    clean_start_conference_v2(
+        openreview_client,
         DEFAULT_CONF_ID,
         post_reviewers=DEFAULT_POST_REVIEWERS,
         post_area_chairs=DEFAULT_POST_AREA_CHAIRS,
@@ -51,7 +51,7 @@ def test_get_papers_from_group(client, openreview_client):
     if os.path.isfile('publications_by_profile_id.json'):
         os.remove('publications_by_profile_id.json')
 
-def test_get_profile_ids(client, openreview_client, clean_start_conference):
+def test_get_profile_ids(client, openreview_client, clean_start_conference_v2):
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
     ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc/Reviewers'])
     assert len(ids) == 100
@@ -705,9 +705,9 @@ def test_expertise_selection_api2(client, openreview_client, helpers, clean_star
     assert len(expertise['~C.V._Lastname1']) == 1
 
 
-def test_expertise_inclusion(client, openreview_client, helpers, clean_start_conference):
-    clean_start_conference(
-        client,
+def test_expertise_inclusion(client, openreview_client, helpers, clean_start_conference_v2):
+    clean_start_conference_v2(
+        openreview_client,
         'CDEXP.cc',
         fake_data_source_id='ABC.cc',
         exclude_expertise=False,

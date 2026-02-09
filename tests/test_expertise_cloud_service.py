@@ -45,9 +45,9 @@ def _setup_tmlr(clean_start_journal, client, openreview_client):
     )
 
 @pytest.fixture(scope="module", autouse=True)
-def _setup_abc_cc(clean_start_conference, client, openreview_client):
-    clean_start_conference(
-        client,
+def _setup_abc_cc(clean_start_conference_v2, client, openreview_client):
+    clean_start_conference_v2(
+        openreview_client,
         DEFAULT_CONF_ID,
         fake_data_source_id='ABC.cc',
         post_reviewers=DEFAULT_POST_REVIEWERS,
