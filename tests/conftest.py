@@ -600,10 +600,13 @@ def clean_start_conference(client, openreview_client, test_google_user):
                 due_date = now + datetime.timedelta(days=3)
                 first_date = now + datetime.timedelta(days=1)
 
-                pc_client=Helpers.create_user(
+                Helpers.create_user(
                     pc_email,
                     'Program',
                     pc_name
+                )
+                pc_client= openreview.Client(
+                    baseurl = 'http://localhost:3000', username=pc_email, password=Helpers.strong_password
                 )
 
                 request_form_note = pc_client.post_note(openreview.Note(
