@@ -504,7 +504,7 @@ def clean_start_conference(client, openreview_client, test_google_user):
             def _post_publications(group_members):
                 with open('tests/data/fakeData.json') as json_file:
                     data = json.load(json_file)
-                Helpers.post_publications(client, client_v2, data, group_members, api_version=2)
+                Helpers.post_publications(client, client_v2, data, group_members)
 
             def _post_submissions():
                 with open('tests/data/fakeData.json') as json_file:
