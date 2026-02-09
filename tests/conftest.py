@@ -23,10 +23,10 @@ class Helpers:
 
     @staticmethod
     def create_user(email, first, last, alternates=[], institution=None):
-        client = openreview.Client(baseurl = 'http://localhost:3000')
+        client = openreview.api.OpenReviewClient(baseurl = 'http://localhost:3001')
         assert client is not None, "Client is none"
         if openreview.tools.get_profile(client, email) is not None:
-            return openreview.Client(baseurl = 'http://localhost:3000', username = email, password = Helpers.strong_password)
+            return openreview.api.OpenReviewClient(baseurl = 'http://localhost:3001', username = email, password = Helpers.strong_password)
         fullname = f'{first} {last}'
         res = client.register_user(email=email, fullname=fullname, password=Helpers.strong_password)
         username = res.get('id')
@@ -62,7 +62,7 @@ class Helpers:
     @staticmethod
     def await_queue(super_client=None):
         if super_client is None:
-            super_client = openreview.Client(baseurl='http://localhost:3000', username='openreview.net', password=Helpers.strong_password)
+            super_client = openreview.api.OpenReviewClient(baseurl='http://localhost:3001', username='openreview.net', password=Helpers.strong_password)
             assert super_client is not None, 'Super Client is none'
 
         while True:
