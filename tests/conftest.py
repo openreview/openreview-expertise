@@ -81,7 +81,6 @@ class Helpers:
             if counter % cycles == 0:
                 print(f'Jobs in API 1 queue: {jobCount}')
             counter += 1
-
         assert not [l for l in super_client.get_process_logs(status='error') if l['executedOn'] == 'openreview-api-1']        
 
     @staticmethod
