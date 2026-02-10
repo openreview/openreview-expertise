@@ -6,7 +6,7 @@ import time
 import json
 import os
 import shortuuid
-from tests.conference_locks import conference_lock
+from conference_locks import conference_lock
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
 
@@ -175,7 +175,7 @@ class Helpers:
                         ))
 
     @staticmethod
-    def post_submissions(data, invitation, api_version=1, datasource_invitation=None):
+    def post_submissions(data, invitation, api_version=1, datasource_invitation=None, extra_fields=False):
         if datasource_invitation is None:
             datasource_invitation = invitation
 
@@ -213,21 +213,30 @@ class Helpers:
                 cdate = note_json.get('cdate')
 
                 if content.get('title') not in existing_titles:
+
+                    content = {
+                        'title': { 'value': content.get('title').get('value') if isinstance(content.get('title'), dict) else content.get('title') },
+                        'abstract': { 'value': content.get('abstract').get('value') if isinstance(content.get('abstract'), dict) else content.get('abstract') },
+                        'venueid': { 'value': content.get('venueid', {}).get('value')},
+                        'authors': { 'value': ['Test User']},
+                        'authorids': { 'value': ['~SomeFirstName_User1']},
+                        'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
+                        # 'supplementary_material': { 'value': '/attachment/' + 's' * 40 +'.zip'},
+                        # 'competing_interests': { 'value': 'None beyond the authors normal conflict of interests'},
+                        # 'human_subjects_reporting': { 'value': 'Not applicable'},
+                        'keywords': { 'value': ['keyword1', 'keyword2'] }
+                    }
+
+                    if extra_fields:
+                        content['supplementary_material'] = { 'value': '/attachment/' + 's' * 40 +'.zip'}
+                        content['competing_interests'] = { 'value': 'None beyond the authors normal conflict of interests'}
+                        content['human_subjects_reporting'] = { 'value': 'Not applicable'}
+
                     submission_note = test_client_v2.post_note_edit(
                         invitation = invitation,
                         signatures = ['~SomeFirstName_User1'],
                         note = Note(
-                            content = {
-                                'title': { 'value': content.get('title').get('value') },
-                                'abstract': { 'value': content.get('abstract').get('value') },
-                                'venueid': { 'value': content.get('venueid', {}).get('value')},
-                                'authors': { 'value': ['Test User']},
-                                'authorids': { 'value': ['~SomeFirstName_User1']},
-                                'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
-                                'supplementary_material': { 'value': '/attachment/' + 's' * 40 +'.zip'},
-                                'competing_interests': { 'value': 'None beyond the authors normal conflict of interests'},
-                                'human_subjects_reporting': { 'value': 'Not applicable'}
-                            }
+                            content = content
                         )
                     )
                 
@@ -407,7 +416,7 @@ def clean_start_journal(client, openreview_client, test_google_user, test_client
             def _post_submissions():
                 with open('tests/data/fakeData.json') as json_file:
                     data = json.load(json_file)
-                Helpers.post_submissions(data, f'{journal_id}/-/Submission', api_version=2)
+                Helpers.post_submissions(data, f'{journal_id}/-/Submission', api_version=2, extra_fields=True)
 
             def _post_publications(committee_name):
                 with open('tests/data/fakeData.json') as json_file:
@@ -504,7 +513,7 @@ def clean_start_conference(client, openreview_client, test_google_user):
             def _post_publications(group_members):
                 with open('tests/data/fakeData.json') as json_file:
                     data = json.load(json_file)
-                Helpers.post_publications(client, client_v2, data, group_members, api_version=2)
+                Helpers.post_publications(client, client_v2, data, group_members)
 
             def _post_submissions():
                 with open('tests/data/fakeData.json') as json_file:
