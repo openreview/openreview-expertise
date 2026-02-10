@@ -443,9 +443,9 @@ class OpenReviewExpertise(object):
 
         seen_papers = {}  # Maps paperhash -> paper
 
-        # print(f"{member} include/exclude")
-        # print(self.included_ids_by_user.get(member))
-        # print(self.excluded_ids_by_user.get(member))
+        print(f"{member} include/exclude")
+        print(self.included_ids_by_user.get(member))
+        print(self.excluded_ids_by_user.get(member))
 
         for n in member_papers:
             paper_title = openreview.tools.get_paperhash('', n['content']['title'])

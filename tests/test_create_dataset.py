@@ -594,7 +594,7 @@ def test_deduplication(client, openreview_client, helpers):
     note = test_user_client.post_note(note)
 
     publications = or_expertise.get_publications('~Harold_Rice1')
-    assert len(publications) == 4 ## it should be 3, there are two notes with same title
+    assert len(publications) == 4 ## it should be 3, we do not have blind submissions on API 2, ignore this for now
 
 def test_expertise_selection(client, openreview_client, helpers):
     config = {
