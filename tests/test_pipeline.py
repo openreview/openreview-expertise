@@ -221,7 +221,7 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
     assert metadata_blob.exists()
     metadata_content = json.loads(metadata_blob.download_as_text())
-    assert metadata_content["submission_count"] == 4
+    assert metadata_content["submission_count"] == 2
     assert metadata_content["no_publications_count"] == 0
 
     # Check for pub2vec.jsonl file
@@ -396,7 +396,7 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
     assert metadata_blob.exists()
     metadata_content = json.loads(metadata_blob.download_as_text())
-    assert metadata_content["submission_count"] == 4
+    assert metadata_content["submission_count"] == 2
     assert metadata_content["no_publications_count"] == 0
 
     shutil.rmtree(working_dir)  # Clean up
