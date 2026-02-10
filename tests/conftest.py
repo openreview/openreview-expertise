@@ -179,12 +179,13 @@ class Helpers:
         if datasource_invitation is None:
             datasource_invitation = invitation
 
-        test_user_client = openreview.Client(username='test@google.com', password=Helpers.strong_password)
-
-        notes = test_user_client.get_all_notes(invitation=invitation)
         if api_version == 1:
+            test_user_client = openreview.Client(username='test@google.com', password=Helpers.strong_password)
+            notes = test_user_client.get_all_notes(invitation=invitation)
             existing_titles = [note.content.get('title') for note in notes]
         elif api_version == 2:
+            test_user_client = openreview.api.OpenReviewClient(baseurl='http://localhost:3001', username='test@google.com', password=Helpers.strong_password)
+            notes = test_user_client.get_all_notes(invitation=invitation)
             existing_titles = [note.content.get('title', {}).get('value') for note in notes]
 
         ## All mock data is in API1 format
