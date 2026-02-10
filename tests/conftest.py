@@ -175,7 +175,7 @@ class Helpers:
                         ))
 
     @staticmethod
-    def post_submissions(data, invitation, api_version=1, datasource_invitation=None, extra_fields=False):
+    def post_submissions(data, invitation, api_version=1, datasource_invitation=None, journal_fields=False):
         if datasource_invitation is None:
             datasource_invitation = invitation
 
@@ -221,16 +221,14 @@ class Helpers:
                         'authors': { 'value': ['Test User']},
                         'authorids': { 'value': ['~SomeFirstName_User1']},
                         'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
-                        # 'supplementary_material': { 'value': '/attachment/' + 's' * 40 +'.zip'},
-                        # 'competing_interests': { 'value': 'None beyond the authors normal conflict of interests'},
-                        # 'human_subjects_reporting': { 'value': 'Not applicable'},
-                        'keywords': { 'value': ['keyword1', 'keyword2'] }
                     }
 
-                    if extra_fields:
+                    if journal_fields:
                         content['supplementary_material'] = { 'value': '/attachment/' + 's' * 40 +'.zip'}
                         content['competing_interests'] = { 'value': 'None beyond the authors normal conflict of interests'}
                         content['human_subjects_reporting'] = { 'value': 'Not applicable'}
+                    else:
+                        content['keywords'] = { 'value': ['keyword1', 'keyword2'] }
 
                     submission_note = test_client_v2.post_note_edit(
                         invitation = invitation,
@@ -416,7 +414,7 @@ def clean_start_journal(client, openreview_client, test_google_user, test_client
             def _post_submissions():
                 with open('tests/data/fakeData.json') as json_file:
                     data = json.load(json_file)
-                Helpers.post_submissions(data, f'{journal_id}/-/Submission', api_version=2, extra_fields=True)
+                Helpers.post_submissions(data, f'{journal_id}/-/Submission', api_version=2, journal_fields=True)
 
             def _post_publications(committee_name):
                 with open('tests/data/fakeData.json') as json_file:
