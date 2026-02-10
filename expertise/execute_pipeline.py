@@ -237,7 +237,7 @@ def run_pipeline(
                     })
             blob = bucket.blob(destination_blob)
             contents = '\n'.join([json.dumps(r) for r in result])
-            blob.upload_from_string(contents)         
+            blob.upload_from_string(contents)   
 
 if __name__ == '__main__':
     print('Starting pipeline')
