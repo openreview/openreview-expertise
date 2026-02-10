@@ -265,8 +265,6 @@ class Helpers:
                 head=note_edit['note']['id'],
                 tail=user,
                 label=edge_label,
-                readers=[conference_id, user],
-                writers=[user],
                 signatures=[user]
             )
             edge = client.post_edge(edge)
