@@ -524,6 +524,7 @@ def clean_start_conference(client, openreview_client, test_google_user):
                         openreview_client,
                         user,
                         conference_id,
+                        committee_name='Reviewers',
                         edge_label=label,
                         api_version=2
                     )
