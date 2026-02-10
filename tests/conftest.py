@@ -521,7 +521,7 @@ def clean_start_conference(client, openreview_client, test_google_user):
             def _post_expertise_selection():
                 for user, label in post_expertise_selection.items():
                     Helpers.post_expertise_publication(
-                        client,
+                        openreview_client,
                         user,
                         conference_id,
                         edge_label=label,
