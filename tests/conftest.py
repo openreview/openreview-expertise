@@ -184,8 +184,8 @@ class Helpers:
             notes = test_user_client.get_all_notes(invitation=invitation)
             existing_titles = [note.content.get('title') for note in notes]
         elif api_version == 2:
-            test_user_client = openreview.api.OpenReviewClient(baseurl='http://localhost:3001', username='test@google.com', password=Helpers.strong_password)
-            notes = test_user_client.get_all_notes(invitation=invitation)
+            openreview_client = openreview.api.OpenReviewClient(baseurl='http://localhost:3001', username='openreview.net', password=Helpers.strong_password)
+            notes = openreview_client.get_all_notes(invitation=invitation)
             existing_titles = [note.content.get('title', {}).get('value') for note in notes]
 
         ## All mock data is in API1 format
