@@ -6,7 +6,7 @@ import time
 import json
 import os
 import shortuuid
-from tests.conference_locks import conference_lock
+from conference_locks import conference_lock
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
 
@@ -23,10 +23,10 @@ class Helpers:
 
     @staticmethod
     def create_user(email, first, last, alternates=[], institution=None):
-        client = openreview.Client(baseurl = 'http://localhost:3000')
+        client = openreview.api.OpenReviewClient(baseurl = 'http://localhost:3001')
         assert client is not None, "Client is none"
         if openreview.tools.get_profile(client, email) is not None:
-            return openreview.Client(baseurl = 'http://localhost:3000', username = email, password = Helpers.strong_password)
+            return openreview.api.OpenReviewClient(baseurl = 'http://localhost:3001', username = email, password = Helpers.strong_password)
         fullname = f'{first} {last}'
         res = client.register_user(email=email, fullname=fullname, password=Helpers.strong_password)
         username = res.get('id')
@@ -63,20 +63,25 @@ class Helpers:
     def await_queue(super_client=None):
         if super_client is None:
             super_client = openreview.Client(baseurl='http://localhost:3000', username='openreview.net', password=Helpers.strong_password)
-            assert super_client is not None, 'Super Client is none'
-
+        counter = 0
+        wait_time = 0.5
+        cycles = 60 * 1 / wait_time # print every 1 minutes
         while True:
             jobs = super_client.get_jobs_status()
             jobCount = 0
             for jobName, job in jobs.items():
+                if jobName == 'fileUploaderQueueMQStatus' or jobName == 'fileDeletionQueueMQStatus':
+                    continue
                 jobCount += job.get('waiting', 0) + job.get('active', 0) + job.get('delayed', 0)
 
             if jobCount == 0:
                 break
 
-            time.sleep(0.5)
-
-        assert not super_client.get_process_logs(status='error')
+            time.sleep(wait_time)
+            if counter % cycles == 0:
+                print(f'Jobs in API 1 queue: {jobCount}')
+            counter += 1
+        assert not [l for l in super_client.get_process_logs(status='error') if l['executedOn'] == 'openreview-api-1']        
 
     @staticmethod
     def await_queue_edit(super_client, edit_id=None, invitation=None, count=1, error=False):
@@ -170,16 +175,17 @@ class Helpers:
                         ))
 
     @staticmethod
-    def post_submissions(data, invitation, api_version=1, datasource_invitation=None):
+    def post_submissions(data, invitation, api_version=1, datasource_invitation=None, journal_fields=False):
         if datasource_invitation is None:
             datasource_invitation = invitation
 
-        test_user_client = openreview.Client(username='test@google.com', password=Helpers.strong_password)
-
-        notes = test_user_client.get_all_notes(invitation=invitation)
         if api_version == 1:
+            test_user_client = openreview.Client(username='test@google.com', password=Helpers.strong_password)
+            notes = test_user_client.get_all_notes(invitation=invitation)
             existing_titles = [note.content.get('title') for note in notes]
         elif api_version == 2:
+            openreview_client = openreview.api.OpenReviewClient(baseurl='http://localhost:3001', username='openreview.net', password=Helpers.strong_password)
+            notes = openreview_client.get_all_notes(invitation=invitation)
             existing_titles = [note.content.get('title', {}).get('value') for note in notes]
 
         ## All mock data is in API1 format
@@ -208,21 +214,28 @@ class Helpers:
                 cdate = note_json.get('cdate')
 
                 if content.get('title') not in existing_titles:
+
+                    content = {
+                        'title': { 'value': content.get('title').get('value') if isinstance(content.get('title'), dict) else content.get('title') },
+                        'abstract': { 'value': content.get('abstract').get('value') if isinstance(content.get('abstract'), dict) else content.get('abstract') },
+                        'venueid': { 'value': content.get('venueid', {}).get('value')},
+                        'authors': { 'value': ['Test User']},
+                        'authorids': { 'value': ['~SomeFirstName_User1']},
+                        'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
+                    }
+
+                    if journal_fields:
+                        content['supplementary_material'] = { 'value': '/attachment/' + 's' * 40 +'.zip'}
+                        content['competing_interests'] = { 'value': 'None beyond the authors normal conflict of interests'}
+                        content['human_subjects_reporting'] = { 'value': 'Not applicable'}
+                    else:
+                        content['keywords'] = { 'value': ['keyword1', 'keyword2'] }
+
                     submission_note = test_client_v2.post_note_edit(
                         invitation = invitation,
                         signatures = ['~SomeFirstName_User1'],
                         note = Note(
-                            content = {
-                                'title': { 'value': content.get('title').get('value') },
-                                'abstract': { 'value': content.get('abstract').get('value') },
-                                'venueid': { 'value': content.get('venueid', {}).get('value')},
-                                'authors': { 'value': ['Test User']},
-                                'authorids': { 'value': ['~SomeFirstName_User1']},
-                                'pdf': {'value': '/pdf/' + 'p' * 40 +'.pdf' },
-                                'supplementary_material': { 'value': '/attachment/' + 's' * 40 +'.zip'},
-                                'competing_interests': { 'value': 'None beyond the authors normal conflict of interests'},
-                                'human_subjects_reporting': { 'value': 'Not applicable'}
-                            }
+                            content = content
                         )
                     )
                 
@@ -253,8 +266,6 @@ class Helpers:
                 head=note_edit['note']['id'],
                 tail=user,
                 label=edge_label,
-                readers=[conference_id, user],
-                writers=[user],
                 signatures=[user]
             )
             edge = client.post_edge(edge)
@@ -402,7 +413,7 @@ def clean_start_journal(client, openreview_client, test_google_user, test_client
             def _post_submissions():
                 with open('tests/data/fakeData.json') as json_file:
                     data = json.load(json_file)
-                Helpers.post_submissions(data, f'{journal_id}/-/Submission', api_version=2)
+                Helpers.post_submissions(data, f'{journal_id}/-/Submission', api_version=2, journal_fields=True)
 
             def _post_publications(committee_name):
                 with open('tests/data/fakeData.json') as json_file:
@@ -483,15 +494,18 @@ def clean_start_conference(client, openreview_client, test_google_user):
             
             # Post expertise selection
             # { '~Harold_Rice1': 'Include' }
-            
+            client_v2 = openreview.api.OpenReviewClient(
+                baseurl = 'http://localhost:3001', username='openreview.net', password=Helpers.strong_password
+            )
+
             def _populate_groups(committee_name):
                 with open('tests/data/fakeData.json') as json_file:
                     data = json.load(json_file)
-                group = openreview.tools.get_group(client, f'{conference_id}/{committee_name}')
+                group = openreview.tools.get_group(client_v2, f'{conference_id}/{committee_name}')
                 if len(group.members) == 0:
-                    Helpers.post_profiles(client, data)
+                    Helpers.post_profiles(client_v2, data)
                     members = data['groups'][f'{fake_data_source_id}/{committee_name}']['members']
-                    client.add_members_to_group(f'{conference_id}/{committee_name}', members)
+                    client_v2.add_members_to_group(f'{conference_id}/{committee_name}', members)
             
             def _post_publications(group_members):
                 with open('tests/data/fakeData.json') as json_file:
@@ -501,21 +515,19 @@ def clean_start_conference(client, openreview_client, test_google_user):
             def _post_submissions():
                 with open('tests/data/fakeData.json') as json_file:
                     data = json.load(json_file)
-                Helpers.post_submissions(data, f'{conference_id}/-/Submission', datasource_invitation=f'{fake_data_source_id}/-/Submission')
+                Helpers.post_submissions(data, f'{conference_id}/-/Submission', datasource_invitation=f'{fake_data_source_id}/-/Submission', api_version=2)
 
             def _post_expertise_selection():
                 for user, label in post_expertise_selection.items():
                     Helpers.post_expertise_publication(
-                        client,
+                        openreview_client,
                         user,
                         conference_id,
+                        committee_name='Reviewers',
                         edge_label=label,
-                        api_version=1
+                        api_version=2
                     )
 
-            client_v2 = openreview.api.OpenReviewClient(
-                baseurl = 'http://localhost:3001', username='openreview.net', password=Helpers.strong_password
-            )
 
             if openreview.tools.get_invitation(client, f'openreview.net/-/paper') is None:
                 # Archival/publication invitation
@@ -595,16 +607,19 @@ def clean_start_conference(client, openreview_client, test_google_user):
             pc_name = f'{conf_prefix.upper()}Chair'
             pc_id = f'~Program_{pc_name}1'
             
+            Helpers.create_user(
+                pc_email,
+                'Program',
+                pc_name
+            )
+            pc_client= openreview.Client(
+                baseurl = 'http://localhost:3000', username=pc_email, password=Helpers.strong_password
+            )
+
             if conference is None:
                 now = datetime.datetime.utcnow()
                 due_date = now + datetime.timedelta(days=3)
                 first_date = now + datetime.timedelta(days=1)
-
-                pc_client=Helpers.create_user(
-                    pc_email,
-                    'Program',
-                    pc_name
-                )
 
                 request_form_note = pc_client.post_note(openreview.Note(
                     invitation='openreview.net/Support/-/Request_Form',
@@ -639,6 +654,7 @@ def clean_start_conference(client, openreview_client, test_google_user):
                         'include_expertise_selection': 'No' if exclude_expertise else 'Yes',
                         'submission_reviewer_assignment': 'Automatic',
                         'submission_license': ['CC BY-SA 4.0'],
+                        'api_version': '2',
                         'venue_organizer_agreement': [
                             'OpenReview natively supports a wide variety of reviewing workflow configurations. However, if we want significant reviewing process customizations or experiments, we will detail these requests to the OpenReview staff at least three months in advance.',
                             'We will ask authors and reviewers to create an OpenReview Profile at least two weeks in advance of the paper submission deadlines.',
@@ -666,23 +682,19 @@ def clean_start_conference(client, openreview_client, test_google_user):
 
                 print(request_form_note)
 
-            pc_client = openreview.Client(
-                baseurl = 'http://localhost:3000', username=pc_email, password=Helpers.strong_password
-            )
-
             if post_reviewers:
                 _populate_groups('Reviewers')
-                reviewers = pc_client.get_group(f'{conference_id}/Reviewers')
+                reviewers = client_v2.get_group(f'{conference_id}/Reviewers')
                 if post_publications:
                     _post_publications(reviewers.members)
             if post_area_chairs:
                 _populate_groups('Area_Chairs')
-                area_chairs = pc_client.get_group(f'{conference_id}/Area_Chairs')
+                area_chairs = client_v2.get_group(f'{conference_id}/Area_Chairs')
                 if post_publications:
                     _post_publications(area_chairs.members)
             if post_senior_area_chairs:
                 _populate_groups('Senior_Area_Chairs')
-                senior_area_chairs = pc_client.get_group(f'{conference_id}/Senior_Area_Chairs')
+                senior_area_chairs = client_v2.get_group(f'{conference_id}/Senior_Area_Chairs')
                 if post_publications:
                     _post_publications(senior_area_chairs.members)
 

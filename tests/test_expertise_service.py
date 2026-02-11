@@ -1027,7 +1027,7 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection'  }
+                        'expertise': { 'invitation': 'INCLUSION.cc/Reviewers/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Note",
@@ -1073,7 +1073,7 @@ class TestExpertiseService():
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
-        assert req['entityA']['expertise']['invitation'] == 'INCLUSION.cc/-/Expertise_Selection'
+        assert req['entityA']['expertise']['invitation'] == 'INCLUSION.cc/Reviewers/-/Expertise_Selection'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
@@ -1090,7 +1090,7 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'ABC.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'ABC.cc/Reviewers/-/Expertise_Selection' }
                     },
                     "entityB": { 
                         'type': "Note",
@@ -1136,7 +1136,7 @@ class TestExpertiseService():
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
-        assert req['entityA']['expertise']['invitation'] == 'ABC.cc/-/Expertise_Selection'
+        assert req['entityA']['expertise']['invitation'] == 'ABC.cc/Reviewers/-/Expertise_Selection'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
@@ -1153,7 +1153,7 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': {  'invitation': 'EXCLUSION.cc/-/Expertise_Selection'  }
+                        'expertise': {  'invitation': 'EXCLUSION.cc/Reviewers/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Note",
@@ -1199,7 +1199,7 @@ class TestExpertiseService():
         assert req['name'] == 'test_run'
         assert req['entityA']['type'] == 'Group'
         assert req['entityA']['memberOf'] == 'ABC.cc/Reviewers'
-        assert req['entityA']['expertise']['invitation'] == 'EXCLUSION.cc/-/Expertise_Selection'
+        assert req['entityA']['expertise']['invitation'] == 'EXCLUSION.cc/Reviewers/-/Expertise_Selection'
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
@@ -1856,12 +1856,12 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': {  'invitation': 'EXCLUSION.cc/-/Expertise_Selection'  }
+                        'expertise': {  'invitation': 'EXCLUSION.cc/Reviewers/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'EXCLUSION.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'EXCLUSION.cc/Reviewers/-/Expertise_Selection' }
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -1930,12 +1930,12 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'EXCLUSION.cc/-/Expertise_Selection'  }
+                        'expertise': { 'invitation': 'EXCLUSION.cc/Reviewers/-/Expertise_Selection'  }
                     },
                     "entityB": { 
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'INCLUSION.cc/Reviewers/-/Expertise_Selection' }
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -2005,12 +2005,12 @@ class TestExpertiseService():
                     "entityA": {
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'INCLUSION.cc/Reviewers/-/Expertise_Selection' }
                     },
                     "entityB": { 
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
-                        'expertise': { 'invitation': 'INCLUSION.cc/-/Expertise_Selection' }
+                        'expertise': { 'invitation': 'INCLUSION.cc/Reviewers/-/Expertise_Selection' }
                     },
                     "model": {
                             "name": "specter+mfr",
