@@ -656,7 +656,7 @@ def test_get_job_status_multiple_filters(mock_storage_client, mock_pipeline_job_
     # Assertions
     assert len(result["results"]) == 1
     assert result["results"][0]["name"] == "job_3"
-    assert result["results"][0]["status"] == JobStatus.ERROR
+    assert result["results"][0]["status"] == JobStatus.UNEXPECTED_ERROR
     assert result["results"][0]["request"]["entityB"]["invitation"] == "TestGroup.cc/-/Submission"
 
 

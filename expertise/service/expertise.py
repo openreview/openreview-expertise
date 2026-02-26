@@ -421,7 +421,7 @@ class BaseExpertiseService:
 
         # Only allow deletion when job has completed or errored out
         allowed_states = {
-            JobStatus.COMPLETED, JobStatus.COMPLETED_WITH_ERROR, JobStatus.ERROR
+            JobStatus.COMPLETED, JobStatus.ERROR, JobStatus.UNEXPECTED_ERROR
         }
         if config.status not in allowed_states:
             raise openreview.OpenReviewException(
@@ -571,10 +571,10 @@ class ExpertiseService(BaseExpertiseService):
             self.update_status(config, JobStatus.COMPLETED)
 
         except ExpectedDataError as e:
-            # Expected data errors - mark as completed with error, don't re-raise, avoid triggering retries
-            self.update_status(config, JobStatus.COMPLETED_WITH_ERROR, str(e))
-        except Exception as e:
+            # Expected data errors - mark as error, don't re-raise, avoid triggering retries
             self.update_status(config, JobStatus.ERROR, str(e))
+        except Exception as e:
+            self.update_status(config, JobStatus.UNEXPECTED_ERROR, str(e))
             # Re raise exception so that it appears in the queue
             exception = e.with_traceback(e.__traceback__)
             raise exception
@@ -903,8 +903,8 @@ class ExpertiseCloudService(BaseExpertiseService):
             self.logger.error(f"Error creating cloud job for {redis_id}: {e} tr={e.__traceback__}")
             self.logger.error(f"Error details: {traceback.format_exc()}")
             config = self.redis.load_job(redis_id, user_id)
-            if config.status != JobStatus.ERROR:
-                self.update_status(config, JobStatus.ERROR, f"Error creating cloud job: {e}")
+            if config.status != JobStatus.UNEXPECTED_ERROR:
+                self.update_status(config, JobStatus.UNEXPECTED_ERROR, f"Error creating cloud job: {e}")
             # If we fail to create the job, we should not proceed with polling
             # Re-raise exception to appear in the queue
             raise e.with_traceback(e.__traceback__)
@@ -931,12 +931,12 @@ class ExpertiseCloudService(BaseExpertiseService):
                         self.logger.info(f"Job {redis_id} completed successfully.")
                         break # Exit the loop on successful completion
 
-                    elif status['status'] == JobStatus.COMPLETED_WITH_ERROR:
+                    elif status['status'] == JobStatus.ERROR:
                         # Expected data errors - job is "complete" from queue perspective
                         self.logger.info(f"Job {redis_id} completed with expected error: {status['description']}")
                         break # Exit the loop - don't raise exception
 
-                    elif status['status'] == JobStatus.ERROR:
+                    elif status['status'] == JobStatus.UNEXPECTED_ERROR:
                         self.logger.error(f"Job {redis_id} encountered an error: {status['description']}")
                         raise Exception(f"Job {redis_id} failed: {status['description']}")
                     self.logger.info(f"Job {redis_id} status: {status['status']}. Waiting {self.poll_interval} seconds before next poll...")
@@ -952,8 +952,8 @@ class ExpertiseCloudService(BaseExpertiseService):
             else:
                 self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {redis_id}.")
                 config = self.redis.load_job(redis_id, user_id)
-                if config.status != JobStatus.ERROR:
-                    self.update_status(config, JobStatus.ERROR, f"Polling timed out after {self.max_attempts} attempts.")
+                if config.status != JobStatus.UNEXPECTED_ERROR:
+                    self.update_status(config, JobStatus.UNEXPECTED_ERROR, f"Polling timed out after {self.max_attempts} attempts.")
                 raise TimeoutError(f"Polling timed out for job {redis_id} after {self.max_attempts} attempts.")
 
             self.logger.info(f"Polling loop finished for job {redis_id}.")

@@ -245,7 +245,7 @@ class TestExpertiseCloudService():
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run', f"Job name: {response['name']}, status: {response}"
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Unexpected Error'
 
         # Let request process
         time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
@@ -295,7 +295,7 @@ class TestExpertiseCloudService():
 
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Unexpected Error'
         responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={'status': 'Completed'}).json['results']
         assert not any([r['jobId'] == job_id for r in responses])
 
@@ -966,7 +966,7 @@ class TestExpertiseCloudService():
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] == 'Completed with Error'
+        assert response['status'] == 'Error'
         assert response['description'] == "No papers found for: invitation_ids: ['CLD_ERR.cc/-/Submission']"
 
     def test_status_returns_redis_when_no_cloud_id(self, openreview_client, openreview_context_cloud):
