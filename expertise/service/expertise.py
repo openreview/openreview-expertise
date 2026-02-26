@@ -68,7 +68,8 @@ class BaseExpertiseService:
                 host=config['REDIS_ADDR'],
                 port=config['REDIS_PORT'],
                 db=config['REDIS_CONFIG_DB'],
-                sync_on_disk=self.sync_on_disk
+                sync_on_disk=self.sync_on_disk,
+                job_ttl=config['JOB_CONFIG_TTL']
             )
 
         # Create the BullMQ queue
