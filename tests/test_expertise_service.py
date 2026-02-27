@@ -1823,7 +1823,7 @@ class TestExpertiseService():
 
         submission_users, match_users = set(), set()
         for item in response:
-            match_id, submission_id, score = item['match_member'], item['submission_member'], float(item['score'])
+            match_id, submission_id, score = item['match_member'], item['alternate_match_member'], float(item['score'])
             submission_users.add(submission_id)
             match_users.add(match_id)
             assert len(submission_id) >= 1
@@ -2080,7 +2080,7 @@ class TestExpertiseService():
         assert metadata['submission_count'] == 10 ## Additional from new conferences, 10 from new publication
         response = response.json['results']
         for item in response:
-            match_id, submitter_id, score = item['match_member'], item['submission_member'], float(item['score'])
+            match_id, submitter_id, score = item['match_member'], item['alternate_match_member'], float(item['score'])
             assert len(match_id) >= 1
             assert len(submitter_id) >= 1
             assert match_id.startswith('~')

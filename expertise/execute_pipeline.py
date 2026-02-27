@@ -174,7 +174,7 @@ def run_pipeline(
                 if group_group_matching:
                     result.append({
                         'match_member': row[0],
-                        'submission_member': row[1],
+                        'alternate_match_member': row[1],
                         'score': float(row[2])
                     })
                 elif paper_paper_matching:

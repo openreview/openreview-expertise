@@ -852,15 +852,15 @@ def test_get_job_results_group_scoring(mock_storage_client):
     # Create a mock file-like object for group score blob
     mock_file = MagicMock()
     mock_file.readline.side_effect = [
-        '{"match_member": "m_user1","submission_member": "s_user1","score": 0.987}',
-        '{"match_member": "m_user2","submission_member": "s_user2","score": 0.987}',
+        '{"match_member": "m_user1","alternate_match_member": "s_user1","score": 0.987}',
+        '{"match_member": "m_user2","alternate_match_member": "s_user2","score": 0.987}',
         ''  # Empty string to terminate the loop
     ]
     mock_file.close.return_value = None
 
     mock_group_score_blob = MagicMock()
     mock_group_score_blob.name = "jobs/job_1/group_scores.jsonl"
-    mock_group_score_blob.download_as_string.return_value = '{"match_member": "m_user1","submission_member": "s_user1","score": 0.987}\n{"match_member": "m_user2","submission_member": "s_user2","score": 0.987}'
+    mock_group_score_blob.download_as_string.return_value = '{"match_member": "m_user1","alternate_match_member": "s_user1","score": 0.987}\n{"match_member": "m_user2","alternate_match_member": "s_user2","score": 0.987}'
     mock_group_score_blob.open.return_value = mock_file
 
     mock_request_blob = MagicMock()
@@ -899,8 +899,8 @@ def test_get_job_results_group_scoring(mock_storage_client):
     # Assertions
     assert result["metadata"] == {"meta": "data"}
     assert result["results"] == [
-        {"match_member": "m_user1","submission_member": "s_user1","score": 0.987},
-        {"match_member": "m_user2","submission_member": "s_user2","score": 0.987}
+        {"match_member": "m_user1","alternate_match_member": "s_user1","score": 0.987},
+        {"match_member": "m_user2","alternate_match_member": "s_user2","score": 0.987}
     ]
 
     # Verify GCS interactions

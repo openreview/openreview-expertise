@@ -735,7 +735,7 @@ class ExpertiseService(BaseExpertiseService):
                     for row in data_reader:
                         ret_list.append({
                             'match_member': row[0],
-                            'submission_member': row[1],
+                            'alternate_match_member': row[1],
                             'score': float(row[2])
                         })
                 result['results'] = ret_list
