@@ -264,7 +264,7 @@ class Specter2Predictor(Predictor):
             p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
         else:
             print("Skipping normalization of scores...")
-            p2p_aff_norm = p2p_aff
+            p2p_aff_norm = torch.clamp(p2p_aff, 0.0, 1.0)
 
         csv_scores = []
         self.preliminary_scores = []

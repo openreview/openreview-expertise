@@ -88,6 +88,7 @@ class EnsembleModel:
         for entry in self.scincl_predictor.preliminary_scores:
             new_score = specter_preliminary_scores_map[(entry[0], entry[1])] * self.merge_alpha + \
                         entry[2] * (1 - self.merge_alpha)
+            new_score = round(min(1.0, max(0.0, new_score)), 4)
             csv_line = '{note_id},{reviewer},{score}'.format(note_id=entry[0], reviewer=entry[1],
                                                              score=new_score)
             csv_scores.append(csv_line)
