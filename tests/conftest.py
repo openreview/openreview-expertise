@@ -23,10 +23,14 @@ class Helpers:
 
     @staticmethod
     def create_user(email, first, last, alternates=[], institution=None):
+
+        super_client = openreview.api.OpenReviewClient(baseurl='http://localhost:3001', username='openreview.net', password=Helpers.strong_password)
+        profile = openreview.tools.get_profile(super_client, email)
+        if profile:
+            return Helpers.get_user(email)
+
         client = openreview.api.OpenReviewClient(baseurl = 'http://localhost:3001')
-        assert client is not None, "Client is none"
-        if openreview.tools.get_profile(client, email) is not None:
-            return openreview.api.OpenReviewClient(baseurl = 'http://localhost:3001', username = email, password = Helpers.strong_password)
+
         fullname = f'{first} {last}'
         res = client.register_user(email=email, fullname=fullname, password=Helpers.strong_password)
         username = res.get('id')
