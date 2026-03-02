@@ -2363,3 +2363,88 @@ class TestExpertiseService():
         unnorm_mean_score = sum(all_scores) / len(all_scores)
 
         assert unnorm_mean_score > norm_mean_score, 'Unnormalized mean score should be greater than normalized mean score'
+
+    def test_request_expertise_identical_submissions_score_one(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        """
+        Integration test for issue #296: When comparing a submission to itself,
+        the score should be exactly 1.0 (not slightly above due to float32 imprecision).
+        
+        Uses the 'submissions' keyword to pass Note data directly in the request
+        for both entityA and entityB with identical content.
+        """
+        MAX_TIMEOUT = 600  # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+
+        # Make a request with identical submissions in both entityA and entityB
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                "name": "test_identical_submissions",
+                "entityA": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "TestPaper01",
+                            "title": "This is a test title",
+                            "abstract": "This is a test abstract"
+                        }
+                    ]
+                },
+                "entityB": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "TestPaper01",
+                            "title": "This is a test title",
+                            "abstract": "This is a test abstract"
+                        }
+                    ]
+                },
+                "model": {
+                    "name": "specter2+scincl",
+                    "useTitle": True,
+                    "useAbstract": True,
+                    "averageScore": False,
+                    "maxScore": True,
+                    "skipSpecter": False
+                }
+            }),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        
+        # Poll until job is complete
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_identical_submissions'
+        assert response['status'] != 'Error'
+        
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        
+        # Get results and verify the self-similarity score is exactly 1.0
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        results = response.json['results']
+        
+        assert len(results) == 1, f"Expected exactly one score result, got {len(results)}"
+        
+        result = results[0]
+        score = float(result['score'])
+        
+        # The score for a paper compared to itself should be exactly 1.0
+        # This verifies the fix for issue #296 where float32 imprecision
+        # could cause scores to marginally exceed 1.0
+        assert score == 1.0, f"Self-similarity score should be exactly 1.0, got {score}"
+        assert result['submission'] == "TestPaper01"
