@@ -64,7 +64,7 @@ class JobDescription(dict, Enum):
         JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
-        JobStatus.ERROR: 'Job completed but encountered a known issue that prevented score calculation',
+        JobStatus.ERROR: 'Job completed but no scores were computed because of an issue with the data',
         JobStatus.UNEXPECTED_ERROR: 'Job has encountered an error and has failed to complete',
     }
 class APIRequest(object):
