@@ -2404,8 +2404,7 @@ class TestExpertiseService():
                     "name": "specter2+scincl",
                     "useTitle": True,
                     "useAbstract": True,
-                    "averageScore": False,
-                    "maxScore": True,
+                    "scoreComputation": "max",
                     "skipSpecter": False
                 }
             }),
@@ -2420,7 +2419,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_identical_submissions'
         assert response['status'] != 'Error'
-        
+
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
