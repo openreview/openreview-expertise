@@ -41,8 +41,8 @@ def _get_required_field(req, superkey, key):
 class ExpectedDataError(Exception):
     """
     Raised when a known/expected data condition prevents job completion.
-    Jobs that fail with this exception should be marked as ERROR and
-    should not be retried by the job queue.
+    Jobs that fail with this exception should be marked as ERROR
+    rather than UNEXPECTED_ERROR, and will not be retried by the job queue.
     """
     pass
 
@@ -54,6 +54,7 @@ class JobStatus(str, Enum):
     RUN_EXPERTISE = 'Running Expertise'
     COMPLETED = 'Completed'
     ERROR = 'Error'
+    UNEXPECTED_ERROR = 'Unexpected Error'
 
 class JobDescription(dict, Enum):
     VALS = {
@@ -63,7 +64,8 @@ class JobDescription(dict, Enum):
         JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
-        JobStatus.ERROR: 'Job failed to complete and no scores were computed',
+        JobStatus.ERROR: 'Job completed but no scores were computed because of an issue with the data',
+        JobStatus.UNEXPECTED_ERROR: 'Job has encountered an error and has failed to complete',
     }
 class APIRequest(object):
     """
@@ -766,7 +768,7 @@ class GCPInterface(object):
         PipelineState.PIPELINE_STATE_QUEUED: JobStatus.QUEUED,
         PipelineState.PIPELINE_STATE_RUNNING: JobStatus.RUN_EXPERTISE,
         PipelineState.PIPELINE_STATE_SUCCEEDED: JobStatus.COMPLETED,
-        PipelineState.PIPELINE_STATE_FAILED: JobStatus.ERROR,
+        PipelineState.PIPELINE_STATE_FAILED: JobStatus.UNEXPECTED_ERROR,
     }
 
     def __init__(
@@ -988,7 +990,7 @@ class GCPInterface(object):
 
         if job_id is None:
             # Return just information in Redis
-            result = {
+            return {
                 'name': config.name,
                 'tauthor': config.user_id,
                 'jobId': config.job_id,
@@ -998,7 +1000,6 @@ class GCPInterface(object):
                 'mdate': config.mdate,
                 'request': config.api_request.to_json()
             }
-            return result
 
         job_blobs = self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}")
         self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}")
@@ -1020,17 +1021,17 @@ class GCPInterface(object):
 
         descriptions = JobDescription.VALS.value
         status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
-        is_expected_error = False
         
-        # Read the error message from the GCS bucket if status is ERROR
-        if status == JobStatus.ERROR:
+        # Read the error message from the GCS bucket if status is UNEXPECTED_ERROR
+        if status == JobStatus.UNEXPECTED_ERROR:
             try:
                 error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
                 if error_message:
                     error_data = json.loads(error_message)
                     description = error_data.get('error', descriptions[status])
-                    # Check for expected flag
-                    is_expected_error = bool(error_data.get('expected', False))
+                    # Check if this was an expected error (e.g., no publications found)
+                    if error_data.get('expected', False):
+                        status = JobStatus.ERROR
                 else:
                     description = descriptions[status]
             except Exception as e:
@@ -1039,7 +1040,7 @@ class GCPInterface(object):
         else:
             description = descriptions[status]
 
-        result = {
+        return {
                 'name': job_id,
                 'tauthor': user_id,
                 'jobId': job_id,
@@ -1047,10 +1048,8 @@ class GCPInterface(object):
                 'description': description,
                 'cdate': request['cdate'],
                 'mdate': int(job.update_time.timestamp() * 1000),
-                'request': request,
-                'expectedError': is_expected_error
+                'request': request
             }
-        return result
 
     def get_job_status(
         self,
@@ -1313,3 +1312,4 @@ class GCPInterface(object):
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
         return _get_scores_and_metadata_streaming(job_blobs, job_id)
+
