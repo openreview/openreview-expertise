@@ -2448,3 +2448,82 @@ class TestExpertiseService():
         # could cause scores to marginally exceed 1.0
         assert score == 1.0, f"Self-similarity score should be exactly 1.0, got {score}"
         assert result['submission'] == "TestPaper01"
+
+    def test_request_expertise_identical_submissions_score_one_normalized(self, openreview_context, openreview_client):
+        """
+        Same as above but with normalizeScores=True.
+        When there is only one score pair, min==max so normalization would produce NaN.
+        The fix falls back to torch.clamp when min==max, so the score should still be 1.0.
+        """
+        MAX_TIMEOUT = 600
+        test_client = openreview_context['test_client']
+
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                "name": "test_identical_submissions_normalized",
+                "entityA": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "TestPaper01",
+                            "title": "This is a test title",
+                            "abstract": "This is a test abstract"
+                        }
+                    ]
+                },
+                "entityB": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "TestPaper01",
+                            "title": "This is a test title",
+                            "abstract": "This is a test abstract"
+                        }
+                    ]
+                },
+                "model": {
+                    "name": "specter2+scincl",
+                    "useTitle": True,
+                    "useAbstract": True,
+                    "scoreComputation": "max",
+                    "skipSpecter": False,
+                    "normalizeScores": True
+                }
+            }),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_identical_submissions_normalized'
+        assert response['status'] != 'Error'
+
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        results = response.json['results']
+
+        assert len(results) == 1, f"Expected exactly one score result, got {len(results)}"
+
+        result = results[0]
+        score = float(result['score'])
+
+        # With normalizeScores=True and a single pair, min==max so the fix
+        # falls back to torch.clamp, which should still produce 1.0
+        assert score == 1.0, f"Self-similarity score with normalization should be 1.0, got {score}"
+        assert result['submission'] == "TestPaper01"
