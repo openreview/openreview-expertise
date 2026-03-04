@@ -2405,7 +2405,8 @@ class TestExpertiseService():
                     "useTitle": True,
                     "useAbstract": True,
                     "scoreComputation": "max",
-                    "skipSpecter": False
+                    "skipSpecter": False,
+                    "normalizeScores": False
                 }
             }),
             content_type='application/json',

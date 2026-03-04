@@ -258,7 +258,10 @@ class SciNCLPredictor(Predictor):
             print("Normalizing scores...")
             min_val = p2p_aff.min()
             max_val = p2p_aff.max()
-            p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+            if max_val - min_val == 0:
+                p2p_aff_norm = torch.clamp(p2p_aff, 0.0, 1.0)
+            else:
+                p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
         else:
             print("Skipping normalization of scores...")
             p2p_aff_norm = torch.clamp(p2p_aff, 0.0, 1.0)
