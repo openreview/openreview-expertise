@@ -2363,3 +2363,347 @@ class TestExpertiseService():
         unnorm_mean_score = sum(all_scores) / len(all_scores)
 
         assert unnorm_mean_score > norm_mean_score, 'Unnormalized mean score should be greater than normalized mean score'
+
+    def test_request_expertise_identical_submissions_score_one(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        """
+        Integration test for issue #296: When comparing a submission to itself,
+        the score should be exactly 1.0 (not slightly above due to float32 imprecision).
+        
+        Uses the 'submissions' keyword to pass Note data directly in the request
+        for both entityA and entityB with identical content.
+        """
+        MAX_TIMEOUT = 600  # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+
+        # Make a request with identical submissions in both entityA and entityB
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                "name": "test_identical_submissions",
+                "entityA": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "TestPaper01",
+                            "title": "This is a test title",
+                            "abstract": "This is a test abstract"
+                        }
+                    ]
+                },
+                "entityB": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "TestPaper01",
+                            "title": "This is a test title",
+                            "abstract": "This is a test abstract"
+                        }
+                    ]
+                },
+                "model": {
+                    "name": "specter2+scincl",
+                    "useTitle": True,
+                    "useAbstract": True,
+                    "scoreComputation": "max",
+                    "skipSpecter": False,
+                    "normalizeScores": False
+                }
+            }),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        
+        # Poll until job is complete
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_identical_submissions'
+        assert response['status'] != 'Error'
+
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        
+        # Get results and verify the self-similarity score is exactly 1.0
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        results = response.json['results']
+        
+        assert len(results) == 1, f"Expected exactly one score result, got {len(results)}"
+        
+        result = results[0]
+        score = float(result['score'])
+        
+        # The score for a paper compared to itself should be exactly 1.0
+        # This verifies the fix for issue #296 where float32 imprecision
+        # could cause scores to marginally exceed 1.0
+        assert score == 1.0, f"Self-similarity score should be exactly 1.0, got {score}"
+        assert result['submission'] == "TestPaper01"
+        score_str = str(result['score'])
+        if '.' in score_str:
+            assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
+
+    def test_request_expertise_identical_submissions_score_one_normalized(self, openreview_context, openreview_client):
+        """
+        Same as above but with normalizeScores=True.
+        When there is only one score pair, min==max so normalization would produce NaN.
+        The fix falls back to torch.clamp when min==max, so the score should still be 1.0.
+        """
+        MAX_TIMEOUT = 600
+        test_client = openreview_context['test_client']
+
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                "name": "test_identical_submissions_normalized",
+                "entityA": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "TestPaper01",
+                            "title": "This is a test title",
+                            "abstract": "This is a test abstract"
+                        }
+                    ]
+                },
+                "entityB": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "TestPaper01",
+                            "title": "This is a test title",
+                            "abstract": "This is a test abstract"
+                        }
+                    ]
+                },
+                "model": {
+                    "name": "specter2+scincl",
+                    "useTitle": True,
+                    "useAbstract": True,
+                    "scoreComputation": "max",
+                    "skipSpecter": False,
+                    "normalizeScores": True
+                }
+            }),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_identical_submissions_normalized'
+        assert response['status'] != 'Error'
+
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        results = response.json['results']
+
+        assert len(results) == 1, f"Expected exactly one score result, got {len(results)}"
+
+        result = results[0]
+        score = float(result['score'])
+
+        # With normalizeScores=True and a single pair, min==max so the fix
+        # falls back to torch.clamp, which should still produce 1.0
+        assert score == 1.0, f"Self-similarity score with normalization should be 1.0, got {score}"
+        assert result['submission'] == "TestPaper01"
+        score_str = str(result['score'])
+        if '.' in score_str:
+            assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
+
+    def test_request_expertise_different_submissions_normalized_bounds(self, openreview_context, openreview_client):
+        """
+        Test that when comparing two different papers with normalizeScores=True,
+        the scores are between 0 and 1.
+        """
+        MAX_TIMEOUT = 600
+        test_client = openreview_context['test_client']
+
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                "name": "test_different_submissions_normalized",
+                "entityA": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "PaperA",
+                            "title": "Machine learning for natural language processing",
+                            "abstract": "We present a novel approach to sentiment analysis using transformer architectures."
+                        },
+                        {
+                            "id": "PaperB",
+                            "title": "Quantum computing and cryptography",
+                            "abstract": "This paper explores post-quantum cryptographic algorithms for secure communication."
+                        }
+                    ]
+                },
+                "entityB": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "PaperA",
+                            "title": "Machine learning for natural language processing",
+                            "abstract": "We present a novel approach to sentiment analysis using transformer architectures."
+                        },
+                        {
+                            "id": "PaperB",
+                            "title": "Quantum computing and cryptography",
+                            "abstract": "This paper explores post-quantum cryptographic algorithms for secure communication."
+                        }
+                    ]
+                },
+                "model": {
+                    "name": "specter2+scincl",
+                    "useTitle": True,
+                    "useAbstract": True,
+                    "scoreComputation": "max",
+                    "skipSpecter": False,
+                    "normalizeScores": True
+                }
+            }),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_different_submissions_normalized'
+        assert response['status'] != 'Error'
+
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        results = response.json['results']
+
+        assert len(results) > 0, "Expected at least one score result"
+
+        for result in results:
+            score = float(result['score'])
+            assert 0.0 <= score <= 1.0, f"Normalized score should be between 0 and 1, got {score} for {result['submission']}"
+            score_str = str(result['score'])
+            if '.' in score_str:
+                assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
+
+    def test_request_expertise_different_submissions_unnormalized_bounds(self, openreview_context, openreview_client):
+        """
+        Test that when comparing two different papers with normalizeScores=False,
+        the raw cosine similarity scores are between -1 and 1.
+        """
+        MAX_TIMEOUT = 600
+        test_client = openreview_context['test_client']
+
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                "name": "test_different_submissions_unnormalized",
+                "entityA": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "PaperA",
+                            "title": "Machine learning for natural language processing",
+                            "abstract": "We present a novel approach to sentiment analysis using transformer architectures."
+                        },
+                        {
+                            "id": "PaperB",
+                            "title": "Quantum computing and cryptography",
+                            "abstract": "This paper explores post-quantum cryptographic algorithms for secure communication."
+                        }
+                    ]
+                },
+                "entityB": {
+                    "type": "Note",
+                    "submissions": [
+                        {
+                            "id": "PaperA",
+                            "title": "Machine learning for natural language processing",
+                            "abstract": "We present a novel approach to sentiment analysis using transformer architectures."
+                        },
+                        {
+                            "id": "PaperB",
+                            "title": "Quantum computing and cryptography",
+                            "abstract": "This paper explores post-quantum cryptographic algorithms for secure communication."
+                        }
+                    ]
+                },
+                "model": {
+                    "name": "specter2+scincl",
+                    "useTitle": True,
+                    "useAbstract": True,
+                    "scoreComputation": "max",
+                    "skipSpecter": False,
+                    "normalizeScores": False
+                }
+            }),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_different_submissions_unnormalized'
+        assert response['status'] != 'Error'
+
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
+        results = response.json['results']
+
+        assert len(results) > 0, "Expected at least one score result"
+
+        for result in results:
+            score = float(result['score'])
+            assert -1.0 <= score <= 1.0, f"Unnormalized score should be between -1 and 1, got {score} for {result['submission']}"
+            score_str = str(result['score'])
+            if '.' in score_str:
+                assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
