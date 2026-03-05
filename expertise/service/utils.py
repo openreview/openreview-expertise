@@ -768,7 +768,7 @@ class GCPInterface(object):
         PipelineState.PIPELINE_STATE_QUEUED: JobStatus.QUEUED,
         PipelineState.PIPELINE_STATE_RUNNING: JobStatus.RUN_EXPERTISE,
         PipelineState.PIPELINE_STATE_SUCCEEDED: JobStatus.COMPLETED,
-        PipelineState.PIPELINE_STATE_FAILED: JobStatus.UNEXPECTED_ERROR,
+        PipelineState.PIPELINE_STATE_FAILED: JobStatus.ERROR,
     }
 
     def __init__(
@@ -1022,16 +1022,16 @@ class GCPInterface(object):
         descriptions = JobDescription.VALS.value
         status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
         
-        # Read the error message from the GCS bucket if status is UNEXPECTED_ERROR
-        if status == JobStatus.UNEXPECTED_ERROR:
+        # Read the error message from the GCS bucket if status is ERROR
+        if status == JobStatus.ERROR:
             try:
                 error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
                 if error_message:
                     error_data = json.loads(error_message)
                     description = error_data.get('error', descriptions[status])
-                    # Check if this was an expected error (e.g., no publications found)
-                    if error_data.get('expected', False):
-                        status = JobStatus.ERROR
+                    # Check if this was an unexpected error (e.g., multi-gpu communication error)
+                    if not error_data.get('expected', False):
+                        status = JobStatus.UNEXPECTED_ERROR
                 else:
                     description = descriptions[status]
             except Exception as e:
