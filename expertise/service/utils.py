@@ -858,6 +858,26 @@ class GCPInterface(object):
     def set_client(self, client):
         self.client = client
 
+    def _resolve_job_status(self, job_id, job):
+        descriptions = JobDescription.VALS.value
+        status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
+        description = descriptions[status]
+
+        if status != JobStatus.ERROR:
+            return status, description
+
+        try:
+            error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
+            if error_message:
+                error_data = json.loads(error_message)
+                description = error_data.get('error', descriptions[status])
+                if not error_data.get('expected', False):
+                    status = JobStatus.UNEXPECTED_ERROR
+        except Exception:
+            pass
+
+        return status, description
+
     def _generate_vertex_prefix(api_request):
         group_entity = None
         key = f"{api_request.entityA['type']}-{api_request.entityB['type']}"
@@ -1019,26 +1039,7 @@ class GCPInterface(object):
         request = authenticated_requests[0]
         job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{job_id}")
 
-        descriptions = JobDescription.VALS.value
-        status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
-        
-        # Read the error message from the GCS bucket if status is ERROR
-        if status == JobStatus.ERROR:
-            try:
-                error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
-                if error_message:
-                    error_data = json.loads(error_message)
-                    description = error_data.get('error', descriptions[status])
-                    # Check if this was an unexpected error (e.g., multi-gpu communication error)
-                    if not error_data.get('expected', False):
-                        status = JobStatus.UNEXPECTED_ERROR
-                else:
-                    description = descriptions[status]
-            except Exception as e:
-                ## If the error message is not found, use the default description
-                description = descriptions[status]
-        else:
-            description = descriptions[status]
+        status, description = self._resolve_job_status(job_id, job)
 
         return {
                 'name': job_id,
@@ -1057,8 +1058,7 @@ class GCPInterface(object):
         query_params,
     ):
         # search bucket
-        def check_status(job):
-            status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
+        def check_status(status):
             search_status = query_obj.get('status', '')
             return not search_status or status.lower().startswith(search_status.lower())
         
@@ -1117,9 +1117,9 @@ class GCPInterface(object):
                 check_paper_id(request)
             ]
 
-        def check_result(request, job):
+        def check_result(request, status):
             return False not in [
-                check_status(job),
+                check_status(status),
                 check_member(request),
                 check_invitation(request),
                 check_paper_id(request)
@@ -1202,11 +1202,9 @@ class GCPInterface(object):
                 else:
                     raise e
 
-            descriptions = JobDescription.VALS.value
-            status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
-            description = descriptions[status]
+            status, description = self._resolve_job_status(request_name, job)
 
-            if check_result(request, job):
+            if check_result(request, status):
                 result['results'].append(
                     {
                         'name': request_name,
