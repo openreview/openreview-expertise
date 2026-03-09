@@ -41,8 +41,8 @@ def _get_required_field(req, superkey, key):
 class ExpectedDataError(Exception):
     """
     Raised when a known/expected data condition prevents job completion.
-    Jobs that fail with this exception should be marked as ERROR
-    rather than UNEXPECTED_ERROR, and will not be retried by the job queue.
+    Jobs that fail with this exception should be marked as DATA_ERROR
+    rather than ERROR, and will not be retried by the job queue.
     """
     pass
 
@@ -53,8 +53,8 @@ class JobStatus(str, Enum):
     EXPERTISE_QUEUED = 'Queued for Expertise'
     RUN_EXPERTISE = 'Running Expertise'
     COMPLETED = 'Completed'
+    DATA_ERROR = 'Data Error'
     ERROR = 'Error'
-    UNEXPECTED_ERROR = 'Unexpected Error'
 
 class JobDescription(dict, Enum):
     VALS = {
@@ -64,8 +64,8 @@ class JobDescription(dict, Enum):
         JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
-        JobStatus.ERROR: 'Job completed but no scores were computed because of an issue with the data',
-        JobStatus.UNEXPECTED_ERROR: 'Job has encountered an error and has failed to complete',
+        JobStatus.DATA_ERROR: 'Job completed but no scores were computed because of an issue with the data',
+        JobStatus.ERROR: 'Job has encountered an error and has failed to complete',
     }
 class APIRequest(object):
     """
@@ -871,8 +871,8 @@ class GCPInterface(object):
             if error_message:
                 error_data = json.loads(error_message)
                 description = error_data.get('error', descriptions[status])
-                if not error_data.get('expected', False):
-                    status = JobStatus.UNEXPECTED_ERROR
+                if error_data.get('expected', False):
+                    status = JobStatus.DATA_ERROR
         except Exception:
             pass
 
