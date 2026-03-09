@@ -643,7 +643,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -651,7 +651,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
         # Weight shifts scores onto a single submission
@@ -742,7 +742,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -750,7 +750,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
         # Weight shifts scores onto a single submission
@@ -816,7 +816,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
         # assert response[0]['description'] == 'Server received config and allocated space'
 
         # # Attempt getting results of an incomplete job
@@ -844,7 +844,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -923,7 +923,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -1050,7 +1050,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1059,7 +1059,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -1113,7 +1113,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1122,7 +1122,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -1176,7 +1176,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1185,7 +1185,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -1260,7 +1260,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1269,7 +1269,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -1416,15 +1416,15 @@ class TestExpertiseService():
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response['status'] not in ['Error', 'Data Error'] and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['name'] == 'test_run'
-        assert response['status'].strip() == 'Data Error'
-        assert response['description'] == "No papers found for: invitation_ids: ['HIJ.cc/-/Submission']"
+        assert response['status'].strip() == 'Error'
+        assert response['description'] == "Not Found Error: No papers found for: invitation_ids: ['HIJ.cc/-/Submission']"
         assert response['cdate'] <= response['mdate']
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
@@ -1620,7 +1620,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1629,7 +1629,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
 
@@ -1708,7 +1708,7 @@ class TestExpertiseService():
             time.sleep(2)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             assert response['name'] == 'test_run'
-            assert response['status'] not in ['Error', 'Data Error']
+            assert response['status'] != 'Error'
 
         assert id_list is not None
         openreview_context['job_id'] = id_list
@@ -1728,7 +1728,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{last_job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -1790,7 +1790,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1799,7 +1799,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
 
@@ -1880,7 +1880,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1889,7 +1889,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
 
@@ -1954,7 +1954,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1963,7 +1963,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
 
@@ -2029,7 +2029,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -2038,7 +2038,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response[0]['description']
             try_time = time.time() - start_time
 
@@ -2196,7 +2196,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -2204,7 +2204,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
         # Weight shifts scores onto a single submission
@@ -2270,7 +2270,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -2279,7 +2279,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -2333,7 +2333,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{unnorm_job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{unnorm_job_id}'}).json
@@ -2342,7 +2342,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{unnorm_job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -2419,7 +2419,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_identical_submissions'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -2427,7 +2427,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -2503,7 +2503,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_identical_submissions_normalized'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -2511,7 +2511,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -2594,7 +2594,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_different_submissions_normalized'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -2602,7 +2602,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
@@ -2681,7 +2681,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_different_submissions_unnormalized'
-        assert response['status'] not in ['Error', 'Data Error']
+        assert response['status'] != 'Error'
 
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -2689,7 +2689,7 @@ class TestExpertiseService():
         while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
-            if response['status'] in ['Error', 'Data Error']:
+            if response['status'] == 'Error':
                 assert False, response['description']
             try_time = time.time() - start_time
 
