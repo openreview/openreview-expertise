@@ -1432,6 +1432,119 @@ class TestExpertiseService():
         response = test_client.delete(f'/expertise/{openreview_context["job_id"]}', headers=openreview_client.headers)
         assert response.status_code == 200
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
+
+    def test_get_results_and_get_data_error_and_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        test_client = openreview_context['test_client']
+
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "HIJ.cc/Reviewers",
+                    },
+                    "entityB": {
+                        'type': "Note",
+                        'invitation': "HIJ.cc/-/Submission"
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'sparseValue': 300,
+                            'useTitle': None,
+                            'useAbstract': None,
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        data_error_job_id = response.json['jobId']
+
+        time.sleep(5)
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{data_error_job_id}"})
+        assert response.status_code == 404
+
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{data_error_job_id}"}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] not in ['Error', 'Data Error'] and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{data_error_job_id}"}).json
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['name'] == 'test_run'
+        assert response['status'].strip() == 'Data Error'
+        assert response['description'] == "No papers found for: invitation_ids: ['HIJ.cc/-/Submission']"
+        assert response['cdate'] <= response['mdate']
+
+        response = test_client.delete(f'/expertise/{data_error_job_id}', headers=openreview_client.headers)
+        assert response.status_code == 200
+        assert not os.path.isdir(f"./tests/jobs/{data_error_job_id}")
+
+        target_id = None
+        journal_papers = openreview_client.get_notes(invitation='TMLR/-/Submission')
+        for paper in journal_papers:
+            if paper.content['authorids']['value'][0] != '~SomeFirstName_User1':
+                target_id = paper.id
+                break
+        assert target_id is not None
+
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "ABC.cc/Reviewers",
+                        'expertise': {  'invitation': 'EXCLUSION.cc/Reviewers/-/Expertise_Selection'  }
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'invitation': "ABC.cc/-/Submission" 
+                    },
+                    "model": {
+                            "name": "specter2+scincl",
+                            'sparseValue': 'notAnInt',
+                            'useTitle': None,
+                            'useAbstract': None,
+                            'skipSpecter': False,   
+                            'scoreComputation': 'avg'
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        error_job_id = response.json['jobId']
+
+        time.sleep(5)
+        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{error_job_id}"})
+        assert response.status_code == 404
+
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{error_job_id}"}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{error_job_id}"}).json
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['name'] == 'test_run'
+        assert response['status'].strip() == 'Error'
+        assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
+        assert response['cdate'] <= response['mdate']
+
+        response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
+        assert response.status_code == 200
+        assert not os.path.isdir(f"./tests/jobs/{error_job_id}")
     
     def test_delete_job_without_authorization(self, openreview_client, openreview_context):
         """Test that DELETE endpoint returns 403 when no authorization headers are provided"""
