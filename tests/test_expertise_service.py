@@ -2447,7 +2447,7 @@ class TestExpertiseService():
         # This verifies the fix for issue #296 where float32 imprecision
         # could cause scores to marginally exceed 1.0
         assert score == 1.0, f"Self-similarity score should be exactly 1.0, got {score}"
-        assert result['submission'] == "TestPaper01"
+        assert result['entityA'] == "TestPaper01"
         score_str = str(result['score'])
         if '.' in score_str:
             assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
@@ -2529,7 +2529,7 @@ class TestExpertiseService():
         # With normalizeScores=True and a single pair, min==max so the fix
         # falls back to torch.clamp, which should still produce 1.0
         assert score == 1.0, f"Self-similarity score with normalization should be 1.0, got {score}"
-        assert result['submission'] == "TestPaper01"
+        assert result['entityA'] == "TestPaper01"
         score_str = str(result['score'])
         if '.' in score_str:
             assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
@@ -2616,7 +2616,7 @@ class TestExpertiseService():
 
         for result in results:
             score = float(result['score'])
-            assert 0.0 <= score <= 1.0, f"Normalized score should be between 0 and 1, got {score} for {result['submission']}"
+            assert 0.0 <= score <= 1.0, f"Normalized score should be between 0 and 1, got {score} for {result['entityA']}"
             score_str = str(result['score'])
             if '.' in score_str:
                 assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
@@ -2703,7 +2703,7 @@ class TestExpertiseService():
 
         for result in results:
             score = float(result['score'])
-            assert -1.0 <= score <= 1.0, f"Unnormalized score should be between -1 and 1, got {score} for {result['submission']}"
+            assert -1.0 <= score <= 1.0, f"Unnormalized score should be between -1 and 1, got {score} for {result['entityA']}"
             score_str = str(result['score'])
             if '.' in score_str:
                 assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
