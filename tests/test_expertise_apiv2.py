@@ -608,19 +608,19 @@ class TestExpertiseV2():
         job_id = response.json['jobId']
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Data Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Data Error' and try_time <= MAX_TIMEOUT:
             print(f"resp: {response}")
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             try_time = time.time() - start_time
 
-        assert response['status'] == 'Error'
+        assert response['status'] == 'Data Error'
         assert response['name'] == 'test_run'
         assert response['description'] == "No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'track': 'no_track'}"
 
@@ -743,19 +743,19 @@ class TestExpertiseV2():
         job_id = response.json['jobId']
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Data Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Data Error' and try_time <= MAX_TIMEOUT:
             print(f"resp: {response}")
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
             try_time = time.time() - start_time
 
-        assert response['status'] == 'Error'
+        assert response['status'] == 'Data Error'
         assert response['name'] == 'test_run'
         assert response['description'] == "No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'human_subjects_reporting': 'Not applicable'}"
 
@@ -789,19 +789,19 @@ class TestExpertiseV2():
         job_id = response.json['jobId']
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Data Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Data Error' and try_time <= MAX_TIMEOUT:
             print(f"resp: {response}")
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
             try_time = time.time() - start_time
 
-        assert response['status'] == 'Error'
+        assert response['status'] == 'Data Error'
         assert response['name'] == 'test_run'
         assert response['description'] == "No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'human_subjects_reporting': 'Not applicable'}"
 
@@ -958,18 +958,18 @@ class TestExpertiseV2():
         job_id = response.json['jobId']
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Data Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Data Error' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             try_time = time.time() - start_time
 
-        assert response['status'] == 'Error'
+        assert response['status'] == 'Data Error'
         assert response['name'] == 'test_run'
         assert response['description'] == "No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'track': 'no_track'}"
 

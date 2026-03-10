@@ -1416,15 +1416,15 @@ class TestExpertiseService():
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Data Error' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
         assert response['name'] == 'test_run'
-        assert response['status'].strip() == 'Error'
-        assert response['description'] == "Not Found Error: No papers found for: invitation_ids: ['HIJ.cc/-/Submission']"
+        assert response['status'].strip() == 'Data Error'
+        assert response['description'] == "No papers found for: invitation_ids: ['HIJ.cc/-/Submission']"
         assert response['cdate'] <= response['mdate']
         ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
 
