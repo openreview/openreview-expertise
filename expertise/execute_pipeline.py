@@ -160,35 +160,17 @@ def run_pipeline(
 
     # Fetch and write to storage
     print('Fetching and writing to storage')
-    group_group_matching = validated_request.entityA.get('type', '') == 'Group' and \
-        validated_request.entityB.get('type', '') == 'Group'
-    paper_paper_matching = validated_request.entityA.get('type', '') == 'Note' and \
-        validated_request.entityB.get('type', '') == 'Note'
-
     for csv_file in [d for d in os.listdir(config.job_dir) if '.csv' in d]:
         result = []
         destination_blob = f"{blob_prefix}/{csv_file.replace('.csv', '.jsonl')}"
         with open(os.path.join(config.job_dir, csv_file), 'r') as f:
             reader = csv.reader(f)
             for row in reader:
-                if group_group_matching:
-                    result.append({
-                        'match_member': row[0],
-                        'alternate_match_member': row[1],
-                        'score': float(row[2])
-                    })
-                elif paper_paper_matching:
-                    result.append({
-                        'match_submission': row[0],
-                        'submission': row[1],
-                        'score': float(row[2])
-                    })
-                else:
-                    result.append({
-                        'submission': row[0],
-                        'user': row[1],
-                        'score': float(row[2])
-                    })
+                result.append({
+                    'entityA': row[0],
+                    'entityB': row[1],
+                    'score': float(row[2])
+                })
                     
         blob = bucket.blob(destination_blob)
         contents = '\n'.join([json.dumps(r) for r in result])

@@ -705,20 +705,20 @@ def test_get_job_results(mock_storage_client, openreview_client):
 
     mock_score_blob = MagicMock()
     mock_score_blob.name = "jobs/job_1/scores.jsonl"
-    mock_score_blob.download_as_string.return_value = '{"submission": "abcd","user": "user_user1","score": 0.987}\n{"submission": "abcd","user": "user_user2","score": 0.987}'
+    mock_score_blob.download_as_string.return_value = '{"entityA": "abcd","entityB": "user_user1","score": 0.987}\n{"entityA": "abcd","entityB": "user_user2","score": 0.987}'
 
     # Create a mock file-like object for sparse score blob
     mock_file = MagicMock()
     mock_file.readline.side_effect = [
-        '{"submission": "abcde","user": "user_user1","score": 0.987}',
-        '{"submission": "abcde","user": "user_user2","score": 0.987}',
+        '{"entityA": "abcde","entityB": "user_user1","score": 0.987}',
+        '{"entityA": "abcde","entityB": "user_user2","score": 0.987}',
         ''  # Empty string to terminate the loop
     ]
     mock_file.close.return_value = None
 
     mock_sparse_score_blob = MagicMock()
     mock_sparse_score_blob.name = "jobs/job_1/scores_sparse.jsonl"
-    mock_sparse_score_blob.download_as_string.return_value = '{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}'
+    mock_sparse_score_blob.download_as_string.return_value = '{"entityA": "abcde","entityB": "user_user1","score": 0.987}\n{"entityA": "abcde","entityB": "user_user2","score": 0.987}'
     mock_sparse_score_blob.open.return_value = mock_file
 
     mock_request_blob = MagicMock()
@@ -759,8 +759,8 @@ def test_get_job_results(mock_storage_client, openreview_client):
     # Assertions
     assert result["metadata"] == {"meta": "data"}
     assert result["results"] == [
-        {"submission": "abcde", "user": "user_user1", "score": 0.987},
-        {"submission": "abcde", "user": "user_user2", "score": 0.987}
+        {"entityA": "abcde", "entityB": "user_user1", "score": 0.987},
+        {"entityA": "abcde", "entityB": "user_user2", "score": 0.987}
     ]
 
     # Verify GCS interactions
@@ -774,7 +774,7 @@ def test_get_job_results_missing_metadata(mock_storage_client, openreview_client
     # Mock GCS blobs
     mock_score_blob = MagicMock()
     mock_score_blob.name = "jobs/job_1/scores.jsonl"
-    mock_score_blob.download_as_string.return_value = '{"submission": abcd,"user": "user_user","score": 0.987}\n{"submission": abcd,"user": "user_user","score": 0.987}'
+    mock_score_blob.download_as_string.return_value = '{"entityA": abcd,"entityB": "user_user","score": 0.987}\n{"entityA": abcd,"entityB": "user_user","score": 0.987}'
 
     mock_request_blob = MagicMock()
     mock_request_blob.name = "jobs/job_1/request.json"
@@ -852,15 +852,15 @@ def test_get_job_results_group_scoring(mock_storage_client):
     # Create a mock file-like object for group score blob
     mock_file = MagicMock()
     mock_file.readline.side_effect = [
-        '{"match_member": "m_user1","alternate_match_member": "s_user1","score": 0.987}',
-        '{"match_member": "m_user2","alternate_match_member": "s_user2","score": 0.987}',
+        '{"entityA": "m_user1","entityB": "s_user1","score": 0.987}',
+        '{"entityA": "m_user2","entityB": "s_user2","score": 0.987}',
         ''  # Empty string to terminate the loop
     ]
     mock_file.close.return_value = None
 
     mock_group_score_blob = MagicMock()
     mock_group_score_blob.name = "jobs/job_1/group_scores.jsonl"
-    mock_group_score_blob.download_as_string.return_value = '{"match_member": "m_user1","alternate_match_member": "s_user1","score": 0.987}\n{"match_member": "m_user2","alternate_match_member": "s_user2","score": 0.987}'
+    mock_group_score_blob.download_as_string.return_value = '{"entityA": "m_user1","entityB": "s_user1","score": 0.987}\n{"entityA": "m_user2","entityB": "s_user2","score": 0.987}'
     mock_group_score_blob.open.return_value = mock_file
 
     mock_request_blob = MagicMock()
@@ -899,8 +899,8 @@ def test_get_job_results_group_scoring(mock_storage_client):
     # Assertions
     assert result["metadata"] == {"meta": "data"}
     assert result["results"] == [
-        {"match_member": "m_user1","alternate_match_member": "s_user1","score": 0.987},
-        {"match_member": "m_user2","alternate_match_member": "s_user2","score": 0.987}
+        {"entityA": "m_user1","entityB": "s_user1","score": 0.987},
+        {"entityA": "m_user2","entityB": "s_user2","score": 0.987}
     ]
 
     # Verify GCS interactions

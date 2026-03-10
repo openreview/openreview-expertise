@@ -723,50 +723,19 @@ class ExpertiseService(BaseExpertiseService):
             ret_list = []
 
             # Check for output format
-            group_group_matching = config.alternate_match_group is not None
-            paper_paper_matching = config.api_request.entityA.get('type') == 'Note' and config.api_request.entityB.get('type') == 'Note'
-
             self.logger.info(f"Retrieving scores from {config.job_dir}")
-            if group_group_matching:
-                # If group-group matching, report results using "*_member" keys
-                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
-                with open(file_dir, 'r') as csv_file:
-                    data_reader = reader(csv_file)
-                    for row in data_reader:
-                        ret_list.append({
-                            'match_member': row[0],
-                            'alternate_match_member': row[1],
-                            'score': float(row[2])
-                        })
-                result['results'] = ret_list
-            elif paper_paper_matching:
-                # If paper-paper matching, report results using submission keywords
-                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
-                with open(file_dir, 'r') as csv_file:
-                    data_reader = reader(csv_file)
-                    for row in data_reader:
-                        ret_list.append({
-                            'match_submission': row[0],
-                            'submission': row[1],
-                            'score': float(row[2])
-                        })
-                result['results'] = ret_list
-            else:
-                # If reviewer-paper matching, use standard 'user' and 'score' keys
-                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
-                with open(file_dir, 'r') as csv_file:
-                    data_reader = reader(csv_file)
-                    for row in data_reader:
-                        # For single paper retrieval, filter out scores against the dummy submission
-                        if row[0] == 'dummy':
-                            continue
-
-                        ret_list.append({
-                            'submission': row[0],
-                            'user': row[1],
-                            'score': float(row[2])
-                        })
-                result['results'] = ret_list
+            file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
+            with open(file_dir, 'r') as csv_file:
+                data_reader = reader(csv_file)
+                for row in data_reader:
+                    if row[0] == 'dummy':
+                        continue
+                    ret_list.append({
+                        'entityA': row[0],
+                        'entityB': row[1],
+                        'score': float(row[2])
+                    })
+            result['results'] = ret_list
 
             # Gather metadata
             with open(metadata_dir, 'r') as metadata:

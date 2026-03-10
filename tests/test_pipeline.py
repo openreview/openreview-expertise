@@ -113,8 +113,8 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"submission": "test_user", "user": "note1", "score": 0.5}' in scores_content
-    assert '{"submission": "test_user", "user": "note2", "score": 0.5}' in scores_content
+    assert '{"entityA": "test_user", "entityB": "note1", "score": 0.5}' in scores_content
+    assert '{"entityA": "test_user", "entityB": "note2", "score": 0.5}' in scores_content
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -214,8 +214,8 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"submission": "test_user", "user": "note1", "score": 0.5}' in scores_content
-    assert '{"submission": "test_user", "user": "note2", "score": 0.5}' in scores_content
+    assert '{"entityA": "test_user", "entityB": "note1", "score": 0.5}' in scores_content
+    assert '{"entityA": "test_user", "entityB": "note2", "score": 0.5}' in scores_content
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -306,7 +306,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"match_member": "test_user", "alternate_match_member": "sub_user", "score": 0.5}' in scores_content
+    assert '{"entityA": "test_user", "entityB": "sub_user", "score": 0.5}' in scores_content
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -390,7 +390,7 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"match_submission": "sub_one", "submission": "sub_two", "score": 0.5}' in scores_content
+    assert '{"entityA": "sub_one", "entityB": "sub_two", "score": 0.5}' in scores_content
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
