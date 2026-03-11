@@ -261,7 +261,10 @@ class Specter2Predictor(Predictor):
             print("Normalizing scores...")
             min_val = p2p_aff.min()
             max_val = p2p_aff.max()
-            p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+            if max_val - min_val == 0:
+                p2p_aff_norm = torch.clamp(p2p_aff, 0.0, 1.0)
+            else:
+                p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
         else:
             print("Skipping normalization of scores...")
             p2p_aff_norm = p2p_aff
@@ -273,9 +276,9 @@ class Specter2Predictor(Predictor):
             for i in range(paper_num_train):
                 for j in range(paper_num_test):
                     csv_line = '{match_id},{submission_id},{score}'.format(match_id=test_id_list[j], submission_id=train_id_list[i],
-                                                                    score=p2p_aff[j, i].item())
+                                                                    score=round(p2p_aff_norm[j, i].item(), 4))
                     csv_scores.append(csv_line)
-                    self.preliminary_scores.append((test_id_list[j], train_id_list[i], p2p_aff[j, i].item()))
+                    self.preliminary_scores.append((test_id_list[j], train_id_list[i], round(p2p_aff_norm[j, i].item(), 4)))
         else:
             for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
                 if len(train_note_id_list) == 0:
@@ -309,9 +312,9 @@ class Specter2Predictor(Predictor):
                     all_paper_aff = train_paper_aff_j.max(dim=1)[0]
                 for j in range(paper_num_test):
                     csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[j], reviewer=reviewer_id,
-                                                                    score=all_paper_aff[j].item())
+                                                                    score=round(all_paper_aff[j].item(), 4))
                     csv_scores.append(csv_line)
-                    self.preliminary_scores.append((test_id_list[j], reviewer_id, all_paper_aff[j].item()))
+                    self.preliminary_scores.append((test_id_list[j], reviewer_id, round(all_paper_aff[j].item(), 4)))
 
         if scores_path:
             with open(scores_path, 'w') as f:

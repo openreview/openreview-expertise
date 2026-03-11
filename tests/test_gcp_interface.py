@@ -134,7 +134,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
     
     # Call the `create_job` method
     # deepcopy because APIRequest() destroys the original
-    result = gcp_interface.create_job(deepcopy(json_request), job_id=test_job_id, machine_type='small')
+    result = gcp_interface.create_job(deepcopy(json_request), job_id=test_job_id, machine_type='small', user_id='openreview.net')
     
     expected_timestamp_ms = int(1234567890.123 * 1000)  # 1234567890123
     expected_valid_vertex_id = f"{test_job_id}-{expected_timestamp_ms}"
