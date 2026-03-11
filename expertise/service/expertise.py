@@ -929,12 +929,12 @@ class ExpertiseCloudService(BaseExpertiseService):
 
                     if status['status'] == JobStatus.COMPLETED:
                         self.logger.info(f"Job {redis_id} completed successfully.")
-                        break # Exit the loop on successful completion
+                        return # Exit the loop on successful completion
 
                     elif status['status'] == JobStatus.DATA_ERROR:
                         # Expected data errors - job is "complete" from queue perspective
                         self.logger.info(f"Job {redis_id} completed with expected error: {status['description']}")
-                        break # Exit the loop - don't raise exception
+                        return # Exit the loop - don't raise exception
 
                     elif status['status'] == JobStatus.ERROR:
                         self.logger.error(f"Job {redis_id} encountered an error: {status['description']}")
