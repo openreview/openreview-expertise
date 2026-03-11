@@ -151,6 +151,7 @@ if __name__ == '__main__':
         accelerator_count=config['PIPELINE_GPU_COUNT_SMALL'],
         boot_disk_type="pd-ssd",
         boot_disk_size_gb=config['PIPELINE_DISK_SIZE_SMALL'],
+        timeout=config['PIPELINE_TIMEOUT_SMALL'],
     )
 
     medium_expertise_job_from_file_input = create_custom_training_job_from_component(
@@ -161,6 +162,7 @@ if __name__ == '__main__':
         accelerator_count=config['PIPELINE_GPU_COUNT_MEDIUM'],
         boot_disk_type="pd-ssd",
         boot_disk_size_gb=config['PIPELINE_DISK_SIZE_MEDIUM'],
+        timeout=config['PIPELINE_TIMEOUT_MEDIUM'],
     )
 
     large_expertise_job_from_file_input = create_custom_training_job_from_component(
@@ -171,6 +173,7 @@ if __name__ == '__main__':
         accelerator_count=config['PIPELINE_GPU_COUNT_LARGE'],
         boot_disk_type="pd-ssd",
         boot_disk_size_gb=config['PIPELINE_DISK_SIZE_LARGE'],
+        timeout=config['PIPELINE_TIMEOUT_LARGE'],
     )
 
     @pipeline(
