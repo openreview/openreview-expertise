@@ -1491,6 +1491,13 @@ class TestExpertiseService():
         )
         assert data_error_queue_job['job']['id'] == data_error_job_id
 
+        # Call get_expertise_results and expect an exception in the error path
+        with pytest.raises(openreview.OpenReviewException, match='There was an error computing scores, description:'):
+            openreview_client.get_expertise_results(
+                data_error_job_id,
+                wait_for_complete=True
+            )
+
         response = test_client.delete(f'/expertise/{data_error_job_id}', headers=openreview_client.headers)
         assert response.status_code == 200
         assert not os.path.isdir(f"./tests/jobs/{data_error_job_id}")
@@ -1558,13 +1565,11 @@ class TestExpertiseService():
         )
         assert error_queue_job['job']['id'] == error_job_id
         assert error_queue_job['job']['failedReason'] is not None
-
-        jobs = helpers.await_queue_jobs_status(
-            openreview_client,
-            queue_names=['ExpertiseStatus'],
-            timeout=1
-        )
-        print(openreview_client.get_process_logs(status='error'))
+        with pytest.raises(openreview.OpenReviewException, match='There was an error computing scores, description:'):
+            openreview_client.get_expertise_results(
+                error_job_id,
+                wait_for_complete=True
+            )
 
         response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
         assert response.status_code == 200
