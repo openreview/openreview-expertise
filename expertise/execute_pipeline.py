@@ -6,7 +6,7 @@ import json
 import csv
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from expertise.service import load_model_artifacts
-from expertise.service.utils import APIRequest, JobConfig
+from expertise.service.utils import APIRequest, JobConfig, ExpectedDataError
 from expertise.utils.utils import generate_job_id
 from google.cloud import storage
 
@@ -149,7 +149,8 @@ def run_pipeline(
         # Write error to single JSONL line in GCS if bucket is available
         if bucket is not None and blob_prefix is not None:
             error_message = {
-                'error': str(e)
+                'error': str(e),
+                'expected': isinstance(e, ExpectedDataError)
             }
             destination_blob = f"{blob_prefix}/error.json"
             blob = bucket.blob(destination_blob)

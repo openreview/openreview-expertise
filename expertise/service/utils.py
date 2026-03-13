@@ -38,6 +38,14 @@ def _get_required_field(req, superkey, key):
         raise openreview.OpenReviewException(f"Bad request: required field missing in {superkey}: {key}")
     return field
 
+class ExpectedDataError(Exception):
+    """
+    Raised when a known/expected data condition prevents job completion.
+    Jobs that fail with this exception should be marked as DATA_ERROR
+    rather than ERROR, and will not be retried by the job queue.
+    """
+    pass
+
 class JobStatus(str, Enum):
     INITIALIZED = 'Initialized'
     QUEUED = 'Queued'
@@ -45,6 +53,7 @@ class JobStatus(str, Enum):
     EXPERTISE_QUEUED = 'Queued for Expertise'
     RUN_EXPERTISE = 'Running Expertise'
     COMPLETED = 'Completed'
+    DATA_ERROR = 'Data Error'
     ERROR = 'Error'
 
 class JobDescription(dict, Enum):
@@ -55,6 +64,7 @@ class JobDescription(dict, Enum):
         JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
+        JobStatus.DATA_ERROR: 'Job completed but no scores were computed because of an issue with the data',
         JobStatus.ERROR: 'Job has encountered an error and has failed to complete',
     }
 class APIRequest(object):
@@ -848,6 +858,26 @@ class GCPInterface(object):
     def set_client(self, client):
         self.client = client
 
+    def _resolve_job_status(self, job_id, job):
+        descriptions = JobDescription.VALS.value
+        status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
+        description = descriptions[status]
+
+        if status != JobStatus.ERROR:
+            return status, description
+
+        try:
+            error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
+            if error_message:
+                error_data = json.loads(error_message)
+                description = error_data.get('error', descriptions[status])
+                if error_data.get('expected', False):
+                    status = JobStatus.DATA_ERROR
+        except Exception:
+            pass
+
+        return status, description
+
     def _generate_vertex_prefix(api_request):
         group_entity = None
         key = f"{api_request.entityA['type']}-{api_request.entityB['type']}"
@@ -1009,22 +1039,7 @@ class GCPInterface(object):
         request = authenticated_requests[0]
         job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{job_id}")
 
-        descriptions = JobDescription.VALS.value
-        status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
-        
-        # Read the error message from the GCS bucket if status is ERROR
-        if status == JobStatus.ERROR:
-            try:
-                error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
-                if error_message:
-                    description = json.loads(error_message)['error']
-                else:
-                    description = descriptions[status]
-            except Exception as e:
-                ## If the error message is not found, use the default description
-                description = descriptions[status]
-        else:
-            description = descriptions[status]
+        status, description = self._resolve_job_status(job_id, job)
 
         return {
                 'name': job_id,
@@ -1043,8 +1058,7 @@ class GCPInterface(object):
         query_params,
     ):
         # search bucket
-        def check_status(job):
-            status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
+        def check_status(status):
             search_status = query_obj.get('status', '')
             return not search_status or status.lower().startswith(search_status.lower())
         
@@ -1103,9 +1117,9 @@ class GCPInterface(object):
                 check_paper_id(request)
             ]
 
-        def check_result(request, job):
+        def check_result(request, status):
             return False not in [
-                check_status(job),
+                check_status(status),
                 check_member(request),
                 check_invitation(request),
                 check_paper_id(request)
@@ -1188,11 +1202,9 @@ class GCPInterface(object):
                 else:
                     raise e
 
-            descriptions = JobDescription.VALS.value
-            status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
-            description = descriptions[status]
+            status, description = self._resolve_job_status(request_name, job)
 
-            if check_result(request, job):
+            if check_result(request, status):
                 result['results'].append(
                     {
                         'name': request_name,

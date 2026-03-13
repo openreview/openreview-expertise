@@ -2,10 +2,12 @@ import openreview
 import datetime
 import pytest
 import requests
+import sys
 import time
 import json
 import os
 import shortuuid
+from urllib.parse import quote
 from conference_locks import conference_lock
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
@@ -86,6 +88,87 @@ class Helpers:
                 print(f'Jobs in API 1 queue: {jobCount}')
             counter += 1
         assert not [l for l in super_client.get_process_logs(status='error') if l['executedOn'] == 'openreview-api-1']        
+
+    @staticmethod
+    def await_queue_jobs_status(super_client=None, queue_names=None, timeout=None):
+        if super_client is None:
+            super_client = openreview.api.OpenReviewClient(
+                baseurl='http://localhost:3001',
+                username='openreview.net',
+                password=Helpers.strong_password
+            )
+
+        counter = 0
+        wait_time = 0.5
+        cycles = 60 * 1 / wait_time # print every 1 minutes
+        start_time = time.time()
+        jobs = {}
+        jobCount = 0
+
+        while True:
+            jobs = super_client.get_jobs_status()
+
+            jobCount = 0
+            for jobName, job in jobs.items():
+                if queue_names and jobName not in queue_names:
+                    continue
+                if jobName == 'fileUploaderQueueMQStatus' or jobName == 'fileDeletionQueueMQStatus':
+                    continue
+                jobCount += job.get('waiting', 0) + job.get('active', 0) + job.get('delayed', 0)
+
+            if jobCount == 0:
+                return jobs
+
+            time.sleep(wait_time)
+            if counter % cycles == 0:
+                print(f'Jobs in API 2 /jobs/status queue(s): {jobCount}')
+                sys.stdout.flush()
+
+            counter += 1
+
+            if timeout is not None and time.time() - start_time > timeout:
+                break
+
+        assert not [l for l in super_client.get_process_logs(status='error')]
+
+    @staticmethod
+    def await_bullmq_job_status(super_client=None, queue_name=None, job_id=None, expected_status='completed', timeout=None, wait_time=0.5):
+        if super_client is None:
+            super_client = openreview.api.OpenReviewClient(
+                baseurl='http://localhost:3001',
+                username='openreview.net',
+                password=Helpers.strong_password
+            )
+
+        finished_status = ['completed', 'failed']
+        counter = 0
+        cycles = 60 * 1 / wait_time # print every 1 minutes
+        start_time = time.time()
+        queue_url = f"{super_client.baseurl}/queue/api/queues/{quote(queue_name, safe='')}/{quote(job_id, safe='')}"
+        job_status = {'status': 'missing'}
+
+        while True:
+            response = super_client.session.get(queue_url, headers=super_client.headers)
+
+            if response.status_code == 404:
+                job_status = {'status': 'missing'}
+            else:
+                assert response.status_code == 200, response.text
+                job_status = response.json()
+                if job_status['status'] in finished_status:
+                    assert job_status['status'] == expected_status, job_status['job'].get('failedReason', 'No failed reason available')
+                    return job_status
+
+            time.sleep(wait_time)
+            if counter % cycles == 0:
+                print(f'BullMQ queue status: {job_status["status"]}', job_id)
+                sys.stdout.flush()
+            counter += 1
+
+            if timeout is not None and time.time() - start_time > timeout:
+                break
+
+        assert job_status['status'] == expected_status, f'BullMQ job {job_id} did not reach expected status {expected_status}'
 
     @staticmethod
     def await_queue_edit(super_client, edit_id=None, invitation=None, count=1, error=False):
