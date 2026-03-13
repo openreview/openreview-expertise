@@ -1561,6 +1561,7 @@ class TestExpertiseService():
 
         jobs = helpers.await_queue_jobs_status(
             openreview_client,
+            queue_names=['ExpertiseStatus'],
             timeout=1
         )
         print(openreview_client.get_process_logs(status='error'))
