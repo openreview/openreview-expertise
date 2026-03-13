@@ -1433,17 +1433,9 @@ class TestExpertiseService():
         assert response.status_code == 200
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
-    def test_get_results_and_get_data_error_and_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_and_get_data_error_and_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker, helpers):
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
-        config = openreview_context['config']
-        redis = RedisDatabase(
-            host=config['REDIS_ADDR'],
-            port=config['REDIS_PORT'],
-            db=config['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
-        failed_key = 'bullmq:expertise:Expertise:failed'
 
         response = test_client.post(
             '/expertise',
@@ -1490,7 +1482,14 @@ class TestExpertiseService():
         assert response['status'].strip() == 'Data Error'
         assert response['description'] == "No papers found for: invitation_ids: ['HIJ.cc/-/Submission']"
         assert response['cdate'] <= response['mdate']
-        assert redis.db.zscore(failed_key, data_error_job_id) is None
+        data_error_queue_job = helpers.await_bullmq_job_status(
+            openreview_client,
+            'Expertise',
+            data_error_job_id,
+            'completed',
+            timeout=MAX_TIMEOUT
+        )
+        assert data_error_queue_job['job']['id'] == data_error_job_id
 
         response = test_client.delete(f'/expertise/{data_error_job_id}', headers=openreview_client.headers)
         assert response.status_code == 200
@@ -1550,19 +1549,21 @@ class TestExpertiseService():
         assert response['status'].strip() == 'Error'
         assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
         assert response['cdate'] <= response['mdate']
+        error_queue_job = helpers.await_bullmq_job_status(
+            openreview_client,
+            'Expertise',
+            error_job_id,
+            'failed',
+            timeout=MAX_TIMEOUT
+        )
+        assert error_queue_job['job']['id'] == error_job_id
+        assert error_queue_job['job']['failedReason'] is not None
 
-        ## Polling is required since BullMQ marks a failures slower than the Redis entry
-        ## maintained by the expertise
-        failed_score = redis.db.zscore(failed_key, error_job_id)
-        start_time = time.time()
-        try_time = time.time() - start_time
-        while failed_score is None and try_time <= MAX_TIMEOUT:
-            time.sleep(5)
-            failed_score = redis.db.zscore(failed_key, error_job_id)
-            try_time = time.time() - start_time
-
-        assert try_time <= MAX_TIMEOUT, 'BullMQ job has not been marked failed in time'
-        assert failed_score is not None
+        jobs = helpers.await_queue_jobs_status(
+            openreview_client,
+            timeout=1
+        )
+        print(openreview_client.get_process_logs(status='error'))
 
         response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
         assert response.status_code == 200
