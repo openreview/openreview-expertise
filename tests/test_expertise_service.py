@@ -1311,7 +1311,10 @@ class TestExpertiseService():
 
     def test_request_expertise_with_model_errors(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         # Submit a config with an error in the model field and return the job_id
+        MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
+        queue_before = openreview_client.get_jobs_status()
+        failed_before = queue_before['expertiseQueueMQStatus']['failed']
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -1340,6 +1343,17 @@ class TestExpertiseService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
 
+        start_time = time.time()
+        try_time = time.time() - start_time
+        failed_after = failed_before
+        while failed_after <= failed_before and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            queue_after = openreview_client.get_jobs_status()
+            failed_after = queue_after['expertiseQueueMQStatus']['failed']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Expertise queue error count did not increase in time'
+        assert failed_after > failed_before
         openreview_context['job_id'] = job_id
 
     def test_get_results_and_get_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
@@ -1466,6 +1480,7 @@ class TestExpertiseService():
         data_error_job_id = response.json['jobId']
 
         time.sleep(5)
+        data_error_queue_before = openreview_client.get_jobs_status()
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{data_error_job_id}"})
         assert response.status_code == 404
 
@@ -1482,21 +1497,11 @@ class TestExpertiseService():
         assert response['status'].strip() == 'Data Error'
         assert response['description'] == "No papers found for: invitation_ids: ['HIJ.cc/-/Submission']"
         assert response['cdate'] <= response['mdate']
-        data_error_queue_job = helpers.await_bullmq_job_status(
+        data_error_queue_after = helpers.await_queue_error(
             openreview_client,
-            'Expertise',
-            data_error_job_id,
-            'completed',
-            timeout=MAX_TIMEOUT
+            queue_names=['expertiseQueueMQStatus']
         )
-        assert data_error_queue_job['job']['id'] == data_error_job_id
-
-        # Call get_expertise_results and expect an exception in the error path
-        with pytest.raises(openreview.OpenReviewException, match='There was an error computing scores, description:'):
-            openreview_client.get_expertise_results(
-                data_error_job_id,
-                wait_for_complete=True
-            )
+        assert data_error_queue_after['expertiseQueueMQStatus']['failed'] == data_error_queue_before['expertiseQueueMQStatus']['failed']
 
         response = test_client.delete(f'/expertise/{data_error_job_id}', headers=openreview_client.headers)
         assert response.status_code == 200
@@ -1510,6 +1515,7 @@ class TestExpertiseService():
                 break
         assert target_id is not None
 
+        error_queue_before = openreview_client.get_jobs_status()
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -1556,15 +1562,19 @@ class TestExpertiseService():
         assert response['status'].strip() == 'Error'
         assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
         assert response['cdate'] <= response['mdate']
-        error_queue_job = helpers.await_bullmq_job_status(
+        error_queue_after = helpers.await_queue_error(
             openreview_client,
-            'Expertise',
-            error_job_id,
-            'failed',
-            timeout=MAX_TIMEOUT
+            queue_names=['expertiseQueueMQStatus']
         )
-        assert error_queue_job['job']['id'] == error_job_id
-        assert error_queue_job['job']['failedReason'] is not None
+        assert error_queue_after['expertiseQueueMQStatus']['failed'] > error_queue_before['expertiseQueueMQStatus']['failed']
+
+        ## Assert openreview-py errors for both
+        # Call get_expertise_results and expect an exception in the error path
+        with pytest.raises(openreview.OpenReviewException, match='There was an error computing scores, description:'):
+            openreview_client.get_expertise_results(
+                data_error_job_id,
+                wait_for_complete=True
+            )
         with pytest.raises(openreview.OpenReviewException, match='There was an error computing scores, description:'):
             openreview_client.get_expertise_results(
                 error_job_id,
