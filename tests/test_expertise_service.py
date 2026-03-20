@@ -660,7 +660,7 @@ class TestExpertiseService():
         response = response.json['results']
         zeroed_royal_scores = {}
         for item in response:
-            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            submission_id, profile_id, score = item['entityA'], item['entityB'], float(item['score'])
             print(item)
             if profile_id == '~Royal_Toy1':
                 zeroed_royal_scores[submission_id] = score
@@ -759,7 +759,7 @@ class TestExpertiseService():
         response = response.json['results']
         openreview_royal_scores = {}
         for item in response:
-            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            submission_id, profile_id, score = item['entityA'], item['entityB'], float(item['score'])
             print(item)
             if profile_id == '~Royal_Toy1':
                 openreview_royal_scores[submission_id] = score
@@ -882,7 +882,7 @@ class TestExpertiseService():
         response = response.json['results']
 
         for item in response:
-            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            submission_id, profile_id, score = item['entityA'], item['entityB'], float(item['score'])
             print(item)
             if profile_id == '~Royal_Toy1':
                 assert round(zeroed_royal_scores[submission_id], 5) == round(score, 5)
@@ -984,7 +984,7 @@ class TestExpertiseService():
 
         all_users = set()
         for item in response:
-            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            submission_id, profile_id, score = item['entityA'], item['entityB'], float(item['score'])
             all_users.add(profile_id)
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
@@ -1301,7 +1301,7 @@ class TestExpertiseService():
         assert len(response) == 4 ## 2 papers x 2 papers = 4 entries in the score matrix
         print(response)
         for item in response:
-            match_submission_id, submission_id, score = item['match_submission'], item['submission'], float(item['score'])
+            match_submission_id, submission_id, score = item['entityA'], item['entityB'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(match_submission_id) >= 1
             assert score >= 0
@@ -1654,7 +1654,7 @@ class TestExpertiseService():
         assert metadata['submission_count'] == 1
         response = response.json['results']
         for item in response:
-            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            submission_id, profile_id, score = item['entityA'], item['entityB'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
@@ -1749,7 +1749,7 @@ class TestExpertiseService():
             assert metadata['submission_count'] == 1
             response = response.json['results']
             for item in response:
-                submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+                submission_id, profile_id, score = item['entityA'], item['entityB'], float(item['score'])
                 assert len(submission_id) >= 1
                 assert len(profile_id) >= 1
                 assert profile_id.startswith('~')
@@ -1823,7 +1823,7 @@ class TestExpertiseService():
 
         submission_users, match_users = set(), set()
         for item in response:
-            match_id, submission_id, score = item['match_member'], item['submission_member'], float(item['score'])
+            match_id, submission_id, score = item['entityA'], item['entityB'], float(item['score'])
             submission_users.add(submission_id)
             match_users.add(match_id)
             assert len(submission_id) >= 1
@@ -2080,7 +2080,7 @@ class TestExpertiseService():
         assert metadata['submission_count'] == 10 ## Additional from new conferences, 10 from new publication
         response = response.json['results']
         for item in response:
-            match_id, submitter_id, score = item['match_member'], item['submission_member'], float(item['score'])
+            match_id, submitter_id, score = item['entityA'], item['entityB'], float(item['score'])
             assert len(match_id) >= 1
             assert len(submitter_id) >= 1
             assert match_id.startswith('~')
@@ -2213,7 +2213,7 @@ class TestExpertiseService():
         response = response.json['results']
         zeroed_royal_scores = {}
         for item in response:
-            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            submission_id, profile_id, score = item['entityA'], item['entityB'], float(item['score'])
             print(item)
             if profile_id == '~Royal_Toy1':
                 zeroed_royal_scores[submission_id] = score
@@ -2295,7 +2295,7 @@ class TestExpertiseService():
 
         all_scores = []
         for item in response:
-            _, _, score = item['submission'], item['user'], float(item['score'])
+            _, _, score = item['entityA'], item['entityB'], float(item['score'])
             all_scores.append(score)
         norm_mean_score = sum(all_scores) / len(all_scores)
 
@@ -2358,7 +2358,7 @@ class TestExpertiseService():
 
         all_scores = []
         for item in response:
-            _, _, score = item['submission'], item['user'], float(item['score'])
+            _, _, score = item['entityA'], item['entityB'], float(item['score'])
             all_scores.append(score)
         unnorm_mean_score = sum(all_scores) / len(all_scores)
 
@@ -2447,7 +2447,7 @@ class TestExpertiseService():
         # This verifies the fix for issue #296 where float32 imprecision
         # could cause scores to marginally exceed 1.0
         assert score == 1.0, f"Self-similarity score should be exactly 1.0, got {score}"
-        assert result['submission'] == "TestPaper01"
+        assert result['entityA'] == "TestPaper01"
         score_str = str(result['score'])
         if '.' in score_str:
             assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
@@ -2529,7 +2529,7 @@ class TestExpertiseService():
         # With normalizeScores=True and a single pair, min==max so the fix
         # falls back to torch.clamp, which should still produce 1.0
         assert score == 1.0, f"Self-similarity score with normalization should be 1.0, got {score}"
-        assert result['submission'] == "TestPaper01"
+        assert result['entityA'] == "TestPaper01"
         score_str = str(result['score'])
         if '.' in score_str:
             assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
@@ -2616,7 +2616,7 @@ class TestExpertiseService():
 
         for result in results:
             score = float(result['score'])
-            assert 0.0 <= score <= 1.0, f"Normalized score should be between 0 and 1, got {score} for {result['submission']}"
+            assert 0.0 <= score <= 1.0, f"Normalized score should be between 0 and 1, got {score} for {result['entityA']}"
             score_str = str(result['score'])
             if '.' in score_str:
                 assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
@@ -2703,7 +2703,7 @@ class TestExpertiseService():
 
         for result in results:
             score = float(result['score'])
-            assert -1.0 <= score <= 1.0, f"Unnormalized score should be between -1 and 1, got {score} for {result['submission']}"
+            assert -1.0 <= score <= 1.0, f"Unnormalized score should be between -1 and 1, got {score} for {result['entityA']}"
             score_str = str(result['score'])
             if '.' in score_str:
                 assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"

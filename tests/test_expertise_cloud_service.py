@@ -349,17 +349,17 @@ class TestExpertiseCloudService():
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
         scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
-        scores_blob.upload_from_string('{"submission": "abcd","user": "user_user1","score": 0.987}\n{"submission": "abcd","user": "user_user2","score": 0.987}')
+        scores_blob.upload_from_string('{"entityA": "abcd","entityB": "user_user1","score": 0.987}\n{"entityA": "abcd","entityB": "user_user2","score": 0.987}')
 
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
-        scores_sparse_blob.upload_from_string('{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}')
+        scores_sparse_blob.upload_from_string('{"entityA": "abcde","entityB": "user_user1","score": 0.987}\n{"entityA": "abcde","entityB": "user_user2","score": 0.987}')
 
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=tmlr_client.headers, query_string={'jobId': job_id})
         assert response.json["metadata"] == {"meta": "data"}
         assert response.json["results"] == [
-            {"submission": "abcde","user": "user_user1","score": 0.987},
-            {"submission": "abcde","user": "user_user2","score": 0.987}
+            {"entityA": "abcde","entityB": "user_user1","score": 0.987},
+            {"entityA": "abcde","entityB": "user_user2","score": 0.987}
         ]
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
@@ -478,17 +478,17 @@ class TestExpertiseCloudService():
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
         scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
-        scores_blob.upload_from_string('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
+        scores_blob.upload_from_string('{"entityA": "user_user2","entityB": "user_user1","score": 0.987}\n{"entityA": "user_user3","entityB": "user_user2","score": 0.987}')
 
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
-        scores_sparse_blob.upload_from_string('{"match_member": "user_user2","submission_member": "user_user1","score": 0.987}\n{"match_member": "user_user3","submission_member": "user_user2","score": 0.987}')
+        scores_sparse_blob.upload_from_string('{"entityA": "user_user2","entityB": "user_user1","score": 0.987}\n{"entityA": "user_user3","entityB": "user_user2","score": 0.987}')
 
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
         assert response.json["metadata"] == {"meta": "data"}
         assert response.json["results"] == [
-            {"match_member": "user_user2","submission_member": "user_user1","score": 0.987},
-            {"match_member": "user_user3","submission_member": "user_user2","score": 0.987}
+            {"entityA": "user_user2","entityB": "user_user1","score": 0.987},
+            {"entityA": "user_user3","entityB": "user_user2","score": 0.987}
         ]
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
@@ -607,17 +607,17 @@ class TestExpertiseCloudService():
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
         scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
-        scores_blob.upload_from_string('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
+        scores_blob.upload_from_string('{"entityA": "abcd","entityB": "edfg","score": 0.987}\n{"entityA": "hijk","entityB": "lmno","score": 0.987}')
 
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
-        scores_sparse_blob.upload_from_string('{"match_submission": "abcd","submission": "edfg","score": 0.987}\n{"match_submission": "hijk","submission": "lmno","score": 0.987}')
+        scores_sparse_blob.upload_from_string('{"entityA": "abcd","entityB": "edfg","score": 0.987}\n{"entityA": "hijk","entityB": "lmno","score": 0.987}')
 
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
         assert response.json["metadata"] == {"meta": "data"}
         assert response.json["results"] == [
-            {"match_submission": "abcd","submission": "edfg","score": 0.987},
-            {"match_submission": "hijk","submission": "lmno","score": 0.987}
+            {"entityA": "abcd","entityB": "edfg","score": 0.987},
+            {"entityA": "hijk","entityB": "lmno","score": 0.987}
         ]
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
@@ -741,17 +741,17 @@ class TestExpertiseCloudService():
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
         scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
-        scores_blob.upload_from_string('{"submission": "ASDFASDF","user": "~Harold_Rice1","score": 0.987}\n{"submission": "ASDFASDF","user": "~Zonia_Willms1","score": 0.987}')
+        scores_blob.upload_from_string('{"entityA": "ASDFASDF","entityB": "~Harold_Rice1","score": 0.987}\n{"entityA": "ASDFASDF","entityB": "~Zonia_Willms1","score": 0.987}')
 
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
-        scores_sparse_blob.upload_from_string('{"submission": "ASDFASDF","user": "~Harold_Rice1","score": 0.987}\n{"submission": "ASDFASDF","user": "~Zonia_Willms1","score": 0.987}')
+        scores_sparse_blob.upload_from_string('{"entityA": "ASDFASDF","entityB": "~Harold_Rice1","score": 0.987}\n{"entityA": "ASDFASDF","entityB": "~Zonia_Willms1","score": 0.987}')
 
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
         assert response.json["metadata"] == {"meta": "data"}
         assert response.json["results"] == [
-            {"submission": "ASDFASDF","user": "~Harold_Rice1","score": 0.987},
-            {"submission": "ASDFASDF","user": "~Zonia_Willms1","score": 0.987}
+            {"entityA": "ASDFASDF","entityB": "~Harold_Rice1","score": 0.987},
+            {"entityA": "ASDFASDF","entityB": "~Zonia_Willms1","score": 0.987}
         ]
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
