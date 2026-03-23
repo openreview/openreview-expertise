@@ -207,17 +207,17 @@ class TestExpertiseV2():
             data = json.dumps({
                     "name": "test_run",
                     "entityA": {
-                        'type': "Note",
-                        'id': target_id
-                    },
-                    "entityB": {
                         'type': "Group",
                         'memberOf': "TMLR/Action_Editors",
                     },
+                    "entityB": { 
+                        'type': "Note",
+                        'id': target_id
+                    },
                     "model": {
                             "name": "specter+mfr",
-                            'useTitle': False,
-                            'useAbstract': True,
+                            'useTitle': False, 
+                            'useAbstract': True, 
                             'skipSpecter': False,
                             'scoreComputation': 'avg'
                     }
@@ -252,10 +252,10 @@ class TestExpertiseV2():
         # Check for API request
         req = response['request']
         assert req['name'] == 'test_run'
-        assert req['entityA']['type'] == 'Note'
-        assert req['entityA']['id'] == target_id
-        assert req['entityB']['type'] == 'Group'
-        assert req['entityB']['memberOf'] == 'TMLR/Action_Editors'
+        assert req['entityA']['type'] == 'Group'
+        assert req['entityA']['memberOf'] == 'TMLR/Action_Editors'
+        assert req['entityB']['type'] == 'Note'
+        assert req['entityB']['id'] == target_id
 
         openreview_context['job_id'] = job_id
 
@@ -265,17 +265,17 @@ class TestExpertiseV2():
             data = json.dumps({
                     "name": "test_run",
                     "entityA": {
-                        'type': "Note",
-                        'id': target_id
-                    },
-                    "entityB": {
                         'type': "Group",
                         'memberOf': "TMLR/Reviewers",
                     },
+                    "entityB": { 
+                        'type': "Note",
+                        'id': target_id
+                    },
                     "model": {
                             "name": "specter2+scincl",
-                            'useTitle': False,
-                            'useAbstract': True,
+                            'useTitle': False, 
+                            'useAbstract': True, 
                             'skipSpecter': False,
                             'scoreComputation': 'max'
                     }
@@ -323,13 +323,13 @@ class TestExpertiseV2():
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'id': target_id, 'memberOf': 'TMLR/Reviewers'}).json['results']
         assert len(response) == 1
 
-        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'entityA.id': target_id, 'memberOf': 'TMLR/Reviewers'}).json['results']
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'entityB.id': target_id, 'memberOf': 'TMLR/Reviewers'}).json['results']
         assert len(response) == 1
 
-        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'entityA.id': target_id, 'entityA.memberOf': 'TMLR/Reviewers'}).json['results']
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'entityB.id': target_id, 'entityB.memberOf': 'TMLR/Reviewers'}).json['results']
         assert len(response) == 0
 
-        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'entityB.id': target_id}).json['results']
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'entityA.id': target_id}).json['results']
         assert len(response) == 0
 
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'id': 'DoesNotExist'}).json['results']
@@ -337,6 +337,7 @@ class TestExpertiseV2():
 
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f'{job_id}', 'deleteOnGet': True})
         assert not os.path.isdir(f"./tests/jobs/{job_id}")
+
 
     def test_get_journal_results(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
         test_client = openreview_context['test_client']
