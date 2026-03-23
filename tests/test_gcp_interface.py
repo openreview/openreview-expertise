@@ -113,12 +113,12 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
     json_request = {
         "name": "test_run2",
         "entityA": {
-            'type': "Group",
-            'memberOf': "GCP.cc/Reviewers",
-        },
-        "entityB": {
             'type': "Note",
             'invitation': "GCP.cc/-/Submission"
+        },
+        "entityB": {
+            'type': "Group",
+            'memberOf': "GCP.cc/Reviewers",
         },
         "model": {
             "name": "specter+mfr",
@@ -217,8 +217,8 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
 
     json_request = {
         "name": "test_run2",
-        "entityA": {'type': "Group", 'memberOf': "GCP.cc/Reviewers"},
-        "entityB": {'type': "Note", 'invitation': "GCP.cc/-/Submission"},
+        "entityA": {'type': "Note", 'invitation': "GCP.cc/-/Submission"},
+        "entityB": {'type': "Group", 'memberOf': "GCP.cc/Reviewers"},
         "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'}
     }
     test_job_id = generate_job_id()

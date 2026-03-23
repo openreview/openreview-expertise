@@ -138,12 +138,12 @@ class TestExpertiseCloudService():
             data = json.dumps({
                     "name": "test_run",
                     "entityA": {
+                        'type': "Note",
+                        'invitation': "CLD.cc/-/Submission"
+                    },
+                    "entityB": {
                         'type': "Group",
                         'memberOf': "CLD.cc/Area_Chairs",
-                    },
-                    "entityB": { 
-                        'type': "Note",
-                        'invitation': "CLD.cc/-/Submission" 
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -217,12 +217,12 @@ class TestExpertiseCloudService():
             data = json.dumps({
                     "name": "test_run",
                     "entityA": {
+                        'type': "Note",
+                        'invitation': "CLD.cc/-/Submission"
+                    },
+                    "entityB": {
                         'type': "Group",
                         'memberOf': "CLD.cc/Area_Chairs",
-                    },
-                    "entityB": { 
-                        'type': "Note",
-                        'invitation': "CLD.cc/-/Submission" 
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -267,12 +267,12 @@ class TestExpertiseCloudService():
             data = json.dumps({
                     "name": "test_run",
                     "entityA": {
+                        'type': "Note",
+                        'invitation': "CLD.cc/-/Submission"
+                    },
+                    "entityB": {
                         'type': "Group",
                         'memberOf': "CLD.cc/Reviewers",
-                    },
-                    "entityB": { 
-                        'type': "Note",
-                        'invitation': "CLD.cc/-/Submission" 
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -314,13 +314,13 @@ class TestExpertiseCloudService():
         responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={'status': 'Completed'}).json['results']
         assert any([r['jobId'] == job_id for r in responses])
         responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={
-            "entityA.memberOf": "CLD.cc/Reviewers",
-            "entityB.invitation": "CLD.cc/-/Submission"
+            "entityA.invitation": "CLD.cc/-/Submission",
+            "entityB.memberOf": "CLD.cc/Reviewers"
         }).json['results']
         assert any([r['jobId'] == job_id for r in responses])
         responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={
-            "entityA.memberOf": "CLD.cc/Reviewers",
-            "entityB.invitation": "CLD.cc/-/Submission",
+            "entityA.invitation": "CLD.cc/-/Submission",
+            "entityB.memberOf": "CLD.cc/Reviewers",
             'status': 'Completed'
         }).json['results']
         assert any([r['jobId'] == job_id for r in responses])
@@ -665,15 +665,6 @@ class TestExpertiseCloudService():
             data = json.dumps({
                     "name": "test_run",
                     "entityA": {
-                        'type': "Group",
-                        'reviewerIds': [
-                            "~Harold_Rice1",
-                            "~Zonia_Willms1",
-                            "~Royal_Toy1",
-                            "~C.V._Lastname1",
-                        ]
-                    },
-                    "entityB": { 
                         'type': "Note",
                         'submissions': [
                             {
@@ -686,6 +677,15 @@ class TestExpertiseCloudService():
                                 "title": "Test Submission 2",
                                 "abstract": "Test Abstract 2",
                             }
+                        ]
+                    },
+                    "entityB": {
+                        'type': "Group",
+                        'reviewerIds': [
+                            "~Harold_Rice1",
+                            "~Zonia_Willms1",
+                            "~Royal_Toy1",
+                            "~C.V._Lastname1",
                         ]
                     },
                     "model": {
@@ -796,8 +796,8 @@ class TestExpertiseCloudService():
                 '/expertise',
                 data=json.dumps({
                     "name": "User_A_Job",
-                    "entityA": {'type': "Group", 'memberOf': "CLD.cc/Area_Chairs"},
-                    "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
+                    "entityA": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
+                    "entityB": {'type': "Group", 'memberOf': "CLD.cc/Area_Chairs"},
                     "model": {"name": "specter+mfr"}
                 }),
                 content_type='application/json',
@@ -815,8 +815,8 @@ class TestExpertiseCloudService():
                 '/expertise',
                 data=json.dumps({
                     "name": "User_B_Job",
-                    "entityA": {'type': "Group", 'memberOf': "TMLR/Reviewers"},
-                    "entityB": {'type': "Note", 'invitation': "TMLR/-/Submission"},
+                    "entityA": {'type': "Note", 'invitation': "TMLR/-/Submission"},
+                    "entityB": {'type': "Group", 'memberOf': "TMLR/Reviewers"},
                     "model": {"name": "specter+mfr"}
                 }),
                 content_type='application/json',
@@ -914,12 +914,12 @@ class TestExpertiseCloudService():
             data = json.dumps({
                     "name": "test_run",
                     "entityA": {
+                        'type': "Note",
+                        'invitation': "CLD_ERR.cc/-/Submission"
+                    },
+                    "entityB": {
                         'type': "Group",
                         'memberOf': "CLD.cc/Area_Chairs",
-                    },
-                    "entityB": { 
-                        'type': "Note",
-                        'invitation': "CLD_ERR.cc/-/Submission" 
                     },
                     "model": {
                             "name": "specter+mfr",

@@ -53,12 +53,12 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     api_request_str = json.dumps({
         "name": "test_run2",
         "entityA": {
-            'type': "Group",
-            'memberOf': "PIPELINE.cc/Reviewers",
-        },
-        "entityB": {
             'type': "Note",
             'invitation': "PIPELINE.cc/-/Submission"
+        },
+        "entityB": {
+            'type': "Group",
+            'memberOf': "PIPELINE.cc/Reviewers",
         },
         "model": {
             "name": "specter+mfr",
@@ -88,10 +88,10 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     ## Build scores file
     scores_file = os.path.join(working_dir, 'scores.csv')
     with open(scores_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
     sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
     with open(sparse_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
     ## Build embeddings
     embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
@@ -113,8 +113,8 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"entityA": "test_user", "entityB": "note1", "score": 0.5}' in scores_content
-    assert '{"entityA": "test_user", "entityB": "note2", "score": 0.5}' in scores_content
+    assert '{"entityA": "note1", "entityB": "test_user", "score": 0.5}' in scores_content
+    assert '{"entityA": "note2", "entityB": "test_user", "score": 0.5}' in scores_content
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -145,12 +145,12 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     api_request = {
         "name": "test_run_gcs",
         "entityA": {
-            'type': "Group",
-            'memberOf': "PIPELINE.cc/Reviewers",
-        },
-        "entityB": {
             'type': "Note",
             'invitation': "PIPELINE.cc/-/Submission"
+        },
+        "entityB": {
+            'type': "Group",
+            'memberOf': "PIPELINE.cc/Reviewers",
         },
         "model": {
             "name": "specter+mfr",
@@ -180,10 +180,10 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     ## Build scores file
     scores_file = os.path.join(working_dir, 'scores.csv')
     with open(scores_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
     sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
     with open(sparse_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
     ## Build embeddings
     embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
@@ -214,8 +214,8 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"entityA": "test_user", "entityB": "note1", "score": 0.5}' in scores_content
-    assert '{"entityA": "test_user", "entityB": "note2", "score": 0.5}' in scores_content
+    assert '{"entityA": "note1", "entityB": "test_user", "score": 0.5}' in scores_content
+    assert '{"entityA": "note2", "entityB": "test_user", "score": 0.5}' in scores_content
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")

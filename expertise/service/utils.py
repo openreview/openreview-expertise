@@ -569,7 +569,15 @@ class JobConfig(object):
                     config.exclusion_inv = edge_inv_id
 
         if api_request.entityB['type'] == 'Group':
-            config.alternate_match_group = [api_request.entityB['memberOf']]
+            # If entityA is a Note (standard reviewer-paper matching), entityB Group is the match_group
+            # If entityA is also a Group (group-group matching), entityB Group is the alternate_match_group
+            if api_request.entityA['type'] == 'Note':
+                if 'memberOf' in api_request.entityB:
+                    config.match_group = [api_request.entityB['memberOf']]
+                elif 'reviewerIds' in api_request.entityB:
+                    config.reviewer_ids = api_request.entityB['reviewerIds']
+            else:
+                config.alternate_match_group = [api_request.entityB['memberOf']]
             edge_inv = api_request.entityB.get('expertise', None)
 
             if edge_inv:
@@ -587,10 +595,16 @@ class JobConfig(object):
                     else:
                         raise e
 
-                if 'include' in label.lower():
-                    config.alternate_inclusion_inv = edge_inv_id
+                if api_request.entityA['type'] == 'Note':
+                    if 'exclude' not in label.lower():
+                        config.inclusion_inv = edge_inv_id
+                    else:
+                        config.exclusion_inv = edge_inv_id
                 else:
-                    config.alternate_exclusion_inv = edge_inv_id
+                    if 'include' in label.lower():
+                        config.alternate_inclusion_inv = edge_inv_id
+                    else:
+                        config.alternate_exclusion_inv = edge_inv_id
 
         # Handle Note cases
         config.paper_invitation = None
