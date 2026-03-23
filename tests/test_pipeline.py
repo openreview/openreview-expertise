@@ -216,7 +216,7 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     scores_content = scores_blob.download_as_text()
     assert '{"entityA": "note1", "entityB": "test_user", "score": 0.5}' in scores_content
     assert '{"entityA": "note2", "entityB": "test_user", "score": 0.5}' in scores_content
-
+   
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
     assert metadata_blob.exists()
