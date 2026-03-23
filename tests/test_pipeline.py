@@ -306,7 +306,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"entityA": "test_user", "entityB": "sub_user", "score": 0.5}' in scores_content
+    assert '{"match_member": "test_user", "submission_member": "sub_user", "score": 0.5}' in scores_content
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -390,7 +390,7 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"entityA": "sub_one", "entityB": "sub_two", "score": 0.5}' in scores_content
+    assert '{"match_submission": "sub_one", "submission": "sub_two", "score": 0.5}' in scores_content
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")

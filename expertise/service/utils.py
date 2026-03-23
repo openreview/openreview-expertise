@@ -29,7 +29,7 @@ def get_user_id(openreview_client):
     :returns id: The id of the logged in user
     """
     user = openreview_client.user
-    return user.get('user', {}).get('id') if user else None
+    return user.get('id') if user else None
 
 def _get_required_field(req, superkey, key):
     try:

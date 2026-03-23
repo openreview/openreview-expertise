@@ -350,7 +350,7 @@ class TestExpertiseV2():
         target_id = None
         for item in response:
             print(item)
-            submission_id, profile_id, score = item['entityA'], item['entityB'], float(item['score'])
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
@@ -429,7 +429,7 @@ class TestExpertiseV2():
         response = response.json['results']
         for item in response:
             print(item)
-            submission_id, profile_id, score = item['entityA'], item['entityB'], float(item['score'])
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
@@ -500,7 +500,7 @@ class TestExpertiseV2():
         response = response.json['results']
         for item in response:
             print(item)
-            submission_id, profile_id, score = item['entityA'], item['entityB'], float(item['score'])
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
@@ -920,8 +920,8 @@ class TestExpertiseV2():
         sorted_sparse_results = sorted(sparse_results, key=lambda x: x['score'], reverse=True)
 
         for i in range(len(sorted_sparse_results)):
-            assert sorted_sparse_results[i]['entityA'] == sorted_results[i]['entityA']
-            assert sorted_sparse_results[i]['entityB'] == sorted_results[i]['entityB']
+            assert sorted_sparse_results[i]['submission'] == sorted_results[i]['submission']
+            assert sorted_sparse_results[i]['match_submission'] == sorted_results[i]['match_submission']
             assert abs(sorted_sparse_results[i]['score'] - sorted_results[i]['score']) < 0.0001
 
     def test_specter2_scincl(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
@@ -1027,7 +1027,7 @@ class TestExpertiseV2():
         response = response.json['results']
         for item in response:
             print(item)
-            submission_id, profile_id, score = item['entityA'], item['entityB'], float(item['score'])
+            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
