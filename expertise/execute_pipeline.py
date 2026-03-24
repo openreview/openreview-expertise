@@ -173,20 +173,20 @@ def run_pipeline(
             for row in reader:
                 if group_group_matching:
                     result.append({
-                        'match_member': row[0],
-                        'submission_member': row[1],
+                        'entityA': row[0],
+                        'entityB': row[1],
                         'score': float(row[2])
                     })
                 elif paper_paper_matching:
                     result.append({
-                        'match_submission': row[0],
-                        'submission': row[1],
+                        'entityA': row[0],
+                        'entityB': row[1],
                         'score': float(row[2])
                     })
                 else:
                     result.append({
-                        'submission': row[0],
-                        'user': row[1],
+                        'entityB': row[0],
+                        'entityA': row[1],
                         'score': float(row[2])
                     })
                     
