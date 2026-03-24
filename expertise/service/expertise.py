@@ -737,8 +737,8 @@ class ExpertiseService(BaseExpertiseService):
                     data_reader = reader(csv_file)
                     for row in data_reader:
                         ret_list.append({
-                            'match_member': row[0],
-                            'submission_member': row[1],
+                            'entityA': row[0],
+                            'entityB': row[1],
                             'score': float(row[2])
                         })
                 result['results'] = ret_list
@@ -749,8 +749,8 @@ class ExpertiseService(BaseExpertiseService):
                     data_reader = reader(csv_file)
                     for row in data_reader:
                         ret_list.append({
-                            'match_submission': row[0],
-                            'submission': row[1],
+                            'entityA': row[0],
+                            'entityB': row[1],
                             'score': float(row[2])
                         })
                 result['results'] = ret_list
@@ -765,8 +765,8 @@ class ExpertiseService(BaseExpertiseService):
                             continue
 
                         ret_list.append({
-                            'submission': row[0],
-                            'user': row[1],
+                            'entityB': row[0],
+                            'entityA': row[1],
                             'score': float(row[2])
                         })
                 result['results'] = ret_list
