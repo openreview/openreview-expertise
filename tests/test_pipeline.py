@@ -88,10 +88,10 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     ## Build scores file
     scores_file = os.path.join(working_dir, 'scores.csv')
     with open(scores_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
     sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
     with open(sparse_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
     ## Build embeddings
     embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
@@ -113,8 +113,9 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"submission": "test_user", "user": "note1", "score": 0.5}' in scores_content
-    assert '{"submission": "test_user", "user": "note2", "score": 0.5}' in scores_content
+    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
+    assert {"entityA": "test_user", "entityB": "note1", "score": 0.5} in scores_data
+    assert {"entityA": "test_user", "entityB": "note2", "score": 0.5} in scores_data
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -127,7 +128,8 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
     pub2vec_content = pub2vec_blob.download_as_text()
-    assert '{"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}' in pub2vec_content
+    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
+    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
@@ -180,10 +182,10 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     ## Build scores file
     scores_file = os.path.join(working_dir, 'scores.csv')
     with open(scores_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
     sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
     with open(sparse_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
     ## Build embeddings
     embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
@@ -214,8 +216,9 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"submission": "test_user", "user": "note1", "score": 0.5}' in scores_content
-    assert '{"submission": "test_user", "user": "note2", "score": 0.5}' in scores_content
+    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
+    assert {"entityA": "test_user", "entityB": "note1", "score": 0.5} in scores_data
+    assert {"entityA": "test_user", "entityB": "note2", "score": 0.5} in scores_data
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -228,7 +231,8 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
     pub2vec_content = pub2vec_blob.download_as_text()
-    assert '{"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}' in pub2vec_content
+    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
+    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
@@ -306,7 +310,8 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"match_member": "test_user", "submission_member": "sub_user", "score": 0.5}' in scores_content
+    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
+    assert {"entityA": "test_user", "entityB": "sub_user", "score": 0.5} in scores_data
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -319,7 +324,8 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
     pub2vec_content = pub2vec_blob.download_as_text()
-    assert '{"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}' in pub2vec_content
+    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
+    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
@@ -390,7 +396,8 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"match_submission": "sub_one", "submission": "sub_two", "score": 0.5}' in scores_content
+    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
+    assert {"entityA": "sub_one", "entityB": "sub_two", "score": 0.5} in scores_data
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
