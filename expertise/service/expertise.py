@@ -762,8 +762,8 @@ class ExpertiseService(BaseExpertiseService):
                             continue
 
                         ret_list.append({
-                            'submission': row[0],
-                            'user': row[1],
+                            'entityB': row[0],
+                            'entityA': row[1],
                             'score': float(row[2])
                         })
                 result['results'] = ret_list
