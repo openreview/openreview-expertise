@@ -82,6 +82,8 @@ jobs:
             conda create -n expertise python=$PYTHON_VERSION -c conda-forge
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
+            echo "numpy >=1.26,<2.3" > $CONDA_PREFIX/conda-meta/pinned
+            export PIP_CONSTRAINT=~/openreview-expertise/constraints.txt
             python --version
             mkdir ~/expertise-utils
             cd ~/expertise-utils
@@ -90,10 +92,10 @@ jobs:
             wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
             tar -xzvf mfr.tar.gz
             mv ./multifacet_recommender_data ./multifacet_recommender
-            conda install -y intel-openmp==2019.4
-            conda install -y -c conda-forge faiss-cpu=1.7.4 "pytorch>=2.3"
             cd ~/openreview-expertise
             python -m pip install -e .
+            conda install -y intel-openmp==2019.4
+            conda install -y -c conda-forge faiss-cpu=1.7.4 "pytorch>=2.3"
             python -m pip install -I protobuf==3.20.1
       - run:
           name: Initialize MongoDB
