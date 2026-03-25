@@ -22,6 +22,7 @@ jobs:
     environment:
       PYTHON_VERSION: 3.11
       GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
+      PIP_CONSTRAINT: /home/circleci/openreview-expertise/constraints.txt
     steps:
       - checkout
       - run:
@@ -83,7 +84,6 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             echo "numpy >=1.26,<2.3" > $CONDA_PREFIX/conda-meta/pinned
-            export PIP_CONSTRAINT=~/openreview-expertise/constraints.txt
             python --version
             mkdir ~/expertise-utils
             cd ~/expertise-utils
