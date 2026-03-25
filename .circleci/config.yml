@@ -83,7 +83,7 @@ jobs:
             conda create -n expertise python=$PYTHON_VERSION -c conda-forge
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            echo "numpy >=1.26,<2.3" > $CONDA_PREFIX/conda-meta/pinned
+            echo "numpy >=2.0,<2.3" > $CONDA_PREFIX/conda-meta/pinned
             python --version
             mkdir ~/expertise-utils
             cd ~/expertise-utils
