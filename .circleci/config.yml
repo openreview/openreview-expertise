@@ -83,7 +83,6 @@ jobs:
             conda create -n expertise python=$PYTHON_VERSION -c conda-forge
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
-            echo "numpy >=2.0,<2.3" > $CONDA_PREFIX/conda-meta/pinned
             python --version
             mkdir ~/expertise-utils
             cd ~/expertise-utils
@@ -142,6 +141,7 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             pip install -e ~/openreview-py
+            pip install "numpy>=2.0,<2.3"
       - run:
           name: Start API V1
           command: |
