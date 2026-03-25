@@ -91,6 +91,7 @@ jobs:
             wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
             tar -xzvf mfr.tar.gz
             mv ./multifacet_recommender_data ./multifacet_recommender
+            pip install "numpy>=2.0,<2.3"
             cd ~/openreview-expertise
             python -m pip install -e .
             conda install -y intel-openmp==2019.4
@@ -141,7 +142,6 @@ jobs:
             source ~/miniconda/etc/profile.d/conda.sh
             conda activate expertise
             pip install -e ~/openreview-py
-            pip install "numpy>=2.0,<2.3"
       - run:
           name: Start API V1
           command: |
