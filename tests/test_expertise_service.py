@@ -7,10 +7,8 @@ import json
 import pytest
 import os
 import time
-import threading
 import numpy as np
 import shutil
-from wsgiref.simple_server import make_server
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.service.utils import JobConfig, RedisDatabase, JobStatus, JobDescription
@@ -191,18 +189,6 @@ class TestExpertiseService():
                 "test_client": app.test_client(),
                 "config": config
             }
-
-    @pytest.fixture(scope='session')
-    def expertise_baseurl(self, openreview_context):
-        server = make_server('127.0.0.1', 0, openreview_context['app'])
-        host, port = server.server_address
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            yield f'http://{host}:{port}'
-        finally:
-            server.shutdown()
-            thread.join()
 
     def test_on_redis_not_disk(self):
         # Load an example config and store it in Redis with no files
@@ -1461,7 +1447,7 @@ class TestExpertiseService():
         assert response.status_code == 200
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
-    def test_get_results_and_get_data_error_and_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker, helpers, expertise_baseurl):
+    def test_get_results_and_get_data_error_and_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker, helpers):
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
 
@@ -1516,6 +1502,10 @@ class TestExpertiseService():
             queue_names=['expertiseQueueMQStatus']
         )
         assert data_error_queue_after['expertiseQueueMQStatus']['failed'] == data_error_queue_before['expertiseQueueMQStatus']['failed']
+
+        response = test_client.delete(f'/expertise/{data_error_job_id}', headers=openreview_client.headers)
+        assert response.status_code == 200
+        assert not os.path.isdir(f"./tests/jobs/{data_error_job_id}")
 
         target_id = None
         journal_papers = openreview_client.get_notes(invitation='TMLR/-/Submission')
@@ -1583,19 +1573,13 @@ class TestExpertiseService():
         with pytest.raises(openreview.OpenReviewException, match='There was an error computing scores, description:'):
             openreview_client.get_expertise_results(
                 data_error_job_id,
-                baseurl=expertise_baseurl,
                 wait_for_complete=True
             )
         with pytest.raises(openreview.OpenReviewException, match='There was an error computing scores, description:'):
             openreview_client.get_expertise_results(
                 error_job_id,
-                baseurl=expertise_baseurl,
                 wait_for_complete=True
             )
-
-        response = test_client.delete(f'/expertise/{data_error_job_id}', headers=openreview_client.headers)
-        assert response.status_code == 200
-        assert not os.path.isdir(f"./tests/jobs/{data_error_job_id}")
 
         response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
         assert response.status_code == 200
