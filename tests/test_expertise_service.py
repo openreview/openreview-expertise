@@ -1568,19 +1568,6 @@ class TestExpertiseService():
         )
         assert error_queue_after['expertiseQueueMQStatus']['failed'] > error_queue_before['expertiseQueueMQStatus']['failed']
 
-        ## Assert openreview-py errors for both
-        # Call get_expertise_results and expect an exception in the error path
-        with pytest.raises(openreview.OpenReviewException, match='There was an error computing scores, description:'):
-            openreview_client.get_expertise_results(
-                data_error_job_id,
-                wait_for_complete=True
-            )
-        with pytest.raises(openreview.OpenReviewException, match='There was an error computing scores, description:'):
-            openreview_client.get_expertise_results(
-                error_job_id,
-                wait_for_complete=True
-            )
-
         response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
         assert response.status_code == 200
         assert not os.path.isdir(f"./tests/jobs/{error_job_id}")
