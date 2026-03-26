@@ -22,7 +22,6 @@ jobs:
     environment:
       PYTHON_VERSION: 3.11
       GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
-      PIP_CONSTRAINT: /home/circleci/openreview-expertise/constraints.txt
     steps:
       - checkout
       - run:
@@ -92,7 +91,6 @@ jobs:
             wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
             tar -xzvf mfr.tar.gz
             mv ./multifacet_recommender_data ./multifacet_recommender
-            pip install "numpy>=2.0,<2.3"
             cd ~/openreview-expertise
             python -m pip install -e .
             python -m pip install -I protobuf==3.20.1
