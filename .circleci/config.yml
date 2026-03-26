@@ -87,13 +87,12 @@ jobs:
             cd ~/expertise-utils
             conda install "pytorch>=2.3" pytorch-cuda=12.4 -c pytorch -c nvidia
             conda install -y filelock
+            conda install -y intel-openmp==2019.4
             wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
             tar -xzvf mfr.tar.gz
             mv ./multifacet_recommender_data ./multifacet_recommender
             cd ~/openreview-expertise
             python -m pip install -e .
-            conda install -y intel-openmp==2019.4
-            conda install -y -c conda-forge faiss-cpu=1.7.4 "pytorch>=2.3"
             python -m pip install -I protobuf==3.20.1
       - run:
           name: Initialize MongoDB

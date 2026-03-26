@@ -942,8 +942,8 @@ class TestExpertiseCloudService():
         # Fetch the job config
         
         # Monitor for cloud ID changes and write error blob to the active cloud ID
-        ## Simulate retry behavior - job should fail with same error
-        error_content = '{"error": "Not Found Error: No papers found for: invitation_ids: [\'CLD_ERR.cc/-/Submission\']"}'
+        ## Simulate retry behavior - job should complete with expected error (not fail)
+        error_content = '{"error": "No papers found for: invitation_ids: [\'CLD_ERR.cc/-/Submission\']", "expected": true}'
         written_cloud_ids = set()
         
         # Write error blob initially and monitor for changes
@@ -966,8 +966,8 @@ class TestExpertiseCloudService():
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] == 'Error'
-        assert response['description'] == "Not Found Error: No papers found for: invitation_ids: ['CLD_ERR.cc/-/Submission']"
+        assert response['status'] == 'Data Error'
+        assert response['description'] == "No papers found for: invitation_ids: ['CLD_ERR.cc/-/Submission']"
 
     def test_status_returns_redis_when_no_cloud_id(self, openreview_client, openreview_context_cloud):
 

@@ -2,6 +2,7 @@ import openreview
 import datetime
 import pytest
 import requests
+import sys
 import time
 import json
 import os
@@ -86,6 +87,37 @@ class Helpers:
                 print(f'Jobs in API 1 queue: {jobCount}')
             counter += 1
         assert not [l for l in super_client.get_process_logs(status='error') if l['executedOn'] == 'openreview-api-1']        
+
+    @staticmethod
+    def await_queue_error(super_client=None, queue_names=None):
+        if super_client is None:
+            super_client = openreview.api.OpenReviewClient(
+                baseurl='http://localhost:3001',
+                username='openreview.net',
+                password=Helpers.strong_password
+            )
+
+        counter = 0
+        wait_time = 0.5
+        cycles = 60 * 1 / wait_time # print every 1 minutes
+        while True:
+            jobs = super_client.get_jobs_status()
+            jobCount = 0
+            for jobName, job in jobs.items():
+                if queue_names and jobName not in queue_names:
+                    continue
+                if jobName == 'fileUploaderQueueMQStatus' or jobName == 'fileDeletionQueueMQStatus':
+                    continue
+                jobCount += job.get('waiting', 0) + job.get('active', 0) + job.get('delayed', 0)
+
+            if jobCount == 0:
+                return jobs
+
+            time.sleep(wait_time)
+            if counter % cycles == 0:
+                print(f'Jobs in API 2 queue: {jobCount}')
+                sys.stdout.flush()
+            counter += 1
 
     @staticmethod
     def await_queue_edit(super_client, edit_id=None, invitation=None, count=1, error=False):

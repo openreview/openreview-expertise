@@ -8,6 +8,7 @@ and that papers have been submitted.
 import time
 
 from .config import ModelConfig
+from .service.utils import ExpectedDataError
 
 import json, argparse, csv
 from openreview import Note
@@ -524,7 +525,7 @@ class OpenReviewExpertise(object):
 
         # Raise an error if none of the values in expertise have papers
         if not any(expertise.values()):
-            raise ValueError('Not Found Error: No publications found, please ensure members have public and published papers attached to their profiles')
+            raise ExpectedDataError('No publications found. Please ensure members have public and published papers attached to their profiles.')
 
         return expertise
 
@@ -600,7 +601,7 @@ class OpenReviewExpertise(object):
         paper_content=None,
         submission_groups=None,
     ):
-        err_string = 'Not Found Error: No papers found for: '
+        err_string = 'No papers found for: '
 
         if sum(len(v) for v in reduced_submissions.values()) == 0:
             args_strings = []
@@ -614,11 +615,11 @@ class OpenReviewExpertise(object):
                 args_strings.append(f'paper_content: {paper_content}')
             if submission_groups:
                 args_strings.append(f'submission_groups: {submission_groups}')
-                err_string = 'Not Found Error: No publications found for: '
+                err_string = 'No publications found for: '
 
             err_string += ', '.join(args_strings)
-            
-            raise ValueError(err_string)
+
+            raise ExpectedDataError(err_string)
 
     def get_submissions_helper(self, 
         invitation_ids=None,

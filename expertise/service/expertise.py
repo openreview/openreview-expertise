@@ -22,7 +22,7 @@ import asyncio
 import threading
 import traceback
 
-from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase, get_user_id
+from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase, get_user_id, ExpectedDataError
 
 user_index_file_lock = Lock()
 
@@ -421,7 +421,7 @@ class BaseExpertiseService:
 
         # Only allow deletion when job has completed or errored out
         allowed_states = {
-            JobStatus.COMPLETED, JobStatus.ERROR
+            JobStatus.COMPLETED, JobStatus.DATA_ERROR, JobStatus.ERROR
         }
         if config.status not in allowed_states:
             raise openreview.OpenReviewException(
@@ -570,6 +570,9 @@ class ExpertiseService(BaseExpertiseService):
             # Update job status
             self.update_status(config, JobStatus.COMPLETED)
 
+        except ExpectedDataError as e:
+            # Expected data errors - mark as data error, don't re-raise, avoid triggering retries
+            self.update_status(config, JobStatus.DATA_ERROR, str(e))
         except Exception as e:
             self.update_status(config, JobStatus.ERROR, str(e))
             # Re raise exception so that it appears in the queue
@@ -926,7 +929,12 @@ class ExpertiseCloudService(BaseExpertiseService):
 
                     if status['status'] == JobStatus.COMPLETED:
                         self.logger.info(f"Job {redis_id} completed successfully.")
-                        break # Exit the loop on successful completion
+                        return # Exit the loop on successful completion
+
+                    elif status['status'] == JobStatus.DATA_ERROR:
+                        # Expected data errors - job is "complete" from queue perspective
+                        self.logger.info(f"Job {redis_id} completed with expected error: {status['description']}")
+                        return # Exit the loop - don't raise exception
 
                     elif status['status'] == JobStatus.ERROR:
                         self.logger.error(f"Job {redis_id} encountered an error: {status['description']}")
