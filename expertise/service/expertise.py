@@ -811,13 +811,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         if os.path.exists(metadata_path):
             with open(metadata_path, 'r') as f:
                 metadata = json.load(f)
-            note_count = metadata.get('submission_count', 0)
-        
-        # Also count archives for total dataset size estimation
-        archives_dir = os.path.join(config.job_dir, 'archives')
-        if os.path.isdir(archives_dir):
-            archives_count = len([f for f in os.listdir(archives_dir) if f.endswith('.jsonl')])
-            note_count += archives_count
+            note_count = metadata.get('submission_count', 0) + metadata.get('archives_count', 0)
 
         self.logger.info(f"Machine type selection: {note_count} submissions in dataset")
 
@@ -839,11 +833,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
-        openreview_client_v2 = openreview.api.OpenReviewClient(
-            username=self.server_config.get('OPENREVIEW_USERNAME'),
-            password=self.server_config.get('OPENREVIEW_PASSWORD'),
-            baseurl=config.baseurl_v2
-        )
+        openreview_client_v2 = openreview.api.OpenReviewClient(token=or_token, baseurl=config.baseurl_v2)
 
         # Task 1: Create dataset locally before submitting to VertexAI
         try:
