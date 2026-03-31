@@ -840,7 +840,8 @@ class ExpertiseCloudService(BaseExpertiseService):
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
         openreview_client_v2 = openreview.api.OpenReviewClient(
-            token=or_token,
+            username=self.server_config.get('OPENREVIEW_USERNAME'),
+            password=self.server_config.get('OPENREVIEW_PASSWORD'),
             baseurl=config.baseurl_v2
         )
 
