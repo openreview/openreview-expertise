@@ -812,10 +812,12 @@ class ExpertiseCloudService(BaseExpertiseService):
             with open(metadata_path, 'r') as f:
                 metadata = json.load(f)
             note_count = metadata.get('submission_count', 0)
-        else:
-            archives_dir = os.path.join(config.job_dir, 'archives')
-            if os.path.isdir(archives_dir):
-                note_count = len([f for f in os.listdir(archives_dir) if f.endswith('.jsonl')])
+        
+        # Also count archives for total dataset size estimation
+        archives_dir = os.path.join(config.job_dir, 'archives')
+        if os.path.isdir(archives_dir):
+            archives_count = len([f for f in os.listdir(archives_dir) if f.endswith('.jsonl')])
+            note_count += archives_count
 
         self.logger.info(f"Machine type selection: {note_count} submissions in dataset")
 

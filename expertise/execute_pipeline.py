@@ -1,10 +1,9 @@
 import argparse
 import os
-import openreview
 import shortuuid
 import json
 import csv
-from expertise.execute_expertise import execute_create_dataset, execute_expertise
+from expertise.execute_expertise import execute_expertise
 from expertise.service import load_model_artifacts
 from expertise.service.utils import APIRequest, JobConfig, ExpectedDataError
 from expertise.utils.utils import generate_job_id
@@ -104,16 +103,15 @@ def run_pipeline(
             raw_request = download_from_gcs(gcs_dir)
             print("Parsed request from GCS folder")
         
-        # Pop token, base URLs and other expected variables
+        # Pop base URLs and other expected variables
         print('Popping variables')
         # user_id is retained so it can be used without an API client when dataset is pre-created
         pipeline_user_id = raw_request.pop('user_id', None)
         for field in DELETED_FIELDS:
             raw_request.pop(field, None)
-        token = raw_request.pop('token')
-        baseurl_v2 = raw_request.pop('baseurl_v2')
+        baseurl_v2 = raw_request.pop('baseurl_v2', None)
         destination_prefix = raw_request.pop('gcs_folder')
-        dump_embs = False if 'dump_embs' not in raw_request else raw_request.pop('dump_embs')
+        # dump_embs removed - embeddings always uploaded
         dump_archives = False if 'dump_archives' not in raw_request else raw_request.pop('dump_archives')
         specter_dir = os.getenv('SPECTER_DIR')
         mfr_vocab_dir = os.getenv('MFR_VOCAB_DIR')
@@ -138,19 +136,11 @@ def run_pipeline(
 
         validated_request = APIRequest(raw_request)
 
-        if dataset_gcs_path:
-            # Dataset pre-created by BullMQ worker — no OpenReview API clients needed
-            print('Using pre-created dataset; skipping OpenReview client setup')
-            client_v2 = None
-        else:
-            print('Logging into OpenReview')
-            client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
-
         print('Creating job config')
         config = JobConfig.from_request(
             api_request = validated_request,
             starting_config = DEFAULT_CONFIG,
-            openreview_client_v2= client_v2,
+            openreview_client_v2= None,
             server_config = server_config,
             working_dir = working_dir,
             user_id = pipeline_user_id
@@ -163,14 +153,8 @@ def run_pipeline(
             for field in path_fields:
                 config.model_params[field] = working_dir
 
-        if dataset_gcs_path:
-            # Task 2: dataset already created; download it and run expertise only
-            print(f'Downloading pre-created dataset from {dataset_gcs_path}')
-            download_dataset_from_gcs(dataset_gcs_path, working_dir)
-        else:
-            # Full pipeline: create dataset then run expertise
-            print('Creating dataset')
-            execute_create_dataset(client_v2, config.to_json())
+        print(f'Downloading pre-created dataset from {dataset_gcs_path}')
+        download_dataset_from_gcs(dataset_gcs_path, working_dir)
 
         print('Executing expertise')
         execute_expertise(config.to_json())
@@ -253,22 +237,20 @@ def run_pipeline(
             contents = '\n'.join([json.dumps(r) for r in result])
             blob.upload_from_string(contents)
 
-    # Dump embeddings: always upload when using split architecture (dataset pre-created),
-    # otherwise respect the dump_embs flag from the request
-    if dump_embs or dataset_gcs_path:
-        for emb_file in [d for d in os.listdir(config.job_dir) if '.jsonl' in d]:
-            result = []
-            destination_blob = f"{blob_prefix}/{emb_file}"
-            with open(os.path.join(config.job_dir, emb_file), 'r') as f:
-                for line in f:
-                    data = json.loads(line)
-                    result.append({
-                        'paper_id': data['paper_id'],
-                        'embedding': data['embedding']
-                    })
-            blob = bucket.blob(destination_blob)
-            contents = '\n'.join([json.dumps(r) for r in result])
-            blob.upload_from_string(contents)
+    # Always dump embeddings to bucket
+    for emb_file in [d for d in os.listdir(config.job_dir) if '.jsonl' in d]:
+        result = []
+        destination_blob = f"{blob_prefix}/{emb_file}"
+        with open(os.path.join(config.job_dir, emb_file), 'r') as f:
+            for line in f:
+                data = json.loads(line)
+                result.append({
+                    'paper_id': data['paper_id'],
+                    'embedding': data['embedding']
+                })
+        blob = bucket.blob(destination_blob)
+        contents = '\n'.join([json.dumps(r) for r in result])
+        blob.upload_from_string(contents)
 
 if __name__ == '__main__':
     print('Starting pipeline')

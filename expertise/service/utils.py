@@ -986,7 +986,6 @@ class GCPInterface(object):
         data['name'] = valid_vertex_id
 
         # Popped fields
-        data['token'] = or_client.token
         data['baseurl_v2'] = openreview.tools.get_base_urls(or_client)[1]
         data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
         #data['dump_embs'] = True
