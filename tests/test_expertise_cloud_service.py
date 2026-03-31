@@ -225,6 +225,56 @@ class TestExpertiseCloudService():
                         'type': "Group",
                         'memberOf': "CLD.cc/Reviewers",
                     },
+                    "entityB": {
+                        'type': "Note",
+                        'invitation': "CLD.cc/-/Submission"
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False,
+                            'useAbstract': True,
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(LATENCY_OFFSET)
+
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run', f"Job name: {response['name']}, status: {response}"
+        assert response['status'] != 'Error'
+
+        # Let request process
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
+
+        # Check proper user ID
+        ## Checking live GCS
+        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
+        assert request_blob.exists(), "Request file should exist in GCS"
+        request = json.loads(request_blob.download_as_text())
+        assert request['user_id'] == 'CLD.cc/Program_Chairs'
+        assert request['machine_type'] == 'small'
+
+        setup_job_mocks()
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "CLD.cc/Reviewers",
+                    },
                     "entityB": { 
                         'type': "Note",
                         'invitation': "CLD.cc/-/Submission" 
