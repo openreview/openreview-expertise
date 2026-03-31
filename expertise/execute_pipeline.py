@@ -59,10 +59,27 @@ def download_from_gcs(gcs_path):
     content = blob.download_as_text(encoding='utf-8')
     return json.loads(content)
 
+def download_dataset_from_gcs(gcs_path, local_dir):
+    """Download dataset files from GCS prefix into local_dir."""
+    _, bucket = load_gcs(gcs_path)
+    blob_prefix = '/'.join(gcs_path.split('/')[3:])
+
+    blobs = list(bucket.list_blobs(prefix=blob_prefix))
+    for blob in blobs:
+        relative_path = blob.name[len(blob_prefix):].lstrip('/')
+        if not relative_path:
+            continue
+        local_path = os.path.join(local_dir, relative_path)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        blob.download_to_filename(local_path)
+        print(f"Downloaded {blob.name} to {local_path}")
+
+
 def run_pipeline(
-        api_request_str=None, 
+        api_request_str=None,
         gcs_dir=None,
-        working_dir=None
+        working_dir=None,
+        dataset_gcs_path=None
     ):
 
     if gcs_dir is None and api_request_str is None:
@@ -87,8 +104,10 @@ def run_pipeline(
             raw_request = download_from_gcs(gcs_dir)
             print("Parsed request from GCS folder")
         
-        # Pop token, base URLs and other expected variable
+        # Pop token, base URLs and other expected variables
         print('Popping variables')
+        # user_id is retained so it can be used without an API client when dataset is pre-created
+        pipeline_user_id = raw_request.pop('user_id', None)
         for field in DELETED_FIELDS:
             raw_request.pop(field, None)
         token = raw_request.pop('token')
@@ -111,23 +130,30 @@ def run_pipeline(
         print('Loading model artifacts')
         load_model_artifacts()
 
-        print('Logging into OpenReview')
-        client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
-
         print('Creating job ID')
         job_id = generate_job_id()
         if working_dir is None:
             working_dir = f"/app/{job_id}"
         os.makedirs(working_dir, exist_ok=True)
 
-        print('Creating job config')
         validated_request = APIRequest(raw_request)
+
+        if dataset_gcs_path:
+            # Dataset pre-created by BullMQ worker — no OpenReview API clients needed
+            print('Using pre-created dataset; skipping OpenReview client setup')
+            client_v2 = None
+        else:
+            print('Logging into OpenReview')
+            client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
+
+        print('Creating job config')
         config = JobConfig.from_request(
             api_request = validated_request,
             starting_config = DEFAULT_CONFIG,
             openreview_client_v2= client_v2,
             server_config = server_config,
-            working_dir = working_dir
+            working_dir = working_dir,
+            user_id = pipeline_user_id
         )
 
         if working_dir is not None:
@@ -137,9 +163,16 @@ def run_pipeline(
             for field in path_fields:
                 config.model_params[field] = working_dir
 
-        # Create Dataset and Execute Expertise
-        print('Creating dataset and executing expertise')
-        execute_create_dataset(client_v2, config.to_json())
+        if dataset_gcs_path:
+            # Task 2: dataset already created; download it and run expertise only
+            print(f'Downloading pre-created dataset from {dataset_gcs_path}')
+            download_dataset_from_gcs(dataset_gcs_path, working_dir)
+        else:
+            # Full pipeline: create dataset then run expertise
+            print('Creating dataset')
+            execute_create_dataset(client_v2, config.to_json())
+
+        print('Executing expertise')
         execute_expertise(config.to_json())
     except Exception as e:
         # Write error to single JSONL line in GCS if bucket is available
@@ -220,8 +253,9 @@ def run_pipeline(
             contents = '\n'.join([json.dumps(r) for r in result])
             blob.upload_from_string(contents)
 
-    # Dump embeddings
-    if dump_embs:
+    # Dump embeddings: always upload when using split architecture (dataset pre-created),
+    # otherwise respect the dump_embs flag from the request
+    if dump_embs or dataset_gcs_path:
         for emb_file in [d for d in os.listdir(config.job_dir) if '.jsonl' in d]:
             result = []
             destination_blob = f"{blob_prefix}/{emb_file}"
@@ -241,9 +275,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--api_request_str', help='a JSON string or file containing all other arguments')
     parser.add_argument('--gcs_dir', help='GCS directory containing request.json')
+    parser.add_argument('--dataset_gcs_path', help='GCS path to pre-created dataset; skips dataset creation when provided')
     args = parser.parse_args()
-    
+
     if args.gcs_dir:
-        run_pipeline(gcs_dir=args.gcs_dir)
+        run_pipeline(gcs_dir=args.gcs_dir, dataset_gcs_path=args.dataset_gcs_path)
     else:
-        run_pipeline(api_request_str=args.api_request_str)
+        run_pipeline(api_request_str=args.api_request_str, dataset_gcs_path=args.dataset_gcs_path)

@@ -15,8 +15,6 @@ import multiprocessing
 from bullmq import Queue, Worker
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from expertise.service.utils import GCPInterface
-from expertise.create_dataset import OpenReviewExpertise
-from expertise.config import ModelConfig
 from copy import deepcopy
 import asyncio
 import threading
@@ -798,53 +796,28 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.client_v2 = client_v2
         self.cloud.set_client(client_v2)
 
-    def compute_machine_type(self, client, job_id):
-        config = self.redis.load_job(job_id, get_user_id(client))
+    def compute_machine_type_from_dataset(self, config):
+        """Compute machine type from the already-created dataset on disk.
+
+        Reads submission_count from metadata.json written by execute_create_dataset().
+        Falls back to counting archive files if metadata is unavailable.
+        """
         if config.machine_type is not None:
             return config.machine_type
-        config = config.to_json()
-        dataset_config = ModelConfig(config_dict=config)
-        expertise = OpenReviewExpertise(
-            client,
-            dataset_config
-        )
+
+
         note_count = 0
+        metadata_path = os.path.join(config.job_dir, 'metadata.json')
+        if os.path.exists(metadata_path):
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            note_count = metadata.get('submission_count', 0)
+        else:
+            archives_dir = os.path.join(config.job_dir, 'archives')
+            if os.path.isdir(archives_dir):
+                note_count = len([f for f in os.listdir(archives_dir) if f.endswith('.jsonl')])
 
-        if 'match_paper_invitation' in config or 'match_paper_id' in config or 'match_paper_venueid' in config or 'match_paper_content' in config:
-            invitation_ids = expertise.convert_to_list(expertise.config.get('match_paper_invitation', []))
-            paper_id = expertise.config.get('match_paper_id')
-            paper_venueid = expertise.config.get('match_paper_venueid', None)
-            paper_content = expertise.config.get('match_paper_content', None)
-
-            reduced_submissions = expertise.get_submissions_helper(
-                invitation_ids=invitation_ids,
-                paper_id=paper_id,
-                paper_venueid=paper_venueid,
-                paper_content=paper_content
-            )
-
-            note_count += len(reduced_submissions)
-
-        # Retrieve match groups to detect group-group matching
-        group_group_matching = 'alternate_match_group' in config.keys()
-
-        # if invitation ID is supplied, collect records for each submission
-        if 'paper_invitation' in config or 'csv_submissions' in config or 'paper_id' in config or 'paper_venueid' in config or group_group_matching:
-            invitation_ids = expertise.convert_to_list(expertise.config.get('paper_invitation', []))
-            paper_id = expertise.config.get('paper_id')
-            paper_venueid = expertise.config.get('paper_venueid', None)
-            paper_content = expertise.config.get('paper_content', None)
-            submission_groups = expertise.convert_to_list(expertise.config.get('alternate_match_group', []))
-
-            reduced_submissions = expertise.get_submissions_helper(
-                invitation_ids=invitation_ids,
-                paper_id=paper_id,
-                paper_venueid=paper_venueid,
-                paper_content=paper_content,
-                submission_groups=submission_groups
-            )
-
-            note_count += len(reduced_submissions)
+        self.logger.info(f"Machine type selection: {note_count} submissions in dataset")
 
         if note_count < self.server_config.get('PIPELINE_MEDIUM_THRESHOLD'):
             return self.server_config.get('SMALL_NAME')
@@ -868,18 +841,36 @@ class ExpertiseCloudService(BaseExpertiseService):
             token=or_token,
             baseurl=config.baseurl_v2
         )
-        try:
-            machine_type = self.compute_machine_type(
-                openreview_client_v2,
-                job_id=redis_id
-            )
 
+        # Task 1: Create dataset locally before submitting to VertexAI
+        try:
+            execute_create_dataset(openreview_client_v2, config=config.to_json())
+        except ExpectedDataError as e:
+            self.update_status(config, JobStatus.DATA_ERROR, str(e))
+            return
+        except Exception as e:
+            self.logger.error(f"Error creating dataset for {redis_id}: {e}")
+            self.logger.error(f"Error details: {traceback.format_exc()}")
+            config = self.redis.load_job(redis_id, user_id)
+            if config.status != JobStatus.ERROR:
+                self.update_status(config, JobStatus.ERROR, str(e))
+            raise e.with_traceback(e.__traceback__)
+
+        # Upload dataset to GCS and submit VertexAI job (expertise only, Task 2)
+        config = self.redis.load_job(redis_id, user_id)
+        self.update_status(config, JobStatus.EXPERTISE_QUEUED)
+        dataset_gcs_path = self.cloud.upload_dataset(config)
+        machine_type = self.compute_machine_type_from_dataset(config)
+        self.logger.info(f"Machine type for {redis_id}: {machine_type}")
+
+        try:
             cloud_id = self.cloud.create_job(
                 deepcopy(request),
                 job_id=job.id,
                 client=openreview_client_v2,
                 user_id=user_id,
-                machine_type=machine_type
+                machine_type=machine_type,
+                dataset_gcs_path=dataset_gcs_path
             )
             config.cloud_id = cloud_id
             self._save_config(config)

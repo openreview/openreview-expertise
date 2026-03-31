@@ -484,7 +484,8 @@ class JobConfig(object):
         starting_config = {},
         openreview_client_v2 = None,
         server_config = {},
-        working_dir = None):
+        working_dir = None,
+        user_id = None):
         """
         Sets default fields from the starting_config and attempts to override from api_request fields
         """
@@ -523,7 +524,7 @@ class JobConfig(object):
 
         # Set metadata fields from request
         config.name = api_request.name
-        config.user_id = get_user_id(openreview_client_v2)
+        config.user_id = user_id if user_id is not None else get_user_id(openreview_client_v2)
         config.job_id = generate_job_id() if job_id is None else job_id
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
@@ -788,6 +789,12 @@ class GCPInterface(object):
             self.jobs_folder = config['GCP_JOBS_FOLDER']
             self.service_label = config['GCP_SERVICE_LABEL']
             self.service_account = config.get('GCP_SERVICE_ACCOUNT')
+            # Per-tier pipeline names derived from base name + machine tier suffix
+            self.pipeline_name_by_tier = {
+                config.get('SMALL_NAME', 'small'):  f"{self.pipeline_name}-{config.get('SMALL_NAME', 'small')}",
+                config.get('MEDIUM_NAME', 'medium'): f"{self.pipeline_name}-{config.get('MEDIUM_NAME', 'medium')}",
+                config.get('LARGE_NAME', 'large'):  f"{self.pipeline_name}-{config.get('LARGE_NAME', 'large')}",
+            }
         else:
             self.project_id = project_id
             self.project_number = project_number
@@ -910,7 +917,32 @@ class GCPInterface(object):
 
             return f"{match_note_value}-{submission_note_value}"
 
-    def create_job(self, json_request: dict, job_id: str, user_id: str = None, client = None, machine_type = None):
+    def upload_dataset(self, config):
+        """Upload dataset files from config.job_dir to GCS. Returns the GCS path."""
+        job_dir = config.job_dir
+        folder_path = f"{self.jobs_folder}/{config.job_id}/dataset"
+
+        dataset_items = ['archives', 'submissions', 'submissions.json']
+        for item in dataset_items:
+            local_path = os.path.join(job_dir, item)
+            if os.path.isdir(local_path):
+                for root, dirs, files in os.walk(local_path):
+                    for fname in files:
+                        file_path = os.path.join(root, fname)
+                        relative_path = os.path.relpath(file_path, job_dir)
+                        blob = self.bucket.blob(f"{folder_path}/{relative_path}")
+                        blob.upload_from_filename(file_path)
+                        self.logger.info(f"Uploaded {relative_path} to gs://{self.bucket_name}/{folder_path}/{relative_path}")
+            elif os.path.isfile(local_path):
+                blob = self.bucket.blob(f"{folder_path}/{item}")
+                blob.upload_from_filename(local_path)
+                self.logger.info(f"Uploaded {item} to gs://{self.bucket_name}/{folder_path}/{item}")
+
+        dataset_gcs_path = f"gs://{self.bucket_name}/{folder_path}"
+        self.logger.info(f"Dataset uploaded to {dataset_gcs_path}")
+        return dataset_gcs_path
+
+    def create_job(self, json_request: dict, job_id: str, user_id: str = None, client = None, machine_type = None, dataset_gcs_path: str = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -972,13 +1004,17 @@ class GCPInterface(object):
 
         parameter_values = {
             'gcs_request_path': gcs_request_path,
-            'machine_type': machine_type,
         }
+        if dataset_gcs_path:
+            parameter_values['dataset_gcs_path'] = dataset_gcs_path
+
+        # Select the per-tier pipeline; fall back to base name if tier mapping unavailable
+        tier_pipeline_name = getattr(self, 'pipeline_name_by_tier', {}).get(machine_type, self.pipeline_name)
 
         # Build PipelineJob kwargs and parameters
         job = aip.PipelineJob(
             display_name = valid_vertex_id,
-            template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
+            template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{tier_pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
             parameter_values = parameter_values,
