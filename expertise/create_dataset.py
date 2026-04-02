@@ -247,10 +247,6 @@ class OpenReviewExpertise(object):
             if isinstance(pub_abstr, dict):
                 pub_abstr = pub_abstr.get('value')
 
-            pub_paperhash = publication.content.get('paperhash')
-            if isinstance(pub_paperhash, dict):
-                pub_paperhash = pub_paperhash.get('value')
-
             pub_venueid = publication.content.get('venueid', '')
             if isinstance(pub_venueid, dict):
                 pub_venueid = pub_venueid.get('value')
@@ -270,8 +266,7 @@ class OpenReviewExpertise(object):
                 'content': {
                     'title': pub_title,
                     'abstract': pub_abstr,
-                    'venueid': pub_venueid,
-                    'paperhash': pub_paperhash 
+                    'venueid': pub_venueid
                 }
             }
 
@@ -437,7 +432,7 @@ class OpenReviewExpertise(object):
         print(self.excluded_ids_by_user.get(member))
 
         for n in member_papers:
-            paper_title = n['content'].get('paperhash') or openreview.tools.get_paperhash('', n['content']['title'])
+            paper_title = openreview.tools.get_paperhash('', n['content']['title'])
             if not paper_title:
                 continue
             
@@ -526,7 +521,7 @@ class OpenReviewExpertise(object):
             seen_papers = {}  # Maps paperhash -> paper dict
 
             for paper in papers:
-                paper_hash = paper['content'].get('paperhash') or openreview.tools.get_paperhash('', paper['content']['title'])
+                paper_hash = openreview.tools.get_paperhash('', paper['content']['title'])
                 if not paper_hash:
                     continue
 
