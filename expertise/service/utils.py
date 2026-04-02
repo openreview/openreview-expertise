@@ -1004,6 +1004,8 @@ class GCPInterface(object):
         parameter_values = {
             'gcs_request_path': gcs_request_path,
         }
+        if machine_type:
+            parameter_values['machine_type'] = machine_type
         if dataset_gcs_path:
             parameter_values['dataset_gcs_path'] = dataset_gcs_path
 
