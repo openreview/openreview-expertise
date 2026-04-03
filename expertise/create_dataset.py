@@ -20,7 +20,6 @@ from collections import defaultdict
 
 class OpenReviewExpertise(object):
     def __init__(self, openreview_client, openreview_client_v2, config):
-        self.openreview_client = openreview_client
         self.openreview_client_v2 = openreview_client_v2
         self.config = config
         self.root = Path(config.get('dataset', {}).get('directory', './'))
@@ -67,7 +66,7 @@ class OpenReviewExpertise(object):
         if use_bids_as_expertise:
             bid_invitation = dataset_params['bid_invitation']
             paper_invitation = self.config['paper_invitation']
-            bids = self.openreview_client.get_all_edges(invitation=bid_invitation, tail=profile.id)
+            bids = self.openreview_client_v2.get_all_edges(invitation=bid_invitation, tail=profile.id)
             note_ids = [e.head for e in bids if e.label in ['Very High', 'High']]
             return [n for n in self.openreview_client_v2.get_notes_by_ids(ids=note_ids) if n.invitation == paper_invitation]
 
@@ -209,8 +208,6 @@ class OpenReviewExpertise(object):
         return matching_weight
 
     def get_publications(self, profile):
-
-        author_id = profile.id
 
         dataset_params = self.config.get('dataset', {})
         weight_specification = dataset_params.get('weight_specification', [])
@@ -368,7 +365,7 @@ class OpenReviewExpertise(object):
             return [], []
 
         profiles_by_key = openreview.tools.get_profiles(
-            self.openreview_client,
+            self.openreview_client_v2,
             list(all_members),
             with_publications=True,
             as_dict=True
@@ -595,39 +592,17 @@ class OpenReviewExpertise(object):
         else:
             if invitation_ids:
                 for invitation_id in invitation_ids:
-                    # Assume invitation is valid for both APIs, but only 1
-                    # will have the associated notes
-                    submissions_v1 = self.openreview_client.get_all_notes(invitation=invitation_id, content={'venueid': paper_venueid})
-
-                    submissions.extend(submissions_v1)
                     submissions.extend(self.openreview_client_v2.get_all_notes(invitation=invitation_id, content={'venueid': paper_venueid}))
             elif paper_venueid:
-                submissions_v1 = self.openreview_client.get_all_notes(content={'venueid': paper_venueid})
-
-                submissions.extend(submissions_v1)
                 submissions.extend(self.openreview_client_v2.get_all_notes(content={'venueid': paper_venueid}))
 
             if paper_id:
-                # If note not found, keep executing and raise an overall exception later
-                # Otherwise if the exception is anything else, raise it again
-                note_v1, note_v2 = None, None
                 try:
-                    note_v1 = self.openreview_client.get_note(paper_id)
-                    submissions.append(note_v1)
+                    submissions.append(self.openreview_client_v2.get_note(paper_id))
                 except openreview.OpenReviewException as e:
                     err_name = e.args[0].get('name').lower()
                     if err_name != 'notfounderror':
                         raise e
-
-                try:
-                    note_v2 = self.openreview_client_v2.get_note(paper_id)
-                    submissions.append(note_v2)
-                except openreview.OpenReviewException as e:
-                    err_name = e.args[0].get('name').lower()
-                    if err_name != 'notfounderror':
-                        raise e
-
-                if not note_v1 and not note_v2:
                     raise openreview.OpenReviewException(f"Note {paper_id} not found")
 
         print('finding records of {} submissions'.format(len(submissions)))
