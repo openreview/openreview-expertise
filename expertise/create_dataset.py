@@ -595,13 +595,7 @@ class OpenReviewExpertise(object):
                 submissions.extend(self.openreview_client_v2.get_all_notes(content={'venueid': paper_venueid}))
 
             if paper_id:
-                try:
-                    submissions.append(self.openreview_client_v2.get_note(paper_id))
-                except openreview.OpenReviewException as e:
-                    err_name = e.args[0].get('name').lower()
-                    if err_name != 'notfounderror':
-                        raise e
-                    raise openreview.OpenReviewException(f"Note {paper_id} not found")
+                submissions.append(self.openreview_client_v2.get_note(paper_id))
 
         print('finding records of {} submissions'.format(len(submissions)))
         reduced_submissions = {}
