@@ -328,20 +328,18 @@ class OpenReviewExpertise(object):
 
     def get_profiles(self, group_ids=None, reviewer_ids=None):
         """
-        Returns a list of all the profile members from a list of groups.
+        Fetches profiles with publications for all members of the given groups
+        and/or reviewer IDs, using a single batched call.
 
-        Uses openreview.tools.get_profiles to fetch profiles and their
-        publications in a single batched call instead of separate searches
-        by IDs and emails.
-
-        :param group_ids: List of group ids
-        :type group_ids: list[str]
+        :param group_ids: List of group ids to fetch members from
+        :type group_ids: list[str], optional
         :param reviewer_ids: List of reviewer ids (tilde IDs or emails)
-        :type reviewer_ids: list[str]
+        :type reviewer_ids: list[str], optional
 
         :return: Tuple of (valid_members, invalid_members) where valid_members
-            contains (profile, email) tuples
-        :rtype: tuple
+            is a list of Profile objects (with publications loaded) and
+            invalid_members is a list of email strings that did not match any profile.
+        :rtype: tuple[list[openreview.Profile], list[str]]
         """
         all_members = set()
 
