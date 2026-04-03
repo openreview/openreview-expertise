@@ -27,7 +27,7 @@ NUM_RETRIES = 3
 DEFAULT_JOURNAL_ID = 'TMLR'
 DEFAULT_CONF_ID = 'CLD.cc'
 DEFAULT_POST_REVIEWERS = True
-DEFAULT_POST_AREA_CHAIRS = True
+DEFAULT_POST_AREA_CHAIRS = False
 DEFAULT_POST_SENIOR_AREA_CHAIRS = False
 DEFAULT_POST_SUBMISSIONS = True
 DEFAULT_POST_PUBLICATIONS = True
@@ -223,16 +223,16 @@ class TestExpertiseCloudService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "CLD.cc/Area_Chairs",
+                        'memberOf': "CLD.cc/Reviewers",
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Note",
-                        'invitation': "CLD.cc/-/Submission" 
+                        'invitation': "CLD.cc/-/Submission"
                     },
                     "model": {
                             "name": "specter+mfr",
-                            'useTitle': False, 
-                            'useAbstract': True, 
+                            'useTitle': False,
+                            'useAbstract': True,
                             'skipSpecter': False,
                             'scoreComputation': 'avg'
                     },
@@ -273,11 +273,11 @@ class TestExpertiseCloudService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "CLD.cc/Reviewers",
+                        'memberOf': "TMLR/Reviewers",
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Note",
-                        'invitation': "CLD.cc/-/Submission" 
+                        'invitation': "TMLR/-/Submission"
                     },
                     "model": {
                             "name": "specter+mfr",
