@@ -546,7 +546,7 @@ class OpenReviewExpertise(object):
             with open(self.root.joinpath('publications_by_profile_id.json'), 'w') as f:
                 json.dump(publications_by_profile_id, f, indent=2)
 
-        return all_papers
+        return [openreview.Note.from_json(paper) for paper in all_papers]
     
     def _validate_paper_data(self,
         reduced_submissions,

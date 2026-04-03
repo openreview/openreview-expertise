@@ -1004,16 +1004,16 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
     all_papers = or_expertise_group.get_papers_from_group('DEF.cc/Reviewers')
     
     # Find papers with test title
-    papers_with_test_title_group = [p for p in all_papers if p['content']['title'] == test_title or (isinstance(p['content']['title'], dict) and p['content']['title'].get('value') == test_title)]
-    
+    papers_with_test_title_group = [p for p in all_papers if p.content.get('title') == test_title or (isinstance(p.content.get('title'), dict) and p.content.get('title', {}).get('value') == test_title)]
+
     # Should only have one paper with this title (the best one)
     assert len(papers_with_test_title_group) == 1, f"Expected 1 paper in get_papers_from_group, got {len(papers_with_test_title_group)}"
     kept_paper_group = papers_with_test_title_group[0]
-    group_abstract = kept_paper_group['content']['abstract']
+    group_abstract = kept_paper_group.content['abstract']
     assert group_abstract == 'This is the best abstract with the newest date.'
-    assert kept_paper_group.get('pdate') == 1640995200  # Should be paper4
+    assert getattr(kept_paper_group, 'pdate', None) == 1640995200  # Should be paper4
     # Verify paper5 (missing abstract field) was not selected in get_papers_from_group
-    assert kept_paper_group['id'] != paper5_id, "Paper5 (missing abstract field) should not be selected over paper4 (has abstract) in get_papers_from_group"
+    assert kept_paper_group.id != paper5_id, "Paper5 (missing abstract field) should not be selected over paper4 (has abstract) in get_papers_from_group"
     
     # Clean up test papers
     for edit in [paper1_edit, paper2_edit, paper3_edit, paper4_edit, paper5_edit]:
