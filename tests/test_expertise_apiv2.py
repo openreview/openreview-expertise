@@ -120,12 +120,16 @@ class TestExpertiseV2():
                 'top_recent_pubs': 3,
             }
         }
+        profiles = openreview.tools.get_profiles(client, ['~Carlos_Mondragon1', '~Harold_Rice1'], with_publications=True, as_dict=True)
+        carlos_profile = profiles.get('~Carlos_Mondragon1') or openreview.Profile(id='~Carlos_Mondragon1', content={})
+        harold_profile = profiles['~Harold_Rice1']
+
         or_expertise = OpenReviewExpertise(client, openreview_client, config)
-        publications = or_expertise.get_publications('~Carlos_Mondragon1')
+        publications = or_expertise.get_publications(carlos_profile)
         assert publications == []
 
         or_expertise = OpenReviewExpertise(client, openreview_client, config)
-        publications = or_expertise.get_publications('~Harold_Rice1')
+        publications = or_expertise.get_publications(harold_profile)
         assert len(publications) == 3 ## 3 top recent publications
         for pub in publications:
             content = pub['content']
