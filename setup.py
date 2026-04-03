@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='openreview-expertise',
-    version='2.0.29',
+    version='2.0.30',
     description='OpenReview paper-reviewer affinity modeling',
     url='https://github.com/openreview/openreview-expertise',
     author='OpenReview',
@@ -13,7 +13,7 @@ setup(
     ],
     install_requires=[
         'setuptools>=75.6.0',
-        'openreview-py>=1.50',
+        'openreview-py>=2.0.0',
         'numpy>=2.0,<2.3',
         'scipy',
         'adapter-transformers',
