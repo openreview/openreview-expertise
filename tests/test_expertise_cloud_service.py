@@ -245,7 +245,7 @@ class TestExpertiseCloudService():
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run', f"Job name: {response['name']}, status: {response}"
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Let request process
         time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
@@ -295,7 +295,7 @@ class TestExpertiseCloudService():
 
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
         responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={'status': 'Completed'}).json['results']
         assert not any([r['jobId'] == job_id for r in responses])
 
