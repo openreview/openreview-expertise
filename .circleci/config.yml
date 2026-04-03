@@ -119,10 +119,6 @@ jobs:
             git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api.git ~/openreview-v2
             cd ~/openreview-v2 && git checkout << pipeline.parameters.openreview-api-v2-branch >>
       - run:
-          name: Clone openreview-py 
-          command: |
-            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
-      - run:
           name: Create API directories
           command: |
             mkdir -p ~/openreview/logs
@@ -133,13 +129,6 @@ jobs:
             mkdir -p ~/openreview-v2/files/attachments
             mkdir -p ~/openreview-v2/files/pdfs
             mkdir -p ~/openreview-v2/files/temp
-      - run:
-          name: Install openreview-py
-          command: |
-            mkdir ~/openreview-py/coverage
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            pip install -e ~/openreview-py
       - run:
           name: Start API V1
           command: |
