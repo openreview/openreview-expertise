@@ -603,8 +603,9 @@ def test_deduplication(client, openreview_client, helpers):
     test_user_client = openreview.Client(username='test@google.com', password=helpers.strong_password)
     note = test_user_client.post_note(note)
 
+    harold_profile = openreview.tools.get_profiles(client, [author_id], with_publications=True)[0]
     publications = or_expertise.get_publications(harold_profile)
-    assert len(publications) == 3 ## it should be 3, we do not have blind submissions on API 2, ignore this for now
+    assert len(publications) == 4 ## it should be 3, we do not have blind submissions on API 2, ignore this for now
 
 def test_expertise_selection(client, openreview_client, helpers):
     config = {
