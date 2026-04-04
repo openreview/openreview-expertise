@@ -130,7 +130,7 @@ class TestExpertiseCloudService():
         abc_client = openreview.api.OpenReviewClient(
             token=openreview_client.token
         )
-        abc_client.impersonate('CLD.cc/Program_Chairs')
+        abc_client.impersonate('CLD.cc')
         test_client = openreview_context_cloud['test_client']
 
         response = test_client.post(
@@ -139,7 +139,7 @@ class TestExpertiseCloudService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "CLD.cc/Area_Chairs",
+                        'memberOf': "CLD.cc/Reviewers",
                     },
                     "entityB": { 
                         'type': "Note",
@@ -194,17 +194,23 @@ class TestExpertiseCloudService():
             sync_on_disk=False
         )
 
-        # Submit first job as CLD.cc/Program_Chairs
+        # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
             token=openreview_client.token
         )
-        abc_client.impersonate('CLD.cc/Program_Chairs')
+        abc_client.impersonate('CLD.cc')
 
-        # Submit as TMLR/Editors_In_Chiefs
+        assert abc_client.get_notes(invitation="CLD.cc/-/Submission", limit=1), "There should be at least 1 submission note for the test"
+        assert len(abc_client.get_group(id="CLD.cc/Reviewers").members) > 0, "There should be at least 1 reviewer group for the test"
+
+        # Submit as TMLR
         tmlr_client = openreview.api.OpenReviewClient(
             token=openreview_client.token
         )
-        tmlr_client.impersonate('TMLR/Editors_In_Chief')
+        tmlr_client.impersonate('TMLR')
+
+        tmlr_client.get_notes(invitation="TMLR/-/Submission", limit=1)  # Test access to the same submissions as a different user with different permissions
+        assert len(tmlr_client.get_group(id="TMLR/Reviewers").members) > 0, "There should be at least 1 reviewer group for the test"
 
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -218,7 +224,7 @@ class TestExpertiseCloudService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "CLD.cc/Area_Chairs",
+                        'memberOf': "CLD.cc/Reviewers",
                     },
                     "entityB": { 
                         'type': "Note",
@@ -258,7 +264,7 @@ class TestExpertiseCloudService():
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
-        assert request['user_id'] == 'CLD.cc/Program_Chairs'
+        assert request['user_id'] == 'CLD.cc'
         assert request['machine_type'] == 'small'
         
         setup_job_mocks()
@@ -268,11 +274,11 @@ class TestExpertiseCloudService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "CLD.cc/Reviewers",
+                        'memberOf': "TMLR/Reviewers",
                     },
                     "entityB": { 
                         'type': "Note",
-                        'invitation': "CLD.cc/-/Submission" 
+                        'invitation': "TMLR/-/Submission" 
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -314,13 +320,13 @@ class TestExpertiseCloudService():
         responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={'status': 'Completed'}).json['results']
         assert any([r['jobId'] == job_id for r in responses])
         responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={
-            "entityA.memberOf": "CLD.cc/Reviewers",
-            "entityB.invitation": "CLD.cc/-/Submission"
+            "entityA.memberOf": "TMLR/Reviewers",
+            "entityB.invitation": "TMLR/-/Submission"
         }).json['results']
         assert any([r['jobId'] == job_id for r in responses])
         responses = test_client.get('/expertise/status/all', headers=tmlr_client.headers, query_string={
-            "entityA.memberOf": "CLD.cc/Reviewers",
-            "entityB.invitation": "CLD.cc/-/Submission",
+            "entityA.memberOf": "TMLR/Reviewers",
+            "entityB.invitation": "TMLR/-/Submission",
             'status': 'Completed'
         }).json['results']
         assert any([r['jobId'] == job_id for r in responses])
@@ -341,7 +347,7 @@ class TestExpertiseCloudService():
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
-        assert request['user_id'] == 'TMLR/Editors_In_Chief'
+        assert request['user_id'] == 'TMLR'
         assert request['machine_type'] == 'small'
 
         # Upload test results to GCS
@@ -390,11 +396,11 @@ class TestExpertiseCloudService():
             sync_on_disk=False
         )
 
-        # Submit first job as CLD.cc/Program_Chairs
+        # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
             token=openreview_client.token
         )
-        abc_client.impersonate('CLD.cc/Program_Chairs')
+        abc_client.impersonate('CLD.cc')
 
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -408,11 +414,11 @@ class TestExpertiseCloudService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "CLD.cc/Area_Chairs",
+                        'memberOf': "CLD.cc/Reviewers",
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Group",
-                        'memberOf': "CLD.cc/Area_Chairs",
+                        'memberOf': "CLD.cc/Reviewers",
                     },
                     "model": {
                             "name": "specter2+scincl",
@@ -446,13 +452,13 @@ class TestExpertiseCloudService():
         responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={'status': 'Completed'}).json['results']
         assert any([r['jobId'] == job_id for r in responses])
         responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
-            "entityA.memberOf": "CLD.cc/Area_Chairs",
-            "entityB.memberOf": "CLD.cc/Area_Chairs"
+            "entityA.memberOf": "CLD.cc/Reviewers",
+            "entityB.memberOf": "CLD.cc/Reviewers"
         }).json['results']
         assert any([r['jobId'] == job_id for r in responses])
         responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
-            "entityA.memberOf": "CLD.cc/Area_Chairs",
-            "entityB.memberOf": "CLD.cc/Area_Chairs",
+            "entityA.memberOf": "CLD.cc/Reviewers",
+            "entityB.memberOf": "CLD.cc/Reviewers",
             'status': 'Completed'
         }).json['results']
         assert any([r['jobId'] == job_id for r in responses])
@@ -472,7 +478,7 @@ class TestExpertiseCloudService():
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
-        assert request['user_id'] == 'CLD.cc/Program_Chairs'
+        assert request['user_id'] == 'CLD.cc'
 
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
@@ -519,11 +525,11 @@ class TestExpertiseCloudService():
             sync_on_disk=False
         )
 
-        # Submit first job as CLD.cc/Program_Chairs
+        # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
             token=openreview_client.token
         )
-        abc_client.impersonate('CLD.cc/Program_Chairs')
+        abc_client.impersonate('CLD.cc')
 
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -601,7 +607,7 @@ class TestExpertiseCloudService():
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
-        assert request['user_id'] == 'CLD.cc/Program_Chairs'
+        assert request['user_id'] == 'CLD.cc'
 
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
@@ -648,11 +654,11 @@ class TestExpertiseCloudService():
             sync_on_disk=False
         )
 
-        # Submit first job as CLD.cc/Program_Chairs
+        # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
             token=openreview_client.token
         )
-        abc_client.impersonate('CLD.cc/Program_Chairs')
+        abc_client.impersonate('CLD.cc')
 
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -734,7 +740,7 @@ class TestExpertiseCloudService():
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
-        assert request['user_id'] == 'CLD.cc/Program_Chairs'
+        assert request['user_id'] == 'CLD.cc'
 
         # Upload test results to GCS
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
@@ -784,10 +790,10 @@ class TestExpertiseCloudService():
         try:
             # Create clients for two different users
             abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
-            abc_client.impersonate('CLD.cc/Program_Chairs')
+            abc_client.impersonate('CLD.cc')
             
             tmlr_client = openreview.api.OpenReviewClient(token=openreview_client.token)
-            tmlr_client.impersonate('TMLR/Editors_In_Chief')
+            tmlr_client.impersonate('TMLR')
             
             test_client = openreview_context_cloud['test_client']
             
@@ -796,7 +802,7 @@ class TestExpertiseCloudService():
                 '/expertise',
                 data=json.dumps({
                     "name": "User_A_Job",
-                    "entityA": {'type': "Group", 'memberOf': "CLD.cc/Area_Chairs"},
+                    "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
                     "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
                     "model": {"name": "specter+mfr"}
                 }),
@@ -836,7 +842,7 @@ class TestExpertiseCloudService():
                 print(f"Current client user: {current_user}")
                 
                 # This should match User B (the last user to submit)
-                assert current_user == "TMLR/Editors_In_Chief", f"Expected client for TMLR/Editors_In_Chief but got {current_user}"
+                assert current_user == "TMLR", f"Expected client for TMLR but got {current_user}"
             
             # Wait for both jobs to be processed
             time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] * 2 + LATENCY_OFFSET)
@@ -849,7 +855,7 @@ class TestExpertiseCloudService():
                 sync_on_disk=False
             )
             
-            job_a = redis.load_job(job_id_a, "CLD.cc/Program_Chairs")
+            job_a = redis.load_job(job_id_a, "CLD.cc")
             assert job_a.cloud_id is not None, "Job A cloud_id is None"
             
             # Check what was stored in GCP for job A
@@ -860,8 +866,8 @@ class TestExpertiseCloudService():
             
             # This check will fail if the bug exists!
             # Due to the shared service instance, it will store User B's ID for User A's job
-            assert stored_request.get('user_id') == "CLD.cc/Program_Chairs", \
-                f"Bug detected! Expected 'CLD.cc/Program_Chairs' but got '{stored_request.get('user_id')}'"
+            assert stored_request.get('user_id') == "CLD.cc", \
+                f"Bug detected! Expected 'CLD.cc' but got '{stored_request.get('user_id')}'"
                 
         finally:
             # Clean up
@@ -898,10 +904,10 @@ class TestExpertiseCloudService():
         tmlr_client = openreview.api.OpenReviewClient(
             token=openreview_client.token
         )
-        tmlr_client.impersonate('TMLR/Editors_In_Chief')
+        tmlr_client.impersonate('TMLR')
 
         abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
-        abc_client.impersonate('CLD.cc/Program_Chairs')
+        abc_client.impersonate('CLD.cc')
 
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
@@ -915,11 +921,11 @@ class TestExpertiseCloudService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "CLD.cc/Area_Chairs",
+                        'memberOf': "CLD.cc/Reviewers",
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Note",
-                        'invitation': "CLD_ERR.cc/-/Submission" 
+                        'invitation': "CLD_ERR.cc/-/Submission"
                     },
                     "model": {
                             "name": "specter+mfr",
@@ -989,7 +995,7 @@ class TestExpertiseCloudService():
 
         api_req = APIRequest({
             "name": "test_no_cloud",
-            "entityA": {"type": "Group", "memberOf": "CLD.cc/Area_Chairs"},
+            "entityA": {"type": "Group", "memberOf": "CLD.cc/Reviewers"},
             "entityB": {"type": "Note", "invitation": "CLD.cc/-/Submission"},
         })
 

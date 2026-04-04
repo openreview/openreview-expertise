@@ -420,7 +420,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     tmlr_client = openreview.api.OpenReviewClient(
         token=openreview_client.token
     )
-    tmlr_client.impersonate('TMLR/Editors_In_Chief')
+    tmlr_client.impersonate('TMLR')
 
     # Prepare input API request string
     api_request_str = json.dumps({
