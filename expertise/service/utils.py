@@ -83,9 +83,9 @@ class APIRequest(object):
             raise openreview.OpenReviewException("Bad request: required field missing in request: name")
         self.name = name
 
-        if not entityA:
+        if entityA is None:
             raise openreview.OpenReviewException("Bad request: required field missing in request: entityA")
-        if not entityB:
+        if entityB is None:
             raise openreview.OpenReviewException("Bad request: required field missing in request: entityB")
 
         self._load_entity('entityA', entityA, self.entityA)
