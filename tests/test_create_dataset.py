@@ -1078,7 +1078,7 @@ def test_get_profiles_with_email_members_as_pc(client, openreview_client):
         token=openreview_client.token
     )
 
-    or_expertise_venue = OpenReviewExpertise(venue_client_v1, venue_client_v2, {})
+    or_expertise_venue = OpenReviewExpertise(venue_client_v2, {})
     members, invalid = or_expertise_venue.get_profiles(group_ids=[email_group_id])
     assert len(members) == len(reviewer_emails), \
         f"Venue impersonation should resolve all {len(reviewer_emails)} emails, got {len(members)} members and {len(invalid)} invalid"
@@ -1092,7 +1092,7 @@ def test_get_profiles_with_email_members_as_pc(client, openreview_client):
         token=openreview_client.token
     )
 
-    or_expertise_pc = OpenReviewExpertise(pc_client_v1, pc_client_v2, {})
+    or_expertise_pc = OpenReviewExpertise(pc_client_v2, {})
     # Program_Chairs cannot search profiles by email — the API rejects the request
     with pytest.raises(openreview.OpenReviewException, match='The field ids cannot be empty or missing'):
         or_expertise_pc.get_profiles(group_ids=[email_group_id])
