@@ -180,7 +180,7 @@ LOG_FILE='development.log'
 
 OPENREVIEW_USERNAME='OpenReview.net'
 OPENREVIEW_PASSWORD='Or$3cur3P@ssw0rd'
-OPENREVIEW_BASEURL_v2='http://localhost:3001'
+OPENREVIEW_BASEURL_V2='http://localhost:3001'
 ```
 
 Start the server with `development.cfg`:
