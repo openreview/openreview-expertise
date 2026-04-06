@@ -97,6 +97,18 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     with open(embeddings_dir, 'w') as f:
         f.write(json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}))
 
+    ## Build metadata
+    metadata_file = os.path.join(working_dir, 'metadata.json')
+    with open(metadata_file, 'w') as f:
+        f.write(json.dumps({"submission_count": 2, "no_publications_count": 0}))
+
+    ## Build archives
+    archives_dir = os.path.join(working_dir, 'archives')
+    os.makedirs(archives_dir, exist_ok=True)
+    for i in range(4):
+        with open(os.path.join(archives_dir, f'archive_{i}.jsonl'), 'w') as f:
+            f.write(json.dumps({"id": f"user_{i}", "content": {"title": f"Paper {i}"}}))
+
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
     run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
@@ -104,7 +116,7 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     # Assertions
 
     # Ensure execute_create_dataset and execute_expertise were called
-    # Use the gcs_test_bucket fixture to get actual 
+    # Use the gcs_test_bucket fixture to get actual
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix/"
 
