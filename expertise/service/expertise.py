@@ -335,9 +335,9 @@ class BaseExpertiseService:
 
         self.logger.info(f"Incoming request - {request}")
         validated_request = APIRequest(
-            name=request['name'],
-            entityA=request['entityA'],
-            entityB=request['entityB'],
+            name=request.get('name'),
+            entityA=request.get('entityA'),
+            entityB=request.get('entityB'),
             model=request.get('model'),
             dataset=request.get('dataset'),
             machine_type=request.get('machineType'),
