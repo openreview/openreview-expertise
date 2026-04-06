@@ -420,7 +420,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     pipeline_client = openreview.api.OpenReviewClient(
         token=openreview_client.token
     )
-    pipeline_client.impersonate('PIPELINE')
+    pipeline_client.impersonate('PIPELINE.cc')
 
     # Prepare input API request string
     api_request_str = json.dumps({
