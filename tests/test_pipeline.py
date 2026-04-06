@@ -5,6 +5,7 @@ import os
 import shutil
 import openreview
 from conftest import GCSTestHelper
+from expertise.service.utils import ExpectedDataError
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -439,13 +440,8 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
 def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
-    mock_execute_expertise.return_value = None
-
-    # Use TMLR client to test permissions
-    pipeline_client = openreview.api.OpenReviewClient(
-        token=openreview_client.token
-    )
-    pipeline_client.impersonate('PIPELINE.cc')
+    error_message = 'No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
+    mock_execute_expertise.side_effect = ExpectedDataError(error_message)
 
     # Prepare input API request string
     api_request_str = json.dumps({
@@ -454,9 +450,9 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
             'type': "Group",
             'memberOf': "PIPELINE.cc/Reviewers",
         },
-        "entityB": { 
+        "entityB": {
             'type': "Note",
-            'invitation': "PIPELINE_ERR.cc/-/Submission" 
+            'invitation': "PIPELINE_ERR.cc/-/Submission"
         },
         "model": {
             "name": "specter+mfr",
@@ -466,7 +462,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
             'scoreComputation': 'avg'
         },
         "user_id": "openreview.net",
-        "token": pipeline_client.token,
+        "token": openreview_client.token,
         "baseurl_v2": "http://localhost:3001",
         "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_err",
         "dump_embs": True,
@@ -482,14 +478,12 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     working_dir = './test_pipeline'
     os.makedirs(working_dir, exist_ok=True)
 
-    ## Skip file building - never happens in error
-
     # Call the function
-    from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
+    from expertise.execute_pipeline import run_pipeline
     try:
         run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
     except Exception as e:
-        assert str(e) == 'No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
+        assert str(e) == error_message
 
     # Assertions
     # Check that blobs were created and data was uploaded to GCS
