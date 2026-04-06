@@ -441,7 +441,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
             'scoreComputation': 'avg'
         },
         "user_id": "openreview.net",
-        "token": openreview_client.token,
+        "token": tmlr_client.token,
         "baseurl_v1": "http://localhost:3000",
         "baseurl_v2": "http://localhost:3001",
         "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_err",

@@ -200,7 +200,7 @@ class TestExpertiseCloudService():
         )
         abc_client.impersonate('CLD.cc')
 
-        assert abc_client.get_notes(invitation="CLD.cc/-/Submission", limit=1), "There should be at least 1 submission note for the test"
+        assert len(abc_client.get_notes(invitation="CLD.cc/-/Submission", limit=1)), "There should be at least 1 submission note for the test"
         assert len(abc_client.get_group(id="CLD.cc/Reviewers").members) > 0, "There should be at least 1 reviewer group for the test"
 
         # Submit as TMLR
@@ -209,7 +209,7 @@ class TestExpertiseCloudService():
         )
         tmlr_client.impersonate('TMLR')
 
-        tmlr_client.get_notes(invitation="TMLR/-/Submission", limit=1)  # Test access to the same submissions as a different user with different permissions
+        assert len(tmlr_client.get_notes(invitation="TMLR/-/Submission", limit=1)), "There should be at least 1 submission note for the test"
         assert len(tmlr_client.get_group(id="TMLR/Reviewers").members) > 0, "There should be at least 1 reviewer group for the test"
 
         # Submit a working job and return the job ID
