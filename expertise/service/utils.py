@@ -525,7 +525,6 @@ class JobConfig(object):
         config.name = api_request.name
         config.user_id = get_user_id(openreview_client_v2)
         config.job_id = generate_job_id() if job_id is None else job_id
-        config.baseurl = server_config['OPENREVIEW_BASEURL']
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
         
@@ -956,7 +955,6 @@ class GCPInterface(object):
 
         # Popped fields
         data['token'] = or_client.token
-        data['baseurl_v1'] = openreview.tools.get_base_urls(or_client)[0]
         data['baseurl_v2'] = openreview.tools.get_base_urls(or_client)[1]
         data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
         #data['dump_embs'] = True

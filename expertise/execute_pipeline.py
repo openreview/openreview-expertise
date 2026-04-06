@@ -92,7 +92,6 @@ def run_pipeline(
         for field in DELETED_FIELDS:
             raw_request.pop(field, None)
         token = raw_request.pop('token')
-        baseurl_v1 = raw_request.pop('baseurl_v1')
         baseurl_v2 = raw_request.pop('baseurl_v2')
         destination_prefix = raw_request.pop('gcs_folder')
         dump_embs = False if 'dump_embs' not in raw_request else raw_request.pop('dump_embs')
@@ -101,7 +100,6 @@ def run_pipeline(
         mfr_vocab_dir = os.getenv('MFR_VOCAB_DIR')
         mfr_checkpoint_dir = os.getenv('MFR_CHECKPOINT_DIR')
         server_config ={
-            'OPENREVIEW_BASEURL': baseurl_v1,
             'OPENREVIEW_BASEURL_V2': baseurl_v2,
             'SPECTER_DIR': specter_dir,
             'MFR_VOCAB_DIR': mfr_vocab_dir,
