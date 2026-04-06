@@ -131,9 +131,6 @@ class BaseExpertiseService:
             torch.cuda.empty_cache()
             gc.collect()
 
-    def set_client(self, client):
-        self.client = client
-
     def set_client_v2(self, client_v2):
         self.client_v2 = client_v2
 
@@ -326,7 +323,7 @@ class BaseExpertiseService:
         running_config.baseurl_v2 = None
         running_config.user_id = None
 
-    def _validate_request(self, client_v1, client, request):
+    def _validate_request(self, client, request):
         """
         Validate and build a JobConfig for a request.
 
@@ -335,8 +332,7 @@ class BaseExpertiseService:
         :returns: (JobConfig, token)
         """
 
-        # Resolve clients
-        or_client_v1 = client_v1 if client_v1 else self.client
+        # Resolve client
         or_client = client if client else self.client_v2
 
         self.logger.info(f"Incoming request - {request}")
@@ -344,7 +340,6 @@ class BaseExpertiseService:
         config = JobConfig.from_request(
             api_request = validated_request,
             starting_config = self.default_expertise_config,
-            openreview_client= or_client_v1,
             openreview_client_v2= or_client,
             server_config = self.server_config,
             working_dir = self.working_dir
@@ -544,17 +539,13 @@ class ExpertiseService(BaseExpertiseService):
         config.description = descriptions[JobStatus.QUEUED]
         self._save_config(config)
         or_token = job.data['token']
-        openreview_client = openreview.Client(
-            token=or_token,
-            baseurl=config.baseurl
-        )
         openreview_client_v2 = openreview.api.OpenReviewClient(
             token=or_token,
             baseurl=config.baseurl_v2
         )
         try:
             # Create dataset
-            execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
+            execute_create_dataset(openreview_client_v2, config=config.to_json())
             self.update_status(config, JobStatus.RUN_EXPERTISE)
 
             queue = multiprocessing.Queue()  # Queue for exception handling
@@ -583,7 +574,7 @@ class ExpertiseService(BaseExpertiseService):
             torch.cuda.empty_cache()
             gc.collect()
 
-    def start_expertise(self, request, client_v1, client):
+    def start_expertise(self, request, client):
         descriptions = JobDescription.VALS.value
 
         job_name = self._get_job_name(request)
@@ -612,7 +603,6 @@ class ExpertiseService(BaseExpertiseService):
                 raise openreview.OpenReviewException("Request already in queue")
 
         config = self._validate_request(
-            client_v1,
             client,
             request
         )
@@ -808,14 +798,13 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.client_v2 = client_v2
         self.cloud.set_client(client_v2)
 
-    def compute_machine_type(self, client_v1, client, job_id):
+    def compute_machine_type(self, client, job_id):
         config = self.redis.load_job(job_id, get_user_id(client))
         if config.machine_type is not None:
             return config.machine_type
         config = config.to_json()
         dataset_config = ModelConfig(config_dict=config)
         expertise = OpenReviewExpertise(
-            client_v1,
             client,
             dataset_config
         )
@@ -875,17 +864,12 @@ class ExpertiseCloudService(BaseExpertiseService):
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
-        openreview_client_v1 = openreview.Client(
-            token=or_token,
-            baseurl=config.baseurl
-        )
         openreview_client_v2 = openreview.api.OpenReviewClient(
             token=or_token,
             baseurl=config.baseurl_v2
         )
         try:
             machine_type = self.compute_machine_type(
-                openreview_client_v1,
                 openreview_client_v2,
                 job_id=redis_id
             )
@@ -962,7 +946,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             # Re-raise exception to appear in the queue
             raise e.with_traceback(e.__traceback__)
 
-    def start_expertise(self, request, client_v1, client):
+    def start_expertise(self, request, client):
         descriptions = JobDescription.VALS.value
 
         job_name = self._get_job_name(request)
@@ -991,7 +975,6 @@ class ExpertiseCloudService(BaseExpertiseService):
                 raise openreview.OpenReviewException("Request already in queue")
 
         config = self._validate_request(
-            client_v1,
             client,
             deepcopy(request)
         )

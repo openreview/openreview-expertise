@@ -37,7 +37,7 @@ def _setup_upweight_dataset(clean_start_journal, client, openreview_client):
     )
 
 def test_convert_to_list(client, openreview_client):
-    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    or_expertise = OpenReviewExpertise(openreview_client, {})
     groupList = or_expertise.convert_to_list('group.cc')
     assert groupList == ['group.cc']
 
@@ -45,14 +45,14 @@ def test_convert_to_list(client, openreview_client):
     assert groupList == ['group.cc', 'group.aa']
 
 def test_get_papers_from_group(client, openreview_client):
-    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    or_expertise = OpenReviewExpertise(openreview_client, {})
     all_papers = or_expertise.get_papers_from_group('DEF.cc/Reviewers')
     assert len(all_papers) == 147
     if os.path.isfile('publications_by_profile_id.json'):
         os.remove('publications_by_profile_id.json')
 
 def test_get_profiles(client, openreview_client, clean_start_conference):
-    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    or_expertise = OpenReviewExpertise(openreview_client, {})
     members, _ = or_expertise.get_profiles(group_ids=['DEF.cc/Reviewers'])
     assert len(members) == 100
     for profile in members:
@@ -80,7 +80,7 @@ def test_get_publications(client, openreview_client):
     carlos_profile = profiles.get('~Carlos_Mondragon1') or openreview.Profile(id='~Carlos_Mondragon1', content={})
     perry_profile = profiles['~Perry_Volkman1']
 
-    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    or_expertise = OpenReviewExpertise(openreview_client, {})
     publications = or_expertise.get_publications(carlos_profile)
     assert publications == []
 
@@ -93,7 +93,7 @@ def test_get_publications(client, openreview_client):
             'minimum_pub_date': minimum_pub_date
         }
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     publications = or_expertise.get_publications(perry_profile)
     assert len(publications) == 3
     for publication in publications:
@@ -105,7 +105,7 @@ def test_get_publications(client, openreview_client):
             'top_recent_pubs': top_recent_pubs
         }
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     publications = or_expertise.get_publications(perry_profile)
     assert len(publications) == 2
     for publication in publications:
@@ -118,7 +118,7 @@ def test_get_publications(client, openreview_client):
             'minimum_pub_date': minimum_pub_date
         }
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     publications = or_expertise.get_publications(perry_profile)
     assert len(publications) == 1
     assert publications[0]['cdate'] > minimum_pub_date
@@ -132,7 +132,7 @@ def test_get_publications(client, openreview_client):
             }
         }
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     publications = or_expertise.get_publications(perry_profile)
     assert len(publications) == 3
     for publication in publications:
@@ -147,7 +147,7 @@ def test_get_publications(client, openreview_client):
             }
         }
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     publications = or_expertise.get_publications(perry_profile)
     assert len(publications) == 3
     for publication in publications:
@@ -160,7 +160,7 @@ def test_get_submissions(client, openreview_client):
         },
         'csv_submissions': 'csv_submissions.csv'
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     submissions = or_expertise.get_submissions()
     print(submissions)
     assert json.dumps(submissions) == json.dumps({
@@ -189,7 +189,7 @@ def test_retrieve_expertise(get_paperhash, client, openreview_client):
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers'
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     members = client.get_group('DEF.cc/Reviewers').members
     expertise = or_expertise.retrieve_expertise()
     # Exclude users whose expertise will be posted in API2
@@ -221,7 +221,7 @@ def test_weight_specification_validation(client, openreview_client):
         }
     }
     with pytest.raises(ValueError, match='weight_specification must be a list'):
-        OpenReviewExpertise(client, openreview_client, config)
+        OpenReviewExpertise(openreview_client, config)
     
     # Test: Objects in weight_specification must be dictionaries
     config = {
@@ -232,7 +232,7 @@ def test_weight_specification_validation(client, openreview_client):
         }
     }
     with pytest.raises(ValueError, match='Objects in weight_specification must be dictionaries'):
-        OpenReviewExpertise(client, openreview_client, config)
+        OpenReviewExpertise(openreview_client, config)
     
     # Test: Cannot have multiple matching keys (prefix, value, articleSubmittedToOpenReview)
     config = {
@@ -245,7 +245,7 @@ def test_weight_specification_validation(client, openreview_client):
         }
     }
     with pytest.raises(KeyError, match=r'Objects in weight_specification must have exactly one of '):
-        OpenReviewExpertise(client, openreview_client, config)
+        OpenReviewExpertise(openreview_client, config)
 
     # Test: Cannot have unsupported keys
     config = {
@@ -258,7 +258,7 @@ def test_weight_specification_validation(client, openreview_client):
         }
     }
     with pytest.raises(KeyError, match=r'Object in weight_specification has unsupported field'):
-        OpenReviewExpertise(client, openreview_client, config)
+        OpenReviewExpertise(openreview_client, config)
     
     # Test: Must have at least one of prefix, value, or articleSubmittedToOpenReview
     config = {
@@ -271,7 +271,7 @@ def test_weight_specification_validation(client, openreview_client):
         }
     }
     with pytest.raises(KeyError, match='Objects in weight_specification must have a prefix, value, or articleSubmittedToOpenReview key'):
-        OpenReviewExpertise(client, openreview_client, config)
+        OpenReviewExpertise(openreview_client, config)
     
     # Test: Must have weight key
     config = {
@@ -284,7 +284,7 @@ def test_weight_specification_validation(client, openreview_client):
         }
     }
     with pytest.raises(KeyError, match='Objects in weight_specification must have a weight key'):
-        OpenReviewExpertise(client, openreview_client, config)
+        OpenReviewExpertise(openreview_client, config)
     
     # Test: Weight must be numeric (int or float)
     config = {
@@ -297,7 +297,7 @@ def test_weight_specification_validation(client, openreview_client):
         }
     }
     with pytest.raises(ValueError, match='weight must be an integer or float greater than or equal to 0'):
-        OpenReviewExpertise(client, openreview_client, config)
+        OpenReviewExpertise(openreview_client, config)
 
     # Test: Must be greater than or equal to 0
     config = {
@@ -310,7 +310,7 @@ def test_weight_specification_validation(client, openreview_client):
         }
     }
     with pytest.raises(ValueError, match='weight must be an integer or float greater than or equal to 0'):
-        OpenReviewExpertise(client, openreview_client, config)
+        OpenReviewExpertise(openreview_client, config)
 
     # Test: Cannot pass non-boolean to articleSubmittedToOpenReview
     config = {
@@ -323,7 +323,7 @@ def test_weight_specification_validation(client, openreview_client):
         }
     }
     with pytest.raises(KeyError, match='The articleSubmittedToOpenReview key can only have a boolean value'):
-        OpenReviewExpertise(client, openreview_client, config)
+        OpenReviewExpertise(openreview_client, config)
     
     # Test: Valid configurations should work
     valid_configs = [
@@ -344,7 +344,7 @@ def test_weight_specification_validation(client, openreview_client):
             }
         }
         # Should not raise any exceptions
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         assert or_expertise is not None
     
     # Test: Multiple valid specifications
@@ -359,7 +359,7 @@ def test_weight_specification_validation(client, openreview_client):
             ]
         }
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     assert or_expertise is not None
 
 def test_weights_applied_by_venue(client, openreview_client):
@@ -404,7 +404,7 @@ def test_weights_applied_by_venue(client, openreview_client):
 
     romeo_profile = openreview.tools.get_profiles(client, ['~Romeo_Mraz1'], with_publications=True)[0]
 
-    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    or_expertise = OpenReviewExpertise(openreview_client, {})
     config = {
         'dataset': {
             'weight_specification': [
@@ -415,7 +415,7 @@ def test_weights_applied_by_venue(client, openreview_client):
             ]
         }
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     publications = or_expertise.get_publications(romeo_profile)
     for publication in publications:
         if publication['id'] != upweighted_note_id:
@@ -426,7 +426,7 @@ def test_weights_applied_by_venue(client, openreview_client):
     # Check archive weights - all publications out side of the new one
     # are archive publications
 
-    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    or_expertise = OpenReviewExpertise(openreview_client, {})
     config = {
         'dataset': {
             'weight_specification': [
@@ -437,7 +437,7 @@ def test_weights_applied_by_venue(client, openreview_client):
             ]
         }
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     publications = or_expertise.get_publications(romeo_profile)
     for publication in publications:
         if publication['id'] != upweighted_note_id:
@@ -465,7 +465,7 @@ def test_weights_applied_by_venue(client, openreview_client):
     )
     archive_note_id = archive_note_edit['note']['id']
 
-    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    or_expertise = OpenReviewExpertise(openreview_client, {})
     config = {
         'dataset': {
             'weight_specification': [
@@ -476,7 +476,7 @@ def test_weights_applied_by_venue(client, openreview_client):
             ]
         }
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     publications = or_expertise.get_publications(romeo_profile)
     for publication in publications:
         if publication['id'] == archive_note_id:
@@ -484,7 +484,7 @@ def test_weights_applied_by_venue(client, openreview_client):
 
 def test_get_pub_weight_invitations(client, openreview_client):
     """Checks domain falls back to invitations[0] when domain and invitation are missing"""
-    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    or_expertise = OpenReviewExpertise(openreview_client, {})
 
     or_expertise.venue_list = {'LEGACY.cc'}
 
@@ -531,7 +531,7 @@ def test_get_pub_weight_invitations(client, openreview_client):
         )
     )
 
-    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    or_expertise = OpenReviewExpertise(openreview_client, {})
     config = {
         'dataset': {
             'weight_specification': [
@@ -543,7 +543,7 @@ def test_get_pub_weight_invitations(client, openreview_client):
         }
     }
     romeo_profile = openreview.tools.get_profiles(client, ['~Romeo_Mraz1'], with_publications=True)[0]
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     publications = or_expertise.get_publications(romeo_profile)
     for publication in publications:
         if publication['id'] == archive_note_id:
@@ -555,7 +555,7 @@ def test_get_submissions_from_invitation(client, openreview_client):
         'match_group': 'DEF.cc/Reviewers',
         'paper_invitation': 'DEF.cc/-/Submission'
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     submissions = or_expertise.get_submissions()
     retrieved_titles = [sub['content']['title'] for sub in submissions.values()]
     assert len(retrieved_titles) == 2
@@ -570,7 +570,7 @@ def test_get_by_submissions_from_paper_id(client, openreview_client):
     config = {
         'paper_id': f"{target_paper.id}"
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     submissions = or_expertise.get_submissions()
     print(submissions)
     assert target_paper.id in submissions.keys()
@@ -583,7 +583,7 @@ def test_deduplication(client, openreview_client, helpers):
     author_id = '~Harold_Rice1'
     harold_profile = openreview.tools.get_profiles(client, [author_id], with_publications=True)[0]
     original_note = list(openreview.tools.iterget_notes(openreview_client, content={'authorids': author_id}))[0]
-    or_expertise = OpenReviewExpertise(client, openreview_client, {})
+    or_expertise = OpenReviewExpertise(openreview_client, {})
 
     publications = or_expertise.get_publications(harold_profile)
     assert len(publications) == 3
@@ -615,7 +615,7 @@ def test_expertise_selection(client, openreview_client, helpers):
     }
     author_id = '~Eleanora_Kerluke1'
     original_note = list(openreview.tools.iterget_notes(openreview_client, content={'authorids': author_id}))[0]
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
 
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Eleanora_Kerluke1']) == 2
@@ -636,7 +636,7 @@ def test_expertise_selection(client, openreview_client, helpers):
         signatures = ['~SomeTest_User1'],
         note=note
     )
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Eleanora_Kerluke1']) == 3 # New note added
     
@@ -650,7 +650,7 @@ def test_expertise_selection(client, openreview_client, helpers):
                     )
     edge = user_client.post_edge(edge)
 
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     or_expertise.excluded_ids_by_user = or_expertise.exclude()
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Eleanora_Kerluke1']) == 2
@@ -675,7 +675,7 @@ def test_expertise_selection_api2(client, openreview_client, helpers, clean_star
     author_id = '~C.V._Lastname1'
     original_note = client.get_all_notes(content={'authorids': author_id})[0]
     print(original_note)
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
 
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~C.V._Lastname1']) == 1, expertise
@@ -697,7 +697,7 @@ def test_expertise_selection_api2(client, openreview_client, helpers, clean_star
 
     helpers.await_queue_edit(openreview_client, edit_id=note_1['id'])
 
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~C.V._Lastname1']) == 1
     
@@ -712,7 +712,7 @@ def test_expertise_selection_api2(client, openreview_client, helpers, clean_star
             label = 'Exclude'
     ))
 
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     or_expertise.excluded_ids_by_user = or_expertise.exclude()
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~C.V._Lastname1']) == 1
@@ -737,7 +737,7 @@ def test_expertise_inclusion(client, openreview_client, helpers, clean_start_con
     }
     author_id = '~Harold_Rice1'
     original_note = list(openreview.tools.iterget_notes(openreview_client, content={'authorids': author_id}))[0]
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
 
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Harold_Rice1']) == 3 # No edges use all publications
@@ -773,7 +773,7 @@ def test_expertise_inclusion(client, openreview_client, helpers, clean_start_con
         signatures = ['~SomeTest_User1'],
         note=exclude_note
     )
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
     assert len(expertise['~Harold_Rice1']) == 5 # New notes added
     
@@ -827,7 +827,7 @@ def test_expertise_inclusion(client, openreview_client, helpers, clean_start_con
 
     assert openreview_client.get_edges_count(invitation='CDEXP.cc/Reviewers/-/Expertise_Selection') == 2
 
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     or_expertise.included_ids_by_user = or_expertise.include()
     assert len(or_expertise.included_ids_by_user['~Harold_Rice1']) == 1
     expertise = or_expertise.retrieve_expertise()
@@ -978,7 +978,7 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
         'use_email_ids': False,
         'match_group': 'DEF.cc/Reviewers'
     }
-    or_expertise = OpenReviewExpertise(client, openreview_client, config)
+    or_expertise = OpenReviewExpertise(openreview_client, config)
     expertise = or_expertise.retrieve_expertise()
     
     # Find papers for the test author
@@ -1000,7 +1000,7 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
     config_group = {
         'alternate_match_group': 'DEF.cc/Reviewers'
     }
-    or_expertise_group = OpenReviewExpertise(client, openreview_client, config_group)
+    or_expertise_group = OpenReviewExpertise(openreview_client, config_group)
     all_papers = or_expertise_group.get_papers_from_group('DEF.cc/Reviewers')
     
     # Find papers with test title

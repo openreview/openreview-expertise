@@ -228,11 +228,11 @@ def execute_expertise(config):
         scores_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
         generate_sparse_scores(preliminary_scores, sparse_value, scores_path)
 
-def execute_create_dataset(client, client_v2, config=None):
+def execute_create_dataset(client_v2, config=None):
 
     config = ModelConfig(config_dict=config)
-    
+
     print(config)
 
-    expertise = OpenReviewExpertise(client, client_v2, config)
+    expertise = OpenReviewExpertise(client_v2, config)
     expertise.run()

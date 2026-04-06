@@ -67,7 +67,6 @@ def expertise():
     """
 
     try:
-        openreview_client = g.or_client
         openreview_client_v2 = g.or_client_v2
 
         flask.current_app.logger.info('Received expertise request')
@@ -76,7 +75,6 @@ def expertise():
         user_request = flask.request.json
 
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
-        expertise_service.set_client(openreview_client)
         expertise_service.set_client_v2(openreview_client_v2)
 
         request_key = expertise_service.get_key_from_request(user_request)
@@ -85,7 +83,7 @@ def expertise():
             raise openreview.OpenReviewException("Request already in process")
 
         try:
-            job_id = expertise_service.start_expertise(user_request, openreview_client, openreview_client_v2)
+            job_id = expertise_service.start_expertise(user_request, openreview_client_v2)
             expertise_service.redis.db.delete(request_key)
         except Exception as error_handle:
             expertise_service.redis.db.delete(request_key)
@@ -136,7 +134,6 @@ def jobs():
     :type job_id: str
     """
     try:
-        openreview_client = g.or_client
         openreview_client_v2 = g.or_client_v2
         user_id = g.user_id
 
@@ -144,7 +141,6 @@ def jobs():
         # Parse query parameters
         job_id = flask.request.args.get('jobId', None)
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
-        expertise_service.set_client(openreview_client)
         expertise_service.set_client_v2(openreview_client_v2)
         if job_id is None or len(job_id) == 0:
             result = expertise_service.get_expertise_all_status(user_id, flask.request.args)
@@ -186,12 +182,12 @@ def all_jobs():
     :type job_id: str
     """
     try:
-        openreview_client = g.or_client
+        openreview_client_v2 = g.or_client_v2
         user_id = g.user_id
         # Parse query parameters
         flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
-        expertise_service.set_client(openreview_client)
+        expertise_service.set_client_v2(openreview_client_v2)
         result = expertise_service.get_expertise_all_status(user_id, flask.request.args)
         flask.current_app.logger.debug('GET returns ' + str(result))
         return flask.jsonify(result), 200
@@ -233,11 +229,11 @@ def delete_job(job_id):
     :type job_id: str
     """
     try:
-        openreview_client = g.or_client
+        openreview_client_v2 = g.or_client_v2
         user_id = g.user_id
 
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
-        expertise_service.set_client(openreview_client)
+        expertise_service.set_client_v2(openreview_client_v2)
         result = expertise_service.del_expertise_job(user_id, job_id)
 
         return flask.jsonify(result), 200
@@ -279,7 +275,6 @@ def results():
     :type delete_on_get: bool
     """
     try:
-        openreview_client = g.or_client
         openreview_client_v2 = g.or_client_v2
         user_id = g.user_id
         # Parse query parameters
@@ -290,7 +285,6 @@ def results():
         delete_on_get = flask.request.args.get('deleteOnGet', 'False').lower() == 'true'
 
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
-        expertise_service.set_client(openreview_client)
         expertise_service.set_client_v2(openreview_client_v2)
         result = expertise_service.get_expertise_results(user_id, job_id, delete_on_get)
         
