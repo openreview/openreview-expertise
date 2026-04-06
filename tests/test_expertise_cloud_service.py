@@ -1042,11 +1042,11 @@ class TestExpertiseCloudService():
         job_dir = os.path.join(cfg["WORKING_DIR"], job_id)
         os.makedirs(job_dir, exist_ok=True)
 
-        api_req = APIRequest({
-            "name": "test_no_cloud",
-            "entityA": {"type": "Group", "memberOf": "CLD.cc/Reviewers"},
-            "entityB": {"type": "Note", "invitation": "CLD.cc/-/Submission"},
-        })
+        api_req = APIRequest(
+            name="test_no_cloud",
+            entityA={"type": "Group", "memberOf": "CLD.cc/Reviewers"},
+            entityB={"type": "Note", "invitation": "CLD.cc/-/Submission"},
+        )
 
         config = JobConfig(
             name="test_no_cloud",
