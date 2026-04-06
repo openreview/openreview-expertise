@@ -160,8 +160,9 @@ def run_pipeline(
             for field in path_fields:
                 config.model_params[field] = working_dir
 
-        print(f'Downloading pre-created dataset from {dataset_gcs_path}')
-        download_dataset_from_gcs(dataset_gcs_path, working_dir)
+        if dataset_gcs_path:
+            print(f'Downloading pre-created dataset from {dataset_gcs_path}')
+            download_dataset_from_gcs(dataset_gcs_path, working_dir)
 
         print('Executing expertise')
         execute_expertise(config.to_json())
