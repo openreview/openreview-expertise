@@ -417,10 +417,10 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     mock_execute_expertise.return_value = None
 
     # Use TMLR client to test permissions
-    tmlr_client = openreview.api.OpenReviewClient(
+    pipeline_client = openreview.api.OpenReviewClient(
         token=openreview_client.token
     )
-    tmlr_client.impersonate('TMLR')
+    pipeline_client.impersonate('PIPELINE')
 
     # Prepare input API request string
     api_request_str = json.dumps({
@@ -441,7 +441,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
             'scoreComputation': 'avg'
         },
         "user_id": "openreview.net",
-        "token": tmlr_client.token,
+        "token": pipeline_client.token,
         "baseurl_v1": "http://localhost:3000",
         "baseurl_v2": "http://localhost:3001",
         "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_err",
