@@ -1677,7 +1677,7 @@ class TestExpertiseService():
             json.dump(owned_config.to_json(), f)
 
         other_client = openreview.api.OpenReviewClient(token=openreview_client.token)
-        other_client.impersonate('ABC.cc/Program_Chairs')
+        other_client.impersonate('ABC.cc')
 
         test_client = openreview_context['test_client']
         response = test_client.delete(f'/expertise/{job_id}', headers=other_client.headers)

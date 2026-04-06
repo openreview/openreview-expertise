@@ -691,7 +691,7 @@ class TestExpertiseV2():
         assert response.json['message'] == "Bad request: model specter+mfr does not support paper-paper scoring"
 
         abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
-        abc_client.impersonate('API.cc/Program_Chairs')
+        abc_client.impersonate('API.cc')
         # Get a no publications error
         response = test_client.post(
             '/expertise',

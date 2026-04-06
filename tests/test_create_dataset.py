@@ -1027,3 +1027,72 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
                 ddate=1554819115,
             )
         )
+
+def test_get_profiles_with_email_members_as_pc(client, openreview_client):
+    """
+    Reproduces the issue where impersonating a role-specific group
+    (e.g. DEF.cc/Program_Chairs) instead of the venue ID (DEF.cc) prevents
+    profile search by email during dataset creation.
+
+    When group members are stored as email addresses, get_profiles calls
+    openreview.tools.get_profiles which needs to search profiles by email.
+    Program_Chairs lack permission for this search, but the venue group does.
+    """
+    # Get emails of existing reviewers
+    reviewers_group = openreview_client.get_group('DEF.cc/Reviewers')
+    reviewer_emails = []
+    for tilde_id in reviewers_group.members[:3]:
+        profile = openreview_client.get_profile(tilde_id)
+        if profile.content.get('preferredEmail'):
+            reviewer_emails.append(profile.content['preferredEmail'])
+
+    assert len(reviewer_emails) > 0, "Need at least one reviewer with an email"
+
+    # Create a group with email-address members
+    email_group_id = 'DEF.cc/Reviewers_By_Email'
+    try:
+        openreview_client.get_group(email_group_id)
+    except openreview.OpenReviewException:
+        openreview_client.post_group_edit(
+            invitation='DEF.cc/-/Edit',
+            signatures=['DEF.cc'],
+            group=openreview.api.Group(
+                id=email_group_id,
+                readers=['everyone'],
+                signatories=[email_group_id],
+                signatures=['DEF.cc'],
+                members=reviewer_emails
+            )
+        )
+
+    email_group = openreview_client.get_group(email_group_id)
+    assert all('@' in m for m in email_group.members), \
+        f"Expected email members but got: {email_group.members}"
+
+    # Case 1: Using venue ID (DEF.cc) — should resolve emails to profiles
+    venue_client_v2 = openreview.api.OpenReviewClient(
+        token=openreview_client.token
+    )
+    venue_client_v2.impersonate('DEF.cc')
+    venue_client_v1 = openreview.Client(
+        token=openreview_client.token
+    )
+
+    or_expertise_venue = OpenReviewExpertise(venue_client_v1, venue_client_v2, {})
+    members, invalid = or_expertise_venue.get_profiles(group_ids=[email_group_id])
+    assert len(members) == len(reviewer_emails), \
+        f"Venue impersonation should resolve all {len(reviewer_emails)} emails, got {len(members)} members and {len(invalid)} invalid"
+
+    # Case 2: Using Program_Chairs — should fail to resolve emails
+    pc_client_v2 = openreview.api.OpenReviewClient(
+        token=openreview_client.token
+    )
+    pc_client_v2.impersonate('DEF.cc/Program_Chairs')
+    pc_client_v1 = openreview.Client(
+        token=openreview_client.token
+    )
+
+    or_expertise_pc = OpenReviewExpertise(pc_client_v1, pc_client_v2, {})
+    # Program_Chairs cannot search profiles by email — the API rejects the request
+    with pytest.raises(openreview.OpenReviewException, match='The field ids cannot be empty or missing'):
+        or_expertise_pc.get_profiles(group_ids=[email_group_id])
