@@ -19,7 +19,7 @@ from tqdm import tqdm
 from collections import defaultdict
 
 class OpenReviewExpertise(object):
-    def __init__(self, openreview_client, openreview_client_v2, config):
+    def __init__(self, openreview_client_v2, config):
         self.openreview_client_v2 = openreview_client_v2
         self.config = config
         self.root = Path(config.get('dataset', {}).get('directory', './'))
@@ -785,7 +785,6 @@ if __name__ == '__main__':
     parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--username')
     parser.add_argument('--password')
-    parser.add_argument('--baseurl')
     parser.add_argument('--baseurl_v2')
     args = parser.parse_args()
 
@@ -793,17 +792,11 @@ if __name__ == '__main__':
 
     print(config)
 
-    client = openreview.Client(
-        username=args.username,
-        password=args.password,
-        baseurl=args.baseurl
-    )
-
     client_v2 = openreview.api.OpenReviewClient(
         username=args.username,
         password=args.password,
         baseurl=args.baseurl_v2
     )
 
-    expertise = OpenReviewExpertise(client, client_v2, config)
+    expertise = OpenReviewExpertise(client_v2, config)
     expertise.run()
