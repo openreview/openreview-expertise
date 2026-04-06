@@ -71,46 +71,20 @@ class APIRequest(object):
     """
     Validates and load objects and fields from POST requests
     """
-    def __init__(self, request):
-            
+    def __init__(self, name, entityA, entityB, model=None, dataset=None, machine_type=None):
+
         self.entityA = {}
         self.entityB = {}
-        self.model = {}
-        self.dataset = {}
-        self.machine_type = None
-        root_key = 'request'
+        self.model = model if model is not None else {}
+        self.dataset = dataset if dataset is not None else {}
+        self.machine_type = machine_type
 
-        def _get_field_from_request(field):
-            return _get_required_field(request, root_key, field)
+        if not name:
+            raise openreview.OpenReviewException("Bad request: required field missing in request: name")
+        self.name = name
 
-        def _load_entity_a(entity):
-            self._load_entity('entityA', entity, self.entityA)
-
-        def _load_entity_b(entity):
-            self._load_entity('entityB', entity, self.entityB)
-
-        # Get the name of the job
-        self.name = _get_field_from_request('name')
-
-        # Validate entityA and entityB
-        entity_a = _get_field_from_request('entityA')
-        entity_b = _get_field_from_request('entityB')
-
-        _load_entity_a(entity_a)
-        _load_entity_b(entity_b)
-
-        # Optionally check for model object
-        self.model = request.pop('model', {})
-
-        # Optionally check for dataset object
-        self.dataset = request.pop('dataset', {})
-
-        # Optinally check for machine type
-        self.machine_type = request.pop('machineType', None)
-
-        # Check for empty request
-        if len(request.keys()) > 0:
-            raise openreview.OpenReviewException(f"Bad request: unexpected fields in {root_key}: {list(request.keys())}")
+        self._load_entity('entityA', entityA, self.entityA)
+        self._load_entity('entityB', entityB, self.entityB)
     
     def _load_entity(self, entity_id, source_entity, target_entity):
         '''Load information from an entity into the config'''
@@ -976,7 +950,14 @@ class GCPInterface(object):
             self.logger.info(f"JSON file '{file_name}' written to '{folder_path}' in bucket '{bucket_name}'.")
 
         or_client = client if client else self.client
-        api_request = APIRequest(json_request)
+        api_request = APIRequest(
+            name=json_request['name'],
+            entityA=json_request['entityA'],
+            entityB=json_request['entityB'],
+            model=json_request.get('model'),
+            dataset=json_request.get('dataset'),
+            machine_type=json_request.get('machineType'),
+        )
         valid_vertex_id = job_id + '-' + str(int(time.time() * 1000))
 
         folder_path = f"{self.jobs_folder}/{valid_vertex_id}"

@@ -134,7 +134,14 @@ def run_pipeline(
             working_dir = f"/app/{job_id}"
         os.makedirs(working_dir, exist_ok=True)
 
-        validated_request = APIRequest(raw_request)
+        validated_request = APIRequest(
+            name=raw_request['name'],
+            entityA=raw_request['entityA'],
+            entityB=raw_request['entityB'],
+            model=raw_request.get('model'),
+            dataset=raw_request.get('dataset'),
+            machine_type=raw_request.get('machineType'),
+        )
 
         print('Creating job config')
         config = JobConfig.from_request(

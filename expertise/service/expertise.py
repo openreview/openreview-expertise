@@ -334,7 +334,14 @@ class BaseExpertiseService:
         or_client = client if client else self.client_v2
 
         self.logger.info(f"Incoming request - {request}")
-        validated_request = APIRequest(request)
+        validated_request = APIRequest(
+            name=request['name'],
+            entityA=request['entityA'],
+            entityB=request['entityB'],
+            model=request.get('model'),
+            dataset=request.get('dataset'),
+            machine_type=request.get('machineType'),
+        )
         config = JobConfig.from_request(
             api_request = validated_request,
             starting_config = self.default_expertise_config,
