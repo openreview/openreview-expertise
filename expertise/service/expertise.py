@@ -334,6 +334,10 @@ class BaseExpertiseService:
         or_client = client if client else self.client_v2
 
         self.logger.info(f"Incoming request - {request}")
+        allowed_fields = {'name', 'entityA', 'entityB', 'model', 'dataset', 'machineType'}
+        unexpected = set(request.keys()) - allowed_fields
+        if unexpected:
+            raise openreview.OpenReviewException(f"Bad request: unexpected fields in request: {sorted(unexpected)}")
         validated_request = APIRequest(
             name=request.get('name'),
             entityA=request.get('entityA'),
