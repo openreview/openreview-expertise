@@ -230,11 +230,12 @@ def run_pipeline(
             blob.upload_from_string(contents)
 
     # Dump archives
-    if dump_archives:
-        for jsonl_file in os.listdir(os.path.join(config.job_dir, 'archives')):
+    archives_dir = os.path.join(config.job_dir, 'archives')
+    if dump_archives and os.path.isdir(archives_dir):
+        for jsonl_file in os.listdir(archives_dir):
             result = []
             destination_blob = f"{blob_prefix}/archives/{jsonl_file}"
-            with open(os.path.join(config.job_dir, 'archives' ,jsonl_file), 'r') as f:
+            with open(os.path.join(archives_dir, jsonl_file), 'r') as f:
                 for line in f:
                     data = json.loads(line)
                     result.append({
