@@ -51,34 +51,40 @@ def test_get_papers_from_group(client, openreview_client):
     if os.path.isfile('publications_by_profile_id.json'):
         os.remove('publications_by_profile_id.json')
 
-def test_get_profile_ids(client, openreview_client, clean_start_conference):
+def test_get_profiles(client, openreview_client, clean_start_conference):
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
-    ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc/Reviewers'])
-    assert len(ids) == 100
-    for tilde_id, email_id in ids:
-        assert '~' in tilde_id
-        assert '@' in email_id
+    members, _ = or_expertise.get_profiles(group_ids=['DEF.cc/Reviewers'])
+    assert len(members) == 100
+    for profile in members:
+        assert '~' in profile.id
+        assert '@' in profile.get_preferred_email()
 
-    ids, _ = or_expertise.get_profile_ids(reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
-    assert len(ids) == 3
-    assert sorted(ids) == sorted([('~Romeo_Mraz1', 'hkinder2b@army.mil'), ('~Stacee_Powlowski1', 'mdagg5@1und1.de'), ('~Stanley_Bogisich1', 'cchippendale26@smugmug.com')])
+    members, _ = or_expertise.get_profiles(reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
+    assert len(members) == 3
+    ids_and_emails = sorted([(p.id, p.get_preferred_email()) for p in members])
+    assert ids_and_emails == sorted([('~Romeo_Mraz1', 'hkinder2b@army.mil'), ('~Stacee_Powlowski1', 'mdagg5@1und1.de'), ('~Stanley_Bogisich1', 'cchippendale26@smugmug.com')])
 
-    ids, _ = or_expertise.get_profile_ids(group_ids=['DEF.cc/Reviewers'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
-    assert len(ids) == 100
+    members, _ = or_expertise.get_profiles(group_ids=['DEF.cc/Reviewers'], reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de'])
+    assert len(members) == 100
 
-    ids, inv_ids = or_expertise.get_profile_ids(reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de', 'mondragon@email.com'])
-    assert len(ids) == 3
-    assert sorted(ids) == sorted([('~Romeo_Mraz1', 'hkinder2b@army.mil'), ('~Stacee_Powlowski1', 'mdagg5@1und1.de'), ('~Stanley_Bogisich1', 'cchippendale26@smugmug.com')])
+    members, inv_ids = or_expertise.get_profiles(reviewer_ids=['hkinder2b@army.mil', 'cchippendale26@smugmug.com', 'mdagg5@1und1.de', 'mondragon@email.com'])
+    assert len(members) == 3
+    ids_and_emails = sorted([(p.id, p.get_preferred_email()) for p in members])
+    assert ids_and_emails == sorted([('~Romeo_Mraz1', 'hkinder2b@army.mil'), ('~Stacee_Powlowski1', 'mdagg5@1und1.de'), ('~Stanley_Bogisich1', 'cchippendale26@smugmug.com')])
     assert len(inv_ids) == 1
     assert inv_ids[0] == 'mondragon@email.com'
 
 
 def test_get_publications(client, openreview_client):
+    profiles = openreview.tools.get_profiles(client, ['~Carlos_Mondragon1', '~Perry_Volkman1'], with_publications=True, as_dict=True)
+    carlos_profile = profiles.get('~Carlos_Mondragon1') or openreview.Profile(id='~Carlos_Mondragon1', content={})
+    perry_profile = profiles['~Perry_Volkman1']
+
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
-    publications = or_expertise.get_publications('~Carlos_Mondragon1')
+    publications = or_expertise.get_publications(carlos_profile)
     assert publications == []
 
-    publications = or_expertise.get_publications('~Perry_Volkman1')
+    publications = or_expertise.get_publications(perry_profile)
     assert len(publications) == 3
 
     minimum_pub_date = 1554819115
@@ -88,7 +94,7 @@ def test_get_publications(client, openreview_client):
         }
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
-    publications = or_expertise.get_publications('~Perry_Volkman1')
+    publications = or_expertise.get_publications(perry_profile)
     assert len(publications) == 3
     for publication in publications:
         assert publication['cdate'] > minimum_pub_date
@@ -100,7 +106,7 @@ def test_get_publications(client, openreview_client):
         }
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
-    publications = or_expertise.get_publications('~Perry_Volkman1')
+    publications = or_expertise.get_publications(perry_profile)
     assert len(publications) == 2
     for publication in publications:
         assert publication['cdate'] > minimum_pub_date
@@ -113,7 +119,7 @@ def test_get_publications(client, openreview_client):
         }
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
-    publications = or_expertise.get_publications('~Perry_Volkman1')
+    publications = or_expertise.get_publications(perry_profile)
     assert len(publications) == 1
     assert publications[0]['cdate'] > minimum_pub_date
 
@@ -127,7 +133,7 @@ def test_get_publications(client, openreview_client):
         }
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
-    publications = or_expertise.get_publications('~Perry_Volkman1')
+    publications = or_expertise.get_publications(perry_profile)
     assert len(publications) == 3
     for publication in publications:
         assert publication['cdate'] > minimum_pub_date
@@ -142,7 +148,7 @@ def test_get_publications(client, openreview_client):
         }
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
-    publications = or_expertise.get_publications('~Perry_Volkman1')
+    publications = or_expertise.get_publications(perry_profile)
     assert len(publications) == 3
     for publication in publications:
         assert publication['cdate'] > minimum_pub_date
@@ -396,6 +402,8 @@ def test_weights_applied_by_venue(client, openreview_client):
         )
     )
 
+    romeo_profile = openreview.tools.get_profiles(client, ['~Romeo_Mraz1'], with_publications=True)[0]
+
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
     config = {
         'dataset': {
@@ -408,7 +416,7 @@ def test_weights_applied_by_venue(client, openreview_client):
         }
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
-    publications = or_expertise.get_publications('~Romeo_Mraz1')
+    publications = or_expertise.get_publications(romeo_profile)
     for publication in publications:
         if publication['id'] != upweighted_note_id:
             assert publication['content']['weight'] == 1
@@ -430,7 +438,7 @@ def test_weights_applied_by_venue(client, openreview_client):
         }
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
-    publications = or_expertise.get_publications('~Romeo_Mraz1')
+    publications = or_expertise.get_publications(romeo_profile)
     for publication in publications:
         if publication['id'] != upweighted_note_id:
             assert publication['content']['weight'] == 10
@@ -469,7 +477,7 @@ def test_weights_applied_by_venue(client, openreview_client):
         }
     }
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
-    publications = or_expertise.get_publications('~Romeo_Mraz1')
+    publications = or_expertise.get_publications(romeo_profile)
     for publication in publications:
         if publication['id'] == archive_note_id:
             assert publication['content']['weight'] == 10
@@ -534,8 +542,9 @@ def test_get_pub_weight_invitations(client, openreview_client):
             ]
         }
     }
+    romeo_profile = openreview.tools.get_profiles(client, ['~Romeo_Mraz1'], with_publications=True)[0]
     or_expertise = OpenReviewExpertise(client, openreview_client, config)
-    publications = or_expertise.get_publications('~Romeo_Mraz1')
+    publications = or_expertise.get_publications(romeo_profile)
     for publication in publications:
         if publication['id'] == archive_note_id:
             assert publication['content']['weight'] == 10
@@ -572,10 +581,11 @@ def test_get_by_submissions_from_paper_id(client, openreview_client):
 
 def test_deduplication(client, openreview_client, helpers):
     author_id = '~Harold_Rice1'
+    harold_profile = openreview.tools.get_profiles(client, [author_id], with_publications=True)[0]
     original_note = list(openreview.tools.iterget_notes(openreview_client, content={'authorids': author_id}))[0]
     or_expertise = OpenReviewExpertise(client, openreview_client, {})
 
-    publications = or_expertise.get_publications('~Harold_Rice1')
+    publications = or_expertise.get_publications(harold_profile)
     assert len(publications) == 3
 
     note = openreview.Note(
@@ -593,7 +603,8 @@ def test_deduplication(client, openreview_client, helpers):
     test_user_client = openreview.Client(username='test@google.com', password=helpers.strong_password)
     note = test_user_client.post_note(note)
 
-    publications = or_expertise.get_publications('~Harold_Rice1')
+    harold_profile = openreview.tools.get_profiles(client, [author_id], with_publications=True)[0]
+    publications = or_expertise.get_publications(harold_profile)
     assert len(publications) == 4 ## it should be 3, we do not have blind submissions on API 2, ignore this for now
 
 def test_expertise_selection(client, openreview_client, helpers):
@@ -994,7 +1005,7 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
     
     # Find papers with test title
     papers_with_test_title_group = [p for p in all_papers if p.content.get('title') == test_title or (isinstance(p.content.get('title'), dict) and p.content.get('title', {}).get('value') == test_title)]
-    
+
     # Should only have one paper with this title (the best one)
     assert len(papers_with_test_title_group) == 1, f"Expected 1 paper in get_papers_from_group, got {len(papers_with_test_title_group)}"
     kept_paper_group = papers_with_test_title_group[0]
@@ -1016,3 +1027,72 @@ def test_paperhash_deduplication_priority(client, openreview_client, helpers):
                 ddate=1554819115,
             )
         )
+
+def test_get_profiles_with_email_members_as_pc(client, openreview_client):
+    """
+    Reproduces the issue where impersonating a role-specific group
+    (e.g. DEF.cc/Program_Chairs) instead of the venue ID (DEF.cc) prevents
+    profile search by email during dataset creation.
+
+    When group members are stored as email addresses, get_profiles calls
+    openreview.tools.get_profiles which needs to search profiles by email.
+    Program_Chairs lack permission for this search, but the venue group does.
+    """
+    # Get emails of existing reviewers
+    reviewers_group = openreview_client.get_group('DEF.cc/Reviewers')
+    reviewer_emails = []
+    for tilde_id in reviewers_group.members[:3]:
+        profile = openreview_client.get_profile(tilde_id)
+        if profile.content.get('preferredEmail'):
+            reviewer_emails.append(profile.content['preferredEmail'])
+
+    assert len(reviewer_emails) > 0, "Need at least one reviewer with an email"
+
+    # Create a group with email-address members
+    email_group_id = 'DEF.cc/Reviewers_By_Email'
+    try:
+        openreview_client.get_group(email_group_id)
+    except openreview.OpenReviewException:
+        openreview_client.post_group_edit(
+            invitation='DEF.cc/-/Edit',
+            signatures=['DEF.cc'],
+            group=openreview.api.Group(
+                id=email_group_id,
+                readers=['everyone'],
+                signatories=[email_group_id],
+                signatures=['DEF.cc'],
+                members=reviewer_emails
+            )
+        )
+
+    email_group = openreview_client.get_group(email_group_id)
+    assert all('@' in m for m in email_group.members), \
+        f"Expected email members but got: {email_group.members}"
+
+    # Case 1: Using venue ID (DEF.cc) — should resolve emails to profiles
+    venue_client_v2 = openreview.api.OpenReviewClient(
+        token=openreview_client.token
+    )
+    venue_client_v2.impersonate('DEF.cc')
+    venue_client_v1 = openreview.Client(
+        token=openreview_client.token
+    )
+
+    or_expertise_venue = OpenReviewExpertise(venue_client_v1, venue_client_v2, {})
+    members, invalid = or_expertise_venue.get_profiles(group_ids=[email_group_id])
+    assert len(members) == len(reviewer_emails), \
+        f"Venue impersonation should resolve all {len(reviewer_emails)} emails, got {len(members)} members and {len(invalid)} invalid"
+
+    # Case 2: Using Program_Chairs — should fail to resolve emails
+    pc_client_v2 = openreview.api.OpenReviewClient(
+        token=openreview_client.token
+    )
+    pc_client_v2.impersonate('DEF.cc/Program_Chairs')
+    pc_client_v1 = openreview.Client(
+        token=openreview_client.token
+    )
+
+    or_expertise_pc = OpenReviewExpertise(pc_client_v1, pc_client_v2, {})
+    # Program_Chairs cannot search profiles by email — the API rejects the request
+    with pytest.raises(openreview.OpenReviewException, match='The field ids cannot be empty or missing'):
+        or_expertise_pc.get_profiles(group_ids=[email_group_id])

@@ -126,30 +126,6 @@ class TestExpertiseService():
     job_id = None
 
     @pytest.fixture(scope='session')
-    def celery_config(self):
-        return {
-            "broker_url": "redis://localhost:6379/10",
-            "result_backend": "redis://localhost:6379/10",
-            "task_track_started": True,
-            "task_serializer": "pickle",
-            "result_serializer": "pickle",
-            "accept_content": ["pickle", "application/x-python-serialize"],
-            "task_create_missing_queues": True,
-        }
-
-    @pytest.fixture(scope='session')
-    def celery_includes(self):
-        return ["expertise.service.celery_tasks"]
-
-    @pytest.fixture(scope='session')
-    def celery_worker_parameters(self):
-        return {
-            "queues": ("userpaper", "expertise"),
-            "perform_ping_check": False,
-            "concurrency": 1,
-        }
-
-    @pytest.fixture(scope='session')
     def openreview_context(self):
         """
         A pytest fixture for setting up a clean expertise-api test instance:
@@ -285,7 +261,7 @@ class TestExpertiseService():
         # Clean up
         redis.remove_job('user@test.com', 'manual_ttl')
 
-    def test_request_expertise_with_no_config(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_no_config(self, openreview_client, openreview_context):
         test_client = openreview_context['test_client']
         # Submitting an empty config with no required fields
         response = test_client.post(
@@ -299,7 +275,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == 'Bad request: required field missing in request: name'
 
-    def test_request_expertise_with_no_second_entity(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_no_second_entity(self, openreview_client, openreview_context):
         # Submitting a partially filled out config without a required field (only group entity)
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -327,7 +303,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == 'Bad request: required field missing in request: entityB'
 
-    def test_request_expertise_with_empty_entity(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_empty_entity(self, openreview_client, openreview_context):
         # Submit a working config with an extra field that is not allowed
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -356,7 +332,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == 'Bad request: required field missing in entityA: type'
 
-    def test_request_expertise_with_missing_required_field_in_entity(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_missing_required_field_in_entity(self, openreview_client, openreview_context):
         # Submitting a partially filled out config without a required field
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -387,7 +363,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == 'Bad request: no valid Group properties in entityA'
 
-    def test_request_expertise_with_unexpected_entity(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_unexpected_entity(self, openreview_client, openreview_context):
         # Submitting a partially filled out config without a required field (only group entity)
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -420,7 +396,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: unexpected fields in request: ['entityC']"
 
-    def test_request_expertise_with_unexpected_field_in_entity(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_unexpected_field_in_entity(self, openreview_client, openreview_context):
         # Submitting a partially filled out config without a required field (only group entity)
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -453,7 +429,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: unexpected fields in entityA: ['unexpected_field']"
 
-    def test_request_expertise_with_unexpected_model_param(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_unexpected_model_param(self, openreview_client, openreview_context):
         # Submitting a partially filled out config without a required field (only group entity)
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -486,7 +462,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: unexpected fields in model: ['unexpected_field']"
 
-    def test_request_expertise_with_empty_inclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_empty_inclusion(self, openreview_client, openreview_context):
         # Submitting a partially filled out config without a required field (only group entity)
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -519,7 +495,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: Expertise invitation indicated but ID not provided"
 
-    def test_request_expertise_with_invalid_model_venue_weights(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_invalid_model_venue_weights(self, openreview_client, openreview_context):
         # Submitting a request with weightSpecification on an invalid model
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -560,7 +536,7 @@ class TestExpertiseService():
         assert 'bad request' in response.json['message'].lower()
         assert response.json['message'] == "Bad request: model specter+mfr does not support weighting by venue"
 
-    def test_request_expertise_with_valid_parameters(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_valid_parameters(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -643,7 +619,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -742,7 +718,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -816,7 +792,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
         # assert response[0]['description'] == 'Server received config and allocated space'
 
         # # Attempt getting results of an incomplete job
@@ -931,7 +907,7 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         openreview_context['job_id2'] = job_id
 
-    def test_status_all_query_params(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_status_all_query_params(self, openreview_client, openreview_context):
         test_client = openreview_context['test_client']
         # Test for status query
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Completed'}).json['results']
@@ -974,7 +950,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={'status': 'Running', 'memberOf': 'CBA'}).json['results']
         assert len(response) == 0
 
-    def test_get_results_by_job_id(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_by_job_id(self, openreview_client, openreview_context):
         test_client = openreview_context['test_client']
         # Searches for results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
@@ -998,7 +974,7 @@ class TestExpertiseService():
         assert "~C.V._Lastname1" in all_users
 
 
-    def test_compare_results_for_identical_jobs(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_compare_results_for_identical_jobs(self, openreview_client, openreview_context):
         test_client = openreview_context['test_client']
         # Searches for results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
@@ -1015,7 +991,7 @@ class TestExpertiseService():
         for i in range(len(results_a)):
             assert results_a[i] == results_b[i]
 
-    def test_inclusion_invitation(self, client, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_inclusion_invitation(self, client, openreview_client, openreview_context):
         # Submit a working job and return the job ID, HIJ has a single inclusion edge posted
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -1050,7 +1026,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1078,7 +1054,7 @@ class TestExpertiseService():
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
 
-    def test_inclusion_invitation_default(self, client, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_inclusion_invitation_default(self, client, openreview_client, openreview_context):
         # Submit a working job and return the job ID, ABC is an inclusion invitation has no edges posted to it
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -1113,7 +1089,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1141,7 +1117,7 @@ class TestExpertiseService():
         assert req['entityB']['invitation'] == 'ABC.cc/-/Submission'
         assert response['cdate'] <= response['mdate']
 
-    def test_exclusion_invitation(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_exclusion_invitation(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID, DEF has a single exclude edge
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -1176,7 +1152,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1209,7 +1185,7 @@ class TestExpertiseService():
         with_exclusion = sum(d.stat().st_size for d in os.scandir(f"./tests/jobs/{job_id}/archives") if d.is_file())
         assert with_exclusion < no_exclusion
 
-    def test_get_results_for_all_jobs(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_for_all_jobs(self, openreview_client, openreview_context):
         # Assert that there are two completed jobs belonging to this user
         test_client = openreview_context['test_client']
         response = test_client.get('/expertise/status/all', headers=openreview_client.headers, query_string={}).json['results']
@@ -1217,7 +1193,7 @@ class TestExpertiseService():
         for job_dict in response:
             assert job_dict['status'] == 'Completed'
 
-    def test_get_results_and_delete_data(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_and_delete_data(self, openreview_client, openreview_context):
         # Clean up directories by setting the "delete_on_get" flag
         assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
@@ -1226,7 +1202,7 @@ class TestExpertiseService():
 
         ## Assert the next expertise results should return empty result
 
-    def test_paper_paper_request(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_paper_paper_request(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID, DEF has a single exclude edge
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -1260,7 +1236,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1309,7 +1285,7 @@ class TestExpertiseService():
                 assert score >= 0.99
 
 
-    def test_request_expertise_with_model_errors(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_model_errors(self, openreview_client, openreview_context):
         # Submit a config with an error in the model field and return the job_id
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -1356,7 +1332,7 @@ class TestExpertiseService():
         assert failed_after > failed_before
         openreview_context['job_id'] = job_id
 
-    def test_get_results_and_get_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_and_get_error(self, openreview_client, openreview_context):
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
@@ -1385,7 +1361,7 @@ class TestExpertiseService():
         assert response.status_code == 200
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
-    def test_request_expertise_with_no_submission_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_no_submission_error(self, openreview_client, openreview_context):
         # Submit a config with no submissions
         test_client = openreview_context['test_client']
         response = test_client.post(
@@ -1418,7 +1394,7 @@ class TestExpertiseService():
 
         openreview_context['job_id'] = job_id
 
-    def test_get_results_and_get_no_submission_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_results_and_get_no_submission_error(self, openreview_client, openreview_context):
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         assert openreview_context['job_id'] is not None
         test_client = openreview_context['test_client']
@@ -1447,7 +1423,7 @@ class TestExpertiseService():
         assert response.status_code == 200
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
-    def test_get_results_and_get_data_error_and_error(self, openreview_client, openreview_context, celery_session_app, celery_session_worker, helpers):
+    def test_get_results_and_get_data_error_and_error(self, openreview_client, openreview_context, helpers):
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
 
@@ -1702,7 +1678,7 @@ class TestExpertiseService():
             json.dump(owned_config.to_json(), f)
 
         other_client = openreview.api.OpenReviewClient(token=openreview_client.token)
-        other_client.impersonate('ABC.cc/Program_Chairs')
+        other_client.impersonate('ABC.cc')
 
         test_client = openreview_context['test_client']
         response = test_client.delete(f'/expertise/{job_id}', headers=other_client.headers)
@@ -1718,7 +1694,7 @@ class TestExpertiseService():
 
         redis.remove_job(config['OPENREVIEW_USERNAME'], job_id)
         shutil.rmtree(job_dir, ignore_errors=True)
-    def test_request_journal(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_journal(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -1759,7 +1735,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1769,7 +1745,7 @@ class TestExpertiseService():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -1785,7 +1761,7 @@ class TestExpertiseService():
         assert req['entityB']['id'] == target_id
         openreview_context['job_id'] = job_id
     
-    def test_get_journal_results(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_journal_results(self, openreview_client, openreview_context):
         test_client = openreview_context['test_client']
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
@@ -1803,7 +1779,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}", 'deleteOnGet': True}).json['results']
         assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
-    def test_high_load(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_high_load(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID
         test_client = openreview_context['test_client']
         num_requests = 1
@@ -1847,12 +1823,12 @@ class TestExpertiseService():
             time.sleep(2)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             assert response['name'] == 'test_run'
-            assert response['status'] != 'Error'
+            assert response['status'] != 'Error', response
 
         assert id_list is not None
         openreview_context['job_id'] = id_list
     
-    def test_fetch_high_load_results(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_fetch_high_load_results(self, openreview_client, openreview_context):
         MAX_TIMEOUT = 1200 # Timeout after 20 minutes
         assert openreview_context['job_id'] is not None
         id_list = openreview_context['job_id']
@@ -1895,7 +1871,7 @@ class TestExpertiseService():
                 assert score >= 0 and score <= 1
             assert not os.path.isdir(f"./tests/jobs/{id}")
 
-    def test_request_group_group(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_group_group(self, openreview_client, openreview_context):
         # Test group-group without any expertise selection
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -1929,7 +1905,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -1939,7 +1915,7 @@ class TestExpertiseService():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -1983,7 +1959,7 @@ class TestExpertiseService():
         assert "~C.V._Lastname1" in submission_users
         assert "~C.V._Lastname1" in match_users
     
-    def test_request_group_exclusion_exclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_group_exclusion_exclusion(self, openreview_client, openreview_context):
         # Test expertise exclusion - both the archives and submissions should be smaller than the previous test's
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -2019,7 +1995,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -2029,7 +2005,7 @@ class TestExpertiseService():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -2057,7 +2033,7 @@ class TestExpertiseService():
         assert with_exclusion < no_exclusion
         openreview_context['exclusion_id'] = job_id ## Store the job ID of a job with exclusion-exclusion selections
 
-    def test_request_group_inclusion_exclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_group_inclusion_exclusion(self, openreview_client, openreview_context):
         # Switch alternate match group to inclusion, do same checks on archives but submissions should be smaller than both previous cases (1 submission)
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -2093,7 +2069,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -2103,7 +2079,7 @@ class TestExpertiseService():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -2132,7 +2108,7 @@ class TestExpertiseService():
         assert with_inclusion < no_inclusion
         assert with_inclusion < with_exclusion
 
-    def test_request_group_inclusion_inclusion(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_group_inclusion_inclusion(self, openreview_client, openreview_context):
         # With 2 inclusions, the match group should have fully populated archives for 2 users (default), and one of them should only have 1 submission
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -2168,7 +2144,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -2178,7 +2154,7 @@ class TestExpertiseService():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -2211,7 +2187,7 @@ class TestExpertiseService():
         assert with_inclusion < no_inclusion
         assert with_inclusion < with_exclusion
 
-    def test_get_group_results(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_group_results(self, openreview_client, openreview_context):
         test_client = openreview_context['test_client']
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
@@ -2335,7 +2311,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -2371,7 +2347,7 @@ class TestExpertiseService():
                 for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
                     assert 'embedding' in pub, f"{model_name} publication {pub.get('paper_id')} missing embedding"
 
-    def test_request_expertise_with_normalization_field(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_with_normalization_field(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -2409,7 +2385,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -2472,7 +2448,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{unnorm_job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{unnorm_job_id}'}).json
@@ -2503,7 +2479,7 @@ class TestExpertiseService():
 
         assert unnorm_mean_score > norm_mean_score, 'Unnormalized mean score should be greater than normalized mean score'
 
-    def test_request_expertise_identical_submissions_score_one(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_request_expertise_identical_submissions_score_one(self, openreview_client, openreview_context):
         """
         Integration test for issue #296: When comparing a submission to itself,
         the score should be exactly 1.0 (not slightly above due to float32 imprecision).
@@ -2558,7 +2534,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_identical_submissions'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -2642,7 +2618,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_identical_submissions_normalized'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -2733,7 +2709,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_different_submissions_normalized'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
@@ -2820,7 +2796,7 @@ class TestExpertiseService():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_different_submissions_unnormalized'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()

@@ -5,8 +5,6 @@ import redis
 from threading import Event
 from google.cloud import storage
 
-from celery import Celery
-
 artifact_loading_started = Event()
 model_ready = Event()
 
@@ -69,19 +67,6 @@ def create_app(config=None):
 
     return app
 
-
-def create_celery(app):
-    """
-    Initializes a celery application using Flask App
-    """
-    config_source = app.config["CELERY_CONFIG"]
-    celery = Celery(
-        app.import_name,
-        include=["expertise.service.celery_tasks"],
-        config_source=config_source
-    )
-
-    return celery
 
 def create_redis(app):
     """

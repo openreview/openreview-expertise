@@ -16,12 +16,10 @@ from pathlib import Path
 from itertools import chain
 import openreview
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 
 class OpenReviewExpertise(object):
     def __init__(self, openreview_client, openreview_client_v2, config):
-        self.openreview_client = openreview_client
         self.openreview_client_v2 = openreview_client_v2
         self.config = config
         self.root = Path(config.get('dataset', {}).get('directory', './'))
@@ -61,22 +59,18 @@ class OpenReviewExpertise(object):
                 return False
         return True
 
-    def get_paper_notes(self, author_id, dataset_params):
+    def get_paper_notes(self, profile, dataset_params):
 
         use_bids_as_expertise = dataset_params.get('bid_as_expertise', False)
 
         if use_bids_as_expertise:
             bid_invitation = dataset_params['bid_invitation']
             paper_invitation = self.config['paper_invitation']
-            bids = openreview.tools.iterget_edges(self.openreview_client, invitation=bid_invitation, tail=author_id)
+            bids = self.openreview_client_v2.get_all_edges(invitation=bid_invitation, tail=profile.id)
             note_ids = [e.head for e in bids if e.label in ['Very High', 'High']]
-            return [n for n in self.openreview_client.get_notes_by_ids(ids=note_ids) if n.invitation == paper_invitation]
+            return [n for n in self.openreview_client_v2.get_notes_by_ids(ids=note_ids) if n.invitation == paper_invitation]
 
-        notes_v1 = list(openreview.tools.iterget_notes(self.openreview_client, content={'authorids': author_id}))
-        notes_v1 = [note for note in notes_v1 if note.readers == ['everyone']]
-        notes_v2 = list(openreview.tools.iterget_notes(self.openreview_client_v2, content={'authorids': author_id}))
-        notes_v2 = [note for note in notes_v2 if note.readers == ['everyone']]
-        return notes_v1 + notes_v2
+        return [pub for pub in profile.content.get('publications', []) if pub.readers == ['everyone']]
 
     def deduplicate_publications(self, publications):
         deduplicated = []
@@ -213,14 +207,14 @@ class OpenReviewExpertise(object):
 
         return matching_weight
 
-    def get_publications(self, author_id):
+    def get_publications(self, profile):
 
         dataset_params = self.config.get('dataset', {})
         weight_specification = dataset_params.get('weight_specification', [])
         minimum_pub_date = dataset_params.get('minimum_pub_date') or dataset_params.get('or', {}).get('minimum_pub_date', 0)
         top_recent_pubs = dataset_params.get('top_recent_pubs') or dataset_params.get('or', {}).get('top_recent_pubs', False)
         publications = self.deduplicate_publications(
-            self.get_paper_notes(author_id, dataset_params)
+            self.get_paper_notes(profile, dataset_params)
         )
 
         # Get all publications and assign tcdate to cdate in case cdate is None. If tcdate is also None
@@ -332,75 +326,59 @@ class OpenReviewExpertise(object):
             return top
         return minimum
 
-    def get_profile_ids(self, group_ids=None, reviewer_ids=None):
+    def get_profiles(self, group_ids=None, reviewer_ids=None):
         """
-        Returns a list of all the tilde id members from a list of groups.
+        Fetches profiles with publications for all members of the given groups
+        and/or reviewer IDs, using a single batched call.
 
-        Example:
+        :param group_ids: List of group ids to fetch members from
+        :type group_ids: list[str], optional
+        :param reviewer_ids: List of reviewer ids (tilde IDs or emails)
+        :type reviewer_ids: list[str], optional
 
-        >>> get_profiles(['ICLR.cc/2018/Conference/Reviewers'])
-
-        :param client: OpenReview Client
-        :type client: Client
-        :param group_ids: List of group ids
-        :type group_ids: list[str]
-
-        :return: List of tuples containing (tilde_id, email)
-        :rtype: list
+        :return: Tuple of (valid_members, invalid_members) where valid_members
+            is a list of Profile objects (with publications loaded) and
+            invalid_members is a list of email strings that did not match any profile.
+        :rtype: tuple[list[openreview.Profile], list[str]]
         """
-        tilde_members = set()
-        email_members = set()
+        all_members = set()
 
         if group_ids:
             for group_id in group_ids:
-                group = self.openreview_client.get_group(group_id)
+                group = self.openreview_client_v2.get_group(group_id)
                 for member in group.members:
                     if '~' in member:
-                        tilde_members.add(member)
+                        all_members.add(member)
                     elif '@' in member:
-                        email_members.add(member.lower())
+                        all_members.add(member.lower())
 
         if reviewer_ids:
             for reviewer_id in reviewer_ids:
                 if '~' in reviewer_id:
-                    tilde_members.add(reviewer_id)
+                    all_members.add(reviewer_id)
                 elif '@' in reviewer_id:
-                    email_members.add(reviewer_id.lower())
+                    all_members.add(reviewer_id.lower())
 
-        emails_confirmed_set = set()
-        members = []
-        tilde_members_list = list(tilde_members)
-        profile_search_results = self.openreview_client.search_profiles(confirmedEmails=None, ids=tilde_members_list, term=None) if tilde_members_list else []
-        tilde_members_list = []
-        for profile in profile_search_results:
-            preferredEmail = profile.content.get('preferredEmail')
-            # If user does not have preferred email, use first email in the emailsConfirmed list
-            preferredEmail = preferredEmail or profile.content.get('emailsConfirmed') and len(profile.content.get('emailsConfirmed')) and profile.content.get('emailsConfirmed')[0]
-            # If the user does not have emails confirmed, use the first email in the emails list
-            preferredEmail = preferredEmail or profile.content.get('emails') and len(profile.content.get('emails')) and profile.content.get('emails')[0]
-            # If the user Profile does not have an email, use its Profile ID
-            tilde_members_list.append((profile.id, preferredEmail or profile.id))
-            if profile.content.get('emailsConfirmed'):
-                for email in profile.content.get('emailsConfirmed'):
-                    emails_confirmed_set.add(email)
-        members.extend(tilde_members_list)
+        if not all_members:
+            return [], []
 
-        email_members_list = list(email_members)
-        profile_search_results = self.openreview_client.search_profiles(confirmedEmails=email_members_list, ids=None, term=None) if email_members_list else {}
-        email_profiles = []
-        for email, profile in profile_search_results.items():
-            email_profiles.append((profile.id, email))
-            if profile.content.get('emailsConfirmed'):
-                for email in profile.content.get('emailsConfirmed'):
-                    emails_confirmed_set.add(email)
-        members.extend(email_profiles)
+        profiles_by_key = openreview.tools.get_profiles(
+            self.openreview_client_v2,
+            list(all_members),
+            with_publications=True,
+            as_dict=True
+        )
 
+        valid_members = []
         invalid_members = []
-        valid_members = list(set(members))
-        if len(email_members):
-            for member in email_members:
-                if member not in emails_confirmed_set:
-                    invalid_members.append(member)
+        seen_profile_ids = set()
+
+        for key, profile in profiles_by_key.items():
+            if profile and profile.id.startswith('~') and profile.id not in seen_profile_ids:
+                seen_profile_ids.add(profile.id)
+                valid_members.append(profile)
+            elif '@' in key:
+                invalid_members.append(key)
 
         return valid_members, invalid_members
 
@@ -409,7 +387,7 @@ class OpenReviewExpertise(object):
         selected_ids_by_user = defaultdict(list)
         for invitation in edge_invitations:
             
-            user_grouped_edges = self.openreview_client.get_grouped_edges(
+            user_grouped_edges = self.openreview_client_v2.get_grouped_edges(
                 invitation=invitation,
                 groupby='tail',
                 select='id,head,label,weight,tail'
@@ -434,9 +412,9 @@ class OpenReviewExpertise(object):
     def alternate_include(self):
         return self.get_expertise_selection_edges('alternate_inclusion_inv', 'Include')
 
-    def retrieve_expertise_helper(self, member, email):
-        self.pbar.update(1)
-        member_papers = self.get_publications(member)
+    def retrieve_expertise_helper(self, profile):
+        member = profile.id
+        member_papers = self.get_publications(profile)
 
         include_all_papers = False
         if 'inclusion_inv' in self.config and len(self.included_ids_by_user[member]) > 0 and not any(paper['id'] in self.included_ids_by_user[member] for paper in member_papers):
@@ -471,7 +449,7 @@ class OpenReviewExpertise(object):
                             seen_papers[paper_title] = n
 
         filtered_papers = list(seen_papers.values())
-        return member, email, filtered_papers
+        return filtered_papers
 
 
     def retrieve_expertise(self):
@@ -481,23 +459,17 @@ class OpenReviewExpertise(object):
         group_ids = self.convert_to_list(self.config.get('match_group', []))
         reviewer_ids = self.convert_to_list(self.config.get('reviewer_ids', []))
 
-        valid_members, invalid_members = self.get_profile_ids(group_ids=group_ids, reviewer_ids=reviewer_ids)
+        valid_members, invalid_members = self.get_profiles(group_ids=group_ids, reviewer_ids=reviewer_ids)
 
         self.metadata['no_profile'] = invalid_members
 
         print('finding archives for {} valid members'.format(len(valid_members)))
 
         expertise = defaultdict(list)
-        futures = []
-        self.pbar = tqdm(total=len(valid_members), desc='Retrieving expertise...')
-        with ThreadPoolExecutor(max_workers=self.config.get('max_workers')) as executor:
-            for (member, email) in valid_members:
-                futures.append(executor.submit(self.retrieve_expertise_helper, member, email))
-        self.pbar.close()
 
-        for future in futures:
-            member, email, filtered_papers = future.result()
-            member_id = email if use_email_ids else member
+        for profile in tqdm(valid_members, desc='Retrieving expertise...'):
+            filtered_papers = self.retrieve_expertise_helper(profile)
+            member_id = profile.get_preferred_email() if use_email_ids else profile.id
             if len(filtered_papers) == 0:
                 self.metadata['no_publications_count'] += 1
                 self.metadata['no_publications'].append(member_id)
@@ -531,67 +503,48 @@ class OpenReviewExpertise(object):
 
     def get_papers_from_group(self, submission_groups):
         submission_groups = self.convert_to_list(submission_groups)
-        client = self.openreview_client
 
-        # Cast from [(tilde_id, email)] -> [tilde_id]
-        group_a_members, invalid_members = self.get_profile_ids(group_ids=submission_groups)
-        group_a_members = [member_pair[0] for member_pair in group_a_members]
-        self.metadata['no_profile_submission'] = invalid_members 
+        # Get profiles with publications for all group members
+        valid_members, invalid_members = self.get_profiles(group_ids=submission_groups)
+        self.metadata['no_profile_submission'] = invalid_members
 
-        pbar = tqdm(total=len(group_a_members), desc='submissions status...')
         publications_by_profile_id = {}
         all_papers = []
 
-        def get_status(profile_id):
-            pbar.update(1)
-            profile = openreview.tools.get_profile(client, profile_id)
-            if profile:
-                publications = [
-                    openreview.Note.from_json(n) for n in self.get_publications(profile.id)
-                ]
-                return { 'profile_id': profile_id, 'papers': publications }
-        futures = []
-        with ThreadPoolExecutor(max_workers=self.config.get('max_workers')) as executor:
-            for profile_id in group_a_members:
-                futures.append(executor.submit(get_status, profile_id))
-        pbar.close()
+        for profile in tqdm(valid_members, desc='submissions status...'):
+            papers = self.get_publications(profile)
+            seen_papers = {}  # Maps paperhash -> paper dict
 
-        for future in futures:
-            result = future.result()
-            seen_papers = {}  # Maps paperhash -> paper_note
-            
-            for paper_note in result['papers']:
-                paper_hash = openreview.tools.get_paperhash('', paper_note.content['title'])
+            for paper in papers:
+                paper_hash = openreview.tools.get_paperhash('', paper['content']['title'])
                 if not paper_hash:
                     continue
-                
+
                 if 'alternate_inclusion_inv' in self.config:
-                    if paper_note.id in self.alternate_included_ids_by_user[result['profile_id']] or len(self.alternate_included_ids_by_user[result['profile_id']]) == 0:
+                    if paper['id'] in self.alternate_included_ids_by_user[profile.id] or len(self.alternate_included_ids_by_user[profile.id]) == 0:
                         if paper_hash not in seen_papers:
-                            seen_papers[paper_hash] = paper_note
+                            seen_papers[paper_hash] = paper
                         else:
-                            if self._is_better_paper(paper_note, seen_papers[paper_hash]):
-                                seen_papers[paper_hash] = paper_note
+                            if self._is_better_paper(paper, seen_papers[paper_hash]):
+                                seen_papers[paper_hash] = paper
                 else:
-                    if paper_note.id not in self.alternate_excluded_ids_by_user[result['profile_id']]:
+                    if paper['id'] not in self.alternate_excluded_ids_by_user[profile.id]:
                         if paper_hash not in seen_papers:
-                            seen_papers[paper_hash] = paper_note
+                            seen_papers[paper_hash] = paper
                         else:
-                            if self._is_better_paper(paper_note, seen_papers[paper_hash]):
-                                seen_papers[paper_hash] = paper_note
-            
-            # Build filtered_papers and papers_json_list from seen_papers values
+                            if self._is_better_paper(paper, seen_papers[paper_hash]):
+                                seen_papers[paper_hash] = paper
+
             filtered_papers = list(seen_papers.values())
-            papers_json_list = [paper.to_json() for paper in seen_papers.values()]
-            publications_by_profile_id[result['profile_id']] = papers_json_list
+            publications_by_profile_id[profile.id] = filtered_papers
             all_papers = all_papers + filtered_papers
 
         # Dump publications by profile id
         if self.root.is_dir():
             with open(self.root.joinpath('publications_by_profile_id.json'), 'w') as f:
                 json.dump(publications_by_profile_id, f, indent=2)
-        
-        return all_papers
+
+        return [openreview.Note.from_json(paper) for paper in all_papers]
     
     def _validate_paper_data(self,
         reduced_submissions,
@@ -637,40 +590,12 @@ class OpenReviewExpertise(object):
         else:
             if invitation_ids:
                 for invitation_id in invitation_ids:
-                    # Assume invitation is valid for both APIs, but only 1
-                    # will have the associated notes
-                    submissions_v1 = self.openreview_client.get_all_notes(invitation=invitation_id, content={'venueid': paper_venueid})
-
-                    submissions.extend(submissions_v1)
                     submissions.extend(self.openreview_client_v2.get_all_notes(invitation=invitation_id, content={'venueid': paper_venueid}))
             elif paper_venueid:
-                submissions_v1 = self.openreview_client.get_all_notes(content={'venueid': paper_venueid})
-
-                submissions.extend(submissions_v1)
                 submissions.extend(self.openreview_client_v2.get_all_notes(content={'venueid': paper_venueid}))
 
             if paper_id:
-                # If note not found, keep executing and raise an overall exception later
-                # Otherwise if the exception is anything else, raise it again
-                note_v1, note_v2 = None, None
-                try:
-                    note_v1 = self.openreview_client.get_note(paper_id)
-                    submissions.append(note_v1)
-                except openreview.OpenReviewException as e:
-                    err_name = e.args[0].get('name').lower()
-                    if err_name != 'notfounderror':
-                        raise e
-
-                try:
-                    note_v2 = self.openreview_client_v2.get_note(paper_id)
-                    submissions.append(note_v2)
-                except openreview.OpenReviewException as e:
-                    err_name = e.args[0].get('name').lower()
-                    if err_name != 'notfounderror':
-                        raise e
-
-                if not note_v1 and not note_v2:
-                    raise openreview.OpenReviewException(f"Note {paper_id} not found")
+                submissions.append(self.openreview_client_v2.get_note(paper_id))
 
         print('finding records of {} submissions'.format(len(submissions)))
         reduced_submissions = {}
