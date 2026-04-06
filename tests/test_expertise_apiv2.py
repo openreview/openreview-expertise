@@ -63,7 +63,6 @@ class TestExpertiseV2():
             "LOG_FILE": "pytest.log",
             "OPENREVIEW_USERNAME": "openreview.net",
             "OPENREVIEW_PASSWORD": "Or$3cur3P@ssw0rd",
-            "OPENREVIEW_BASEURL": "http://localhost:3000",
             "SUPERUSER_FIRSTNAME": "Super",
             "SUPERUSER_LASTNAME": "User",
             "SUPERUSER_TILDE_ID": "~Super_User1",
@@ -100,11 +99,11 @@ class TestExpertiseV2():
         carlos_profile = profiles.get('~Carlos_Mondragon1') or openreview.Profile(id='~Carlos_Mondragon1', content={})
         harold_profile = profiles['~Harold_Rice1']
 
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         publications = or_expertise.get_publications(carlos_profile)
         assert publications == []
 
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         publications = or_expertise.get_publications(harold_profile)
         assert len(publications) == 3 ## 3 top recent publications
         for pub in publications:
@@ -119,7 +118,7 @@ class TestExpertiseV2():
             'match_group': 'API.cc',
             'paper_invitation': 'TMLR/-/Submission',
         }
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         retrieved_submissions = or_expertise.get_submissions()
         print(retrieved_submissions)
         retrieved_titles = [pub.get('content').get('title') for pub in retrieved_submissions.values()]
@@ -140,7 +139,7 @@ class TestExpertiseV2():
         config = {
             'paper_id': target_paper.id,
         }
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert not isinstance(submissions[target_paper.id]['content']['title'], dict)
@@ -156,7 +155,7 @@ class TestExpertiseV2():
         config = {
             'paper_venueid': target_paper.content['venueid']['value'],
         }
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert not isinstance(submissions[target_paper.id]['content']['title'], dict)

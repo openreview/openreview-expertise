@@ -135,7 +135,6 @@ class TestExpertiseService():
             "LOG_FILE": "pytest.log",
             "OPENREVIEW_USERNAME": "openreview.net",
             "OPENREVIEW_PASSWORD": "Or$3cur3P@ssw0rd",
-            "OPENREVIEW_BASEURL": "http://localhost:3000",
             "SUPERUSER_FIRSTNAME": "Super",
             "SUPERUSER_LASTNAME": "User",
             "SUPERUSER_TILDE_ID": "~Super_User1",

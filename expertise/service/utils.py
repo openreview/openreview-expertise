@@ -482,7 +482,6 @@ class JobConfig(object):
     def from_request(api_request: APIRequest,
         job_id=None,
         starting_config = {},
-        openreview_client = None,
         openreview_client_v2 = None,
         server_config = {},
         working_dir = None):
@@ -524,9 +523,8 @@ class JobConfig(object):
 
         # Set metadata fields from request
         config.name = api_request.name
-        config.user_id = get_user_id(openreview_client)
+        config.user_id = get_user_id(openreview_client_v2)
         config.job_id = generate_job_id() if job_id is None else job_id
-        config.baseurl = server_config['OPENREVIEW_BASEURL']
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
         
@@ -565,13 +563,7 @@ class JobConfig(object):
                 if edge_inv_id is None or len(edge_inv_id) <= 0:
                     raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
 
-                try:
-                    label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
-                except openreview.OpenReviewException as e:
-                    if "notfound" in str(e).lower():
-                        label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
-                    else:
-                        raise e
+                label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
 
                 if 'exclude' not in label.lower():
                     config.inclusion_inv = edge_inv_id
@@ -589,13 +581,7 @@ class JobConfig(object):
                 if edge_inv_id is None:
                     raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
 
-                try:
-                    label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
-                except openreview.OpenReviewException as e:
-                    if "notfound" in str(e).lower():
-                        label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
-                    else:
-                        raise e
+                label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
 
                 if 'include' in label.lower():
                     config.alternate_inclusion_inv = edge_inv_id
@@ -969,7 +955,6 @@ class GCPInterface(object):
 
         # Popped fields
         data['token'] = or_client.token
-        data['baseurl_v1'] = openreview.tools.get_base_urls(or_client)[0]
         data['baseurl_v2'] = openreview.tools.get_base_urls(or_client)[1]
         data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
         #data['dump_embs'] = True
