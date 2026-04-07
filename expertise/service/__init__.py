@@ -66,7 +66,6 @@ def create_app(config=None):
 
     if config and isinstance(config, dict):
         app.config.from_mapping(config)
-        app.config['EXPERTISE_ENV'] = env
 
     configure_logger(app)
 
