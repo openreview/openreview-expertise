@@ -463,11 +463,11 @@ class TestExpertiseCloudService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "CLD.cc/Area_Chairs",
+                        'memberOf': "CLD.cc/Reviewers",
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Group",
-                        'memberOf': "CLD.cc/Area_Chairs",
+                        'memberOf': "CLD.cc/Reviewers",
                     },
                     "model": {
                             "name": "specter2+scincl",
@@ -501,13 +501,13 @@ class TestExpertiseCloudService():
         responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={'status': 'Completed'}).json['results']
         assert any([r['jobId'] == job_id for r in responses])
         responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
-            "entityA.memberOf": "CLD.cc/Area_Chairs",
-            "entityB.memberOf": "CLD.cc/Area_Chairs"
+            "entityA.memberOf": "CLD.cc/Reviewers",
+            "entityB.memberOf": "CLD.cc/Reviewers"
         }).json['results']
         assert any([r['jobId'] == job_id for r in responses])
         responses = test_client.get('/expertise/status/all', headers=abc_client.headers, query_string={
-            "entityA.memberOf": "CLD.cc/Area_Chairs",
-            "entityB.memberOf": "CLD.cc/Area_Chairs",
+            "entityA.memberOf": "CLD.cc/Reviewers",
+            "entityB.memberOf": "CLD.cc/Reviewers",
             'status': 'Completed'
         }).json['results']
         assert any([r['jobId'] == job_id for r in responses])
