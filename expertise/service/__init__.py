@@ -52,16 +52,20 @@ def create_app(config=None):
 
     # Use our own EXPERTISE_ENV variable to pick the config file to load.
     # FLASK_ENV / app.config['ENV'] are deprecated in Flask 2.3, so we avoid
-    # them entirely. Defaults to 'production'.
+    # them entirely. Defaults to 'production'. Callers may override the env
+    # via the config dict, so resolve the final value first and then load the
+    # matching cfg file to keep app.config['EXPERTISE_ENV'] consistent with
+    # the settings actually loaded.
     env = os.getenv('EXPERTISE_ENV', 'production')
+    if config and isinstance(config, dict) and 'EXPERTISE_ENV' in config:
+        env = config['EXPERTISE_ENV']
+
     app.config['EXPERTISE_ENV'] = env
     app.config.from_pyfile('default.cfg')
     app.config.from_pyfile('{}.cfg'.format(env), silent=True)
 
     if config and isinstance(config, dict):
         app.config.from_mapping(config)
-        # Allow callers to override EXPERTISE_ENV via the config dict.
-        env = app.config.get('EXPERTISE_ENV', env)
         app.config['EXPERTISE_ENV'] = env
 
     configure_logger(app)

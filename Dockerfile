@@ -15,9 +15,7 @@ COPY . /app/openreview-expertise
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     wget \
-    curl \
     ca-certificates \
-    git \
     build-essential \
     && rm -rf /var/lib/apt/lists/* \
     \
@@ -37,7 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && python -m pip install --no-cache-dir -e $HOME/openreview-expertise \
     && python -m pip install --no-cache-dir -I protobuf==3.20.1 \
     && conda clean --all -y \
-    && apt-get purge -y build-essential wget curl git \
+    && apt-get purge -y build-essential wget \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 

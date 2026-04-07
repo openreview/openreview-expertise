@@ -39,19 +39,20 @@ def test_generate_job_id_gcp_compliance():
 @pytest.fixture
 def temp_env_cfg(tmp_path):
     """
-    Writes a temporary <env>.cfg file into the service config directory and
-    cleans it up after the test. Yields (env_name, sentinel_value).
+    Writes a temporary <env>.cfg file into the service config directory with
+    LOG_FILE pointing at an absolute path under pytest's tmp_path, and cleans
+    up the cfg file after the test. Yields (env_name, sentinel_log_path).
     """
     config_dir = os.path.join(
         os.path.dirname(expertise.service.__file__), 'config'
     )
     env_name = 'pytest_env'
-    sentinel = 'sentinel-log-file.log'
+    sentinel_log = tmp_path / 'sentinel-log-file.log'
     cfg_path = os.path.join(config_dir, f'{env_name}.cfg')
     with open(cfg_path, 'w') as f:
-        f.write(f"LOG_FILE='{sentinel}'\n")
+        f.write(f"LOG_FILE='{sentinel_log}'\n")
     try:
-        yield env_name, sentinel
+        yield env_name, str(sentinel_log)
     finally:
         if os.path.exists(cfg_path):
             os.remove(cfg_path)
