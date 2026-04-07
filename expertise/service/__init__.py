@@ -30,7 +30,7 @@ def configure_logger(app):
     stream_handler.setFormatter(formatter)
     stream_handler.setLevel(logging.DEBUG)
 
-    if os.getenv('EXPERTISE_ENV', 'production') == 'development':
+    if app.config.get('EXPERTISE_ENV', 'production') == 'development':
         app.logger.addHandler(stream_handler)
 
     app.logger.setLevel(logging.DEBUG)
@@ -54,11 +54,15 @@ def create_app(config=None):
     # FLASK_ENV / app.config['ENV'] are deprecated in Flask 2.3, so we avoid
     # them entirely. Defaults to 'production'.
     env = os.getenv('EXPERTISE_ENV', 'production')
+    app.config['EXPERTISE_ENV'] = env
     app.config.from_pyfile('default.cfg')
     app.config.from_pyfile('{}.cfg'.format(env), silent=True)
 
     if config and isinstance(config, dict):
         app.config.from_mapping(config)
+        # Allow callers to override EXPERTISE_ENV via the config dict.
+        env = app.config.get('EXPERTISE_ENV', env)
+        app.config['EXPERTISE_ENV'] = env
 
     configure_logger(app)
 
