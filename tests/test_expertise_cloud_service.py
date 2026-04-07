@@ -359,9 +359,9 @@ class TestExpertiseCloudService():
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-        ## Expect 2*4 calls from the worker thread, 2*2 call from /expertise/status and 0 calls from /expertise/status/all
+        ## Expect 3*4 calls from the worker thread, 3*2 calls from /expertise/status and 0 calls from /expertise/status/all
         print(mock_pipeline_job.get.call_args_list)
-        assert len(mock_pipeline_job.get.call_args_list) == 12
+        assert len(mock_pipeline_job.get.call_args_list) == 18
 
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
