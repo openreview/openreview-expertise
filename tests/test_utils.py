@@ -37,25 +37,37 @@ def test_generate_job_id_gcp_compliance():
 
 
 @pytest.fixture
-def temp_env_cfg(tmp_path):
+def temp_env_cfg(tmp_path, monkeypatch):
     """
-    Writes a temporary <env>.cfg file into the service config directory with
-    LOG_FILE pointing at an absolute path under pytest's tmp_path, and cleans
-    up the cfg file after the test. Yields (env_name, sentinel_log_path).
+    Writes default.cfg and a <env>.cfg into an isolated temp directory and
+    monkeypatches Flask so create_app() uses it as the instance path. This
+    avoids mutating the package's source tree during tests.
+
+    Yields (env_name, sentinel_log_path).
     """
-    config_dir = os.path.join(
-        os.path.dirname(expertise.service.__file__), 'config'
-    )
     env_name = 'pytest_env'
     sentinel_log = tmp_path / 'sentinel-log-file.log'
-    cfg_path = os.path.join(config_dir, f'{env_name}.cfg')
-    with open(cfg_path, 'w') as f:
-        f.write(f"LOG_FILE='{sentinel_log}'\n")
-    try:
-        yield env_name, str(sentinel_log)
-    finally:
-        if os.path.exists(cfg_path):
-            os.remove(cfg_path)
+
+    # Copy the real default.cfg into the temp config dir so create_app()'s
+    # from_pyfile('default.cfg') succeeds.
+    real_config_dir = os.path.join(
+        os.path.dirname(expertise.service.__file__), 'config'
+    )
+    with open(os.path.join(real_config_dir, 'default.cfg')) as f:
+        default_cfg = f.read()
+    (tmp_path / 'default.cfg').write_text(default_cfg)
+    (tmp_path / f'{env_name}.cfg').write_text(f"LOG_FILE='{sentinel_log}'\n")
+
+    # Wrap flask.Flask so create_app()'s instance_path points at tmp_path.
+    original_flask = expertise.service.flask.Flask
+
+    def _flask_with_tmp_instance(*args, **kwargs):
+        kwargs['instance_path'] = str(tmp_path)
+        return original_flask(*args, **kwargs)
+
+    monkeypatch.setattr(expertise.service.flask, 'Flask', _flask_with_tmp_instance)
+
+    yield env_name, str(sentinel_log)
 
 
 def test_create_app_loads_env_cfg(monkeypatch, temp_env_cfg):
@@ -72,24 +84,31 @@ def test_create_app_loads_env_cfg(monkeypatch, temp_env_cfg):
     assert app.config['LOG_FILE'] == sentinel
 
 
-def test_create_app_defaults_to_production(monkeypatch):
+def test_create_app_defaults_to_production(monkeypatch, tmp_path, temp_env_cfg):
     """
     When EXPERTISE_ENV is not set, it should default to 'production'.
+    Uses temp_env_cfg to isolate instance_path and passes LOG_FILE so the
+    logger doesn't write into the repo/CI workspace.
     """
     monkeypatch.delenv('EXPERTISE_ENV', raising=False)
+    log_file = str(tmp_path / 'default.log')
 
-    app = expertise.service.create_app()
+    app = expertise.service.create_app(config={'LOG_FILE': log_file})
 
     assert app.config['EXPERTISE_ENV'] == 'production'
 
 
-def test_create_app_config_dict_overrides_env(monkeypatch):
+def test_create_app_config_dict_overrides_env(monkeypatch, tmp_path, temp_env_cfg):
     """
     Callers should be able to override EXPERTISE_ENV via the config dict
-    passed to create_app().
+    passed to create_app(). Uses temp_env_cfg to isolate instance_path and
+    passes LOG_FILE to keep the test hermetic.
     """
     monkeypatch.setenv('EXPERTISE_ENV', 'production')
+    log_file = str(tmp_path / 'override.log')
 
-    app = expertise.service.create_app(config={'EXPERTISE_ENV': 'override'})
+    app = expertise.service.create_app(
+        config={'EXPERTISE_ENV': 'override', 'LOG_FILE': log_file}
+    )
 
     assert app.config['EXPERTISE_ENV'] == 'override'
