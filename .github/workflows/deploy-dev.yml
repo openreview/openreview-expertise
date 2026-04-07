@@ -11,10 +11,6 @@ on:
         description: 'Branch or tag to deploy'
         required: false
         default: 'master'
-      py_branch:
-        description: 'openreview-py branch or tag to deploy'
-        required: false
-        default: 'master'
   # Triggers the workflow on push events but only for the master branch
   push:
     branches: [ master ]
@@ -65,18 +61,15 @@ jobs:
         run: |
           # Simple: Use branch/tag name + commit SHA of the main repo
           BRANCH="${{ github.event.inputs.branch || 'master' }}"
-          PY_BRANCH="${{ github.event.inputs.py_branch || 'master' }}"
           SHORT_SHA=$(git rev-parse --short HEAD)
-          
+
           # Clean branch name (replace / with -)
           CLEAN_BRANCH=$(echo "$BRANCH" | sed 's/\//-/g')
-          CLEAN_PY_BRANCH=$(echo "$PY_BRANCH" | sed 's/\//-/g')
-          
-          # Create simple tag: branch-pybranch-sha
-          IMAGE_TAG_VERSION="${CLEAN_BRANCH}-${CLEAN_PY_BRANCH}-${SHORT_SHA}"
-          
+
+          # Create simple tag: branch-sha
+          IMAGE_TAG_VERSION="${CLEAN_BRANCH}-${SHORT_SHA}"
+
           echo "IMAGE_TAG_VERSION=$IMAGE_TAG_VERSION" >> $GITHUB_ENV
-          echo "OPENREVIEW_PY_VERSION=${{ github.event.inputs.py_branch || 'master' }}" >> $GITHUB_ENV
           echo "KFP_PIPELINE_NAME=${{ env.PIPELINE_NAME }}" >> $GITHUB_ENV
           echo "IMAGE=${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
           echo "IMAGE_TAG=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
@@ -111,8 +104,6 @@ jobs:
           # Push multiple tags: the version provided
           tags: |
             ${{ env.IMAGE_TAG }}:${{ env.IMAGE_TAG_VERSION }}
-          build-args: |
-            OPENREVIEW_PY_VERSION=${{ env.OPENREVIEW_PY_VERSION }}
           cache-from: type=registry,ref=${{ env.IMAGE_TAG }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE_TAG }}:buildcache,mode=max
       - name: Build and push Kubeflow pipeline
@@ -129,7 +120,6 @@ jobs:
       - name: Run deploy script
         run: |
           BRANCH="${{ github.event.inputs.branch || 'master' }}"
-          PY_BRANCH="${{ github.event.inputs.py_branch || 'master' }}"
           instance_prefix='openreview-dev-'
 
           instances=$(gcloud compute instances list | grep "$instance_prefix" | grep RUNNING | tr -s ' ' | cut -d' ' -f1,2)
@@ -148,5 +138,5 @@ jobs:
 
           for i in ${!instance_names[@]}; do
             echo Deploying to ${instance_names[$i]}
-            gcloud compute ssh --zone ${zones[$i]} --tunnel-through-iap openreview@${instance_names[$i]} --command "bash /home/openreview/bin/deploy-expertise.sh $BRANCH $PY_BRANCH" --quiet
+            gcloud compute ssh --zone ${zones[$i]} --tunnel-through-iap openreview@${instance_names[$i]} --command "bash /home/openreview/bin/deploy-expertise.sh $BRANCH" --quiet
           done
