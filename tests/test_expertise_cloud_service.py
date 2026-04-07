@@ -263,7 +263,7 @@ class TestExpertiseCloudService():
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
-        assert request['user_id'] == 'CLD.cc/Program_Chairs'
+        assert request['user_id'] == 'CLD.cc'
         assert request['machine_type'] == 'small'
 
         setup_job_mocks()
