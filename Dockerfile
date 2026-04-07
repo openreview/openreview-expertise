@@ -1,13 +1,10 @@
 FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
 
-ARG OPENREVIEW_PY_VERSION=master
-
 WORKDIR /app
 
 ENV PYTHON_VERSION=3.11 \
     HOME="/app" \
     PATH="/app/miniconda/bin:${PATH}" \
-    FLASK_ENV=production \
     AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/" \
     SPECTER_DIR="/app/expertise-utils/specter/" \
     MFR_VOCAB_DIR="/app/expertise-utils/multifacet_recommender/feature_vocab_file" \
@@ -39,7 +36,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && conda install --force-reinstall pytorch pytorch-cuda=12.4 -c pytorch -c nvidia \
     && python -m pip install --no-cache-dir -e $HOME/openreview-expertise \
     && python -m pip install --no-cache-dir -I protobuf==3.20.1 \
-    && python -m pip install -e "git+https://github.com/openreview/openreview-py.git@${OPENREVIEW_PY_VERSION}#egg=openreview-py" \
     && conda clean --all -y \
     && apt-get purge -y build-essential wget curl git \
     && apt-get autoremove -y \
