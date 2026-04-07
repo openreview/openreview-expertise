@@ -851,7 +851,7 @@ class TestExpertiseCloudService():
                 '/expertise',
                 data=json.dumps({
                     "name": "User_A_Job",
-                    "entityA": {'type': "Group", 'memberOf': "CLD.cc/Area_Chairs"},
+                    "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
                     "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
                     "model": {"name": "specter+mfr"}
                 }),
@@ -970,11 +970,11 @@ class TestExpertiseCloudService():
                     "name": "test_run",
                     "entityA": {
                         'type': "Group",
-                        'memberOf': "CLD.cc/Area_Chairs",
+                        'memberOf': "CLD.cc/Reviewers",
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Note",
-                        'invitation': "CLD_ERR.cc/-/Submission" 
+                        'invitation': "CLD_ERR.cc/-/Submission"
                     },
                     "model": {
                             "name": "specter+mfr",
