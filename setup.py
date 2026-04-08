@@ -2,11 +2,11 @@ from setuptools import setup
 
 setup(
     name='openreview-expertise',
-    version='2.0.30',
+    version='2.1.0',
     description='OpenReview paper-reviewer affinity modeling',
     url='https://github.com/openreview/openreview-expertise',
     author='OpenReview',
-    author_email='harold@openreview.net, carlos@openreview.net',
+    author_email='info@openreview.net',
     license='MIT',
     packages=[
         'expertise'
