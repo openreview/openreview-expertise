@@ -171,7 +171,7 @@ When SPECTER is run as a service, it creates ~1GB of extra files get stored in a
 ```
 
 ### Configuration
-Configuration files are located in `/expertise/service/config`. When started, the server will search for a `.cfg` file in `/expertise/service/config` that matches the environment variable `FLASK_ENV`, and will default to the values in `default.cfg`.
+Configuration files are located in `/expertise/service/config`. When started, the server will search for a `.cfg` file in `/expertise/service/config` that matches the environment variable `EXPERTISE_ENV`, and will default to the values in `default.cfg`.
 
 For example, with file `/expertise/service/config/development.cfg`:
 ```
@@ -185,10 +185,10 @@ OPENREVIEW_BASEURL_V2='http://localhost:3001'
 
 Start the server with `development.cfg`:
 ```
-FLASK_ENV=development python -m expertise.service
+EXPERTISE_ENV=development python -m expertise.service
 ```
 
-Note that Flask will set `FLASK_ENV` to "production" by default, so if a file `production.cfg` exists, and the `FLASK_ENV` variable is unset, then the app will overwrite default values with those in `production.cfg`.
+Note that `EXPERTISE_ENV` defaults to "production", so if a file `production.cfg` exists and the `EXPERTISE_ENV` variable is unset, the app will overwrite default values with those in `production.cfg`.
 
 ## Configuration File
 
