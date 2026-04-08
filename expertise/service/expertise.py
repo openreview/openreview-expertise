@@ -862,7 +862,7 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         # Upload dataset to GCS and submit VertexAI job (expertise only, Task 2)
         config = self.redis.load_job(redis_id, user_id)
-        self.update_status(config, JobStatus.EXPERTISE_QUEUED)
+        self.update_status(config, JobStatus.QUEUED)
         dataset_gcs_path = self.cloud.upload_dataset(config)
         machine_type = self.compute_machine_type_from_dataset(config)
         self.logger.info(f"Machine type for {redis_id}: {machine_type}")

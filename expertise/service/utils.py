@@ -52,7 +52,6 @@ class JobStatus(str, Enum):
     INITIALIZED = 'Initialized'
     QUEUED = 'Queued'
     FETCHING_DATA  = 'Fetching Data'
-    EXPERTISE_QUEUED = 'Queued for Expertise'
     RUN_EXPERTISE = 'Running Expertise'
     COMPLETED = 'Completed'
     DATA_ERROR = 'Data Error'
@@ -63,7 +62,6 @@ class JobDescription(dict, Enum):
         JobStatus.INITIALIZED: 'Server received config and allocated space',
         JobStatus.QUEUED: 'Job is waiting to start fetching OpenReview data',
         JobStatus.FETCHING_DATA: 'Job is currently fetching data from OpenReview',
-        JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
         JobStatus.DATA_ERROR: 'Job completed but no scores were computed because of an issue with the data',
