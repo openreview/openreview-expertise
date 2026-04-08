@@ -292,19 +292,19 @@ class TestExpertiseCloudService():
                 }
             ),
             content_type='application/json',
-            headers=abc_client.headers
+            headers=tmlr_client.headers
         )
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
         time.sleep(LATENCY_OFFSET)
 
-        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run', f"Job name: {response['name']}, status: {response}"
         assert response['status'] != 'Error', response
 
         # Let request process
         time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
-        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         # Check proper user ID
@@ -313,7 +313,7 @@ class TestExpertiseCloudService():
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
-        assert request['user_id'] == 'CLD.cc'
+        assert request['user_id'] == 'TMLR'
         assert request['machine_type'] == 'small'
         
         setup_job_mocks()
