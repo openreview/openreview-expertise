@@ -28,6 +28,8 @@ def get_user_id(openreview_client):
 
     :returns id: The id of the logged in user
     """
+    if openreview_client is None:
+        return None
     user = openreview_client.user
     return user.get('id') if user else None
 
@@ -463,8 +465,7 @@ class JobConfig(object):
         starting_config = {},
         openreview_client_v2 = None,
         server_config = {},
-        working_dir = None,
-        user_id = None):
+        working_dir = None):
         """
         Sets default fields from the starting_config and attempts to override from api_request fields
         """
@@ -503,7 +504,7 @@ class JobConfig(object):
 
         # Set metadata fields from request
         config.name = api_request.name
-        config.user_id = user_id if user_id is not None else get_user_id(openreview_client_v2)
+        config.user_id = get_user_id(openreview_client_v2)
         config.job_id = generate_job_id() if job_id is None else job_id
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
@@ -921,7 +922,7 @@ class GCPInterface(object):
         self.logger.info(f"Dataset uploaded to {dataset_gcs_path}")
         return dataset_gcs_path
 
-    def create_job(self, json_request: dict, job_id: str, user_id: str = None, client = None, machine_type = None, dataset_gcs_path: str = None):
+    def create_job(self, json_request: dict, job_id: str, user_id: str = None, machine_type = None, dataset_gcs_path: str = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -954,7 +955,6 @@ class GCPInterface(object):
             )
             self.logger.info(f"JSON file '{file_name}' written to '{folder_path}' in bucket '{bucket_name}'.")
 
-        or_client = client if client else self.client
         api_request = APIRequest(
             name=json_request['name'],
             entityA=json_request['entityA'],
@@ -972,14 +972,14 @@ class GCPInterface(object):
         data['name'] = valid_vertex_id
 
         # Popped fields
-        data['baseurl_v2'] = openreview.tools.get_base_urls(or_client)[1]
+        data['baseurl_v2'] = openreview.tools.get_base_urls(self.client)[1]
         data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
         #data['dump_embs'] = True
         #data['dump_archives'] = True
 
         # Deleted metadata fields before hitting the pipeline
         data['machine_type'] = machine_type
-        data['user_id'] = user_id if user_id else get_user_id(or_client)
+        data['user_id'] = user_id if user_id else get_user_id(self.client)
         data['cdate'] = int(time.time() * 1000)
 
         write_json_to_gcs(self.bucket_name, folder_path, self.request_fname, data)

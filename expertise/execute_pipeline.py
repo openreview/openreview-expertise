@@ -105,8 +105,6 @@ def run_pipeline(
         
         # Pop base URLs and other expected variables
         print('Popping variables')
-        # user_id is retained so it can be used without an API client when dataset is pre-created
-        pipeline_user_id = raw_request.pop('user_id', None)
         for field in DELETED_FIELDS:
             raw_request.pop(field, None)
         baseurl_v2 = raw_request.pop('baseurl_v2', None)
@@ -150,7 +148,6 @@ def run_pipeline(
             openreview_client_v2= None,
             server_config = server_config,
             working_dir = working_dir,
-            user_id = pipeline_user_id
         )
 
         if working_dir is not None:

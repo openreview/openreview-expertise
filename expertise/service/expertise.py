@@ -844,13 +844,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
-        # Use server credentials for dataset creation: group tokens may lack read access to cross-venue submissions.
-        username = self.server_config.get('OPENREVIEW_USERNAME')
-        password = self.server_config.get('OPENREVIEW_PASSWORD')
-        if username and password:
-            openreview_client_v2 = openreview.api.OpenReviewClient(username=username, password=password, baseurl=config.baseurl_v2)
-        else:
-            openreview_client_v2 = openreview.api.OpenReviewClient(token=or_token, baseurl=config.baseurl_v2)
+        openreview_client_v2 = openreview.api.OpenReviewClient(token=or_token, baseurl=config.baseurl_v2)
 
         # Task 1: Create dataset locally before submitting to VertexAI
         try:
@@ -877,7 +871,6 @@ class ExpertiseCloudService(BaseExpertiseService):
             cloud_id = self.cloud.create_job(
                 deepcopy(request),
                 job_id=job.id,
-                client=openreview_client_v2,
                 user_id=user_id,
                 machine_type=machine_type,
                 dataset_gcs_path=dataset_gcs_path
