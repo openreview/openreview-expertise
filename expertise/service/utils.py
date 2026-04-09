@@ -29,8 +29,6 @@ def get_user_id(openreview_client):
 
     :returns id: The id of the logged in user
     """
-    if openreview_client is None:
-        return None
     user = openreview_client.user
     return user.get('id') if user else None
 
@@ -524,7 +522,8 @@ class JobConfig(object):
 
         # Set metadata fields from request
         config.name = api_request.name
-        config.user_id = get_user_id(openreview_client_v2)
+        if openreview_client_v2 is not None:
+            config.user_id = get_user_id(openreview_client_v2)
         config.job_id = generate_job_id() if job_id is None else job_id
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
