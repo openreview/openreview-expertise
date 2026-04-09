@@ -522,8 +522,7 @@ class JobConfig(object):
 
         # Set metadata fields from request
         config.name = api_request.name
-        if openreview_client_v2 is not None:
-            config.user_id = get_user_id(openreview_client_v2)
+        config.user_id = get_user_id(openreview_client_v2)
         config.job_id = generate_job_id() if job_id is None else job_id
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
