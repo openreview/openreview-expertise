@@ -983,9 +983,7 @@ class GCPInterface(object):
             'name': json_request['name'],
             'entityA': json_request['entityA'],
             'entityB': json_request['entityB'],
-            'model': json_request.get('model'),
-            'dataset': json_request.get('dataset'),
-            'machineType': json_request.get('machineType'),
+            **{k: json_request[k] for k in ['model', 'dataset', 'machineType'] if json_request.get(k) is not None}
         })
         valid_vertex_id = job_id + '-' + str(int(time.time() * 1000))
 

@@ -137,9 +137,7 @@ def run_pipeline(
             'name': raw_request['name'],
             'entityA': raw_request['entityA'],
             'entityB': raw_request['entityB'],
-            'model': raw_request.get('model'),
-            'dataset': raw_request.get('dataset'),
-            'machineType': raw_request.get('machineType'),
+            **{k: raw_request[k] for k in ['model', 'dataset', 'machineType'] if raw_request.get(k) is not None}
         })
 
         print('Creating job config')
