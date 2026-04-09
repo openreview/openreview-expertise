@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
+from google.cloud.storage import transfer_manager
 from google.cloud.aiplatform_v1.types import PipelineState
 from copy import deepcopy
 from expertise.config import ModelConfig
@@ -71,25 +72,46 @@ class APIRequest(object):
     """
     Validates and load objects and fields from POST requests
     """
-    def __init__(self, name, entityA, entityB, model=None, dataset=None, machine_type=None):
+    def __init__(self, request):
 
         self.entityA = {}
         self.entityB = {}
-        self.model = model if model is not None else {}
-        self.dataset = dataset if dataset is not None else {}
-        self.machine_type = machine_type
+        self.model = {}
+        self.dataset = {}
+        self.machine_type = None
+        root_key = 'request'
 
-        if not name:
-            raise openreview.OpenReviewException("Bad request: required field missing in request: name")
-        self.name = name
+        def _get_field_from_request(field):
+            return _get_required_field(request, root_key, field)
 
-        if entityA is None:
-            raise openreview.OpenReviewException("Bad request: required field missing in request: entityA")
-        if entityB is None:
-            raise openreview.OpenReviewException("Bad request: required field missing in request: entityB")
+        def _load_entity_a(entity):
+            self._load_entity('entityA', entity, self.entityA)
 
-        self._load_entity('entityA', entityA, self.entityA)
-        self._load_entity('entityB', entityB, self.entityB)
+        def _load_entity_b(entity):
+            self._load_entity('entityB', entity, self.entityB)
+
+        # Get the name of the job
+        self.name = _get_field_from_request('name')
+
+        # Validate entityA and entityB
+        entity_a = _get_field_from_request('entityA')
+        entity_b = _get_field_from_request('entityB')
+
+        _load_entity_a(entity_a)
+        _load_entity_b(entity_b)
+
+        # Optionally check for model object
+        self.model = request.pop('model', {})
+
+        # Optionally check for dataset object
+        self.dataset = request.pop('dataset', {})
+
+        # Optionally check for machine type
+        self.machine_type = request.pop('machineType', None)
+
+        # Check for empty request
+        if len(request.keys()) > 0:
+            raise openreview.OpenReviewException(f"Bad request: unexpected fields in {root_key}: {list(request.keys())}")
     
     def _load_entity(self, entity_id, source_entity, target_entity):
         '''Load information from an entity into the config'''
@@ -900,21 +922,25 @@ class GCPInterface(object):
         job_dir = config.job_dir
         folder_path = f"{self.jobs_folder}/{config.job_id}/dataset"
 
+        filenames = []
         dataset_items = ['archives', 'submissions', 'submissions.json']
         for item in dataset_items:
             local_path = os.path.join(job_dir, item)
             if os.path.isdir(local_path):
                 for root, dirs, files in os.walk(local_path):
                     for fname in files:
-                        file_path = os.path.join(root, fname)
-                        relative_path = os.path.relpath(file_path, job_dir)
-                        blob = self.bucket.blob(f"{folder_path}/{relative_path}")
-                        blob.upload_from_filename(file_path)
-                        self.logger.info(f"Uploaded {relative_path} to gs://{self.bucket_name}/{folder_path}/{relative_path}")
+                        filenames.append(os.path.relpath(os.path.join(root, fname), job_dir))
             elif os.path.isfile(local_path):
-                blob = self.bucket.blob(f"{folder_path}/{item}")
-                blob.upload_from_filename(local_path)
-                self.logger.info(f"Uploaded {item} to gs://{self.bucket_name}/{folder_path}/{item}")
+                filenames.append(item)
+
+        if filenames:
+            transfer_manager.upload_many_from_filenames(
+                self.bucket,
+                filenames,
+                source_directory=job_dir,
+                blob_name_prefix=f"{folder_path}/",
+            )
+            self.logger.info(f"Uploaded {len(filenames)} files to gs://{self.bucket_name}/{folder_path}/")
 
         dataset_gcs_path = f"gs://{self.bucket_name}/{folder_path}"
         self.logger.info(f"Dataset uploaded to {dataset_gcs_path}")
@@ -953,14 +979,14 @@ class GCPInterface(object):
             )
             self.logger.info(f"JSON file '{file_name}' written to '{folder_path}' in bucket '{bucket_name}'.")
 
-        api_request = APIRequest(
-            name=json_request['name'],
-            entityA=json_request['entityA'],
-            entityB=json_request['entityB'],
-            model=json_request.get('model'),
-            dataset=json_request.get('dataset'),
-            machine_type=json_request.get('machineType'),
-        )
+        api_request = APIRequest({
+            'name': json_request['name'],
+            'entityA': json_request['entityA'],
+            'entityB': json_request['entityB'],
+            'model': json_request.get('model'),
+            'dataset': json_request.get('dataset'),
+            'machineType': json_request.get('machineType'),
+        })
         valid_vertex_id = job_id + '-' + str(int(time.time() * 1000))
 
         folder_path = f"{self.jobs_folder}/{valid_vertex_id}"
