@@ -993,6 +993,7 @@ class GCPInterface(object):
 
         # Popped fields
         data['baseurl_v2'] = openreview.tools.get_base_urls(self.client)[1]
+        data['token'] = self.client.token
         data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
         #data['dump_embs'] = True
         #data['dump_archives'] = True

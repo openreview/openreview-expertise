@@ -3,6 +3,7 @@ import os
 import shortuuid
 import json
 import csv
+import openreview
 from expertise.execute_expertise import execute_expertise
 from expertise.service import load_model_artifacts
 from expertise.service.utils import APIRequest, JobConfig, ExpectedDataError
@@ -105,10 +106,10 @@ def run_pipeline(
         
         # Pop base URLs and other expected variables
         print('Popping variables')
-        pipeline_user_id = raw_request.pop('user_id', None)
         for field in DELETED_FIELDS:
             raw_request.pop(field, None)
-        baseurl_v2 = raw_request.pop('baseurl_v2', None)
+        token = raw_request.pop('token')
+        baseurl_v2 = raw_request.pop('baseurl_v2')
         destination_prefix = raw_request.pop('gcs_folder')
         # dump_embs removed - embeddings always uploaded
         dump_archives = False if 'dump_archives' not in raw_request else raw_request.pop('dump_archives')
@@ -127,6 +128,9 @@ def run_pipeline(
         print('Loading model artifacts')
         load_model_artifacts()
 
+        print('Logging into OpenReview')
+        client_v2 = openreview.api.OpenReviewClient(baseurl=baseurl_v2, token=token)
+
         print('Creating job ID')
         job_id = generate_job_id()
         if working_dir is None:
@@ -144,12 +148,10 @@ def run_pipeline(
         config = JobConfig.from_request(
             api_request = validated_request,
             starting_config = DEFAULT_CONFIG,
-            openreview_client_v2= None,
+            openreview_client_v2= client_v2,
             server_config = server_config,
             working_dir = working_dir,
         )
-        if pipeline_user_id:
-            config.user_id = pipeline_user_id
 
         if working_dir is not None:
             path_fields = ['work_dir', 'scores_path', 'publications_path', 'submissions_path']
