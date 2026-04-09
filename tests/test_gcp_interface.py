@@ -158,7 +158,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
     assert submitted_json['name'] == result
     assert submitted_json['entityA'] == json_request['entityA']
     assert submitted_json['entityB'] == json_request['entityB']
-    assert 'token' not in submitted_json
+    assert submitted_json['token'] == openreview_client.token
     assert submitted_json['baseurl_v2'] == 'http://localhost:3001'
     assert submitted_json['gcs_folder'] == f"gs://test-bucket/{expected_folder_path}"
     assert submitted_json['user_id'] == 'openreview.net'
