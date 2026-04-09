@@ -284,13 +284,29 @@ def test_get_job_status_by_job_id(mock_storage_client, mock_pipeline_job_get, op
     config = JobConfig(
         cloud_id = job_id
     )
-    config.api_request = APIRequest({
-        "name": "test_run",
-        "entityA": {"type": "Group", "memberOf": "ABC.cc/Area_Chairs"},
-        "entityB": {"type": "Note", "invitation": "ABC.cc/-/Submission"},
-        "model": {"name": "specter+mfr", "useTitle": False, "useAbstract": True, "skipSpecter": False, "scoreComputation": "avg"},
-        "dataset": {"minimumPubDate": 0}
-    })
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": {
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission"
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False,
+                    'useAbstract': True,
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
     result = gcp_interface.get_job_status_by_job_id(user_id, config)
 
     # Assertions
@@ -335,13 +351,29 @@ def test_get_job_status_by_job_id_job_not_found(mock_storage_client, openreview_
     config = JobConfig(
         cloud_id = "test_job"
     )
-    config.api_request = APIRequest({
-        "name": "test_run",
-        "entityA": {"type": "Group", "memberOf": "ABC.cc/Area_Chairs"},
-        "entityB": {"type": "Note", "invitation": "ABC.cc/-/Submission"},
-        "model": {"name": "specter+mfr", "useTitle": False, "useAbstract": True, "skipSpecter": False, "scoreComputation": "avg"},
-        "dataset": {"minimumPubDate": 0}
-    })
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": {
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission"
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False,
+                    'useAbstract': True,
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
     with pytest.raises(openreview.OpenReviewException, match="Job not found"):
         gcp_interface.get_job_status_by_job_id("test_user", config)
 
@@ -376,13 +408,29 @@ def test_get_job_status_by_job_id_insufficient_permissions(mock_storage_client, 
     config = JobConfig(
         cloud_id = 'test_job'
     )
-    config.api_request = APIRequest({
-        "name": "test_run",
-        "entityA": {"type": "Group", "memberOf": "ABC.cc/Area_Chairs"},
-        "entityB": {"type": "Note", "invitation": "ABC.cc/-/Submission"},
-        "model": {"name": "specter+mfr", "useTitle": False, "useAbstract": True, "skipSpecter": False, "scoreComputation": "avg"},
-        "dataset": {"minimumPubDate": 0}
-    })
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": {
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission"
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False,
+                    'useAbstract': True,
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
     with pytest.raises(openreview.OpenReviewException, match="Forbidden: Insufficient permissions to access job"):
         gcp_interface.get_job_status_by_job_id("test_user", config)
 
@@ -424,13 +472,29 @@ def test_get_job_status_by_job_id_multiple_requests(mock_storage_client, mock_pi
     config = JobConfig(
         cloud_id = 'test_job'
     )
-    config.api_request = APIRequest({
-        "name": "test_run",
-        "entityA": {"type": "Group", "memberOf": "ABC.cc/Area_Chairs"},
-        "entityB": {"type": "Note", "invitation": "ABC.cc/-/Submission"},
-        "model": {"name": "specter+mfr", "useTitle": False, "useAbstract": True, "skipSpecter": False, "scoreComputation": "avg"},
-        "dataset": {"minimumPubDate": 0}
-    })
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": {
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission"
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False,
+                    'useAbstract': True,
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
     with pytest.raises(openreview.OpenReviewException, match="Internal Error: Multiple requests found for job"):
         gcp_interface.get_job_status_by_job_id("openreview.net", config)
 
@@ -848,11 +912,19 @@ def test_get_job_results_group_scoring(mock_storage_client):
 def test_get_job_status_by_job_id_returns_redis_when_no_cloud_id(mock_storage_client, mock_pipeline_job_get, openreview_client):
     from expertise.service.utils import APIRequest, JobConfig, GCPInterface, JobStatus, JobDescription
     # Minimal request and config with no cloud_id
-    api_req = APIRequest({
-        "name": "test_job",
-        "entityA": {"type": "Group", "memberOf": "Some.Venue/Reviewers"},
-        "entityB": {"type": "Note", "invitation": "Some.Venue/-/Submission"}
-    })
+    api_req = APIRequest(
+        {
+            "name": "test_job",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "Some.Venue/Reviewers",
+            },
+            "entityB": {
+                'type': "Note",
+                'invitation': "Some.Venue/-/Submission"
+            }
+        }
+    )
     cfg = JobConfig(
         name="test",
         user_id="openreview.net",
