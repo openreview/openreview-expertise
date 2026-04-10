@@ -66,14 +66,14 @@ class Specter2Predictor(Predictor):
         self.compute_paper_paper = compute_paper_paper
         self.venue_specific_weights = venue_specific_weights
         self.normalize_scores = normalize_scores
-        print(f"SPECTER2 venue_specific_weights: {venue_specific_weights}")
+        print(f"SPECTER2 venue_specific_weights: {venue_specific_weights}", flush=True)
 
         self.percentile_select = percentile_select
-        print("Loading tokenizer 'allenai/specter2_aug2023refresh_base'...")
+        print("Loading tokenizer 'allenai/specter2_aug2023refresh_base'...", flush=True)
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
-        print("Loading model 'allenai/specter2_aug2023refresh_base'...")
+        print("Loading model 'allenai/specter2_aug2023refresh_base'...", flush=True)
         self.model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base')
-        print("Loading adapter 'allenai/specter2_aug2023refresh'...")
+        print("Loading adapter 'allenai/specter2_aug2023refresh'...", flush=True)
         adapter_timeout = int(os.environ.get('HF_HUB_DOWNLOAD_TIMEOUT', 600))
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(

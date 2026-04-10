@@ -4,6 +4,7 @@ WORKDIR /app
 
 ENV PYTHON_VERSION=3.11 \
     HOME="/app" \
+    PYTHONUNBUFFERED=1 \
     PATH="/app/miniconda/bin:${PATH}" \
     AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/" \
     SPECTER_DIR="/app/expertise-utils/specter/" \

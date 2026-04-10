@@ -64,7 +64,9 @@ def execute_expertise(config):
         )
 
     if config['model'] == 'specter2+scincl':
+        print("Importing specter2_scincl module...", flush=True)
         from .models import specter2_scincl
+        print("Module imported, creating EnsembleModel...", flush=True)
         predictor = specter2_scincl.EnsembleModel(
             specter_dir=config['model_params'].get('specter_dir', "./models/multifacet_recommender/specter/"),
             work_dir=config['model_params'].get('work_dir', "./"),
