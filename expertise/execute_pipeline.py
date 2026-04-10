@@ -108,12 +108,8 @@ def run_pipeline(
         _, bucket = load_gcs(destination_prefix)
         blob_prefix = '/'.join(destination_prefix.split('/')[3:])
 
-        model_type = raw_request.get('model', DEFAULT_CONFIG['model'])
-        if model_type in ('specter+mfr', 'specter', 'mfr'):
-            print(f'Loading model artifacts for {model_type}')
-            load_model_artifacts()
-        else:
-            print(f'Skipping GCS artifact download for {model_type}')
+        print('Loading model artifacts')
+        load_model_artifacts()
 
         print('Logging into OpenReview')
         client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
