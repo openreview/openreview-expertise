@@ -1,6 +1,7 @@
 import time
 
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import json
 import os
 import torch
@@ -75,8 +76,24 @@ class Specter2Predictor(Predictor):
         print("Loading model 'allenai/specter2_aug2023refresh_base'...")
         self.model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base')
         print("Loading adapter 'allenai/specter2_aug2023refresh'...")
-        self.model.load_adapter("allenai/specter2_aug2023refresh", source="hf", load_as="proximity", set_active=True)
-        print("Model loaded, moving to device...")
+        adapter_timeout = int(os.environ.get('HF_HUB_DOWNLOAD_TIMEOUT', 600))
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                self.model.load_adapter,
+                "allenai/specter2_aug2023refresh",
+                source="hf",
+                load_as="proximity",
+                set_active=True,
+            )
+            try:
+                future.result(timeout=adapter_timeout)
+            except FuturesTimeoutError:
+                future.cancel()
+                raise TimeoutError(
+                    f"Loading adapter 'allenai/specter2_aug2023refresh' timed out after {adapter_timeout}s. "
+                    "HuggingFace Hub may be unreachable."
+                )
+        print("Adapter loaded, moving to device...")
         self.model.to(self.cuda_device)
         self.model.eval()
 
