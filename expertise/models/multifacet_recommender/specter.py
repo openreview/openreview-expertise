@@ -21,8 +21,6 @@ from typing import Optional
 import redisai
 import numpy as np
 
-from expertise.service.server import redis_embeddings_pool
-
 import logging
 
 """
@@ -69,6 +67,7 @@ class SpecterPredictor:
             os.makedirs(self.work_dir)
         self.use_redis = use_redis
         if use_redis:
+            from expertise.service.server import redis_embeddings_pool
             self.redis = redisai.Client(connection_pool=redis_embeddings_pool)
         else:
             self.redis = None

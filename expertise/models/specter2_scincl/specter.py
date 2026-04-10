@@ -16,8 +16,6 @@ from transformers import AutoTokenizer, AutoModel
 from adapters import AutoAdapterModel
 from .predictor import Predictor
 
-from expertise.service.server import redis_embeddings_pool
-
 import logging
 """
 archive_file: $SPECTER_FOLDER/model.tar.gz
