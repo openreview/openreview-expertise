@@ -266,6 +266,15 @@ class TestExpertiseCloudService():
         assert request['user_id'] == 'CLD.cc'
         assert request['machine_type'] == 'small'
 
+        # Verify dataset files were uploaded to the bucket
+        dataset_prefix = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/"
+        dataset_blobs = list(gcs_test_bucket.list_blobs(prefix=dataset_prefix))
+        dataset_blob_names = [b.name.replace(dataset_prefix, '') for b in dataset_blobs]
+        assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
+        assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
+        assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
+        assert any(name.startswith('submissions/') for name in dataset_blob_names), f"No submission files found in bucket. Found: {dataset_blob_names}"
+
         setup_job_mocks()
         response = test_client.post(
             '/expertise',
@@ -315,7 +324,16 @@ class TestExpertiseCloudService():
         request = json.loads(request_blob.download_as_text())
         assert request['user_id'] == 'TMLR'
         assert request['machine_type'] == 'small'
-        
+
+        # Verify dataset files were uploaded to the bucket
+        dataset_prefix = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/"
+        dataset_blobs = list(gcs_test_bucket.list_blobs(prefix=dataset_prefix))
+        dataset_blob_names = [b.name.replace(dataset_prefix, '') for b in dataset_blobs]
+        assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
+        assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
+        assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
+        assert any(name.startswith('submissions/') for name in dataset_blob_names), f"No submission files found in bucket. Found: {dataset_blob_names}"
+
         setup_job_mocks()
         response = test_client.post(
             '/expertise',
@@ -325,7 +343,7 @@ class TestExpertiseCloudService():
                         'type': "Group",
                         'memberOf': "TMLR/Reviewers",
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Note",
                         'invitation': "TMLR/-/Submission" 
                     },
@@ -398,6 +416,15 @@ class TestExpertiseCloudService():
         request = json.loads(request_blob.download_as_text())
         assert request['user_id'] == 'TMLR'
         assert request['machine_type'] == 'small'
+
+        # Verify dataset files were uploaded to the bucket
+        dataset_prefix = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/"
+        dataset_blobs = list(gcs_test_bucket.list_blobs(prefix=dataset_prefix))
+        dataset_blob_names = [b.name.replace(dataset_prefix, '') for b in dataset_blobs]
+        assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
+        assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
+        assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
+        assert any(name.startswith('submissions/') for name in dataset_blob_names), f"No submission files found in bucket. Found: {dataset_blob_names}"
 
         # Upload test results to GCS
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
