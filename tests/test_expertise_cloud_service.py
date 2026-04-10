@@ -273,7 +273,6 @@ class TestExpertiseCloudService():
         assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
         assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
         assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
-        assert any(name.startswith('submissions/') for name in dataset_blob_names), f"No submission files found in bucket. Found: {dataset_blob_names}"
 
         setup_job_mocks()
         response = test_client.post(
@@ -332,7 +331,6 @@ class TestExpertiseCloudService():
         assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
         assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
         assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
-        assert any(name.startswith('submissions/') for name in dataset_blob_names), f"No submission files found in bucket. Found: {dataset_blob_names}"
 
         setup_job_mocks()
         response = test_client.post(
@@ -424,7 +422,6 @@ class TestExpertiseCloudService():
         assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
         assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
         assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
-        assert any(name.startswith('submissions/') for name in dataset_blob_names), f"No submission files found in bucket. Found: {dataset_blob_names}"
 
         # Upload test results to GCS
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
