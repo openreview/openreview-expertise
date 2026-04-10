@@ -1,5 +1,11 @@
 import argparse
 import os
+
+# Set HuggingFace timeouts (in seconds) before importing any model code.
+# Prevents jobs from hanging indefinitely if HuggingFace Hub is unreachable.
+os.environ.setdefault('HF_HUB_DOWNLOAD_TIMEOUT', '600')
+os.environ.setdefault('HF_HUB_ETAG_TIMEOUT', '30')
+
 import openreview
 import shortuuid
 import json

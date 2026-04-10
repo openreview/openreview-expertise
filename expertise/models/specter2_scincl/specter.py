@@ -70,11 +70,13 @@ class Specter2Predictor(Predictor):
         print(f"SPECTER2 venue_specific_weights: {venue_specific_weights}")
 
         self.percentile_select = percentile_select
+        print("Loading tokenizer 'allenai/specter2_aug2023refresh_base'...")
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
-        #load base model
+        print("Loading model 'allenai/specter2_aug2023refresh_base'...")
         self.model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base')
-        #load the adapter(s) as per the required task, provide an identifier for the adapter in load_as argument and activate it
+        print("Loading adapter 'allenai/specter2_aug2023refresh'...")
         self.model.load_adapter("allenai/specter2_aug2023refresh", source="hf", load_as="proximity", set_active=True)
+        print("Model loaded, moving to device...")
         self.model.to(self.cuda_device)
         self.model.eval()
 

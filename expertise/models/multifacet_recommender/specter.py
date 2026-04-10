@@ -74,9 +74,11 @@ class SpecterPredictor:
             self.redis = None
         self.compute_paper_paper = compute_paper_paper
 
+        print("Loading tokenizer 'allenai/specter'...")
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter')
-        #load base model
+        print("Loading model 'allenai/specter'...")
         self.model = AutoModel.from_pretrained('allenai/specter')
+        print("Model loaded, moving to device...")
         self.model.to(self.cuda_device)
         self.model.eval()
 

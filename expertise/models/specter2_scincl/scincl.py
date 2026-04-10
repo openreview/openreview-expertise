@@ -69,9 +69,11 @@ class SciNCLPredictor(Predictor):
         print(f"SciNCL venue_specific_weights: {venue_specific_weights}")
         self.percentile_select = percentile_select
 
+        print("Loading tokenizer 'malteos/scincl'...")
         self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
-        #load base model
+        print("Loading model 'malteos/scincl'...")
         self.model = AutoModel.from_pretrained('malteos/scincl')
+        print("Model loaded, moving to device...")
         self.model.to(self.cuda_device)
         self.model.eval()
 
