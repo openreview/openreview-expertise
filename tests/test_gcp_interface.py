@@ -4,6 +4,8 @@ import pytest
 import json
 import datetime
 import time
+import os
+import tempfile
 import openreview
 from copy import deepcopy
 from expertise.service.utils import GCPInterface, JobDescription, JobStatus, JobConfig, APIRequest
@@ -241,6 +243,104 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     mock_pipeline_instance.submit.assert_called_once_with(
         service_account='sa-under-test@test-project.iam.gserviceaccount.com'
     )
+
+# Test case for `upload_dataset` — verifies that dataset files are actually uploaded to the bucket
+@patch("expertise.service.utils.transfer_manager")  # Mock transfer_manager
+@patch("expertise.service.utils.storage.Client")  # Mock GCS Client
+def test_upload_dataset(mock_storage_client, mock_transfer_manager, openreview_client):
+    mock_bucket = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
+    )
+
+    with tempfile.TemporaryDirectory() as job_dir:
+        # Create dataset files matching what create_dataset produces
+        archives_dir = os.path.join(job_dir, 'archives')
+        submissions_dir = os.path.join(job_dir, 'submissions')
+        os.makedirs(archives_dir)
+        os.makedirs(submissions_dir)
+
+        # Write test archive files
+        with open(os.path.join(archives_dir, '~User_One1.jsonl'), 'w') as f:
+            f.write(json.dumps({'id': 'paper1', 'content': {'title': 'Test Paper'}}) + '\n')
+        with open(os.path.join(archives_dir, '~User_Two1.jsonl'), 'w') as f:
+            f.write(json.dumps({'id': 'paper2', 'content': {'title': 'Another Paper'}}) + '\n')
+
+        # Write test submission files
+        with open(os.path.join(submissions_dir, 'sub1.jsonl'), 'w') as f:
+            f.write(json.dumps({'id': 'sub1', 'content': {'title': 'Submission 1'}}) + '\n')
+
+        # Write submissions.json
+        with open(os.path.join(job_dir, 'submissions.json'), 'w') as f:
+            json.dump({'count': 1}, f)
+
+        config = JobConfig(job_id='test-upload-job', job_dir=job_dir)
+
+        result = gcp_interface.upload_dataset(config)
+
+        # Verify the returned GCS path
+        assert result == "gs://test-bucket/jobs/test-upload-job/dataset"
+
+        # Verify transfer_manager.upload_many_from_filenames was called
+        mock_transfer_manager.upload_many_from_filenames.assert_called_once()
+        call_args = mock_transfer_manager.upload_many_from_filenames.call_args
+
+        # Verify it was called with the correct bucket
+        assert call_args[0][0] == mock_bucket
+
+        # Verify the filenames include archives, submissions, and submissions.json
+        uploaded_filenames = sorted(call_args[0][1])
+        assert 'archives/~User_One1.jsonl' in uploaded_filenames
+        assert 'archives/~User_Two1.jsonl' in uploaded_filenames
+        assert 'submissions/sub1.jsonl' in uploaded_filenames
+        assert 'submissions.json' in uploaded_filenames
+        assert len(uploaded_filenames) == 4
+
+        # Verify source_directory and blob_name_prefix
+        assert call_args[1]['source_directory'] == job_dir
+        assert call_args[1]['blob_name_prefix'] == "jobs/test-upload-job/dataset/"
+
+
+# Test that upload_dataset handles an empty job directory without errors
+@patch("expertise.service.utils.transfer_manager")
+@patch("expertise.service.utils.storage.Client")
+def test_upload_dataset_empty_directory(mock_storage_client, mock_transfer_manager, openreview_client):
+    mock_bucket = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
+    )
+
+    with tempfile.TemporaryDirectory() as job_dir:
+        config = JobConfig(job_id='test-empty-job', job_dir=job_dir)
+
+        result = gcp_interface.upload_dataset(config)
+
+        assert result == "gs://test-bucket/jobs/test-empty-job/dataset"
+        # No files to upload, so transfer_manager should not be called
+        mock_transfer_manager.upload_many_from_filenames.assert_not_called()
+
 
 # Test case for the `get_job_status_by_job_id` method
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
