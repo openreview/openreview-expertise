@@ -43,6 +43,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Add conda environment bin to PATH so that 'python' uses the environment by default
 ENV PATH="/app/miniconda/envs/expertise/bin:${PATH}"
 
+# Pre-download HuggingFace models so jobs don't depend on HF availability at runtime
+RUN python -c "\
+from transformers import AutoTokenizer, AutoModel; \
+AutoTokenizer.from_pretrained('allenai/specter'); \
+AutoModel.from_pretrained('allenai/specter'); \
+AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base'); \
+AutoModel.from_pretrained('allenai/specter2_aug2023refresh_base'); \
+AutoTokenizer.from_pretrained('malteos/scincl'); \
+AutoModel.from_pretrained('malteos/scincl'); \
+" && python -c "\
+from adapters import AutoAdapterModel; \
+model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base'); \
+model.load_adapter('allenai/specter2_aug2023refresh', source='hf', load_as='proximity', set_active=True); \
+"
+
 RUN mkdir ${HOME}/expertise-utils \
     && cp ${HOME}/openreview-expertise/expertise/service/config/default_container.cfg \
        ${HOME}/openreview-expertise/expertise/service/config/production.cfg
