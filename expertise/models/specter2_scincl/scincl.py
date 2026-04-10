@@ -14,8 +14,6 @@ import numpy as np
 from transformers import AutoTokenizer, AutoModel
 from .predictor import Predictor
 
-from expertise.service.server import redis_embeddings_pool
-
 import logging
 """
 archive_file: $SPECTER_FOLDER/model.tar.gz
@@ -69,9 +67,11 @@ class SciNCLPredictor(Predictor):
         print(f"SciNCL venue_specific_weights: {venue_specific_weights}")
         self.percentile_select = percentile_select
 
+        print("Loading tokenizer 'malteos/scincl'...")
         self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
-        #load base model
+        print("Loading model 'malteos/scincl'...")
         self.model = AutoModel.from_pretrained('malteos/scincl')
+        print("Model loaded, moving to device...")
         self.model.to(self.cuda_device)
         self.model.eval()
 

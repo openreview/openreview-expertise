@@ -36,7 +36,7 @@ class ArchivesDataset(UserDict):
     This class maps a tilde id to its list of publications
     '''
     def __init__(self, **kwargs):
-        print('Loading Archives dataset...')
+        print('Loading Archives dataset...', flush=True)
         if kwargs.get('archives_path'):
             author_archives = defaultdict(list)
             for author_file in Path(kwargs['archives_path']).iterdir():
@@ -69,7 +69,7 @@ class SubmissionsDataset(UserDict):
     This class maps a Note id to its Note
     '''
     def __init__(self, **kwargs):
-        print('Loading Submissions dataset...')
+        print('Loading Submissions dataset...', flush=True)
         if kwargs.get('submissions_path'):
             submissions = {}
             for submission_file in Path(kwargs['submissions_path']).iterdir():
