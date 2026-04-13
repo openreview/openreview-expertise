@@ -95,6 +95,25 @@ jobs:
             python -m pip install -e .
             python -m pip install -I protobuf==3.20.1
       - run:
+          name: Pre-download HuggingFace models
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            python -c "
+            from transformers import AutoTokenizer, AutoModel
+            AutoTokenizer.from_pretrained('allenai/specter')
+            AutoModel.from_pretrained('allenai/specter')
+            AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
+            AutoModel.from_pretrained('allenai/specter2_aug2023refresh_base')
+            AutoTokenizer.from_pretrained('malteos/scincl')
+            AutoModel.from_pretrained('malteos/scincl')
+            "
+            python -c "
+            from adapters import AutoAdapterModel
+            model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base')
+            model.load_adapter('allenai/specter2_aug2023refresh', source='hf', load_as='proximity', set_active=True)
+            "
+      - run:
           name: Initialize MongoDB
           command: |
             docker run -d --name mongodb -p 27017:27017 mongo:8.0 --replSet rs0

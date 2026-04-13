@@ -15,8 +15,6 @@ from transformers import AutoTokenizer, AutoModel
 from adapters import AutoAdapterModel
 from .predictor import Predictor
 
-from expertise.service.server import redis_embeddings_pool
-
 import logging
 """
 archive_file: $SPECTER_FOLDER/model.tar.gz
@@ -67,14 +65,16 @@ class Specter2Predictor(Predictor):
         self.compute_paper_paper = compute_paper_paper
         self.venue_specific_weights = venue_specific_weights
         self.normalize_scores = normalize_scores
-        print(f"SPECTER2 venue_specific_weights: {venue_specific_weights}")
+        print(f"SPECTER2 venue_specific_weights: {venue_specific_weights}", flush=True)
 
         self.percentile_select = percentile_select
+        print("Loading tokenizer 'allenai/specter2_aug2023refresh_base'...", flush=True)
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
-        #load base model
+        print("Loading model 'allenai/specter2_aug2023refresh_base'...", flush=True)
         self.model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base')
-        #load the adapter(s) as per the required task, provide an identifier for the adapter in load_as argument and activate it
+        print("Loading adapter 'allenai/specter2_aug2023refresh'...", flush=True)
         self.model.load_adapter("allenai/specter2_aug2023refresh", source="hf", load_as="proximity", set_active=True)
+        print("Model loaded, moving to device...", flush=True)
         self.model.to(self.cuda_device)
         self.model.eval()
 

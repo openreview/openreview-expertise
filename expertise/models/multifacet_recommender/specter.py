@@ -21,8 +21,6 @@ from typing import Optional
 import redisai
 import numpy as np
 
-from expertise.service.server import redis_embeddings_pool
-
 import logging
 
 """
@@ -69,14 +67,17 @@ class SpecterPredictor:
             os.makedirs(self.work_dir)
         self.use_redis = use_redis
         if use_redis:
+            from expertise.service.server import redis_embeddings_pool
             self.redis = redisai.Client(connection_pool=redis_embeddings_pool)
         else:
             self.redis = None
         self.compute_paper_paper = compute_paper_paper
 
+        print("Loading tokenizer 'allenai/specter'...")
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter')
-        #load base model
+        print("Loading model 'allenai/specter'...")
         self.model = AutoModel.from_pretrained('allenai/specter')
+        print("Model loaded, moving to device...")
         self.model.to(self.cuda_device)
         self.model.eval()
 
