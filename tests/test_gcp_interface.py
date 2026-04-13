@@ -243,6 +243,50 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
         service_account='sa-under-test@test-project.iam.gserviceaccount.com'
     )
 
+# machine_type must not appear in pipeline parameter_values — it is used only to
+# select the per-tier pipeline and must not be forwarded into the job definition,
+# otherwise Vertex AI rejects the job with "parameter not found in input definitions".
+@patch("expertise.service.utils.time.time")
+@patch("expertise.service.utils.aip.PipelineJob")
+@patch("expertise.service.utils.storage.Client")
+def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock_pipeline_job, mock_time, openreview_client):
+    mock_time.return_value = 1234567890.123
+    mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+    mock_bucket.blob.return_value = mock_blob
+    mock_blob.upload_from_string.return_value = None
+    mock_pipeline_job.return_value = MagicMock()
+
+    config = {
+        'GCP_PROJECT_ID': 'test_project',
+        'GCP_PROJECT_NUMBER': '123456',
+        'GCP_REGION': 'us-central1',
+        'GCP_PIPELINE_ROOT': 'pipeline-root',
+        'GCP_PIPELINE_NAME': 'test-pipeline',
+        'GCP_PIPELINE_REPO': 'test-repo',
+        'GCP_PIPELINE_TAG': 'latest',
+        'GCP_BUCKET_NAME': 'test-bucket',
+        'GCP_JOBS_FOLDER': 'jobs',
+        'GCP_SERVICE_LABEL': {'test': 'label'},
+    }
+    gcp_interface = GCPInterface(config=config, openreview_client=openreview_client)
+
+    json_request = {
+        "name": "test_run_machine_type",
+        "entityA": {'type': "Group", 'memberOf': "GCP.cc/Reviewers"},
+        "entityB": {'type': "Note", 'invitation': "GCP.cc/-/Submission"},
+        "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'}
+    }
+    gcp_interface.create_job(deepcopy(json_request), job_id=generate_job_id(), machine_type='small')
+
+    _, kwargs = mock_pipeline_job.call_args
+    params = kwargs['parameter_values']
+    assert 'machine_type' not in params, (
+        "machine_type must not be passed as a pipeline parameter — it is used only "
+        "for tier-based pipeline selection and is not defined in any pipeline's input definitions"
+    )
+
 # Test case for `upload_dataset` — verifies that dataset files are actually uploaded to the bucket
 @patch("expertise.service.utils.transfer_manager")  # Mock transfer_manager
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
