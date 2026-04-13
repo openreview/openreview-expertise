@@ -175,7 +175,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
         ),
         job_id=result,
         pipeline_root="gs://test-bucket/pipeline-root",
-        parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json", "machine_type": "small"},
+        parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json"},
         labels={"test": "label"}
     )
     mock_pipeline_instance.submit.assert_called_once_with(service_account=None)
@@ -237,7 +237,6 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     assert kwargs['pipeline_root'] == "gs://test-bucket/pipeline-root"
     params = kwargs['parameter_values']
     assert params["gcs_request_path"] == f"gs://test-bucket/{expected_folder_path}/request.json"
-    assert params["machine_type"] == "small"
     
     # Verify submit() is called with the service account
     mock_pipeline_instance.submit.assert_called_once_with(
