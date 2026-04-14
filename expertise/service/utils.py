@@ -915,10 +915,11 @@ class GCPInterface(object):
 
             return f"{match_note_value}-{submission_note_value}"
 
-    def upload_dataset(self, config):
+    def upload_dataset(self, config, vertex_id=None):
         """Upload dataset files from config.job_dir to GCS. Returns the GCS path."""
         job_dir = config.job_dir
-        folder_path = f"{self.jobs_folder}/{config.job_id}/dataset"
+        folder_name = vertex_id if vertex_id else config.job_id
+        folder_path = f"{self.jobs_folder}/{folder_name}/dataset"
 
         filenames = []
         dataset_items = ['archives', 'submissions', 'submissions.json']
@@ -944,7 +945,7 @@ class GCPInterface(object):
         self.logger.info(f"Dataset uploaded to {dataset_gcs_path}")
         return dataset_gcs_path
 
-    def create_job(self, json_request: dict, job_id: str, user_id: str = None, machine_type = None, dataset_gcs_path: str = None):
+    def create_job(self, json_request: dict, job_id: str, user_id: str = None, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -983,7 +984,7 @@ class GCPInterface(object):
             'entityB': json_request['entityB'],
             **{k: json_request[k] for k in ['model', 'dataset', 'machineType'] if json_request.get(k) is not None}
         })
-        valid_vertex_id = job_id + '-' + str(int(time.time() * 1000))
+        valid_vertex_id = vertex_id if vertex_id else job_id + '-' + str(int(time.time() * 1000))
 
         folder_path = f"{self.jobs_folder}/{valid_vertex_id}"
         data = api_request.to_json()
@@ -1335,6 +1336,16 @@ class GCPInterface(object):
             raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
         if len(authenticated_requests) > 1:
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
+
+        # Validate score and metadata files exist before returning the streaming generator.
+        # If validation is deferred into the generator, exceptions fire after the HTTP
+        # response has already started — causing a broken chunked response on the client.
+        score_files = [blob for blob in job_blobs if '.jsonl' in blob.name and job_id in blob.name]
+        metadata_files = [blob for blob in job_blobs if 'metadata.json' in blob.name]
+        if len(metadata_files) != 1:
+            raise openreview.OpenReviewException(f'Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}')
+        if len(score_files) < 1 or len(score_files) > 2:
+            raise openreview.OpenReviewException(f'Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}')
 
         return _get_scores_and_metadata_streaming(job_blobs, job_id)
 

@@ -355,6 +355,41 @@ def test_upload_dataset(mock_storage_client, mock_transfer_manager, openreview_c
         assert call_args[1]['blob_name_prefix'] == "jobs/test-upload-job/dataset/"
 
 
+# Test that upload_dataset uses the provided vertex_id as the folder name,
+# so dataset and scores land in the same folder when vertex_id is pre-generated.
+@patch("expertise.service.utils.transfer_manager")
+@patch("expertise.service.utils.storage.Client")
+def test_upload_dataset_with_vertex_id(mock_storage_client, mock_transfer_manager, openreview_client):
+    mock_bucket = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
+    )
+
+    with tempfile.TemporaryDirectory() as job_dir:
+        with open(os.path.join(job_dir, 'submissions.json'), 'w') as f:
+            json.dump({}, f)
+
+        config = JobConfig(job_id='base-job-id', job_dir=job_dir)
+        vertex_id = 'base-job-id-1234567890000'
+
+        result = gcp_interface.upload_dataset(config, vertex_id=vertex_id)
+
+        assert result == "gs://test-bucket/jobs/base-job-id-1234567890000/dataset"
+        call_args = mock_transfer_manager.upload_many_from_filenames.call_args
+        assert call_args[1]['blob_name_prefix'] == "jobs/base-job-id-1234567890000/dataset/"
+
+
 # Test that upload_dataset handles an empty job directory without errors
 @patch("expertise.service.utils.transfer_manager")
 @patch("expertise.service.utils.storage.Client")
