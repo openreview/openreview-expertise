@@ -1265,7 +1265,7 @@ class GCPInterface(object):
                 blob for blob in all_blobs if 'metadata.json' in blob.name
             ]
             score_files = [
-                blob for blob in all_blobs if '.jsonl' in blob.name and job_id in blob.name
+                blob for blob in all_blobs if '.jsonl' in blob.name and 'dataset/' not in blob.name
             ]
 
             if len(metadata_files) != 1:
@@ -1340,7 +1340,7 @@ class GCPInterface(object):
         # Validate score and metadata files exist before returning the streaming generator.
         # If validation is deferred into the generator, exceptions fire after the HTTP
         # response has already started — causing a broken chunked response on the client.
-        score_files = [blob for blob in job_blobs if '.jsonl' in blob.name and job_id in blob.name]
+        score_files = [blob for blob in job_blobs if '.jsonl' in blob.name and 'dataset/' not in blob.name]
         metadata_files = [blob for blob in job_blobs if 'metadata.json' in blob.name]
         if len(metadata_files) != 1:
             raise openreview.OpenReviewException(f'Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}')
