@@ -85,11 +85,11 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     working_dir = './test_pipeline'
     os.makedirs(working_dir, exist_ok=True)
 
-    ## Build scores file
-    scores_file = os.path.join(working_dir, 'scores.csv')
+    ## Build scores file — named after config['name'] as execute_expertise does in production
+    scores_file = os.path.join(working_dir, 'test_run2.csv')
     with open(scores_file, 'w') as f:
         f.write("note1,test_user,0.5\nnote2,test_user,0.5")
-    sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
+    sparse_file = os.path.join(working_dir, 'test_run2_sparse.csv')
     with open(sparse_file, 'w') as f:
         f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
@@ -122,7 +122,7 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     prefix = f"{gcs_jobs_prefix}/test_prefix/"
 
     # Check for scores.jsonl file
-    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    scores_blob = bucket.blob(f"{prefix}test_run2.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
     scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
@@ -190,11 +190,11 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     working_dir = './test_pipeline'
     os.makedirs(working_dir, exist_ok=True)
 
-    ## Build scores file
-    scores_file = os.path.join(working_dir, 'scores.csv')
+    ## Build scores file — named after config['name'] as execute_expertise does in production
+    scores_file = os.path.join(working_dir, 'test_run_gcs.csv')
     with open(scores_file, 'w') as f:
         f.write("note1,test_user,0.5\nnote2,test_user,0.5")
-    sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
+    sparse_file = os.path.join(working_dir, 'test_run_gcs_sparse.csv')
     with open(sparse_file, 'w') as f:
         f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
@@ -224,7 +224,7 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     prefix = f"{gcs_jobs_prefix}/test_prefix_gcs_dir/"
 
     # Check for scores.jsonl file
-    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    scores_blob = bucket.blob(f"{prefix}test_run_gcs.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
     scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
@@ -292,11 +292,11 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     working_dir = './test_pipeline'
     os.makedirs(working_dir, exist_ok=True)
 
-    ## Build scores file
-    scores_file = os.path.join(working_dir, 'scores.csv')
+    ## Build scores file — named after config['name'] as execute_expertise does in production
+    scores_file = os.path.join(working_dir, 'test_run2.csv')
     with open(scores_file, 'w') as f:
         f.write("test_user,sub_user,0.5\ntest_user,sub_user,0.5")
-    sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
+    sparse_file = os.path.join(working_dir, 'test_run2_sparse.csv')
     with open(sparse_file, 'w') as f:
         f.write("test_user,sub_user,0.5\ntest_user,sub_user,0.5")
 
@@ -329,7 +329,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     mock_execute_expertise.assert_called_once()
 
     # Check for scores.jsonl file
-    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    scores_blob = bucket.blob(f"{prefix}test_run2.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
     scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
@@ -393,11 +393,11 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     working_dir = './test_pipeline'
     os.makedirs(working_dir, exist_ok=True)
 
-    ## Build scores file
-    scores_file = os.path.join(working_dir, 'scores.csv')
+    ## Build scores file — named after config['name'] as execute_expertise does in production
+    scores_file = os.path.join(working_dir, 'test_run2.csv')
     with open(scores_file, 'w') as f:
         f.write("sub_one,sub_two,0.5\nsub_one,sub_two,0.5")
-    sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
+    sparse_file = os.path.join(working_dir, 'test_run2_sparse.csv')
     with open(sparse_file, 'w') as f:
         f.write("sub_one,sub_two,0.5\nsub_one,sub_two,0.5")
 
@@ -419,7 +419,7 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     mock_execute_expertise.assert_called_once()
 
     # Check for scores.jsonl file
-    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    scores_blob = bucket.blob(f"{prefix}test_run2.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
     scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]

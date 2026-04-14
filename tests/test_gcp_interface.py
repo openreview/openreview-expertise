@@ -328,6 +328,10 @@ def test_upload_dataset(mock_storage_client, mock_transfer_manager, openreview_c
         with open(os.path.join(job_dir, 'submissions.json'), 'w') as f:
             json.dump({'count': 1}, f)
 
+        # Write metadata.json
+        with open(os.path.join(job_dir, 'metadata.json'), 'w') as f:
+            json.dump({'submission_count': 1}, f)
+
         config = JobConfig(job_id='test-upload-job', job_dir=job_dir)
 
         result = gcp_interface.upload_dataset(config)
@@ -342,13 +346,14 @@ def test_upload_dataset(mock_storage_client, mock_transfer_manager, openreview_c
         # Verify it was called with the correct bucket
         assert call_args[0][0] == mock_bucket
 
-        # Verify the filenames include archives, submissions, and submissions.json
+        # Verify the filenames include archives, submissions, submissions.json, and metadata.json
         uploaded_filenames = sorted(call_args[0][1])
         assert 'archives/~User_One1.jsonl' in uploaded_filenames
         assert 'archives/~User_Two1.jsonl' in uploaded_filenames
         assert 'submissions/sub1.jsonl' in uploaded_filenames
         assert 'submissions.json' in uploaded_filenames
-        assert len(uploaded_filenames) == 4
+        assert 'metadata.json' in uploaded_filenames
+        assert len(uploaded_filenames) == 5
 
         # Verify source_directory and blob_name_prefix
         assert call_args[1]['source_directory'] == job_dir
@@ -881,7 +886,7 @@ def test_get_job_results(mock_storage_client, openreview_client):
     mock_metadata_blob.download_as_string.return_value = json.dumps({"meta": "data"})
 
     mock_score_blob = MagicMock()
-    mock_score_blob.name = "jobs/job_1/scores.jsonl"
+    mock_score_blob.name = "jobs/job_1/job_1.jsonl"
     mock_score_blob.download_as_string.return_value = '{"entityB": "abcd","entityA": "user_user1","score": 0.987}\n{"entityB": "abcd","entityA": "user_user2","score": 0.987}'
 
     # Create a mock file-like object for sparse score blob
@@ -894,7 +899,7 @@ def test_get_job_results(mock_storage_client, openreview_client):
     mock_file.close.return_value = None
 
     mock_sparse_score_blob = MagicMock()
-    mock_sparse_score_blob.name = "jobs/job_1/scores_sparse.jsonl"
+    mock_sparse_score_blob.name = "jobs/job_1/job_1_sparse.jsonl"
     mock_sparse_score_blob.download_as_string.return_value = '{"entityB": "abcde","entityA": "user_user1","score": 0.987}\n{"entityB": "abcde","entityA": "user_user2","score": 0.987}'
     mock_sparse_score_blob.open.return_value = mock_file
 
@@ -950,7 +955,7 @@ def test_get_job_results(mock_storage_client, openreview_client):
 def test_get_job_results_missing_metadata(mock_storage_client, openreview_client):
     # Mock GCS blobs
     mock_score_blob = MagicMock()
-    mock_score_blob.name = "jobs/job_1/scores.jsonl"
+    mock_score_blob.name = "jobs/job_1/job_1.jsonl"
     mock_score_blob.download_as_string.return_value = '{"entityB": "abcd","entityA": "user_user","score": 0.987}\n{"entityB": "abcd","entityA": "user_user","score": 0.987}'
 
     mock_request_blob = MagicMock()
@@ -1036,7 +1041,7 @@ def test_get_job_results_group_scoring(mock_storage_client):
     mock_file.close.return_value = None
 
     mock_group_score_blob = MagicMock()
-    mock_group_score_blob.name = "jobs/job_1/group_scores.jsonl"
+    mock_group_score_blob.name = "jobs/job_1/job_1.jsonl"
     mock_group_score_blob.download_as_string.return_value = '{"entityA": "m_user1","entityB": "s_user1","score": 0.987}\n{"entityA": "m_user2","entityB": "s_user2","score": 0.987}'
     mock_group_score_blob.open.return_value = mock_file
 

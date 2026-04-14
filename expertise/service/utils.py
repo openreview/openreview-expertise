@@ -922,7 +922,7 @@ class GCPInterface(object):
         folder_path = f"{self.jobs_folder}/{folder_name}/dataset"
 
         filenames = []
-        dataset_items = ['archives', 'submissions', 'submissions.json']
+        dataset_items = ['archives', 'submissions', 'submissions.json', 'metadata.json']
         for item in dataset_items:
             local_path = os.path.join(job_dir, item)
             if os.path.isdir(local_path):
