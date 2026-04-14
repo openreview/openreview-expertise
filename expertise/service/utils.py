@@ -1262,7 +1262,7 @@ class GCPInterface(object):
             :returns generator: A generator that yields chunks of scores and finally the metadata
             """
             metadata_files = [
-                blob for blob in all_blobs if 'metadata.json' in blob.name
+                blob for blob in all_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name
             ]
             score_files = [
                 blob for blob in all_blobs if '.jsonl' in blob.name and 'dataset/' not in blob.name
@@ -1341,7 +1341,7 @@ class GCPInterface(object):
         # If validation is deferred into the generator, exceptions fire after the HTTP
         # response has already started — causing a broken chunked response on the client.
         score_files = [blob for blob in job_blobs if '.jsonl' in blob.name and 'dataset/' not in blob.name]
-        metadata_files = [blob for blob in job_blobs if 'metadata.json' in blob.name]
+        metadata_files = [blob for blob in job_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name]
         if len(metadata_files) != 1:
             raise openreview.OpenReviewException(f'Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}')
         if len(score_files) < 1 or len(score_files) > 2:
