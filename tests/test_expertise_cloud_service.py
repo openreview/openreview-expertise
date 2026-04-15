@@ -427,10 +427,10 @@ class TestExpertiseCloudService():
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{config.cloud_id}.jsonl")
+        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
         scores_blob.upload_from_string('{"entityB": "abcd","entityA": "user_user1","score": 0.987}\n{"entityB": "abcd","entityA": "user_user2","score": 0.987}')
 
-        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{config.cloud_id}_sparse.jsonl")
+        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityB": "abcde","entityA": "user_user1","score": 0.987}\n{"entityB": "abcde","entityA": "user_user2","score": 0.987}')
 
         # Searches for journal results from the given job_id assuming the job has completed
@@ -556,10 +556,10 @@ class TestExpertiseCloudService():
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{config.cloud_id}.jsonl")
+        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
         scores_blob.upload_from_string('{"entityA": "user_user2","entityB": "user_user1","score": 0.987}\n{"entityA": "user_user3","entityB": "user_user2","score": 0.987}')
 
-        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{config.cloud_id}_sparse.jsonl")
+        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityA": "user_user2","entityB": "user_user1","score": 0.987}\n{"entityA": "user_user3","entityB": "user_user2","score": 0.987}')
 
         # Searches for journal results from the given job_id assuming the job has completed
@@ -685,10 +685,10 @@ class TestExpertiseCloudService():
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{config.cloud_id}.jsonl")
+        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
         scores_blob.upload_from_string('{"entityA": "abcd","entityB": "edfg","score": 0.987}\n{"entityA": "hijk","entityB": "lmno","score": 0.987}')
 
-        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{config.cloud_id}_sparse.jsonl")
+        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityA": "abcd","entityB": "edfg","score": 0.987}\n{"entityA": "hijk","entityB": "lmno","score": 0.987}')
 
         # Searches for journal results from the given job_id assuming the job has completed
@@ -819,10 +819,10 @@ class TestExpertiseCloudService():
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{config.cloud_id}.jsonl")
+        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.jsonl")
         scores_blob.upload_from_string('{"entityB": "ASDFASDF","entityA": "~Harold_Rice1","score": 0.987}\n{"entityB": "ASDFASDF","entityA": "~Zonia_Willms1","score": 0.987}')
 
-        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{config.cloud_id}_sparse.jsonl")
+        scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityB": "ASDFASDF","entityA": "~Harold_Rice1","score": 0.987}\n{"entityB": "ASDFASDF","entityA": "~Zonia_Willms1","score": 0.987}')
 
         # Searches for journal results from the given job_id assuming the job has completed

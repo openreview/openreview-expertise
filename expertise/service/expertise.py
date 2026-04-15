@@ -852,21 +852,20 @@ class ExpertiseCloudService(BaseExpertiseService):
         # Upload dataset to GCS and submit VertexAI job (expertise only, Task 2)
         config = self.redis.load_job(redis_id, user_id)
         self.update_status(config, JobStatus.QUEUED)
-        vertex_id = f"{job.id}-{int(time.time() * 1000)}"
-        dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=vertex_id)
+        config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
+        dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
         machine_type = self.compute_machine_type_from_dataset(config)
         self.logger.info(f"Machine type for {redis_id}: {machine_type}")
 
         try:
-            cloud_id = self.cloud.create_job(
+            self.cloud.create_job(
                 deepcopy(request),
                 job_id=job.id,
                 user_id=user_id,
                 machine_type=machine_type,
                 dataset_gcs_path=dataset_gcs_path,
-                vertex_id=vertex_id
+                vertex_id=config.cloud_id
             )
-            config.cloud_id = cloud_id
             self._save_config(config)
         except Exception as e:
             self.logger.error(f"Error creating cloud job for {redis_id}: {e} tr={e.__traceback__}")

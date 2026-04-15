@@ -17,7 +17,6 @@ from itertools import chain
 import openreview
 from tqdm import tqdm
 from collections import defaultdict
-import requests
 
 class OpenReviewExpertise(object):
     def __init__(self, openreview_client_v2, config):
@@ -363,22 +362,12 @@ class OpenReviewExpertise(object):
         if not all_members:
             return [], []
 
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                profiles_by_key = openreview.tools.get_profiles(
-                    self.openreview_client_v2,
-                    list(all_members),
-                    with_publications=True,
-                    as_dict=True
-                )
-                break
-            except requests.exceptions.ChunkedEncodingError as e:
-                if attempt == max_retries - 1:
-                    raise
-                wait = 2 ** attempt
-                print(f'get_profiles attempt {attempt + 1} failed with connection error, retrying in {wait}s: {e}')
-                time.sleep(wait)
+        profiles_by_key = openreview.tools.get_profiles(
+            self.openreview_client_v2,
+            list(all_members),
+            with_publications=True,
+            as_dict=True
+        )
 
         valid_members = []
         invalid_members = []
