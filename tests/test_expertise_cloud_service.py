@@ -433,6 +433,11 @@ class TestExpertiseCloudService():
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityB": "abcde","entityA": "user_user1","score": 0.987}\n{"entityB": "abcde","entityA": "user_user2","score": 0.987}')
 
+        # Upload embedding .jsonl files as execute_pipeline does — these must not be mistaken for score files
+        for emb_name in ['sub2vec_specter.jsonl', 'sub2vec_scincl.jsonl', 'pub2vec_specter.jsonl', 'pub2vec_scincl.jsonl']:
+            emb_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{emb_name}")
+            emb_blob.upload_from_string('{"paper_id": "abcd", "embedding": [0.1, 0.2]}')
+
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=tmlr_client.headers, query_string={'jobId': job_id})
         assert response.json["metadata"] == {"meta": "data"}
@@ -562,6 +567,10 @@ class TestExpertiseCloudService():
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityA": "user_user2","entityB": "user_user1","score": 0.987}\n{"entityA": "user_user3","entityB": "user_user2","score": 0.987}')
 
+        for emb_name in ['sub2vec_specter.jsonl', 'sub2vec_scincl.jsonl', 'pub2vec_specter.jsonl', 'pub2vec_scincl.jsonl']:
+            emb_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{emb_name}")
+            emb_blob.upload_from_string('{"paper_id": "abcd", "embedding": [0.1, 0.2]}')
+
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
         assert response.json["metadata"] == {"meta": "data"}
@@ -690,6 +699,10 @@ class TestExpertiseCloudService():
 
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityA": "abcd","entityB": "edfg","score": 0.987}\n{"entityA": "hijk","entityB": "lmno","score": 0.987}')
+
+        for emb_name in ['sub2vec_specter.jsonl', 'sub2vec_scincl.jsonl', 'pub2vec_specter.jsonl', 'pub2vec_scincl.jsonl']:
+            emb_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{emb_name}")
+            emb_blob.upload_from_string('{"paper_id": "abcd", "embedding": [0.1, 0.2]}')
 
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
@@ -824,6 +837,10 @@ class TestExpertiseCloudService():
 
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityB": "ASDFASDF","entityA": "~Harold_Rice1","score": 0.987}\n{"entityB": "ASDFASDF","entityA": "~Zonia_Willms1","score": 0.987}')
+
+        for emb_name in ['sub2vec_specter.jsonl', 'sub2vec_scincl.jsonl', 'pub2vec_specter.jsonl', 'pub2vec_scincl.jsonl']:
+            emb_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{emb_name}")
+            emb_blob.upload_from_string('{"paper_id": "abcd", "embedding": [0.1, 0.2]}')
 
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})

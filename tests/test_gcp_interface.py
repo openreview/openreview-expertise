@@ -911,11 +911,19 @@ def test_get_job_results(mock_storage_client, openreview_client):
         "entityB": {"type": "Note"}
     })
 
+    # Simulate archive .jsonl files that exist alongside scores in real GCS
+    mock_archive_blob_1 = MagicMock()
+    mock_archive_blob_1.name = "jobs/job_1/~Profile_One1.jsonl"
+    mock_archive_blob_2 = MagicMock()
+    mock_archive_blob_2.name = "jobs/job_1/~Profile_Two1.jsonl"
+
     mock_storage_client.return_value.bucket.return_value.list_blobs.return_value = [
         mock_metadata_blob,
         mock_sparse_score_blob,
         mock_score_blob,
-        mock_request_blob
+        mock_request_blob,
+        mock_archive_blob_1,
+        mock_archive_blob_2,
     ]
 
     # Initialize GCPInterface with test parameters
@@ -1041,7 +1049,7 @@ def test_get_job_results_group_scoring(mock_storage_client):
     mock_file.close.return_value = None
 
     mock_group_score_blob = MagicMock()
-    mock_group_score_blob.name = "jobs/job_1/group_scores.jsonl"
+    mock_group_score_blob.name = "jobs/job_1/scores.jsonl"
     mock_group_score_blob.download_as_string.return_value = '{"entityA": "m_user1","entityB": "s_user1","score": 0.987}\n{"entityA": "m_user2","entityB": "s_user2","score": 0.987}'
     mock_group_score_blob.open.return_value = mock_file
 
