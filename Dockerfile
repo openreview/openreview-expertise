@@ -9,7 +9,11 @@ ENV PYTHON_VERSION=3.11 \
     AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/" \
     SPECTER_DIR="/app/expertise-utils/specter/" \
     MFR_VOCAB_DIR="/app/expertise-utils/multifacet_recommender/feature_vocab_file" \
-    MFR_CHECKPOINT_DIR="/app/expertise-utils/multifacet_recommender/mfr_model_checkpoint/"
+    MFR_CHECKPOINT_DIR="/app/expertise-utils/multifacet_recommender/mfr_model_checkpoint/" \
+    SPECTER_HF_DIR="/app/expertise-utils/hf_models/specter" \
+    SPECTER2_HF_DIR="/app/expertise-utils/hf_models/specter2_base" \
+    SPECTER2_ADAPTER_DIR="/app/expertise-utils/hf_models/specter2_adapter" \
+    SCINCL_HF_DIR="/app/expertise-utils/hf_models/scincl"
 
 COPY . /app/openreview-expertise
 
@@ -43,20 +47,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Add conda environment bin to PATH so that 'python' uses the environment by default
 ENV PATH="/app/miniconda/envs/expertise/bin:${PATH}"
 
-# Pre-download HuggingFace models so jobs don't depend on HF availability at runtime
-RUN python -c "\
-from transformers import AutoTokenizer, AutoModel; \
-AutoTokenizer.from_pretrained('allenai/specter'); \
-AutoModel.from_pretrained('allenai/specter'); \
-AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base'); \
-AutoModel.from_pretrained('allenai/specter2_aug2023refresh_base'); \
-AutoTokenizer.from_pretrained('malteos/scincl'); \
-AutoModel.from_pretrained('malteos/scincl'); \
-" && python -c "\
-from adapters import AutoAdapterModel; \
-model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base'); \
-model.load_adapter('allenai/specter2_aug2023refresh', source='hf', load_as='proximity', set_active=True); \
-"
+# HuggingFace models (specter, specter2 base + adapter, scincl) are not baked into
+# the image — they are fetched from gs://openreview-expertise/expertise-utils/hf_models/
+# at job start, selectively per-request, by expertise.service.load_model_artifacts.
 
 RUN mkdir ${HOME}/expertise-utils \
     && cp ${HOME}/openreview-expertise/expertise/service/config/default_container.cfg \
