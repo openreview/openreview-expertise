@@ -189,7 +189,8 @@ def run_pipeline(
 
     for csv_file in [d for d in os.listdir(config.job_dir) if '.csv' in d]:
         result = []
-        destination_blob = f"{blob_prefix}/{csv_file.replace('.csv', '.jsonl')}"
+        dest_name = 'scores_sparse.jsonl' if '_sparse' in csv_file else 'scores.jsonl'
+        destination_blob = f"{blob_prefix}/{dest_name}"
         with open(os.path.join(config.job_dir, csv_file), 'r') as f:
             reader = csv.reader(f)
             for row in reader:
