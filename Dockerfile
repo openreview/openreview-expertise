@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && python${PYTHON_VERSION} -m venv ${VIRTUAL_ENV} \
     && pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu124 \
-    && pip install --no-cache-dir filelock intel-openmp faiss-cpu \
+    && pip install --no-cache-dir filelock faiss-cpu \
     && pip install --no-cache-dir -e /app/openreview-expertise \
     && pip install --no-cache-dir -I protobuf==3.20.1 \
     && apt-get purge -y build-essential software-properties-common \

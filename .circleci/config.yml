@@ -84,7 +84,7 @@ jobs:
             mkdir ~/expertise-utils
             cd ~/openreview-expertise
             pip install torch --index-url https://download.pytorch.org/whl/cu124
-            pip install filelock intel-openmp==2019.4
+            pip install filelock
             pip install -e .
             pip install -I protobuf==3.20.1
             # Persist venv activation for subsequent steps
