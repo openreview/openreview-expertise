@@ -156,11 +156,13 @@ jobs:
           name: Start API V1
           command: |
             export PATH=/usr/bin:$PATH
+            source ~/venv/bin/activate
             node -v
             which node
             whereis node
             which npm
             whereis npm
+            which python
             cd ~/openreview
             /usr/local/bin/npm run cleanStart
           background: true
@@ -174,11 +176,13 @@ jobs:
           name: Start API V2
           command: |
             export PATH=/usr/bin:$PATH
+            source ~/venv/bin/activate
             node -v
             which node
             whereis node
             which npm
             whereis npm
+            which python
             cd ~/openreview-v2
             /usr/local/bin/npm run cleanStart
           background: true
