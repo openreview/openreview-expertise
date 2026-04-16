@@ -155,15 +155,14 @@ jobs:
       - run:
           name: Start API V1
           command: |
-            export PATH=/usr/bin:$PATH
             source ~/venv/bin/activate
+            cd ~/openreview
+            # Pin PATH after cd so nvm's cd-hook cannot shuffle Node 16 in front of /usr/bin (Node 22)
+            export PATH="$VIRTUAL_ENV/bin:/usr/bin:/usr/local/bin:$PATH"
             node -v
             which node
-            whereis node
             which npm
-            whereis npm
             which python
-            cd ~/openreview
             /usr/local/bin/npm run cleanStart
           background: true
       - run:
@@ -175,15 +174,14 @@ jobs:
       - run:
           name: Start API V2
           command: |
-            export PATH=/usr/bin:$PATH
             source ~/venv/bin/activate
+            cd ~/openreview-v2
+            # Pin PATH after cd so nvm's cd-hook cannot shuffle Node 16 in front of /usr/bin (Node 22)
+            export PATH="$VIRTUAL_ENV/bin:/usr/bin:/usr/local/bin:$PATH"
             node -v
             which node
-            whereis node
             which npm
-            whereis npm
             which python
-            cd ~/openreview-v2
             /usr/local/bin/npm run cleanStart
           background: true
       - run:
