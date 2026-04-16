@@ -39,11 +39,12 @@ silent
 class SciNCLPredictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=False,
-                 normalize_scores=True):
+                 normalize_scores=True, scincl_hf_dir=None):
         self.model_name = 'scincl'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
+        self.scincl_hf_dir = scincl_hf_dir or os.getenv('SCINCL_HF_DIR') or 'malteos/scincl'
         self.predictor_name = "specter_predictor"
         self.work_dir = work_dir
         self.average_score = average_score
@@ -67,10 +68,11 @@ class SciNCLPredictor(Predictor):
         print(f"SciNCL venue_specific_weights: {venue_specific_weights}")
         self.percentile_select = percentile_select
 
-        print("Loading tokenizer 'malteos/scincl'...")
-        self.tokenizer = AutoTokenizer.from_pretrained('malteos/scincl')
-        print("Loading model 'malteos/scincl'...")
-        self.model = AutoModel.from_pretrained('malteos/scincl')
+        scincl_source = "BUCKET (local dir)" if os.path.isdir(self.scincl_hf_dir) else "HUGGINGFACE HUB (network)"
+        print(f"[scincl] Loading tokenizer from '{self.scincl_hf_dir}' [source={scincl_source}]", flush=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.scincl_hf_dir)
+        print(f"[scincl] Loading model from '{self.scincl_hf_dir}' [source={scincl_source}]", flush=True)
+        self.model = AutoModel.from_pretrained(self.scincl_hf_dir)
         print("Model loaded, moving to device...")
         self.model.to(self.cuda_device)
         self.model.eval()

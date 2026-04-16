@@ -540,6 +540,49 @@ Running the openreview-expertise test suite requires some initial setup. First, 
 - [OpenReview API](https://github.com/openreview/openreview-api)
 - [OpenReview API2](https://github.com/openreview/openreview-api-v1)
 
+### Download model artifacts
+
+The predictors load their weights from a local directory tree. The tests expect this tree at `../expertise-utils/` (relative to the repo), matching the layout used in production.
+
+**Recommended — from the OpenReview GCS bucket.** This is the same path that CI and the Vertex AI pipeline workers use, so running tests this way exercises the production code path. You need `gcloud` installed and read access to `gs://openreview-expertise/`:
+
+```bash
+gcloud auth application-default login
+
+export AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/"
+export EXPERTISE_UTILS_DIR="$(pwd)/../expertise-utils"
+
+python -c "
+from expertise.service import load_model_artifacts
+load_model_artifacts(subdirs=[
+    'multifacet_recommender',
+    'hf_models/specter',
+    'hf_models/specter2_base',
+    'hf_models/specter2_adapter',
+    'hf_models/scincl',
+])
+"
+```
+
+Then export the paths the predictors look for:
+
+```bash
+export SPECTER_HF_DIR="$(pwd)/../expertise-utils/hf_models/specter"
+export SPECTER2_HF_DIR="$(pwd)/../expertise-utils/hf_models/specter2_base"
+export SPECTER2_ADAPTER_DIR="$(pwd)/../expertise-utils/hf_models/specter2_adapter"
+export SCINCL_HF_DIR="$(pwd)/../expertise-utils/hf_models/scincl"
+```
+
+You'll see `[source=BUCKET (local dir)]` in the test output, confirming the predictors are loading from the bucket-mirrored tree rather than from HuggingFace.
+
+**Fallback — from HuggingFace Hub (no bucket access).** If you don't have access to the GCS bucket, leave `SPECTER_HF_DIR`, `SPECTER2_HF_DIR`, `SPECTER2_ADAPTER_DIR`, and `SCINCL_HF_DIR` unset. The predictors fall back to the HuggingFace Hub IDs (`allenai/specter`, `allenai/specter2_aug2023refresh_base`, `allenai/specter2_aug2023refresh`, `malteos/scincl`) and download them on first use. You'll see `[source=HUGGINGFACE HUB (network)]` in the logs.
+
+**Caveat:** `tests/test_spectermfr.py` cannot run this way because the MFR checkpoint only lives in the OpenReview GCS bucket — it is not published to HuggingFace. Skip that file if you don't have bucket access:
+
+```bash
+pytest tests --ignore=tests/test_spectermfr.py
+```
+
 Run Tests
 ---------
 

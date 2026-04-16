@@ -5,6 +5,7 @@ import time
 from collections import Counter
 from expertise.utils.utils import generate_job_id, JOB_ID_ALPHABET
 import expertise.service
+from expertise.service import artifacts_for_model
 
 
 def test_generate_job_id_gcp_compliance():
@@ -112,3 +113,29 @@ def test_create_app_config_dict_overrides_env(monkeypatch, tmp_path, temp_env_cf
     )
 
     assert app.config['EXPERTISE_ENV'] == 'override'
+
+
+@pytest.mark.parametrize("model, expected_subdirs", [
+    ('bm25', []),
+    ('specter', ['hf_models/specter']),
+    ('mfr', ['multifacet_recommender']),
+    ('specter+mfr', ['hf_models/specter', 'multifacet_recommender']),
+    ('specter2', ['hf_models/specter2_base', 'hf_models/specter2_adapter']),
+    ('scincl', ['hf_models/scincl']),
+    ('specter2+scincl', [
+        'hf_models/specter2_base',
+        'hf_models/specter2_adapter',
+        'hf_models/scincl',
+    ]),
+])
+def test_artifacts_for_model_returns_only_needed_subdirs(model, expected_subdirs):
+    """Pipeline workers download only the artifacts their model needs — this
+    map is the contract wiring that selective-download into run_pipeline."""
+    assert artifacts_for_model(model) == expected_subdirs
+
+
+def test_artifacts_for_model_unknown_model_falls_back_to_all():
+    """Unknown model names fall back to downloading everything (None) so a new
+    model added to the API doesn't break the pipeline before the map is updated."""
+    assert artifacts_for_model('some-unreleased-model') is None
+    assert artifacts_for_model(None) is None

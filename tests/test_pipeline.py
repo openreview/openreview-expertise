@@ -116,6 +116,16 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
 
     # Assertions
 
+    # Pipeline worker pulled only the artifacts the requested model needs — read
+    # from raw_request['model']['name']. For 'specter+mfr': specter HF + MFR,
+    # and nothing from the specter2/scincl family.
+    mock_load_model_artifacts.assert_called_once()
+    downloaded_subdirs = mock_load_model_artifacts.call_args.kwargs['subdirs']
+    assert set(downloaded_subdirs) == {'hf_models/specter', 'multifacet_recommender'}
+    assert 'hf_models/specter2_base' not in downloaded_subdirs
+    assert 'hf_models/specter2_adapter' not in downloaded_subdirs
+    assert 'hf_models/scincl' not in downloaded_subdirs
+
     # Ensure execute_create_dataset and execute_expertise were called
     # Use the gcs_test_bucket fixture to get actual
     bucket = gcs_test_bucket
@@ -416,6 +426,18 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
 
     # Assertions
+    # Pipeline worker pulled only the artifacts needed for 'specter2+scincl':
+    # specter2 base + adapter + scincl, and nothing MFR/legacy-specter related.
+    mock_load_model_artifacts.assert_called_once()
+    downloaded_subdirs = mock_load_model_artifacts.call_args.kwargs['subdirs']
+    assert set(downloaded_subdirs) == {
+        'hf_models/specter2_base',
+        'hf_models/specter2_adapter',
+        'hf_models/scincl',
+    }
+    assert 'hf_models/specter' not in downloaded_subdirs
+    assert 'multifacet_recommender' not in downloaded_subdirs
+
     # Check that blobs were created and data was uploaded to GCS
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix_pap/"

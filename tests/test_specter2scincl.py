@@ -45,6 +45,30 @@ def compute_score_statistics(scores, label=""):
     
     return stats
 
+def assert_scores_have_max_4_decimals(csv_path):
+    """Scores rounded to 4 decimals is a contract — CSVs exposed to the API
+    should never expose more precision than the model actually provides."""
+    violations = []
+    with open(csv_path) as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(',')
+            if len(parts) < 3:
+                continue
+            score_str = parts[-1]
+            try:
+                float(score_str)
+            except ValueError:
+                continue
+            if '.' in score_str:
+                decimals = len(score_str.split('.')[1])
+                if decimals > 4:
+                    violations.append(f"{csv_path}:{line_num}: score={score_str} has {decimals} decimals")
+    assert not violations, "Scores with more than 4 decimal places found:\n" + "\n".join(violations)
+
+
 @pytest.fixture
 def create_specncl():
     def simple_specncl(config):
@@ -108,6 +132,8 @@ def test_specncl_scores(tmp_path, create_specncl):
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
 
+    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '.csv'))
+
 
 def test_sparse_scores(tmp_path, create_specncl):
     config = {
@@ -151,6 +177,9 @@ def test_sparse_scores(tmp_path, create_specncl):
 
     if config['model_params'].get('sparse_value'):
         all_scores = generate_sparse_scores(all_scores, config['model_params']['sparse_value'], scores_path.joinpath(config['name'] + '_sparse.csv'))
+
+    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '.csv'))
+    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '_sparse.csv'))
 
     assert len(all_scores) == 8
     for row in all_scores:
@@ -413,3 +442,6 @@ def test_self_similarity_score_within_bounds(tmp_path):
         f"product to marginally exceed 1.0 (observed = {expected_raw_dot}). "
         f"Fix: clamp scores to [0, 1] before returning from all_scores()."
     )
+
+
+
