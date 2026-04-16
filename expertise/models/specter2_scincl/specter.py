@@ -40,11 +40,16 @@ silent
 class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=None,
-                 normalize_scores=True):
+                 normalize_scores=True, specter2_hf_dir=None, specter2_adapter_dir=None):
         self.model_name = 'specter2'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
+        # Paths to locally-mirrored HuggingFace snapshots. Fall back to env vars
+        # (set in the container) and finally to the HF hub IDs so local dev can
+        # still download from HF if no mirror is available.
+        self.specter2_hf_dir = specter2_hf_dir or os.getenv('SPECTER2_HF_DIR') or 'allenai/specter2_aug2023refresh_base'
+        self.specter2_adapter_dir = specter2_adapter_dir or os.getenv('SPECTER2_ADAPTER_DIR') or 'allenai/specter2_aug2023refresh'
         self.predictor_name = "specter_predictor"
         self.work_dir = work_dir
         self.average_score = average_score
@@ -68,12 +73,19 @@ class Specter2Predictor(Predictor):
         print(f"SPECTER2 venue_specific_weights: {venue_specific_weights}", flush=True)
 
         self.percentile_select = percentile_select
-        print("Loading tokenizer 'allenai/specter2_aug2023refresh_base'...", flush=True)
-        self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
-        print("Loading model 'allenai/specter2_aug2023refresh_base'...", flush=True)
-        self.model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base')
-        print("Loading adapter 'allenai/specter2_aug2023refresh'...", flush=True)
-        self.model.load_adapter("allenai/specter2_aug2023refresh", source="hf", load_as="proximity", set_active=True)
+        # `from_pretrained` and `load_adapter` accept a local directory as-is;
+        # when pointed at a HF hub ID they fall back to the network.
+        base_is_local = os.path.isdir(self.specter2_hf_dir)
+        adapter_is_local = os.path.isdir(self.specter2_adapter_dir)
+        base_source = "BUCKET (local dir)" if base_is_local else "HUGGINGFACE HUB (network)"
+        adapter_source_label = "BUCKET (local dir)" if adapter_is_local else "HUGGINGFACE HUB (network)"
+        adapter_source = "local" if adapter_is_local else "hf"
+        print(f"[specter2] Loading tokenizer from '{self.specter2_hf_dir}' [source={base_source}]", flush=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.specter2_hf_dir)
+        print(f"[specter2] Loading model from '{self.specter2_hf_dir}' [source={base_source}]", flush=True)
+        self.model = AutoAdapterModel.from_pretrained(self.specter2_hf_dir)
+        print(f"[specter2] Loading adapter from '{self.specter2_adapter_dir}' [source={adapter_source_label}]", flush=True)
+        self.model.load_adapter(self.specter2_adapter_dir, source=adapter_source, load_as="proximity", set_active=True)
         print("Model loaded, moving to device...", flush=True)
         self.model.to(self.cuda_device)
         self.model.eval()

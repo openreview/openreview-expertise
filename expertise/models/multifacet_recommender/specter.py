@@ -47,10 +47,11 @@ silent
 
 class SpecterPredictor:
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, compute_paper_paper=False):
+                 sparse_value=None, use_redis=False, compute_paper_paper=False, specter_hf_dir=None):
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
+        self.specter_hf_dir = specter_hf_dir or os.getenv('SPECTER_HF_DIR') or 'allenai/specter'
         self.predictor_name = "specter_predictor"
         self.work_dir = work_dir
         self.average_score = average_score
@@ -73,10 +74,11 @@ class SpecterPredictor:
             self.redis = None
         self.compute_paper_paper = compute_paper_paper
 
-        print("Loading tokenizer 'allenai/specter'...")
-        self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter')
-        print("Loading model 'allenai/specter'...")
-        self.model = AutoModel.from_pretrained('allenai/specter')
+        specter_source = "BUCKET (local dir)" if os.path.isdir(self.specter_hf_dir) else "HUGGINGFACE HUB (network)"
+        print(f"[specter] Loading tokenizer from '{self.specter_hf_dir}' [source={specter_source}]", flush=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.specter_hf_dir)
+        print(f"[specter] Loading model from '{self.specter_hf_dir}' [source={specter_source}]", flush=True)
+        self.model = AutoModel.from_pretrained(self.specter_hf_dir)
         print("Model loaded, moving to device...")
         self.model.to(self.cuda_device)
         self.model.eval()

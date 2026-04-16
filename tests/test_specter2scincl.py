@@ -45,6 +45,30 @@ def compute_score_statistics(scores, label=""):
     
     return stats
 
+def assert_scores_have_max_4_decimals(csv_path):
+    """Scores rounded to 4 decimals is a contract — CSVs exposed to the API
+    should never expose more precision than the model actually provides."""
+    violations = []
+    with open(csv_path) as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(',')
+            if len(parts) < 3:
+                continue
+            score_str = parts[-1]
+            try:
+                float(score_str)
+            except ValueError:
+                continue
+            if '.' in score_str:
+                decimals = len(score_str.split('.')[1])
+                if decimals > 4:
+                    violations.append(f"{csv_path}:{line_num}: score={score_str} has {decimals} decimals")
+    assert not violations, "Scores with more than 4 decimal places found:\n" + "\n".join(violations)
+
+
 @pytest.fixture
 def create_specncl():
     def simple_specncl(config):
@@ -108,6 +132,8 @@ def test_specncl_scores(tmp_path, create_specncl):
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
 
+    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '.csv'))
+
 
 def test_sparse_scores(tmp_path, create_specncl):
     config = {
@@ -151,6 +177,9 @@ def test_sparse_scores(tmp_path, create_specncl):
 
     if config['model_params'].get('sparse_value'):
         all_scores = generate_sparse_scores(all_scores, config['model_params']['sparse_value'], scores_path.joinpath(config['name'] + '_sparse.csv'))
+
+    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '.csv'))
+    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '_sparse.csv'))
 
     assert len(all_scores) == 8
     for row in all_scores:
@@ -416,44 +445,3 @@ def test_self_similarity_score_within_bounds(tmp_path):
 
 
 
-def test_score_decimal_precision():
-    """Test that all scores have at most 4 decimal places."""
-    import os
-    import re
-    from pathlib import Path
-    
-    # Get the scores directory
-    scores_dir = Path('tests/test_workflow/scores')
-    
-    # Find all score files (csv files)
-    score_files = list(scores_dir.glob('*.csv'))
-    
-    # If no files exist, skip (they're generated during other tests)
-    if not score_files:
-        pytest.skip("No score files found - run other tests first")
-    
-    decimal_violations = []
-    
-    for score_file in score_files:
-        with open(score_file, 'r') as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
-                # Parse CSV: note_id,reviewer,score
-                parts = line.split(',')
-                if len(parts) >= 3:
-                    score_str = parts[-1]
-                    try:
-                        score = float(score_str)
-                        # Check decimal places
-                        if '.' in score_str:
-                            decimals = len(score_str.split('.')[1])
-                            if decimals > 4:
-                                decimal_violations.append(
-                                    f"{score_file}:{line_num}: score={score_str} has {decimals} decimal places"
-                                )
-                    except ValueError:
-                        continue
-    
-    assert len(decimal_violations) == 0, "Scores with more than 4 decimal places found:\n" + "\n".join(decimal_violations)

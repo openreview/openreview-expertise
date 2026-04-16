@@ -5,7 +5,7 @@ import shortuuid
 import json
 import csv
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
-from expertise.service import load_model_artifacts
+from expertise.service import load_model_artifacts, artifacts_for_model
 from expertise.service.utils import APIRequest, JobConfig, ExpectedDataError
 from expertise.utils.utils import generate_job_id
 from google.cloud import storage
@@ -108,8 +108,12 @@ def run_pipeline(
         _, bucket = load_gcs(destination_prefix)
         blob_prefix = '/'.join(destination_prefix.split('/')[3:])
 
-        print('Loading model artifacts')
-        load_model_artifacts()
+        # Download only the artifacts required for this model — a pipeline worker
+        # handles a single job and pulling unused models wastes startup time.
+        requested_model = raw_request.get('model', {}).get('name', DEFAULT_CONFIG['model'])
+        required_artifacts = artifacts_for_model(requested_model)
+        print(f'Loading model artifacts for model={requested_model}: {required_artifacts}')
+        load_model_artifacts(subdirs=required_artifacts)
 
         print('Logging into OpenReview')
         client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
