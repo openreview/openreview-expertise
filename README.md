@@ -48,17 +48,14 @@ The following table is partially taken from Stelmakh et al., where SPECTER2, Sci
 
 ## Installation
 
-This repository only supports Python 3.8 and above (Python 3.11 is recommended). Python 3.8 and above is required to run SPECTER2
-Clone this repository and install the package using pip as follows. You may use the `pip` command in a conda environment as long as you first run all the pip installs and then conda installs. Just follow the order of the commands shown below and it should work. You may read more about this [here](https://www.anaconda.com/using-pip-in-a-conda-environment/).
+This repository only supports Python 3.8 and above (Python 3.11 is recommended). Python 3.8 and above is required to run SPECTER2.
 
-Run this command only if you are using conda:
-```
-conda create -n affinity python=3.11
-conda activate affinity
-conda install pip
-```
+Create and activate a virtual environment, then install the package with pip:
 
 ```
+python3.11 -m venv ~/venv/expertise
+source ~/venv/expertise/bin/activate
+pip install --upgrade pip setuptools wheel
 pip install <location of this repository>
 ```
 
@@ -70,14 +67,12 @@ pip install -e <location of this repository>
 
 Because some of the libraries are specific to our operating system you would need to install these dependencies separately. We expect to improve this in the future. If you plan to use SPECTER, Multifacet-Recommender (MFR), SPECTER+MFR, SPECTER2+SciNCL with GPU you need to install [pytorch](https://pytorch.org/) by selecting the right configuration for your particular OS, otherwise, if you are only using the CPU, the current dependencies should be fine.
 
-If you plan to use GPU acceleration SPECTER / SPECTER+MFR, with the conda environment `affinity` active:
+If you plan to use GPU acceleration for SPECTER / SPECTER+MFR, with the venv active:
 ```
-conda install pytorch cudatoolkit=10.1 -c pytorch 
-pip install -r requirements.txt
+pip install torch --index-url https://download.pytorch.org/whl/cu124
 pip install -I protobuf==3.20.1
-pip install numpy==1.24.4 --force-reinstall
 ```
-Pass the path to the cloned GitHub repository as `model_params.specter_dir`. 
+Pass the path to the cloned GitHub repository as `model_params.specter_dir`.
 
 If you plan to use Multifacet-Recommender / SPECTER+MFR, download the checkpoint files from [here](https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz), extract it, and pass the paths:
 ```
@@ -99,21 +94,19 @@ https://www.overleaf.com/read/swqrxgqqvmyv
 
 The following instructions are all of the commands to install the dependencies used by this repository - this follows the same commands listed above and assumes you start in the `openreview-expertise` directory after cloning it:
 ```
-conda update -y conda
-conda create -n expertise python=$PYTHON_VERSION -c conda-forge
-conda activate expertise
+python3.11 -m venv ~/venv/expertise
+source ~/venv/expertise/bin/activate
+pip install --upgrade pip setuptools wheel
 mkdir ../expertise-utils
 cd ../expertise-utils
-conda install "pytorch>=2.3" pytorch-cuda=12.4 -c pytorch -c nvidia
-conda install -y filelock
+pip install torch --index-url https://download.pytorch.org/whl/cu124
+pip install filelock intel-openmp faiss-cpu
 wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
 tar -xzvf mfr.tar.gz
 mv ./multifacet_recommender_data ./multifacet_recommender
 cd ~/openreview-expertise
-python -m pip install -e .
-conda install -y intel-openmp==2019.4
-conda install -y -c conda-forge faiss-cpu=1.7.4 "pytorch>=2.3"
-python -m pip install -I protobuf==3.20.1
+pip install -e .
+pip install -I protobuf==3.20.1
 ```
 ## Affinity Scores
 
