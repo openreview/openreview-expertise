@@ -5,6 +5,7 @@ WORKDIR /app
 ENV PYTHON_VERSION=3.11 \
     HOME="/app" \
     PYTHONUNBUFFERED=1 \
+    PIP_ROOT_USER_ACTION=ignore \
     VIRTUAL_ENV="/app/venv" \
     PATH="/app/venv/bin:${PATH}" \
     AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/" \
