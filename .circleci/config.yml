@@ -22,6 +22,9 @@ jobs:
     environment:
       PYTHON_VERSION: 3.11
       GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
+      DEBIAN_FRONTEND: noninteractive
+      NEEDRESTART_MODE: a
+      NEEDRESTART_SUSPEND: "1"
     steps:
       - checkout
       - run:
@@ -44,23 +47,24 @@ jobs:
       - run:
           name: Install Python ${PYTHON_VERSION}
           command: |
-            sudo apt update
-            sudo apt install -y software-properties-common
-            sudo add-apt-repository -y ppa:deadsnakes/ppa
-            sudo apt update
-            sudo apt install -y \
+            export APT_OPTS="NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive"
+            sudo env $APT_OPTS apt-get update
+            sudo env $APT_OPTS apt-get install -y software-properties-common
+            sudo env $APT_OPTS add-apt-repository -y ppa:deadsnakes/ppa
+            sudo env $APT_OPTS apt-get update
+            sudo env $APT_OPTS apt-get install -y \
               python${PYTHON_VERSION} \
               python${PYTHON_VERSION}-venv \
               python${PYTHON_VERSION}-dev
-            sudo apt install -y wget make gcc curl build-essential git sudo
-            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC sudo apt install -y tzdata
+            sudo env $APT_OPTS apt-get install -y wget make gcc curl build-essential git sudo
+            sudo env $APT_OPTS TZ=Etc/UTC apt-get install -y tzdata
       - run:
           name: Install Node 22
           command: |
-            sudo apt-get remove -y nodejs
+            sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get remove -y nodejs
             sudo rm -f /usr/local/bin/node /usr/local/bin/npm
             curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-            sudo apt-get install -y nodejs
+            sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
             export PATH=/usr/bin:$PATH
             node -v
             npm -v
