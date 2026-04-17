@@ -21,18 +21,13 @@ setup(
         'nltk',
         'gensim==4.4.0',
         'torch',
-        'cloudpickle',
         'scikit-learn',
         'tqdm',
-        'pytorch_pretrained_bert',
         'ipdb',
         'spacy==3.8.13',
         'en_core_web_sm@https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0.tar.gz',
-        'python-Levenshtein',
         'sacremoses',
         'rank_bm25',
-        'pytest==7.3.0',
-        'overrides==3.1.0',
         'flask==3.0.3',
         'flask-cors==6.0.0',
         'cffi>=1.0.0',
@@ -42,11 +37,15 @@ setup(
         'python-dotenv',
         'importlib-metadata==4.13.0',
         'werkzeug==3.0.6',
-        'adapter-transformers',
         'google-cloud',
         'google-cloud-storage',
         'google-cloud-aiplatform',
         'bullmq==2.11.0'
     ],
+    extras_require={
+        'dev': [
+            'pytest==7.3.0',
+        ],
+    },
     zip_safe=False
 )
