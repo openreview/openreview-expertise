@@ -164,9 +164,13 @@ def run_pipeline(
             for field in path_fields:
                 config.model_params[field] = working_dir
 
-        if dataset_gcs_path:
-            print(f'Downloading pre-created dataset from {dataset_gcs_path}')
-            download_dataset_from_gcs(dataset_gcs_path, working_dir)
+        if not dataset_gcs_path:
+            raise ValueError(
+                "dataset_gcs_path is required: this pipeline only runs the expertise step "
+                "and expects a pre-created dataset produced by the dataset task."
+            )
+        print(f'Downloading pre-created dataset from {dataset_gcs_path}')
+        download_dataset_from_gcs(dataset_gcs_path, working_dir)
 
         print('Executing expertise')
         execute_expertise(config.to_json())

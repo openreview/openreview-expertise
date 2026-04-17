@@ -799,19 +799,12 @@ class ExpertiseCloudService(BaseExpertiseService):
     def compute_machine_type_from_dataset(self, config):
         """Compute machine type from the already-created dataset on disk.
 
-        Reads submission_count from metadata.json written by execute_create_dataset().
-        Falls back to counting archive files if metadata is unavailable.
+        Reads submission_count and archives_count from metadata.json written by execute_create_dataset().
         """
-        if config.machine_type is not None:
-            return config.machine_type
-
-
-        note_count = 0
         metadata_path = os.path.join(config.job_dir, 'metadata.json')
-        if os.path.exists(metadata_path):
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-            note_count = metadata.get('submission_count', 0) + metadata.get('archives_count', 0)
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+        note_count = metadata.get('submission_count', 0) + metadata.get('archives_count', 0)
 
         self.logger.info(f"Machine type selection: {note_count} submissions in dataset")
 
@@ -830,9 +823,6 @@ class ExpertiseCloudService(BaseExpertiseService):
         or_token = job.data['token']
 
         config = self.redis.load_job(redis_id, user_id)
-        config.mdate = int(time.time() * 1000)
-        config.status = JobStatus.QUEUED
-        config.description = descriptions[JobStatus.QUEUED]
         openreview_client_v2 = openreview.api.OpenReviewClient(token=or_token, baseurl=config.baseurl_v2)
 
         # Task 1: Create dataset locally before submitting to VertexAI
@@ -851,7 +841,6 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         # Upload dataset to GCS and submit VertexAI job (expertise only, Task 2)
         config = self.redis.load_job(redis_id, user_id)
-        self.update_status(config, JobStatus.QUEUED)
         config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
         dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
         machine_type = self.compute_machine_type_from_dataset(config)
@@ -962,10 +951,10 @@ class ExpertiseCloudService(BaseExpertiseService):
             client,
             deepcopy(request)
         )
-        self._save_config(config) # Save initialized
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
+        self._save_config(config) # Persist QUEUED so clients see it as soon as the job is enqueued
 
         config_log = self._get_log_from_config(config)
         self.logger.info(f"Adding job {config.job_id} to queue")
