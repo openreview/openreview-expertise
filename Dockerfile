@@ -37,7 +37,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu124 \
     && pip install --no-cache-dir filelock faiss-cpu \
     && pip install --no-cache-dir -e /app/openreview-expertise \
-    && pip install --no-cache-dir -I protobuf==3.20.1 \
     && apt-get purge -y build-essential software-properties-common \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*

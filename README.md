@@ -70,7 +70,6 @@ Because some of the libraries are specific to our operating system you would nee
 If you plan to use GPU acceleration for SPECTER / SPECTER+MFR, with the venv active:
 ```
 pip install torch --index-url https://download.pytorch.org/whl/cu124
-pip install -I protobuf==3.20.1
 ```
 Pass the path to the cloned GitHub repository as `model_params.specter_dir`.
 
@@ -100,13 +99,12 @@ pip install --upgrade pip setuptools wheel
 mkdir ../expertise-utils
 cd ../expertise-utils
 pip install torch --index-url https://download.pytorch.org/whl/cu124
-pip install filelock intel-openmp faiss-cpu
+pip install filelock faiss-cpu
 wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
 tar -xzvf mfr.tar.gz
 mv ./multifacet_recommender_data ./multifacet_recommender
 cd ~/openreview-expertise
 pip install -e .
-pip install -I protobuf==3.20.1
 ```
 ## Affinity Scores
 
