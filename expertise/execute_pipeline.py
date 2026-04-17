@@ -5,8 +5,8 @@ import shortuuid
 import json
 import csv
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
-from expertise.service import load_model_artifacts
-from expertise.service.utils import APIRequest, JobConfig
+from expertise.service import load_model_artifacts, artifacts_for_model
+from expertise.service.utils import APIRequest, JobConfig, ExpectedDataError
 from expertise.utils.utils import generate_job_id
 from google.cloud import storage
 
@@ -92,7 +92,6 @@ def run_pipeline(
         for field in DELETED_FIELDS:
             raw_request.pop(field, None)
         token = raw_request.pop('token')
-        baseurl_v1 = raw_request.pop('baseurl_v1')
         baseurl_v2 = raw_request.pop('baseurl_v2')
         destination_prefix = raw_request.pop('gcs_folder')
         dump_embs = False if 'dump_embs' not in raw_request else raw_request.pop('dump_embs')
@@ -101,7 +100,6 @@ def run_pipeline(
         mfr_vocab_dir = os.getenv('MFR_VOCAB_DIR')
         mfr_checkpoint_dir = os.getenv('MFR_CHECKPOINT_DIR')
         server_config ={
-            'OPENREVIEW_BASEURL': baseurl_v1,
             'OPENREVIEW_BASEURL_V2': baseurl_v2,
             'SPECTER_DIR': specter_dir,
             'MFR_VOCAB_DIR': mfr_vocab_dir,
@@ -110,11 +108,14 @@ def run_pipeline(
         _, bucket = load_gcs(destination_prefix)
         blob_prefix = '/'.join(destination_prefix.split('/')[3:])
 
-        print('Loading model artifacts')
-        load_model_artifacts()
+        # Download only the artifacts required for this model — a pipeline worker
+        # handles a single job and pulling unused models wastes startup time.
+        requested_model = raw_request.get('model', {}).get('name', DEFAULT_CONFIG['model'])
+        required_artifacts = artifacts_for_model(requested_model)
+        print(f'Loading model artifacts for model={requested_model}: {required_artifacts}')
+        load_model_artifacts(subdirs=required_artifacts)
 
         print('Logging into OpenReview')
-        client_v1 = openreview.Client(baseurl=baseurl_v1, token=token)
         client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
 
         print('Creating job ID')
@@ -128,7 +129,6 @@ def run_pipeline(
         config = JobConfig.from_request(
             api_request = validated_request,
             starting_config = DEFAULT_CONFIG,
-            openreview_client= client_v1,
             openreview_client_v2= client_v2,
             server_config = server_config,
             working_dir = working_dir
@@ -143,13 +143,14 @@ def run_pipeline(
 
         # Create Dataset and Execute Expertise
         print('Creating dataset and executing expertise')
-        execute_create_dataset(client_v1, client_v2, config.to_json())
+        execute_create_dataset(client_v2, config.to_json())
         execute_expertise(config.to_json())
     except Exception as e:
         # Write error to single JSONL line in GCS if bucket is available
         if bucket is not None and blob_prefix is not None:
             error_message = {
-                'error': str(e)
+                'error': str(e),
+                'expected': isinstance(e, ExpectedDataError)
             }
             destination_blob = f"{blob_prefix}/error.json"
             blob = bucket.blob(destination_blob)
@@ -173,20 +174,20 @@ def run_pipeline(
             for row in reader:
                 if group_group_matching:
                     result.append({
-                        'match_member': row[0],
-                        'submission_member': row[1],
+                        'entityA': row[0],
+                        'entityB': row[1],
                         'score': float(row[2])
                     })
                 elif paper_paper_matching:
                     result.append({
-                        'match_submission': row[0],
-                        'submission': row[1],
+                        'entityA': row[0],
+                        'entityB': row[1],
                         'score': float(row[2])
                     })
                 else:
                     result.append({
-                        'submission': row[0],
-                        'user': row[1],
+                        'entityB': row[0],
+                        'entityA': row[1],
                         'score': float(row[2])
                     })
                     

@@ -17,6 +17,7 @@ import math, random
 import ipdb
 import numpy as np
 import shortuuid
+from tqdm import tqdm
 
 JOB_ID_ALPHABET = "123456789abcdefghijkmnopqrstuvwxyz"
 
@@ -464,6 +465,47 @@ def extract_candidate_words(text, good_tags=set(['JJ','JJR','JJS','NN','NNP','NN
 
     return candidates
 
+def generate_sparse_scores(full_scores, sparse_value, scores_path=None):    
+    def apply_sparse_value(sparse_scores, full_scores, id_index):
+        counter = 0
+        # Get the first note_id or profile_id
+        current_id = full_scores[0][id_index]
+        if id_index == 0:
+            desc = 'Note IDs'
+        else:
+            desc = 'Profiles IDs'
+        for note_id, profile_id, score in tqdm(full_scores, total=len(full_scores), desc=desc):
+            if counter < sparse_value:
+                sparse_scores.add((note_id, profile_id, score))
+            elif (note_id, profile_id)[id_index] != current_id:
+                counter = 0
+                sparse_scores.add((note_id, profile_id, score))
+                current_id = (note_id, profile_id)[id_index]
+            counter += 1
+        return sparse_scores
+
+    sparse_scores = set()
+    print('Sorting...')
+    full_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
+    print('Sort 1 complete')
+    # They are first sorted by note_id
+    apply_sparse_value(sparse_scores, full_scores, 0)
+
+    # Sort by profile_id
+    print('Sorting...')
+    full_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
+    print('Sort 2 complete')
+    apply_sparse_value(sparse_scores, full_scores, 1)
+
+    print('Final Sort...')
+    sparse_scores = sorted(list(sparse_scores), key=lambda x: (x[0], x[2]), reverse=True)
+    if scores_path:
+        with open(scores_path, 'w') as f:
+            for note_id, profile_id, score in sparse_scores:
+                f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
+
+    return sparse_scores
+
 def aggregate_by_group(config):
     # Fetch scores
     scores = {}
@@ -507,12 +549,16 @@ def aggregate_by_group(config):
             if score_length:
                 average_score[profile_id][archive_id] = round(score_sum/score_length, 2)
     
+    preliminary_scores = []
     # Overwrite out new scores
     with open(original_score_path, 'w') as outfile:
         csvwriter = csv.writer(outfile, delimiter=',')
         for submission_member, archive_scores in average_score.items():
             for archive_member, score in archive_scores.items():
+                preliminary_scores.append((archive_member, submission_member, score))
                 csvwriter.writerow([archive_member, submission_member, score])
+
+    return preliminary_scores
 
 
 '''

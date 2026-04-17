@@ -21,8 +21,6 @@ from typing import Optional
 import redisai
 import numpy as np
 
-from expertise.service.server import redis_embeddings_pool
-
 import logging
 
 """
@@ -49,10 +47,11 @@ silent
 
 class SpecterPredictor:
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
-                 sparse_value=None, use_redis=False, compute_paper_paper=False):
+                 sparse_value=None, use_redis=False, compute_paper_paper=False, specter_hf_dir=None):
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
+        self.specter_hf_dir = specter_hf_dir or os.getenv('SPECTER_HF_DIR') or 'allenai/specter'
         self.predictor_name = "specter_predictor"
         self.work_dir = work_dir
         self.average_score = average_score
@@ -69,14 +68,18 @@ class SpecterPredictor:
             os.makedirs(self.work_dir)
         self.use_redis = use_redis
         if use_redis:
+            from expertise.service.server import redis_embeddings_pool
             self.redis = redisai.Client(connection_pool=redis_embeddings_pool)
         else:
             self.redis = None
         self.compute_paper_paper = compute_paper_paper
 
-        self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter')
-        #load base model
-        self.model = AutoModel.from_pretrained('allenai/specter')
+        specter_source = "BUCKET (local dir)" if os.path.isdir(self.specter_hf_dir) else "HUGGINGFACE HUB (network)"
+        print(f"[specter] Loading tokenizer from '{self.specter_hf_dir}' [source={specter_source}]", flush=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.specter_hf_dir)
+        print(f"[specter] Loading model from '{self.specter_hf_dir}' [source={specter_source}]", flush=True)
+        self.model = AutoModel.from_pretrained(self.specter_hf_dir)
+        print("Model loaded, moving to device...")
         self.model.to(self.cuda_device)
         self.model.eval()
 
@@ -276,51 +279,6 @@ class SpecterPredictor:
                     f.write(csv_line + '\n')
 
         return self.preliminary_scores
-
-    def _sparse_scores_helper(self, all_scores, id_index):
-        counter = 0
-        # Get the first note_id or profile_id
-        current_id = self.preliminary_scores[0][id_index]
-        if id_index == 0:
-            desc = 'Note IDs'
-        else:
-            desc = 'Profiles IDs'
-        for note_id, profile_id, score in tqdm(self.preliminary_scores, total=len(self.preliminary_scores), desc=desc):
-            if counter < self.sparse_value:
-                all_scores.add((note_id, profile_id, score))
-            elif (note_id, profile_id)[id_index] != current_id:
-                counter = 0
-                all_scores.add((note_id, profile_id, score))
-                current_id = (note_id, profile_id)[id_index]
-            counter += 1
-        return all_scores
-
-    def sparse_scores(self, scores_path=None):
-        if self.preliminary_scores is None:
-            raise RuntimeError("Call all_scores before calling sparse_scores")
-
-        print('Sorting...')
-        self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
-        print('Sort 1 complete')
-        all_scores = set()
-        # They are first sorted by note_id
-        all_scores = self._sparse_scores_helper(all_scores, 0)
-
-        # Sort by profile_id
-        print('Sorting...')
-        self.preliminary_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
-        print('Sort 2 complete')
-        all_scores = self._sparse_scores_helper(all_scores, 1)
-
-        print('Final Sort...')
-        all_scores = sorted(list(all_scores), key=lambda x: (x[0], x[2]), reverse=True)
-        if scores_path:
-            with open(scores_path, 'w') as f:
-                for note_id, profile_id, score in all_scores:
-                    f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
-
-        print('Sparse score computation complete')
-        return all_scores
 
     def _remove_keys_from_cache(self, key):
         if self.redis:

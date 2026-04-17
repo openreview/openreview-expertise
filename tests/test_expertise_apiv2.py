@@ -54,30 +54,6 @@ class TestExpertiseV2():
     job_id = None
 
     @pytest.fixture(scope='session')
-    def celery_config(self):
-        return {
-            "broker_url": "redis://localhost:6379/10",
-            "result_backend": "redis://localhost:6379/10",
-            "task_track_started": True,
-            "task_serializer": "pickle",
-            "result_serializer": "pickle",
-            "accept_content": ["pickle", "application/x-python-serialize"],
-            "task_create_missing_queues": True,
-        }
-
-    @pytest.fixture(scope='session')
-    def celery_includes(self):
-        return ["expertise.service.celery_tasks"]
-
-    @pytest.fixture(scope='session')
-    def celery_worker_parameters(self):
-        return {
-            "queues": ("userpaper", "expertise"),
-            "perform_ping_check": False,
-            "concurrency": 1,
-        }
-
-    @pytest.fixture(scope='session')
     def openreview_context(self):
         """
         A pytest fixture for setting up a clean expertise-api test instance:
@@ -87,7 +63,6 @@ class TestExpertiseV2():
             "LOG_FILE": "pytest.log",
             "OPENREVIEW_USERNAME": "openreview.net",
             "OPENREVIEW_PASSWORD": "Or$3cur3P@ssw0rd",
-            "OPENREVIEW_BASEURL": "http://localhost:3000",
             "SUPERUSER_FIRSTNAME": "Super",
             "SUPERUSER_LASTNAME": "User",
             "SUPERUSER_TILDE_ID": "~Super_User1",
@@ -98,7 +73,7 @@ class TestExpertiseV2():
             "WORKING_DIR": './tests/jobs',
             "REDIS_ADDR": 'localhost',
             "REDIS_PORT": 6379,
-            "REDIS_CONFIG_DB": 10,
+            "REDIS_CONFIG_DB": 8,
             "CHECK_EVERY": 3600,
             "DELETE_AFTER": 3600,
             "IN_TEST": True
@@ -120,12 +95,16 @@ class TestExpertiseV2():
                 'top_recent_pubs': 3,
             }
         }
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
-        publications = or_expertise.get_publications('~Carlos_Mondragon1')
+        profiles = openreview.tools.get_profiles(client, ['~Carlos_Mondragon1', '~Harold_Rice1'], with_publications=True, as_dict=True)
+        carlos_profile = profiles.get('~Carlos_Mondragon1') or openreview.Profile(id='~Carlos_Mondragon1', content={})
+        harold_profile = profiles['~Harold_Rice1']
+
+        or_expertise = OpenReviewExpertise(openreview_client, config)
+        publications = or_expertise.get_publications(carlos_profile)
         assert publications == []
 
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
-        publications = or_expertise.get_publications('~Harold_Rice1')
+        or_expertise = OpenReviewExpertise(openreview_client, config)
+        publications = or_expertise.get_publications(harold_profile)
         assert len(publications) == 3 ## 3 top recent publications
         for pub in publications:
             content = pub['content']
@@ -139,7 +118,7 @@ class TestExpertiseV2():
             'match_group': 'API.cc',
             'paper_invitation': 'TMLR/-/Submission',
         }
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         retrieved_submissions = or_expertise.get_submissions()
         print(retrieved_submissions)
         retrieved_titles = [pub.get('content').get('title') for pub in retrieved_submissions.values()]
@@ -160,7 +139,7 @@ class TestExpertiseV2():
         config = {
             'paper_id': target_paper.id,
         }
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert not isinstance(submissions[target_paper.id]['content']['title'], dict)
@@ -176,13 +155,13 @@ class TestExpertiseV2():
         config = {
             'paper_venueid': target_paper.content['venueid']['value'],
         }
-        or_expertise = OpenReviewExpertise(client, openreview_client, config)
+        or_expertise = OpenReviewExpertise(openreview_client, config)
         submissions = or_expertise.get_submissions()
         print(submissions)
         assert not isinstance(submissions[target_paper.id]['content']['title'], dict)
         assert not isinstance(submissions[target_paper.id]['content']['abstract'], dict)
     
-    def test_journal_request_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_journal_request_v2(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID
 
         redis = RedisDatabase(
@@ -231,7 +210,7 @@ class TestExpertiseV2():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -241,7 +220,7 @@ class TestExpertiseV2():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -291,7 +270,7 @@ class TestExpertiseV2():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -301,7 +280,7 @@ class TestExpertiseV2():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -338,7 +317,7 @@ class TestExpertiseV2():
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f'{job_id}', 'deleteOnGet': True})
         assert not os.path.isdir(f"./tests/jobs/{job_id}")
 
-    def test_get_journal_results(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_get_journal_results(self, openreview_client, openreview_context):
         test_client = openreview_context['test_client']
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
@@ -349,7 +328,7 @@ class TestExpertiseV2():
         target_id = None
         for item in response:
             print(item)
-            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            submission_id, profile_id, score = item['entityB'], item['entityA'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
@@ -406,7 +385,7 @@ class TestExpertiseV2():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -416,7 +395,7 @@ class TestExpertiseV2():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -428,7 +407,7 @@ class TestExpertiseV2():
         response = response.json['results']
         for item in response:
             print(item)
-            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            submission_id, profile_id, score = item['entityB'], item['entityA'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
@@ -477,7 +456,7 @@ class TestExpertiseV2():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -487,7 +466,7 @@ class TestExpertiseV2():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -499,7 +478,7 @@ class TestExpertiseV2():
         response = response.json['results']
         for item in response:
             print(item)
-            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            submission_id, profile_id, score = item['entityB'], item['entityA'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
@@ -521,7 +500,7 @@ class TestExpertiseV2():
         if os.path.isfile('default.log'):
             os.remove('default.log')
 
-    def test_venueid_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_venueid_v2(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -555,7 +534,7 @@ class TestExpertiseV2():
         job_id = response.json['jobId']
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -565,7 +544,7 @@ class TestExpertiseV2():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -573,7 +552,7 @@ class TestExpertiseV2():
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
-    def test_submission_content_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_submission_content_v2(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -608,21 +587,21 @@ class TestExpertiseV2():
         job_id = response.json['jobId']
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Data Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Data Error' and try_time <= MAX_TIMEOUT:
             print(f"resp: {response}")
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             try_time = time.time() - start_time
 
-        assert response['status'] == 'Error'
+        assert response['status'] == 'Data Error'
         assert response['name'] == 'test_run'
-        assert response['description'] == "Not Found Error: No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'track': 'no_track'}"
+        assert response['description'] == "No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'track': 'no_track'}"
 
         response = test_client.post(
             '/expertise',
@@ -654,7 +633,7 @@ class TestExpertiseV2():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -664,7 +643,7 @@ class TestExpertiseV2():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -675,7 +654,7 @@ class TestExpertiseV2():
         results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']       
         assert len(results) == 15 # 3 editors x 5 submissions/publications from Raia/Kyunghyun
 
-    def test_paperpaper_submission_content_v2(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+    def test_paperpaper_submission_content_v2(self, openreview_client, openreview_context):
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
 
@@ -712,7 +691,7 @@ class TestExpertiseV2():
         assert response.json['message'] == "Bad request: model specter+mfr does not support paper-paper scoring"
 
         abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
-        abc_client.impersonate('API.cc/Program_Chairs')
+        abc_client.impersonate('API.cc')
         # Get a no publications error
         response = test_client.post(
             '/expertise',
@@ -743,21 +722,21 @@ class TestExpertiseV2():
         job_id = response.json['jobId']
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Data Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Data Error' and try_time <= MAX_TIMEOUT:
             print(f"resp: {response}")
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
             try_time = time.time() - start_time
 
-        assert response['status'] == 'Error'
+        assert response['status'] == 'Data Error'
         assert response['name'] == 'test_run'
-        assert response['description'] == "Not Found Error: No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'human_subjects_reporting': 'Not applicable'}"
+        assert response['description'] == "No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'human_subjects_reporting': 'Not applicable'}"
 
         # Get a no submissions error
         response = test_client.post(
@@ -789,21 +768,21 @@ class TestExpertiseV2():
         job_id = response.json['jobId']
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Data Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Data Error' and try_time <= MAX_TIMEOUT:
             print(f"resp: {response}")
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
             try_time = time.time() - start_time
 
-        assert response['status'] == 'Error'
+        assert response['status'] == 'Data Error'
         assert response['name'] == 'test_run'
-        assert response['description'] == "Not Found Error: No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'human_subjects_reporting': 'Not applicable'}"
+        assert response['description'] == "No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'human_subjects_reporting': 'Not applicable'}"
 
         # Make a request that is supported by the model
         response = test_client.post(
@@ -837,7 +816,7 @@ class TestExpertiseV2():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -847,7 +826,7 @@ class TestExpertiseV2():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -855,10 +834,75 @@ class TestExpertiseV2():
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
 
-        results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']       
+        results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']
         assert len(results) == 25 # 5 submissions x 5 submissions/publications from Raia/Kyunghyun
 
-    def test_specter2_scincl(self, openreview_client, openreview_context, celery_session_app, celery_session_worker):
+        sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
+
+        total_submissions = len(openreview_client.get_notes(content={'venueid': 'TMLR/Submitted'}))
+
+        # Make a request that is supported by the model
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": { 
+                        'type': "Note",
+                        'withVenueid': "TMLR/Submitted",
+                        'withContent': { 'human_subjects_reporting': 'Not applicable' }
+                    },
+                    "entityB": { 
+                        'type': "Note",
+                        'withVenueid': "TMLR/Submitted",
+                        'withContent': { 'human_subjects_reporting': 'Not applicable' }
+                    },
+                    "model": {
+                        "name": "specter2+scincl",
+                        'useTitle': False, 
+                        'useAbstract': True, 
+                        'skipSpecter': False,
+                        'scoreComputation': 'avg',
+                        'sparseValue': 1,
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=openreview_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(2)
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run'
+        assert response['status'] != 'Error', response
+
+        # Query until job is complete
+        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(5)
+            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] == 'Error':
+                assert False, response['description']
+            try_time = time.time() - start_time
+
+        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
+        assert response['status'] == 'Completed'
+        assert response['name'] == 'test_run'
+        assert response['description'] == 'Job is complete and the computed scores are ready'
+
+        sparse_results = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id}).json['results']
+        assert len(sparse_results) == total_submissions # Sparse value of 1
+
+        sorted_sparse_results = sorted(sparse_results, key=lambda x: x['score'], reverse=True)
+
+        for i in range(len(sorted_sparse_results)):
+            assert sorted_sparse_results[i]['entityA'] == sorted_results[i]['entityA']
+            assert sorted_sparse_results[i]['entityB'] == sorted_results[i]['entityB']
+            assert abs(sorted_sparse_results[i]['score'] - sorted_results[i]['score']) < 0.0001
+
+    def test_specter2_scincl(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
@@ -893,20 +937,20 @@ class TestExpertiseV2():
         job_id = response.json['jobId']
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Data Error'
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         start_time = time.time()
         try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
+        while response['status'] != 'Data Error' and try_time <= MAX_TIMEOUT:
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             try_time = time.time() - start_time
 
-        assert response['status'] == 'Error'
+        assert response['status'] == 'Data Error'
         assert response['name'] == 'test_run'
-        assert response['description'] == "Not Found Error: No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'track': 'no_track'}"
+        assert response['description'] == "No papers found for: paper_venueid: TMLR/Submitted, paper_content: {'track': 'no_track'}"
 
         response = test_client.post(
             '/expertise',
@@ -938,7 +982,7 @@ class TestExpertiseV2():
         time.sleep(2)
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run'
-        assert response['status'] != 'Error'
+        assert response['status'] != 'Error', response
 
         # Query until job is complete
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
@@ -948,7 +992,7 @@ class TestExpertiseV2():
             time.sleep(5)
             response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'}).json
             if response['status'] == 'Error':
-                assert False, response[0]['description']
+                assert False, response['description']
             try_time = time.time() - start_time
 
         assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
@@ -961,7 +1005,7 @@ class TestExpertiseV2():
         response = response.json['results']
         for item in response:
             print(item)
-            submission_id, profile_id, score = item['submission'], item['user'], float(item['score'])
+            submission_id, profile_id, score = item['entityB'], item['entityA'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')

@@ -8,7 +8,8 @@ from tqdm import tqdm
 class EnsembleModel:
     def __init__(self, specter_dir, work_dir,
                  average_score=False, max_score=True, specter_batch_size=16, merge_alpha=0.5,
-                 use_cuda=True, sparse_value=None, use_redis=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=None, normalize_scores=True):
+                 use_cuda=True, sparse_value=None, use_redis=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=None, normalize_scores=True,
+                 specter2_hf_dir=None, specter2_adapter_dir=None, scincl_hf_dir=None):
         self.specter_predictor = Specter2Predictor(
             specter_dir=specter_dir,
             work_dir=os.path.join(work_dir, "specter"),
@@ -21,7 +22,9 @@ class EnsembleModel:
             compute_paper_paper=compute_paper_paper,
             venue_specific_weights=venue_specific_weights,
             percentile_select=percentile_select,
-            normalize_scores=normalize_scores
+            normalize_scores=normalize_scores,
+            specter2_hf_dir=specter2_hf_dir,
+            specter2_adapter_dir=specter2_adapter_dir
         )
 
         self.scincl_predictor = SciNCLPredictor(
@@ -36,10 +39,12 @@ class EnsembleModel:
             compute_paper_paper=compute_paper_paper,
             venue_specific_weights=venue_specific_weights,
             percentile_select=percentile_select,
-            normalize_scores=normalize_scores
+            normalize_scores=normalize_scores,
+            scincl_hf_dir=scincl_hf_dir
         )
         self.merge_alpha = merge_alpha
         self.sparse_value = sparse_value
+        self.normalize_scores = normalize_scores
         self.preliminary_scores = None
 
     def set_archives_dataset(self, archives_dataset):
@@ -88,6 +93,10 @@ class EnsembleModel:
         for entry in self.scincl_predictor.preliminary_scores:
             new_score = specter_preliminary_scores_map[(entry[0], entry[1])] * self.merge_alpha + \
                         entry[2] * (1 - self.merge_alpha)
+            if self.normalize_scores:
+                new_score = round(min(1.0, max(0.0, new_score)), 4)
+            else:
+                new_score = round(min(1.0, max(-1.0, new_score)), 4)
             csv_line = '{note_id},{reviewer},{score}'.format(note_id=entry[0], reviewer=entry[1],
                                                              score=new_score)
             csv_scores.append(csv_line)
@@ -99,48 +108,3 @@ class EnsembleModel:
                     f.write(csv_line + '\n')
 
         return self.preliminary_scores
-
-    def _sparse_scores_helper(self, all_scores, id_index):
-        counter = 0
-        # Get the first note_id or profile_id
-        current_id = self.preliminary_scores[0][id_index]
-        if id_index == 0:
-            desc = 'Note IDs'
-        else:
-            desc = 'Profiles IDs'
-        for note_id, profile_id, score in tqdm(self.preliminary_scores, total=len(self.preliminary_scores), desc=desc):
-            if counter < self.sparse_value:
-                all_scores.add((note_id, profile_id, score))
-            elif (note_id, profile_id)[id_index] != current_id:
-                counter = 0
-                all_scores.add((note_id, profile_id, score))
-                current_id = (note_id, profile_id)[id_index]
-            counter += 1
-        return all_scores
-
-    def sparse_scores(self, scores_path=None):
-        if self.preliminary_scores is None:
-            raise RuntimeError("Call all_scores before calling sparse_scores")
-
-        print('Sorting...')
-        self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
-        print('Sort 1 complete')
-        all_scores = set()
-        # They are first sorted by note_id
-        all_scores = self._sparse_scores_helper(all_scores, 0)
-
-        # Sort by profile_id
-        print('Sorting...')
-        self.preliminary_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
-        print('Sort 2 complete')
-        all_scores = self._sparse_scores_helper(all_scores, 1)
-
-        print('Final Sort...')
-        all_scores = sorted(list(all_scores), key=lambda x: (x[0], x[2]), reverse=True)
-        if scores_path:
-            with open(scores_path, 'w') as f:
-                for note_id, profile_id, score in all_scores:
-                    f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
-
-        print('Sparse score computation complete')
-        return all_scores

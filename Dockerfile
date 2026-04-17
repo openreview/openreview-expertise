@@ -1,26 +1,26 @@
 FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
 
-ARG OPENREVIEW_PY_VERSION=master
-
 WORKDIR /app
 
 ENV PYTHON_VERSION=3.11 \
     HOME="/app" \
+    PYTHONUNBUFFERED=1 \
     PATH="/app/miniconda/bin:${PATH}" \
-    FLASK_ENV=production \
     AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/" \
     SPECTER_DIR="/app/expertise-utils/specter/" \
     MFR_VOCAB_DIR="/app/expertise-utils/multifacet_recommender/feature_vocab_file" \
-    MFR_CHECKPOINT_DIR="/app/expertise-utils/multifacet_recommender/mfr_model_checkpoint/"
+    MFR_CHECKPOINT_DIR="/app/expertise-utils/multifacet_recommender/mfr_model_checkpoint/" \
+    SPECTER_HF_DIR="/app/expertise-utils/hf_models/specter" \
+    SPECTER2_HF_DIR="/app/expertise-utils/hf_models/specter2_base" \
+    SPECTER2_ADAPTER_DIR="/app/expertise-utils/hf_models/specter2_adapter" \
+    SCINCL_HF_DIR="/app/expertise-utils/hf_models/scincl"
 
 COPY . /app/openreview-expertise
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     wget \
-    curl \
     ca-certificates \
-    git \
     build-essential \
     && rm -rf /var/lib/apt/lists/* \
     \
@@ -39,14 +39,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && conda install --force-reinstall pytorch pytorch-cuda=12.4 -c pytorch -c nvidia \
     && python -m pip install --no-cache-dir -e $HOME/openreview-expertise \
     && python -m pip install --no-cache-dir -I protobuf==3.20.1 \
-    && python -m pip install -e "git+https://github.com/openreview/openreview-py.git@${OPENREVIEW_PY_VERSION}#egg=openreview-py" \
     && conda clean --all -y \
-    && apt-get purge -y build-essential wget curl git \
+    && apt-get purge -y build-essential wget \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Add conda environment bin to PATH so that 'python' uses the environment by default
 ENV PATH="/app/miniconda/envs/expertise/bin:${PATH}"
+
+# HuggingFace models (specter, specter2 base + adapter, scincl) are not baked into
+# the image — they are fetched from gs://openreview-expertise/expertise-utils/hf_models/
+# at job start, selectively per-request, by expertise.service.load_model_artifacts.
 
 RUN mkdir ${HOME}/expertise-utils \
     && cp ${HOME}/openreview-expertise/expertise/service/config/default_container.cfg \

@@ -30,13 +30,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.version }}
-      - name: Add SSH key
+      - name: Free up space
         run: |
-          mkdir -p /home/runner/.ssh
-          echo "${{ secrets.GCLOUD_SSH_KEY }}" > /home/runner/.ssh/google_compute_engine
-          echo "${{ secrets.GCLOUD_SSH_KEY_PUB }}" > /home/runner/.ssh/google_compute_engine.pub
-          chmod 600 /home/runner/.ssh/google_compute_engine
-          chmod 600 /home/runner/.ssh/google_compute_engine.pub
+          # Remove .NET SDKs
+          sudo rm -rf /usr/share/dotnet
+
+          # Remove Android SDKs
+          sudo rm -rf /usr/local/lib/android
+
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
       - name: Authenticate with Google Cloud
         id: auth
         uses: google-github-actions/auth@v2
@@ -50,11 +54,6 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       - name: Setup Docker authentication
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
-      - name: Get deployment configuration
-        run: |
-          gsutil cp gs://openreview-general/conf/deployment.conf ./deployment.conf
-          OPENREVIEW_TAG=$(grep 'OPENREVIEW_PY_V2_TAG=' deployment.conf | cut -d'"' -f2)
-          echo "OPENREVIEW_PY_VERSION=$OPENREVIEW_TAG" >> $GITHUB_ENV
       - name: Set Environment Variables
         run: |
           echo "IMAGE_TAG_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
@@ -92,8 +91,6 @@ jobs:
           # Push multiple tags: the version provided
           tags: |
             ${{ env.IMAGE_TAG }}:${{ env.IMAGE_TAG_VERSION }}
-          build-args: |
-            OPENREVIEW_PY_VERSION=${{ env.OPENREVIEW_PY_VERSION }}
           cache-from: type=registry,ref=${{ env.IMAGE_TAG }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE_TAG }}:buildcache,mode=max
       - name: Build and push Kubeflow pipeline
@@ -112,4 +109,4 @@ jobs:
           gcloud config set compute/zone us-central1-b
           VERSION="${{ github.event.inputs.version }}"
           echo "Deploying version: $VERSION"
-          gcloud compute ssh openreview@openreview-expertise-instance --command "/bin/expertise_build.sh $VERSION" --quiet
+          gcloud compute ssh --tunnel-through-iap openreview@openreview-expertise-instance --command "/bin/expertise_build.sh $VERSION" --quiet

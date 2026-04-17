@@ -87,14 +87,40 @@ jobs:
             cd ~/expertise-utils
             conda install "pytorch>=2.3" pytorch-cuda=12.4 -c pytorch -c nvidia
             conda install -y filelock
-            wget https://storage.googleapis.com/openreview-public/openreview-expertise/models-data/multifacet_recommender_data.tar.gz -O mfr.tar.gz
-            tar -xzvf mfr.tar.gz
-            mv ./multifacet_recommender_data ./multifacet_recommender
+            conda install -y intel-openmp==2019.4
             cd ~/openreview-expertise
             python -m pip install -e .
-            conda install -y intel-openmp==2019.4
-            conda install -y -c conda-forge faiss-cpu=1.7.4 "pytorch>=2.3"
             python -m pip install -I protobuf==3.20.1
+      - run:
+          name: Download model artifacts from GCS bucket
+          # Mirror the bucket path that Vertex AI pipeline workers use, so
+          # `test_specter2scincl.py` / `test_spectermfr.py` exercise the same
+          # code path in production (bucket -> local dir -> from_pretrained).
+          # Covers MFR + all HuggingFace snapshots so nothing falls back to HF.
+          command: |
+            source ~/miniconda/etc/profile.d/conda.sh
+            conda activate expertise
+            cd ~/openreview-expertise
+            export AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/"
+            export EXPERTISE_UTILS_DIR="$HOME/expertise-utils"
+            python -c "
+            from expertise.service import load_model_artifacts
+            load_model_artifacts(subdirs=[
+                'multifacet_recommender',
+                'hf_models/specter',
+                'hf_models/specter2_base',
+                'hf_models/specter2_adapter',
+                'hf_models/scincl',
+            ])
+            "
+            # Persist env vars for the test step so predictors pick up the
+            # local dirs instead of falling back to HuggingFace Hub.
+            {
+              echo "export SPECTER_HF_DIR=$HOME/expertise-utils/hf_models/specter"
+              echo "export SPECTER2_HF_DIR=$HOME/expertise-utils/hf_models/specter2_base"
+              echo "export SPECTER2_ADAPTER_DIR=$HOME/expertise-utils/hf_models/specter2_adapter"
+              echo "export SCINCL_HF_DIR=$HOME/expertise-utils/hf_models/scincl"
+            } >> "$BASH_ENV"
       - run:
           name: Initialize MongoDB
           command: |
@@ -120,10 +146,6 @@ jobs:
             git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-api.git ~/openreview-v2
             cd ~/openreview-v2 && git checkout << pipeline.parameters.openreview-api-v2-branch >>
       - run:
-          name: Clone openreview-py 
-          command: |
-            git clone https://$OPENREVIEW_GITHUB@github.com/openreview/openreview-py.git ~/openreview-py
-      - run:
           name: Create API directories
           command: |
             mkdir -p ~/openreview/logs
@@ -134,13 +156,6 @@ jobs:
             mkdir -p ~/openreview-v2/files/attachments
             mkdir -p ~/openreview-v2/files/pdfs
             mkdir -p ~/openreview-v2/files/temp
-      - run:
-          name: Install openreview-py
-          command: |
-            mkdir ~/openreview-py/coverage
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            pip install -e ~/openreview-py
       - run:
           name: Start API V1
           command: |
@@ -216,7 +231,9 @@ jobs:
               -e "GOOGLE_APPLICATION_CREDENTIALS" \
               --entrypoint="" \
               expertise-test:${CIRCLE_SHA1:0:12} \
-              sh -c "cd /app/openreview-expertise && python -m pytest tests/test_pipeline.py tests/test_specter2scincl.py -v --tb=short"
+              sh -c "cd /app/openreview-expertise && \
+                     python -c 'from expertise.service import load_model_artifacts; load_model_artifacts(subdirs=[\"multifacet_recommender\", \"hf_models/specter\", \"hf_models/specter2_base\", \"hf_models/specter2_adapter\", \"hf_models/scincl\"])' && \
+                     python -m pytest tests/test_pipeline.py tests/test_specter2scincl.py -v --tb=short"
       - run:
           name: Copy API logs to artifacts
           when: on_fail

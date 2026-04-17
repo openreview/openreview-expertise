@@ -15,8 +15,6 @@ from transformers import AutoTokenizer, AutoModel
 from adapters import AutoAdapterModel
 from .predictor import Predictor
 
-from expertise.service.server import redis_embeddings_pool
-
 import logging
 """
 archive_file: $SPECTER_FOLDER/model.tar.gz
@@ -42,11 +40,16 @@ silent
 class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=None,
-                 normalize_scores=True):
+                 normalize_scores=True, specter2_hf_dir=None, specter2_adapter_dir=None):
         self.model_name = 'specter2'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
+        # Paths to locally-mirrored HuggingFace snapshots. Fall back to env vars
+        # (set in the container) and finally to the HF hub IDs so local dev can
+        # still download from HF if no mirror is available.
+        self.specter2_hf_dir = specter2_hf_dir or os.getenv('SPECTER2_HF_DIR') or 'allenai/specter2_aug2023refresh_base'
+        self.specter2_adapter_dir = specter2_adapter_dir or os.getenv('SPECTER2_ADAPTER_DIR') or 'allenai/specter2_aug2023refresh'
         self.predictor_name = "specter_predictor"
         self.work_dir = work_dir
         self.average_score = average_score
@@ -67,14 +70,23 @@ class Specter2Predictor(Predictor):
         self.compute_paper_paper = compute_paper_paper
         self.venue_specific_weights = venue_specific_weights
         self.normalize_scores = normalize_scores
-        print(f"SPECTER2 venue_specific_weights: {venue_specific_weights}")
+        print(f"SPECTER2 venue_specific_weights: {venue_specific_weights}", flush=True)
 
         self.percentile_select = percentile_select
-        self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_aug2023refresh_base')
-        #load base model
-        self.model = AutoAdapterModel.from_pretrained('allenai/specter2_aug2023refresh_base')
-        #load the adapter(s) as per the required task, provide an identifier for the adapter in load_as argument and activate it
-        self.model.load_adapter("allenai/specter2_aug2023refresh", source="hf", load_as="proximity", set_active=True)
+        # `from_pretrained` and `load_adapter` accept a local directory as-is;
+        # when pointed at a HF hub ID they fall back to the network.
+        base_is_local = os.path.isdir(self.specter2_hf_dir)
+        adapter_is_local = os.path.isdir(self.specter2_adapter_dir)
+        base_source = "BUCKET (local dir)" if base_is_local else "HUGGINGFACE HUB (network)"
+        adapter_source_label = "BUCKET (local dir)" if adapter_is_local else "HUGGINGFACE HUB (network)"
+        adapter_source = "local" if adapter_is_local else "hf"
+        print(f"[specter2] Loading tokenizer from '{self.specter2_hf_dir}' [source={base_source}]", flush=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.specter2_hf_dir)
+        print(f"[specter2] Loading model from '{self.specter2_hf_dir}' [source={base_source}]", flush=True)
+        self.model = AutoAdapterModel.from_pretrained(self.specter2_hf_dir)
+        print(f"[specter2] Loading adapter from '{self.specter2_adapter_dir}' [source={adapter_source_label}]", flush=True)
+        self.model.load_adapter(self.specter2_adapter_dir, source=adapter_source, load_as="proximity", set_active=True)
+        print("Model loaded, moving to device...", flush=True)
         self.model.to(self.cuda_device)
         self.model.eval()
 
@@ -261,7 +273,10 @@ class Specter2Predictor(Predictor):
             print("Normalizing scores...")
             min_val = p2p_aff.min()
             max_val = p2p_aff.max()
-            p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+            if max_val - min_val == 0:
+                p2p_aff_norm = torch.clamp(p2p_aff, 0.0, 1.0)
+            else:
+                p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
         else:
             print("Skipping normalization of scores...")
             p2p_aff_norm = p2p_aff
@@ -273,9 +288,9 @@ class Specter2Predictor(Predictor):
             for i in range(paper_num_train):
                 for j in range(paper_num_test):
                     csv_line = '{match_id},{submission_id},{score}'.format(match_id=test_id_list[j], submission_id=train_id_list[i],
-                                                                    score=p2p_aff[j, i].item())
+                                                                    score=round(p2p_aff_norm[j, i].item(), 4))
                     csv_scores.append(csv_line)
-                    self.preliminary_scores.append((test_id_list[j], train_id_list[i], p2p_aff[j, i].item()))
+                    self.preliminary_scores.append((test_id_list[j], train_id_list[i], round(p2p_aff_norm[j, i].item(), 4)))
         else:
             for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
                 if len(train_note_id_list) == 0:
@@ -309,9 +324,9 @@ class Specter2Predictor(Predictor):
                     all_paper_aff = train_paper_aff_j.max(dim=1)[0]
                 for j in range(paper_num_test):
                     csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[j], reviewer=reviewer_id,
-                                                                    score=all_paper_aff[j].item())
+                                                                    score=round(all_paper_aff[j].item(), 4))
                     csv_scores.append(csv_line)
-                    self.preliminary_scores.append((test_id_list[j], reviewer_id, all_paper_aff[j].item()))
+                    self.preliminary_scores.append((test_id_list[j], reviewer_id, round(all_paper_aff[j].item(), 4)))
 
         if scores_path:
             with open(scores_path, 'w') as f:
@@ -319,33 +334,6 @@ class Specter2Predictor(Predictor):
                     f.write(csv_line + '\n')
 
         return self.preliminary_scores
-
-    def sparse_scores(self, scores_path=None):
-        if self.preliminary_scores is None:
-            raise RuntimeError("Call all_scores before calling sparse_scores")
-
-        print('Sorting...')
-        self.preliminary_scores.sort(key=lambda x: (x[0], x[2]), reverse=True)
-        print('Sort 1 complete')
-        all_scores = set()
-        # They are first sorted by note_id
-        all_scores = self._sparse_scores_helper(all_scores, 0)
-
-        # Sort by profile_id
-        print('Sorting...')
-        self.preliminary_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
-        print('Sort 2 complete')
-        all_scores = self._sparse_scores_helper(all_scores, 1)
-
-        print('Final Sort...')
-        all_scores = sorted(list(all_scores), key=lambda x: (x[0], x[2]), reverse=True)
-        if scores_path:
-            with open(scores_path, 'w') as f:
-                for note_id, profile_id, score in all_scores:
-                    f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
-
-        print('Sparse score computation complete')
-        return all_scores
 
     def _remove_keys_from_cache(self, key):
         if self.redis:

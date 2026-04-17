@@ -29,7 +29,7 @@ def get_user_id(openreview_client):
     :returns id: The id of the logged in user
     """
     user = openreview_client.user
-    return user.get('user', {}).get('id') if user else None
+    return user.get('id') if user else None
 
 def _get_required_field(req, superkey, key):
     try:
@@ -38,6 +38,14 @@ def _get_required_field(req, superkey, key):
         raise openreview.OpenReviewException(f"Bad request: required field missing in {superkey}: {key}")
     return field
 
+class ExpectedDataError(Exception):
+    """
+    Raised when a known/expected data condition prevents job completion.
+    Jobs that fail with this exception should be marked as DATA_ERROR
+    rather than ERROR, and will not be retried by the job queue.
+    """
+    pass
+
 class JobStatus(str, Enum):
     INITIALIZED = 'Initialized'
     QUEUED = 'Queued'
@@ -45,6 +53,7 @@ class JobStatus(str, Enum):
     EXPERTISE_QUEUED = 'Queued for Expertise'
     RUN_EXPERTISE = 'Running Expertise'
     COMPLETED = 'Completed'
+    DATA_ERROR = 'Data Error'
     ERROR = 'Error'
 
 class JobDescription(dict, Enum):
@@ -55,6 +64,7 @@ class JobDescription(dict, Enum):
         JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
+        JobStatus.DATA_ERROR: 'Job completed but no scores were computed because of an issue with the data',
         JobStatus.ERROR: 'Job has encountered an error and has failed to complete',
     }
 class APIRequest(object):
@@ -274,7 +284,8 @@ class RedisDatabase(object):
         port=None,
         db=None,
         connection_pool=None,
-        sync_on_disk=True) -> None:
+        sync_on_disk=True,
+        job_ttl=None) -> None:
         if not connection_pool:
             self.db = redis.Redis(
                 host = host,
@@ -285,8 +296,12 @@ class RedisDatabase(object):
             self.db = redis.Redis(connection_pool=connection_pool)
 
         self.sync_on_disk = sync_on_disk
-    def save_job(self, job_config):
-        self.db.set(f"job:{job_config.job_id}", pickle.dumps(job_config))
+        self.job_ttl = job_ttl
+
+    def save_job(self, job_config, ttl=None):
+        key = f"job:{job_config.job_id}"
+        job_ttl = ttl if ttl is not None else self.job_ttl
+        self.db.set(key, pickle.dumps(job_config), ex=job_ttl)
     
     def load_all_jobs(self, user_id):
         """
@@ -297,7 +312,10 @@ class RedisDatabase(object):
         configs = []
 
         for job_key in self.db.scan_iter("job:*"):
-            current_config = pickle.loads(self.db.get(job_key))
+            pickled_config = self.db.get(job_key)
+            if not pickled_config:  # Key expired between scan and get
+                continue
+            current_config = pickle.loads(pickled_config)
 
             if self.sync_on_disk and not os.path.isdir(current_config.job_dir):
                 print(f"No files found {job_key} - skipping")
@@ -314,9 +332,12 @@ class RedisDatabase(object):
         """
         job_key = f"job:{job_id}"
         
-        if not self.db.exists(job_key):
-            raise openreview.OpenReviewException('Job not found')        
-        config = pickle.loads(self.db.get(job_key))
+        pickled_config = self.db.get(job_key)
+        if not pickled_config:
+            raise openreview.OpenReviewException('Job not found')
+        
+        config = pickle.loads(pickled_config)
+        
         if self.sync_on_disk and not os.path.isdir(config.job_dir):
             self.remove_job(user_id, job_id)
             raise openreview.OpenReviewException('Job not found')
@@ -329,9 +350,10 @@ class RedisDatabase(object):
     def remove_job(self, user_id, job_id):
         job_key = f"job:{job_id}"
 
-        if not self.db.exists(job_key):
+        pickled_config = self.db.get(job_key)
+        if not pickled_config:
             raise openreview.OpenReviewException('Job not found')
-        config = pickle.loads(self.db.get(job_key))
+        config = pickle.loads(pickled_config)
         if config.user_id != user_id and user_id not in SUPERUSER_IDS:
             raise openreview.OpenReviewException('Forbidden: Insufficient permissions to modify job')
 
@@ -460,7 +482,6 @@ class JobConfig(object):
     def from_request(api_request: APIRequest,
         job_id=None,
         starting_config = {},
-        openreview_client = None,
         openreview_client_v2 = None,
         server_config = {},
         working_dir = None):
@@ -502,9 +523,8 @@ class JobConfig(object):
 
         # Set metadata fields from request
         config.name = api_request.name
-        config.user_id = get_user_id(openreview_client)
+        config.user_id = get_user_id(openreview_client_v2)
         config.job_id = generate_job_id() if job_id is None else job_id
-        config.baseurl = server_config['OPENREVIEW_BASEURL']
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
         
@@ -543,13 +563,7 @@ class JobConfig(object):
                 if edge_inv_id is None or len(edge_inv_id) <= 0:
                     raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
 
-                try:
-                    label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
-                except openreview.OpenReviewException as e:
-                    if "notfound" in str(e).lower():
-                        label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
-                    else:
-                        raise e
+                label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
 
                 if 'exclude' not in label.lower():
                     config.inclusion_inv = edge_inv_id
@@ -567,13 +581,7 @@ class JobConfig(object):
                 if edge_inv_id is None:
                     raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
 
-                try:
-                    label = openreview_client.get_invitation(edge_inv_id).reply.get('content', {}).get('label', {}).get('value-radio',['Include'])[0]
-                except openreview.OpenReviewException as e:
-                    if "notfound" in str(e).lower():
-                        label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
-                    else:
-                        raise e
+                label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
 
                 if 'include' in label.lower():
                     config.alternate_inclusion_inv = edge_inv_id
@@ -764,7 +772,8 @@ class GCPInterface(object):
         openreview_client=None,
         pipeline_tag='latest',
         logger=None,
-        gcs_client=None
+        gcs_client=None,
+        service_account=None
     ):
 
         if config is not None:
@@ -778,6 +787,7 @@ class GCPInterface(object):
             self.bucket_name = config['GCP_BUCKET_NAME']
             self.jobs_folder = config['GCP_JOBS_FOLDER']
             self.service_label = config['GCP_SERVICE_LABEL']
+            self.service_account = config.get('GCP_SERVICE_ACCOUNT')
         else:
             self.project_id = project_id
             self.project_number = project_number
@@ -789,6 +799,7 @@ class GCPInterface(object):
             self.bucket_name = bucket_name
             self.jobs_folder = jobs_folder
             self.service_label = service_label
+            self.service_account = service_account
 
         required_fields = [
             self.project_id,
@@ -832,6 +843,26 @@ class GCPInterface(object):
 
     def set_client(self, client):
         self.client = client
+
+    def _resolve_job_status(self, job_id, job):
+        descriptions = JobDescription.VALS.value
+        status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
+        description = descriptions[status]
+
+        if status != JobStatus.ERROR:
+            return status, description
+
+        try:
+            error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
+            if error_message:
+                error_data = json.loads(error_message)
+                description = error_data.get('error', descriptions[status])
+                if error_data.get('expected', False):
+                    status = JobStatus.DATA_ERROR
+        except Exception:
+            pass
+
+        return status, description
 
     def _generate_vertex_prefix(api_request):
         group_entity = None
@@ -924,7 +955,6 @@ class GCPInterface(object):
 
         # Popped fields
         data['token'] = or_client.token
-        data['baseurl_v1'] = openreview.tools.get_base_urls(or_client)[0]
         data['baseurl_v2'] = openreview.tools.get_base_urls(or_client)[1]
         data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
         #data['dump_embs'] = True
@@ -940,19 +970,42 @@ class GCPInterface(object):
         # Pass GCS path instead of JSON data to avoid parameter size limits
         gcs_request_path = f"gs://{self.bucket_name}/{folder_path}/{self.request_fname}"
 
+        parameter_values = {
+            'gcs_request_path': gcs_request_path,
+            'machine_type': machine_type,
+        }
+
+        # Build PipelineJob kwargs and parameters
         job = aip.PipelineJob(
             display_name = valid_vertex_id,
             template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
-            parameter_values = {'gcs_request_path': gcs_request_path, 'machine_type': machine_type},
+            parameter_values = parameter_values,
             labels = self.service_label)
 
-        job.submit()
+        job.submit(
+            service_account=self.service_account
+        )
 
         return valid_vertex_id
 
-    def get_job_status_by_job_id(self, user_id, job_id):
+    def get_job_status_by_job_id(self, user_id, config):
+        job_id = config.cloud_id
+
+        if job_id is None:
+            # Return just information in Redis
+            return {
+                'name': config.name,
+                'tauthor': config.user_id,
+                'jobId': config.job_id,
+                'status': config.status,
+                'description': config.description,
+                'cdate': config.cdate,
+                'mdate': config.mdate,
+                'request': config.api_request.to_json()
+            }
+
         job_blobs = self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}")
         self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}")
         all_requests = [
@@ -971,22 +1024,7 @@ class GCPInterface(object):
         request = authenticated_requests[0]
         job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{job_id}")
 
-        descriptions = JobDescription.VALS.value
-        status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
-        
-        # Read the error message from the GCS bucket if status is ERROR
-        if status == JobStatus.ERROR:
-            try:
-                error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
-                if error_message:
-                    description = json.loads(error_message)['error']
-                else:
-                    description = descriptions[status]
-            except Exception as e:
-                ## If the error message is not found, use the default description
-                description = descriptions[status]
-        else:
-            description = descriptions[status]
+        status, description = self._resolve_job_status(job_id, job)
 
         return {
                 'name': job_id,
@@ -1005,8 +1043,7 @@ class GCPInterface(object):
         query_params,
     ):
         # search bucket
-        def check_status(job):
-            status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
+        def check_status(status):
             search_status = query_obj.get('status', '')
             return not search_status or status.lower().startswith(search_status.lower())
         
@@ -1065,9 +1102,9 @@ class GCPInterface(object):
                 check_paper_id(request)
             ]
 
-        def check_result(request, job):
+        def check_result(request, status):
             return False not in [
-                check_status(job),
+                check_status(status),
                 check_member(request),
                 check_invitation(request),
                 check_paper_id(request)
@@ -1150,11 +1187,9 @@ class GCPInterface(object):
                 else:
                     raise e
 
-            descriptions = JobDescription.VALS.value
-            status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
-            description = descriptions[status]
+            status, description = self._resolve_job_status(request_name, job)
 
-            if check_result(request, job):
+            if check_result(request, status):
                 result['results'].append(
                     {
                         'name': request_name,
@@ -1171,7 +1206,7 @@ class GCPInterface(object):
 
     def get_job_results(self, user_id, job_id, delete_on_get=False):
 
-        def _get_scores_and_metadata_streaming(all_blobs, job_id, group_scoring=False, paper_scoring=False):
+        def _get_scores_and_metadata_streaming(all_blobs, job_id):
             """
             Extracts the scores and metadata from the GCS bucket and returns a generator that yields
             chunks of results to enable streaming
@@ -1180,10 +1215,6 @@ class GCPInterface(object):
             :type all_blobs: list
             :param job_id: Unique job ID
             :type job_id: str
-            :param group_scoring: Indicator for scores between groups
-            :type group_scoring: bool
-            :param paper_scoring: Indicator for scores between papers
-            :type paper_scoring: bool
 
             :returns generator: A generator that yields chunks of scores and finally the metadata
             """
@@ -1193,7 +1224,6 @@ class GCPInterface(object):
             score_files = [
                 blob for blob in all_blobs if '.jsonl' in blob.name and job_id in blob.name
             ]
-            skip_sparse = group_scoring or paper_scoring
 
             if len(metadata_files) != 1:
                 raise openreview.OpenReviewException(f"Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}")
@@ -1204,71 +1234,49 @@ class GCPInterface(object):
             metadata = json.loads(metadata_files[0].download_as_string())
             yield {'metadata': metadata, 'results': []}
 
-            # Then stream the scores
-            if not skip_sparse:
-                sparse_score_files = [
-                    blob for blob in score_files if 'sparse' in blob.name
-                ]
-                if len(sparse_score_files) != 1:
-                    raise openreview.OpenReviewException(f"Internal Error: incorrect sparse score files found expected [1] found {len(sparse_score_files)}")
-                
-                # Stream the sparse scores in chunks
-                downloader = sparse_score_files[0].open('r')
+            # Helper function to stream scores from a blob file
+            def stream_score_file(blob):
+                downloader = blob.open('r')
                 chunk = downloader.readline()
                 results_chunk = []
                 chunk_size = 1000  # Adjust this number based on your data size
-                
+
                 while chunk:
                     if isinstance(chunk, bytes):
                         chunk = chunk.decode('utf-8')
                     if chunk.strip():
                         results_chunk.append(json.loads(chunk.strip()))
-                    
+
                     # Yield chunks of results
                     if len(results_chunk) >= chunk_size:
                         yield {'results': results_chunk, 'metadata': None}
                         results_chunk = []
-                    
+
                     chunk = downloader.readline()
-                
+
                 # Yield any remaining results
                 if results_chunk:
                     yield {'results': results_chunk, 'metadata': None}
-                    
+
                 downloader.close()
+
+            # Determine whether to use sparse or non-sparse score files
+            sparse_score_files = [
+                blob for blob in score_files if 'sparse' in blob.name
+            ]
+
+            # Then stream the scores
+            if len(sparse_score_files) == 1:
+                yield from stream_score_file(sparse_score_files[0])
             else:
                 non_sparse_score_files = [
                     blob for blob in score_files if 'sparse' not in blob.name
                 ]
                 if len(non_sparse_score_files) != 1:
-                    scoring_type_string = 'group' if group_scoring else 'paper'
-                    raise openreview.OpenReviewException(f"Internal Error: incorrect {scoring_type_string} score files found expected [1] found {len(non_sparse_score_files)}")
-                
-                # Stream the non-sparse scores in chunks
-                downloader = non_sparse_score_files[0].open('r')
-                chunk = downloader.readline()
-                results_chunk = []
-                chunk_size = 1000  # Adjust this number based on your data size
-                
-                while chunk:
-                    if isinstance(chunk, bytes):
-                        chunk = chunk.decode('utf-8')
-                    if chunk.strip():
-                        results_chunk.append(json.loads(chunk.strip()))
-                    
-                    # Yield chunks of results
-                    if len(results_chunk) >= chunk_size:
-                        yield {'results': results_chunk, 'metadata': None}
-                        results_chunk = []
-                    
-                    chunk = downloader.readline()
-                
-                # Yield any remaining results
-                if results_chunk:
-                    yield {'results': results_chunk, 'metadata': None}
-                
-                downloader.close()
-    
+                    raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
+
+                yield from stream_score_file(non_sparse_score_files[0])
+
         # Main function implementation
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
         self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}/")
@@ -1286,9 +1294,5 @@ class GCPInterface(object):
         if len(authenticated_requests) > 1:
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
-        request = authenticated_requests[0]
-        group_group_matching = request.get('entityA', {}).get('type', '') == 'Group' and request.get('entityB', {}).get('type', '') == 'Group'
-        paper_paper_matching = request.get('entityA', {}).get('type', '') == 'Note' and request.get('entityB', {}).get('type', '') == 'Note'
-
-        return _get_scores_and_metadata_streaming(job_blobs, job_id, group_scoring=group_group_matching, paper_scoring=paper_paper_matching)
+        return _get_scores_and_metadata_streaming(job_blobs, job_id)
 

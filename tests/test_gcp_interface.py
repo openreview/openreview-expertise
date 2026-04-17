@@ -6,7 +6,7 @@ import datetime
 import time
 import openreview
 from copy import deepcopy
-from expertise.service.utils import GCPInterface, JobDescription, JobStatus
+from expertise.service.utils import GCPInterface, JobDescription, JobStatus, JobConfig, APIRequest
 from google.cloud.aiplatform_v1.types import PipelineState
 from expertise.utils.utils import generate_job_id
 
@@ -134,7 +134,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
     
     # Call the `create_job` method
     # deepcopy because APIRequest() destroys the original
-    result = gcp_interface.create_job(deepcopy(json_request), job_id=test_job_id, machine_type='small')
+    result = gcp_interface.create_job(deepcopy(json_request), job_id=test_job_id, machine_type='small', user_id='openreview.net')
     
     expected_timestamp_ms = int(1234567890.123 * 1000)  # 1234567890123
     expected_valid_vertex_id = f"{test_job_id}-{expected_timestamp_ms}"
@@ -159,7 +159,6 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
     assert submitted_json['entityA'] == json_request['entityA']
     assert submitted_json['entityB'] == json_request['entityB']
     assert submitted_json['token'] == openreview_client.token
-    assert submitted_json['baseurl_v1'] == 'http://localhost:3000'
     assert submitted_json['baseurl_v2'] == 'http://localhost:3001'
     assert submitted_json['gcs_folder'] == f"gs://test-bucket/{expected_folder_path}"
     assert submitted_json['user_id'] == 'openreview.net'
@@ -177,7 +176,71 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
         parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json", "machine_type": "small"},
         labels={"test": "label"}
     )
-    mock_pipeline_instance.submit.assert_called_once()
+    mock_pipeline_instance.submit.assert_called_once_with(service_account=None)
+
+# Test service account is passed to pipeline when provided in config
+@patch("expertise.service.utils.time.time")  # Mock time.time()
+@patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob
+@patch("expertise.service.utils.storage.Client")  # Mock GCS Client
+def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job, mock_time, openreview_client):
+    mock_time.return_value = 1234567890.123
+
+    # Setup mock storage client
+    mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+    mock_bucket.blob.return_value = mock_blob
+    mock_blob.upload_from_string.return_value = None
+
+    # Setup mock PipelineJob
+    mock_pipeline_instance = MagicMock()
+    mock_pipeline_job.return_value = mock_pipeline_instance
+
+    config = {
+        'GCP_PROJECT_ID': 'test_project',
+        'GCP_PROJECT_NUMBER': '123456',
+        'GCP_REGION': 'us-central1',
+        'GCP_PIPELINE_ROOT': 'pipeline-root',
+        'GCP_PIPELINE_NAME': 'test-pipeline',
+        'GCP_PIPELINE_REPO': 'test-repo',
+        'GCP_PIPELINE_TAG': 'latest',
+        'GCP_BUCKET_NAME': 'test-bucket',
+        'GCP_JOBS_FOLDER': 'jobs',
+        'GCP_SERVICE_LABEL': {'test': 'label'},
+        'GCP_SERVICE_ACCOUNT': 'sa-under-test@test-project.iam.gserviceaccount.com',
+    }
+    gcp_interface = GCPInterface(
+        config=config,
+        openreview_client=openreview_client
+    )
+
+    json_request = {
+        "name": "test_run2",
+        "entityA": {'type': "Group", 'memberOf': "GCP.cc/Reviewers"},
+        "entityB": {'type': "Note", 'invitation': "GCP.cc/-/Submission"},
+        "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'}
+    }
+    test_job_id = generate_job_id()
+    result = gcp_interface.create_job(deepcopy(json_request), job_id=test_job_id, machine_type='small')
+
+    expected_timestamp_ms = int(1234567890.123 * 1000)
+    expected_valid_vertex_id = f"{test_job_id}-{expected_timestamp_ms}"
+    expected_folder_path = f"jobs/{expected_valid_vertex_id}"
+
+    # 3. Verify PipelineJob submission includes new params
+    _, kwargs = mock_pipeline_job.call_args
+    assert kwargs['display_name'] == expected_valid_vertex_id
+    assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/test_project/")
+    assert kwargs['job_id'] == expected_valid_vertex_id
+    assert kwargs['pipeline_root'] == "gs://test-bucket/pipeline-root"
+    params = kwargs['parameter_values']
+    assert params["gcs_request_path"] == f"gs://test-bucket/{expected_folder_path}/request.json"
+    assert params["machine_type"] == "small"
+    
+    # Verify submit() is called with the service account
+    mock_pipeline_instance.submit.assert_called_once_with(
+        service_account='sa-under-test@test-project.iam.gserviceaccount.com'
+    )
 
 # Test case for the `get_job_status_by_job_id` method
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
@@ -218,7 +281,33 @@ def test_get_job_status_by_job_id(mock_storage_client, mock_pipeline_job_get, op
     # Call the `get_job_status_by_job_id` method
     user_id = "openreview.net"
     job_id = "test_job"
-    result = gcp_interface.get_job_status_by_job_id(user_id, job_id)
+    config = JobConfig(
+        cloud_id = job_id
+    )
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": { 
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission" 
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False, 
+                    'useAbstract': True, 
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
+    result = gcp_interface.get_job_status_by_job_id(user_id, config)
 
     # Assertions
     assert result["name"] == job_id
@@ -259,8 +348,34 @@ def test_get_job_status_by_job_id_job_not_found(mock_storage_client, openreview_
     )
 
     # Verify that an exception is raised when no job is found
+    config = JobConfig(
+        cloud_id = "test_job"
+    )
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": { 
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission" 
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False, 
+                    'useAbstract': True, 
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
     with pytest.raises(openreview.OpenReviewException, match="Job not found"):
-        gcp_interface.get_job_status_by_job_id("test_user", "test_job")
+        gcp_interface.get_job_status_by_job_id("test_user", config)
 
 # Test case for insufficient permissions
 @patch("expertise.service.utils.storage.Client")
@@ -290,8 +405,34 @@ def test_get_job_status_by_job_id_insufficient_permissions(mock_storage_client, 
     )
 
     # Verify that an exception is raised for insufficient permissions
+    config = JobConfig(
+        cloud_id = 'test_job'
+    )
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": { 
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission" 
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False, 
+                    'useAbstract': True, 
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
     with pytest.raises(openreview.OpenReviewException, match="Forbidden: Insufficient permissions to access job"):
-        gcp_interface.get_job_status_by_job_id("test_user", "test_job")
+        gcp_interface.get_job_status_by_job_id("test_user", config)
 
 # Test case for multiple requests found
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
@@ -328,8 +469,34 @@ def test_get_job_status_by_job_id_multiple_requests(mock_storage_client, mock_pi
     )
 
     # Verify that an exception is raised for multiple requests
+    config = JobConfig(
+        cloud_id = 'test_job'
+    )
+    config.api_request = APIRequest(
+        {
+            "name": "test_run",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "ABC.cc/Area_Chairs",
+            },
+            "entityB": { 
+                'type': "Note",
+                'invitation': "ABC.cc/-/Submission" 
+            },
+            "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False, 
+                    'useAbstract': True, 
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+            },
+            "dataset": {
+                'minimumPubDate': 0
+            }
+        }
+    )
     with pytest.raises(openreview.OpenReviewException, match="Internal Error: Multiple requests found for job"):
-        gcp_interface.get_job_status_by_job_id("openreview.net", "test_job")
+        gcp_interface.get_job_status_by_job_id("openreview.net", config)
 
 # Test case for the `get_job_status` method
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
@@ -537,20 +704,20 @@ def test_get_job_results(mock_storage_client, openreview_client):
 
     mock_score_blob = MagicMock()
     mock_score_blob.name = "jobs/job_1/scores.jsonl"
-    mock_score_blob.download_as_string.return_value = '{"submission": "abcd","user": "user_user1","score": 0.987}\n{"submission": "abcd","user": "user_user2","score": 0.987}'
+    mock_score_blob.download_as_string.return_value = '{"entityB": "abcd","entityA": "user_user1","score": 0.987}\n{"entityB": "abcd","entityA": "user_user2","score": 0.987}'
 
     # Create a mock file-like object for sparse score blob
     mock_file = MagicMock()
     mock_file.readline.side_effect = [
-        '{"submission": "abcde","user": "user_user1","score": 0.987}',
-        '{"submission": "abcde","user": "user_user2","score": 0.987}',
+        '{"entityB": "abcde","entityA": "user_user1","score": 0.987}',
+        '{"entityB": "abcde","entityA": "user_user2","score": 0.987}',
         ''  # Empty string to terminate the loop
     ]
     mock_file.close.return_value = None
 
     mock_sparse_score_blob = MagicMock()
     mock_sparse_score_blob.name = "jobs/job_1/scores_sparse.jsonl"
-    mock_sparse_score_blob.download_as_string.return_value = '{"submission": "abcde","user": "user_user1","score": 0.987}\n{"submission": "abcde","user": "user_user2","score": 0.987}'
+    mock_sparse_score_blob.download_as_string.return_value = '{"entityB": "abcde","entityA": "user_user1","score": 0.987}\n{"entityB": "abcde","entityA": "user_user2","score": 0.987}'
     mock_sparse_score_blob.open.return_value = mock_file
 
     mock_request_blob = MagicMock()
@@ -591,8 +758,8 @@ def test_get_job_results(mock_storage_client, openreview_client):
     # Assertions
     assert result["metadata"] == {"meta": "data"}
     assert result["results"] == [
-        {"submission": "abcde", "user": "user_user1", "score": 0.987},
-        {"submission": "abcde", "user": "user_user2", "score": 0.987}
+        {"entityB": "abcde", "entityA": "user_user1", "score": 0.987},
+        {"entityB": "abcde", "entityA": "user_user2", "score": 0.987}
     ]
 
     # Verify GCS interactions
@@ -606,7 +773,7 @@ def test_get_job_results_missing_metadata(mock_storage_client, openreview_client
     # Mock GCS blobs
     mock_score_blob = MagicMock()
     mock_score_blob.name = "jobs/job_1/scores.jsonl"
-    mock_score_blob.download_as_string.return_value = '{"submission": abcd,"user": "user_user","score": 0.987}\n{"submission": abcd,"user": "user_user","score": 0.987}'
+    mock_score_blob.download_as_string.return_value = '{"entityB": "abcd","entityA": "user_user","score": 0.987}\n{"entityB": "abcd","entityA": "user_user","score": 0.987}'
 
     mock_request_blob = MagicMock()
     mock_request_blob.name = "jobs/job_1/request.json"
@@ -684,15 +851,15 @@ def test_get_job_results_group_scoring(mock_storage_client):
     # Create a mock file-like object for group score blob
     mock_file = MagicMock()
     mock_file.readline.side_effect = [
-        '{"match_member": "m_user1","submission_member": "s_user1","score": 0.987}',
-        '{"match_member": "m_user2","submission_member": "s_user2","score": 0.987}',
+        '{"entityA": "m_user1","entityB": "s_user1","score": 0.987}',
+        '{"entityA": "m_user2","entityB": "s_user2","score": 0.987}',
         ''  # Empty string to terminate the loop
     ]
     mock_file.close.return_value = None
 
     mock_group_score_blob = MagicMock()
     mock_group_score_blob.name = "jobs/job_1/group_scores.jsonl"
-    mock_group_score_blob.download_as_string.return_value = '{"match_member": "m_user1","submission_member": "s_user1","score": 0.987}\n{"match_member": "m_user2","submission_member": "s_user2","score": 0.987}'
+    mock_group_score_blob.download_as_string.return_value = '{"entityA": "m_user1","entityB": "s_user1","score": 0.987}\n{"entityA": "m_user2","entityB": "s_user2","score": 0.987}'
     mock_group_score_blob.open.return_value = mock_file
 
     mock_request_blob = MagicMock()
@@ -731,11 +898,63 @@ def test_get_job_results_group_scoring(mock_storage_client):
     # Assertions
     assert result["metadata"] == {"meta": "data"}
     assert result["results"] == [
-        {"match_member": "m_user1","submission_member": "s_user1","score": 0.987},
-        {"match_member": "m_user2","submission_member": "s_user2","score": 0.987}
+        {"entityA": "m_user1","entityB": "s_user1","score": 0.987},
+        {"entityA": "m_user2","entityB": "s_user2","score": 0.987}
     ]
 
     # Verify GCS interactions
     mock_storage_client.return_value.bucket.return_value.list_blobs.assert_called_once_with(prefix="jobs/job_1/")
     mock_metadata_blob.download_as_string.assert_called_once()
     mock_group_score_blob.open.assert_called_once_with('r')
+
+@patch("expertise.service.utils.aip.PipelineJob.get")
+@patch("expertise.service.utils.storage.Client")
+def test_get_job_status_by_job_id_returns_redis_when_no_cloud_id(mock_storage_client, mock_pipeline_job_get, openreview_client):
+    from expertise.service.utils import APIRequest, JobConfig, GCPInterface, JobStatus, JobDescription
+    # Minimal request and config with no cloud_id
+    api_req = APIRequest({
+        "name": "test_job",
+        "entityA": {"type": "Group", "memberOf": "Some.Venue/Reviewers"},
+        "entityB": {"type": "Note", "invitation": "Some.Venue/-/Submission"}
+    })
+    cfg = JobConfig(
+        name="test",
+        user_id="openreview.net",
+        job_id="job_no_cloud",
+        cloud_id=None,
+        cdate=1234567890000,
+        mdate=1234567890000,
+        status=JobStatus.QUEUED,
+        description=JobDescription.VALS.value[JobStatus.QUEUED],
+    )
+    cfg.api_request = api_req
+
+    gcp = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        openreview_client=openreview_client,
+        service_label={"test": "label"},
+    )
+
+    # Early return
+    result = gcp.get_job_status_by_job_id("openreview.net", cfg)
+
+    # Assert
+    assert result["name"] == "test"
+    assert result["tauthor"] == "openreview.net"
+    assert result["jobId"] == "job_no_cloud"
+    assert result["status"] == JobStatus.QUEUED
+    assert result["description"] == JobDescription.VALS.value[JobStatus.QUEUED]
+    assert result["cdate"] == 1234567890000
+    assert result["mdate"] == 1234567890000
+    assert result["request"] == api_req.to_json()
+
+    # No cloud lookups
+    mock_storage_client.return_value.bucket.return_value.list_blobs.assert_not_called()
+    mock_pipeline_job_get.assert_not_called()

@@ -69,7 +69,6 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
         },
         "user_id": "openreview.net",
         "token": openreview_client.token,
-        "baseurl_v1": "http://localhost:3000",
         "baseurl_v2": "http://localhost:3001",
         "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix",
         "dump_embs": True,
@@ -88,10 +87,10 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     ## Build scores file
     scores_file = os.path.join(working_dir, 'scores.csv')
     with open(scores_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
     sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
     with open(sparse_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
     ## Build embeddings
     embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
@@ -104,8 +103,18 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
 
     # Assertions
 
+    # Pipeline worker pulled only the artifacts the requested model needs — read
+    # from raw_request['model']['name']. For 'specter+mfr': specter HF + MFR,
+    # and nothing from the specter2/scincl family.
+    mock_load_model_artifacts.assert_called_once()
+    downloaded_subdirs = mock_load_model_artifacts.call_args.kwargs['subdirs']
+    assert set(downloaded_subdirs) == {'hf_models/specter', 'multifacet_recommender'}
+    assert 'hf_models/specter2_base' not in downloaded_subdirs
+    assert 'hf_models/specter2_adapter' not in downloaded_subdirs
+    assert 'hf_models/scincl' not in downloaded_subdirs
+
     # Ensure execute_create_dataset and execute_expertise were called
-    # Use the gcs_test_bucket fixture to get actual 
+    # Use the gcs_test_bucket fixture to get actual
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix/"
 
@@ -113,8 +122,9 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"submission": "test_user", "user": "note1", "score": 0.5}' in scores_content
-    assert '{"submission": "test_user", "user": "note2", "score": 0.5}' in scores_content
+    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
+    assert {"entityA": "test_user", "entityB": "note1", "score": 0.5} in scores_data
+    assert {"entityA": "test_user", "entityB": "note2", "score": 0.5} in scores_data
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -127,7 +137,8 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
     pub2vec_content = pub2vec_blob.download_as_text()
-    assert '{"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}' in pub2vec_content
+    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
+    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
@@ -161,7 +172,6 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
         },
         "user_id": "openreview.net",
         "token": openreview_client.token,
-        "baseurl_v1": "http://localhost:3000",
         "baseurl_v2": "http://localhost:3001",
         "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_gcs_dir",
         "dump_embs": True,
@@ -180,10 +190,10 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     ## Build scores file
     scores_file = os.path.join(working_dir, 'scores.csv')
     with open(scores_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
     sparse_file = os.path.join(working_dir, 'scores_sparse.csv')
     with open(sparse_file, 'w') as f:
-        f.write("test_user,note1,0.5\ntest_user,note2,0.5")
+        f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
     ## Build embeddings
     embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
@@ -214,8 +224,9 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"submission": "test_user", "user": "note1", "score": 0.5}' in scores_content
-    assert '{"submission": "test_user", "user": "note2", "score": 0.5}' in scores_content
+    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
+    assert {"entityA": "test_user", "entityB": "note1", "score": 0.5} in scores_data
+    assert {"entityA": "test_user", "entityB": "note2", "score": 0.5} in scores_data
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -228,7 +239,8 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
     pub2vec_content = pub2vec_blob.download_as_text()
-    assert '{"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}' in pub2vec_content
+    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
+    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
@@ -262,7 +274,6 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
         },
         "user_id": "openreview.net",
         "token": openreview_client.token,
-        "baseurl_v1": "http://localhost:3000",
         "baseurl_v2": "http://localhost:3001",
         "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_grp",
         "dump_embs": True,
@@ -306,7 +317,8 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"match_member": "test_user", "submission_member": "sub_user", "score": 0.5}' in scores_content
+    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
+    assert {"entityA": "test_user", "entityB": "sub_user", "score": 0.5} in scores_data
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -319,7 +331,8 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
     pub2vec_content = pub2vec_blob.download_as_text()
-    assert '{"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}' in pub2vec_content
+    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
+    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
@@ -355,7 +368,6 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
         },
         "user_id": "openreview.net",
         "token": openreview_client.token,
-        "baseurl_v1": "http://localhost:3000",
         "baseurl_v2": "http://localhost:3001",
         "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_pap",
         "dump_embs": False,
@@ -379,6 +391,18 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
 
     # Assertions
+    # Pipeline worker pulled only the artifacts needed for 'specter2+scincl':
+    # specter2 base + adapter + scincl, and nothing MFR/legacy-specter related.
+    mock_load_model_artifacts.assert_called_once()
+    downloaded_subdirs = mock_load_model_artifacts.call_args.kwargs['subdirs']
+    assert set(downloaded_subdirs) == {
+        'hf_models/specter2_base',
+        'hf_models/specter2_adapter',
+        'hf_models/scincl',
+    }
+    assert 'hf_models/specter' not in downloaded_subdirs
+    assert 'multifacet_recommender' not in downloaded_subdirs
+
     # Check that blobs were created and data was uploaded to GCS
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix_pap/"
@@ -390,7 +414,8 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     scores_blob = bucket.blob(f"{prefix}scores.jsonl")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    assert '{"match_submission": "sub_one", "submission": "sub_two", "score": 0.5}' in scores_content
+    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
+    assert {"entityA": "sub_one", "entityB": "sub_two", "score": 0.5} in scores_data
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -410,10 +435,10 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     mock_execute_expertise.return_value = None
 
     # Use TMLR client to test permissions
-    tmlr_client = openreview.api.OpenReviewClient(
+    pipeline_client = openreview.api.OpenReviewClient(
         token=openreview_client.token
     )
-    tmlr_client.impersonate('TMLR/Editors_In_Chief')
+    pipeline_client.impersonate('PIPELINE.cc')
 
     # Prepare input API request string
     api_request_str = json.dumps({
@@ -434,8 +459,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
             'scoreComputation': 'avg'
         },
         "user_id": "openreview.net",
-        "token": openreview_client.token,
-        "baseurl_v1": "http://localhost:3000",
+        "token": pipeline_client.token,
         "baseurl_v2": "http://localhost:3001",
         "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_err",
         "dump_embs": True,
@@ -458,7 +482,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     try:
         run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
     except Exception as e:
-        assert str(e) == 'Not Found Error: No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
+        assert str(e) == 'No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
 
     # Assertions
     # Check that blobs were created and data was uploaded to GCS
@@ -469,6 +493,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     error_blob = bucket.blob(f"{prefix}error.json")
     assert error_blob.exists()
     error_content = json.loads(error_blob.download_as_text())
-    assert error_content["error"] == 'Not Found Error: No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
+    assert error_content["error"] == 'No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
+    assert error_content["expected"] == True  # This is an expected data error
 
     shutil.rmtree(working_dir)  # Clean up

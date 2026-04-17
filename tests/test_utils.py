@@ -1,8 +1,11 @@
+import os
 import pytest
 import re
 import time
 from collections import Counter
 from expertise.utils.utils import generate_job_id, JOB_ID_ALPHABET
+import expertise.service
+from expertise.service import artifacts_for_model
 
 
 def test_generate_job_id_gcp_compliance():
@@ -32,3 +35,107 @@ def test_generate_job_id_gcp_compliance():
             f"Must match regex pattern '[a-z][-a-z0-9]{{0,127}}' "
             f"(start with lowercase letter, followed by lowercase letters, numbers, or hyphens)"
         )
+
+
+@pytest.fixture
+def temp_env_cfg(tmp_path, monkeypatch):
+    """
+    Writes default.cfg and a <env>.cfg into an isolated temp directory and
+    monkeypatches Flask so create_app() uses it as the instance path. This
+    avoids mutating the package's source tree during tests.
+
+    Yields (env_name, sentinel_log_path).
+    """
+    env_name = 'pytest_env'
+    sentinel_log = tmp_path / 'sentinel-log-file.log'
+
+    # Copy the real default.cfg into the temp config dir so create_app()'s
+    # from_pyfile('default.cfg') succeeds.
+    real_config_dir = os.path.join(
+        os.path.dirname(expertise.service.__file__), 'config'
+    )
+    with open(os.path.join(real_config_dir, 'default.cfg')) as f:
+        default_cfg = f.read()
+    (tmp_path / 'default.cfg').write_text(default_cfg)
+    (tmp_path / f'{env_name}.cfg').write_text(f"LOG_FILE='{sentinel_log}'\n")
+
+    # Wrap flask.Flask so create_app()'s instance_path points at tmp_path.
+    original_flask = expertise.service.flask.Flask
+
+    def _flask_with_tmp_instance(*args, **kwargs):
+        kwargs['instance_path'] = str(tmp_path)
+        return original_flask(*args, **kwargs)
+
+    monkeypatch.setattr(expertise.service.flask, 'Flask', _flask_with_tmp_instance)
+
+    yield env_name, str(sentinel_log)
+
+
+def test_create_app_loads_env_cfg(monkeypatch, temp_env_cfg):
+    """
+    create_app() should load <EXPERTISE_ENV>.cfg on top of default.cfg and
+    expose EXPERTISE_ENV via app.config.
+    """
+    env_name, sentinel = temp_env_cfg
+    monkeypatch.setenv('EXPERTISE_ENV', env_name)
+
+    app = expertise.service.create_app()
+
+    assert app.config['EXPERTISE_ENV'] == env_name
+    assert app.config['LOG_FILE'] == sentinel
+
+
+def test_create_app_defaults_to_production(monkeypatch, tmp_path, temp_env_cfg):
+    """
+    When EXPERTISE_ENV is not set, it should default to 'production'.
+    Uses temp_env_cfg to isolate instance_path and passes LOG_FILE so the
+    logger doesn't write into the repo/CI workspace.
+    """
+    monkeypatch.delenv('EXPERTISE_ENV', raising=False)
+    log_file = str(tmp_path / 'default.log')
+
+    app = expertise.service.create_app(config={'LOG_FILE': log_file})
+
+    assert app.config['EXPERTISE_ENV'] == 'production'
+
+
+def test_create_app_config_dict_overrides_env(monkeypatch, tmp_path, temp_env_cfg):
+    """
+    Callers should be able to override EXPERTISE_ENV via the config dict
+    passed to create_app(). Uses temp_env_cfg to isolate instance_path and
+    passes LOG_FILE to keep the test hermetic.
+    """
+    monkeypatch.setenv('EXPERTISE_ENV', 'production')
+    log_file = str(tmp_path / 'override.log')
+
+    app = expertise.service.create_app(
+        config={'EXPERTISE_ENV': 'override', 'LOG_FILE': log_file}
+    )
+
+    assert app.config['EXPERTISE_ENV'] == 'override'
+
+
+@pytest.mark.parametrize("model, expected_subdirs", [
+    ('bm25', []),
+    ('specter', ['hf_models/specter']),
+    ('mfr', ['multifacet_recommender']),
+    ('specter+mfr', ['hf_models/specter', 'multifacet_recommender']),
+    ('specter2', ['hf_models/specter2_base', 'hf_models/specter2_adapter']),
+    ('scincl', ['hf_models/scincl']),
+    ('specter2+scincl', [
+        'hf_models/specter2_base',
+        'hf_models/specter2_adapter',
+        'hf_models/scincl',
+    ]),
+])
+def test_artifacts_for_model_returns_only_needed_subdirs(model, expected_subdirs):
+    """Pipeline workers download only the artifacts their model needs — this
+    map is the contract wiring that selective-download into run_pipeline."""
+    assert artifacts_for_model(model) == expected_subdirs
+
+
+def test_artifacts_for_model_unknown_model_falls_back_to_all():
+    """Unknown model names fall back to downloading everything (None) so a new
+    model added to the API doesn't break the pipeline before the map is updated."""
+    assert artifacts_for_model('some-unreleased-model') is None
+    assert artifacts_for_model(None) is None

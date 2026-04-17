@@ -9,6 +9,7 @@ import numpy as np
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import multifacet_recommender
 import redisai
+from expertise.utils.utils import generate_sparse_scores
 
 @pytest.fixture
 def create_smfr():
@@ -141,9 +142,7 @@ def test_sparse_scores(tmp_path, create_smfr):
         all_submissions.add(score[0])
 
     if config['model_params'].get('sparse_value'):
-        all_scores = smfrModel.sparse_scores(
-            scores_path=scores_path.joinpath(config['name'] + '_sparse.csv')
-        )
+        all_scores = generate_sparse_scores(all_scores, config['model_params']['sparse_value'], scores_path.joinpath(config['name'] + '_sparse.csv'))
     
     sparse_users, sparse_submissions = set(), set()
     for score in all_scores:

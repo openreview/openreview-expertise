@@ -22,7 +22,7 @@ import asyncio
 import threading
 import traceback
 
-from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase, get_user_id
+from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase, get_user_id, ExpectedDataError
 
 user_index_file_lock = Lock()
 
@@ -68,7 +68,8 @@ class BaseExpertiseService:
                 host=config['REDIS_ADDR'],
                 port=config['REDIS_PORT'],
                 db=config['REDIS_CONFIG_DB'],
-                sync_on_disk=self.sync_on_disk
+                sync_on_disk=self.sync_on_disk,
+                job_ttl=config['JOB_CONFIG_TTL']
             )
 
         # Create the BullMQ queue
@@ -129,9 +130,6 @@ class BaseExpertiseService:
             # Cleanup resources
             torch.cuda.empty_cache()
             gc.collect()
-
-    def set_client(self, client):
-        self.client = client
 
     def set_client_v2(self, client_v2):
         self.client_v2 = client_v2
@@ -196,9 +194,7 @@ class BaseExpertiseService:
 
         config.mdate = int(time.time() * 1000)
 
-        # Save job if we have a Redis instance
-        if not self.containerized:
-            self.redis.save_job(config)
+        self._save_config(config)
 
     def get_expertise_all_status(self, user_id, query_params):
         """
@@ -327,47 +323,32 @@ class BaseExpertiseService:
         running_config.baseurl_v2 = None
         running_config.user_id = None
 
-    def _prepare_config(self, request, job_id=None, client_v1=None, client=None) -> dict:
+    def _validate_request(self, client, request):
         """
-        Overwrites/add specific key-value pairs in the submitted job config
-        :param request: Contains the initial request from the user
-        :type request: dict
+        Validate and build a JobConfig for a request.
 
-        :param job_id: If provided, use this job ID instead of generating a new one
-        :type job_id: str
-
-        :returns config: A modified version of config with the server-required fields
-
-        :raises Exception: Raises exceptions when a required field is missing, or when a parameter is provided
-                        when it is not expected
+        :param request: Submitted job request
+        :param job_id: Optional job id to reuse
+        :returns: (JobConfig, token)
         """
 
-        if job_id:
-            try:
-                job = self.redis.load_job(job_id, get_user_id(self.client_v2))
-                return job, self.client.token
-            except Exception as e:
-                if 'not found' not in str(e):
-                    raise e
-
-        # Validate fields
-        or_client_v1 = client_v1 if client_v1 else self.client
+        # Resolve client
         or_client = client if client else self.client_v2
 
         self.logger.info(f"Incoming request - {request}")
         validated_request = APIRequest(request)
         config = JobConfig.from_request(
             api_request = validated_request,
-            job_id=job_id,
             starting_config = self.default_expertise_config,
-            openreview_client= or_client_v1,
             openreview_client_v2= or_client,
             server_config = self.server_config,
             working_dir = self.working_dir
         )
         self.logger.info(f"Config validation passed - {config.to_json()}")
+        return config
 
-        # Create directory and config file
+    def _save_config(self, config: JobConfig):
+        """Create job directory, write config.json, and save to Redis."""
         if not os.path.isdir(config.dataset['directory']):
             os.makedirs(config.dataset['directory'])
         with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
@@ -375,8 +356,7 @@ class BaseExpertiseService:
         if not self.containerized:
             self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
             self.redis.save_job(config)
-
-        return config, or_client.token
+        return config
 
     def _get_subdirs(self, user_id):
         """
@@ -398,36 +378,28 @@ class BaseExpertiseService:
 
         return filtered_dirs
 
-    def _get_score_and_metadata_dir(self, search_dir, group_scoring=False, paper_scoring=False):
+    def _get_score_and_metadata_dir(self, search_dir):
         """
         Searches the given directory for a possible score file and the metadata file
 
         :param search_dir: The root directory to search in
         :type search_dir: str
 
-        :param group_scoring: Indicate if scoring between groups, if so skip sparse scores
-        :type group_scoring: bool
-
-        :param paper_scoring: Indicate if scoring between papers, if so skip sparse scores
-        :type paper_scoring: bool
-
         :returns file_dir: The directory of the score file, if it exists, starting from the given directory
         :returns metadata_dir: The directory of the metadata file, if it exists, starting from the given directory
         """
         # Search for scores files (if sparse scores exist, retrieve by default)
         file_dir, metadata_dir = None, None
-        skip_sparse = group_scoring or paper_scoring
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
             config = JobConfig.from_json(json.load(f))
 
         # Look for files
         if os.path.isfile(os.path.join(search_dir, f"{config.name}.csv")):
             file_dir = os.path.join(search_dir, f"{config.name}.csv")
-            if not skip_sparse:
-                if 'sparse_value' in config.model_params.keys() and os.path.isfile(os.path.join(search_dir, f"{config.name}_sparse.csv")):
-                    file_dir = os.path.join(search_dir, f"{config.name}_sparse.csv")
-                else:
-                    raise OpenReviewException("Sparse score file not found for job {job_id}".format(job_id=config.job_id))    
+            if 'sparse_value' in config.model_params.keys() and os.path.isfile(os.path.join(search_dir, f"{config.name}_sparse.csv")):
+                file_dir = os.path.join(search_dir, f"{config.name}_sparse.csv")
+            else:
+                raise OpenReviewException("Sparse score file not found for job {job_id}".format(job_id=config.job_id))
         else:
             raise OpenReviewException("Score file not found for job {job_id}".format(job_id=config.job_id))
 
@@ -437,6 +409,30 @@ class BaseExpertiseService:
             raise OpenReviewException("Metadata file not found for job {job_id}".format(job_id=config.job_id))
 
         return file_dir, metadata_dir
+
+    def del_expertise_job(self, user_id, job_id):
+        """Remove job artifacts from disk and Redis, returning a sanitized config."""
+        config = self.redis.load_job(job_id, user_id)
+
+        # Only allow deletion when job has completed or errored out
+        allowed_states = {
+            JobStatus.COMPLETED, JobStatus.DATA_ERROR, JobStatus.ERROR
+        }
+        if config.status not in allowed_states:
+            raise openreview.OpenReviewException(
+                f"Bad request: cannot delete job in status {config.status}"
+            )
+
+        self.logger.info(f"Deleting {config.job_dir} for {user_id}")
+        if os.path.isdir(config.job_dir):
+            shutil.rmtree(config.job_dir)
+        else:
+            self.logger.info("No files found - only removing Redis entry")
+
+        self.redis.remove_job(user_id, job_id)
+
+        self._filter_config(config)
+        return config.to_json()
 
     def _get_job_name(self, request):
         job_name_parts = [request.get('name', 'No name provided')]
@@ -534,21 +530,22 @@ class ExpertiseService(BaseExpertiseService):
         )
 
     async def worker_process(self, job, token):
+        descriptions = JobDescription.VALS.value
         job_id = job.data['job_id']
         user_id = job.data['user_id']
         config = self.redis.load_job(job_id, user_id)
+        config.mdate = int(time.time() * 1000)
+        config.status = JobStatus.QUEUED
+        config.description = descriptions[JobStatus.QUEUED]
+        self._save_config(config)
         or_token = job.data['token']
-        openreview_client = openreview.Client(
-            token=or_token,
-            baseurl=config.baseurl
-        )
         openreview_client_v2 = openreview.api.OpenReviewClient(
             token=or_token,
             baseurl=config.baseurl_v2
         )
         try:
             # Create dataset
-            execute_create_dataset(openreview_client, openreview_client_v2, config=config.to_json())
+            execute_create_dataset(openreview_client_v2, config=config.to_json())
             self.update_status(config, JobStatus.RUN_EXPERTISE)
 
             queue = multiprocessing.Queue()  # Queue for exception handling
@@ -564,6 +561,9 @@ class ExpertiseService(BaseExpertiseService):
             # Update job status
             self.update_status(config, JobStatus.COMPLETED)
 
+        except ExpectedDataError as e:
+            # Expected data errors - mark as data error, don't re-raise, avoid triggering retries
+            self.update_status(config, JobStatus.DATA_ERROR, str(e))
         except Exception as e:
             self.update_status(config, JobStatus.ERROR, str(e))
             # Re raise exception so that it appears in the queue
@@ -574,7 +574,7 @@ class ExpertiseService(BaseExpertiseService):
             torch.cuda.empty_cache()
             gc.collect()
 
-    def start_expertise(self, request, client_v1, client):
+    def start_expertise(self, request, client):
         descriptions = JobDescription.VALS.value
 
         job_name = self._get_job_name(request)
@@ -602,20 +602,19 @@ class ExpertiseService(BaseExpertiseService):
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
-        config, token = self._prepare_config(request, client_v1=client_v1, client=client)
+        config = self._validate_request(
+            client,
+            request
+        )
+        self._save_config(config) # Save initialized
         job_id = config.job_id
 
         config_log = self._get_log_from_config(config)
-
-        config.mdate = int(time.time() * 1000)
-        config.status = JobStatus.QUEUED
-        config.description = descriptions[JobStatus.QUEUED]
 
         # Config has passed validation - add it to the user index
         self.logger.info('just before submitting')
 
         self.logger.info(f"\nconf: {config.to_json()}\n")
-        self.redis.save_job(config)
 
         future = asyncio.run_coroutine_threadsafe(
             self.queue.add(
@@ -624,7 +623,7 @@ class ExpertiseService(BaseExpertiseService):
                     "job_id": job_id,
                     "request_key": request_key,
                     "user_id": config.user_id,
-                    "token": token
+                    "token": client.token
                 },
                 {
                     'jobId': job_id,
@@ -723,25 +722,25 @@ class ExpertiseService(BaseExpertiseService):
             self.logger.info(f"Retrieving scores from {config.job_dir}")
             if group_group_matching:
                 # If group-group matching, report results using "*_member" keys
-                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir, group_scoring=True)
+                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
                 with open(file_dir, 'r') as csv_file:
                     data_reader = reader(csv_file)
                     for row in data_reader:
                         ret_list.append({
-                            'match_member': row[0],
-                            'submission_member': row[1],
+                            'entityA': row[0],
+                            'entityB': row[1],
                             'score': float(row[2])
                         })
                 result['results'] = ret_list
             elif paper_paper_matching:
                 # If paper-paper matching, report results using submission keywords
-                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir, paper_scoring=True)
+                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
                 with open(file_dir, 'r') as csv_file:
                     data_reader = reader(csv_file)
                     for row in data_reader:
                         ret_list.append({
-                            'match_submission': row[0],
-                            'submission': row[1],
+                            'entityA': row[0],
+                            'entityB': row[1],
                             'score': float(row[2])
                         })
                 result['results'] = ret_list
@@ -756,8 +755,8 @@ class ExpertiseService(BaseExpertiseService):
                             continue
 
                         ret_list.append({
-                            'submission': row[0],
-                            'user': row[1],
+                            'entityB': row[0],
+                            'entityA': row[1],
                             'score': float(row[2])
                         })
                 result['results'] = ret_list
@@ -773,32 +772,6 @@ class ExpertiseService(BaseExpertiseService):
             self.redis.remove_job(user_id, job_id)
 
         return result
-
-    def del_expertise_job(self, user_id, job_id):
-        """
-        Returns the filtered config of a job and deletes the job directory
-
-        :param user_id: The ID of the user accessing the data
-        :type user_id: str
-
-        :param job_id: ID of the specific job to look up
-        :type job_id: str
-
-        :returns: Filtered config of the job to be deleted
-        """
-        config = self.redis.load_job(job_id, user_id)
-        
-        # Clear directory and Redis entry
-        self.logger.info(f"Deleting {config.job_dir} for {user_id}")
-        if os.path.isdir(config.job_dir):
-            shutil.rmtree(config.job_dir)
-        else:
-            self.logger.info(f"No files found - only removing Redis entry")
-        self.redis.remove_job(user_id, job_id)
-
-        # Return filtered config
-        self._filter_config(config)
-        return config.to_json()
 
 class ExpertiseCloudService(BaseExpertiseService):
 
@@ -825,15 +798,14 @@ class ExpertiseCloudService(BaseExpertiseService):
         self.client_v2 = client_v2
         self.cloud.set_client(client_v2)
 
-    def compute_machine_type(self, client, client_v2, api_request):
-        config, _ = self._prepare_config(deepcopy(api_request), client_v1=client, client=client_v2)
+    def compute_machine_type(self, client, job_id):
+        config = self.redis.load_job(job_id, get_user_id(client))
         if config.machine_type is not None:
             return config.machine_type
         config = config.to_json()
         dataset_config = ModelConfig(config_dict=config)
         expertise = OpenReviewExpertise(
             client,
-            client_v2,
             dataset_config
         )
         note_count = 0
@@ -889,19 +861,17 @@ class ExpertiseCloudService(BaseExpertiseService):
         or_token = job.data['token']
 
         config = self.redis.load_job(redis_id, user_id)
-        openreview_client_v1 = openreview.Client(
-            token=or_token,
-            baseurl=config.baseurl
-        )
+        config.mdate = int(time.time() * 1000)
+        config.status = JobStatus.QUEUED
+        config.description = descriptions[JobStatus.QUEUED]
         openreview_client_v2 = openreview.api.OpenReviewClient(
             token=or_token,
             baseurl=config.baseurl_v2
         )
         try:
             machine_type = self.compute_machine_type(
-                openreview_client_v1,
                 openreview_client_v2,
-                deepcopy(request)
+                job_id=redis_id
             )
 
             cloud_id = self.cloud.create_job(
@@ -911,6 +881,8 @@ class ExpertiseCloudService(BaseExpertiseService):
                 user_id=user_id,
                 machine_type=machine_type
             )
+            config.cloud_id = cloud_id
+            self._save_config(config)
         except Exception as e:
             self.logger.error(f"Error creating cloud job for {redis_id}: {e} tr={e.__traceback__}")
             self.logger.error(f"Error details: {traceback.format_exc()}")
@@ -920,25 +892,19 @@ class ExpertiseCloudService(BaseExpertiseService):
             # If we fail to create the job, we should not proceed with polling
             # Re-raise exception to appear in the queue
             raise e.with_traceback(e.__traceback__)
-        config.mdate = int(time.time() * 1000)
-        config.status = JobStatus.QUEUED
-        config.description = descriptions[JobStatus.QUEUED]
-        config.cloud_id = cloud_id
-        self.redis.save_job(config)
 
         try:
             self.logger.info(f"In polling worker...")
             for attempt in range(self.max_attempts):
                 self.logger.info(f"{redis_id} - attempt {attempt + 1} of {self.max_attempts}...")
-                status = self.cloud.get_job_status_by_job_id(user_id, cloud_id)
+                config = self.redis.load_job(redis_id, user_id)
+                status = self.cloud.get_job_status_by_job_id(user_id, config)
                 self.logger.info(f"Invoked get_job_status_by_job_id for {redis_id} - status: {status}")
 
                 # Check status validity
                 self.logger.info(f"INFO: before status check")
                 if status and isinstance(status, dict) and 'status' in status and 'description' in status:
                     self.logger.info(f"INFO: after status check")
-                    config = self.redis.load_job(redis_id, user_id)
-                    self.logger.info(f"INFO: after load job")
                     # Only update non-stale status
                     if config.status != status['status'] or config.description != status['description']:
                         self.logger.info(f"INFO: before update status")
@@ -947,7 +913,12 @@ class ExpertiseCloudService(BaseExpertiseService):
 
                     if status['status'] == JobStatus.COMPLETED:
                         self.logger.info(f"Job {redis_id} completed successfully.")
-                        break # Exit the loop on successful completion
+                        return # Exit the loop on successful completion
+
+                    elif status['status'] == JobStatus.DATA_ERROR:
+                        # Expected data errors - job is "complete" from queue perspective
+                        self.logger.info(f"Job {redis_id} completed with expected error: {status['description']}")
+                        return # Exit the loop - don't raise exception
 
                     elif status['status'] == JobStatus.ERROR:
                         self.logger.error(f"Job {redis_id} encountered an error: {status['description']}")
@@ -975,7 +946,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             # Re-raise exception to appear in the queue
             raise e.with_traceback(e.__traceback__)
 
-    def start_expertise(self, request, client_v1, client):
+    def start_expertise(self, request, client):
         descriptions = JobDescription.VALS.value
 
         job_name = self._get_job_name(request)
@@ -1003,11 +974,14 @@ class ExpertiseCloudService(BaseExpertiseService):
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
-        config, _ = self._prepare_config(deepcopy(request), client_v1=client_v1, client=client)
+        config = self._validate_request(
+            client,
+            deepcopy(request)
+        )
+        self._save_config(config) # Save initialized
         config.mdate = int(time.time() * 1000)
         config.status = JobStatus.QUEUED
         config.description = descriptions[JobStatus.QUEUED]
-        self.redis.save_job(config)
 
         config_log = self._get_log_from_config(config)
         self.logger.info(f"Adding job {config.job_id} to queue")
@@ -1064,9 +1038,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
         redis_job = self.redis.load_job(job_id, user_id)
-        if redis_job.cloud_id is None:
-            raise openreview.OpenReviewException(f"Not Found error: Job {job_id} has not requested resources")
-        cloud_return = self.cloud.get_job_status_by_job_id(user_id, redis_job.cloud_id)
+        cloud_return = self.cloud.get_job_status_by_job_id(user_id, redis_job)
         cloud_return['name'] = redis_job.name
         cloud_return['jobId'] = redis_job.job_id
         return cloud_return
@@ -1089,29 +1061,3 @@ class ExpertiseCloudService(BaseExpertiseService):
         """
         redis_job = self.redis.load_job(job_id, user_id)
         return self.cloud.get_job_results(user_id, redis_job.cloud_id, delete_on_get)
-
-    def del_expertise_job(self, user_id, job_id):
-        """
-        Returns the filtered config of a job and deletes the job directory
-
-        :param user_id: The ID of the user accessing the data
-        :type user_id: str
-
-        :param job_id: ID of the specific job to look up
-        :type job_id: str
-
-        :returns: Filtered config of the job to be deleted
-        """
-        config = self.redis.load_job(job_id, user_id)
-        
-        # Clear directory and Redis entry
-        self.logger.info(f"Deleting {config.job_dir} for {user_id}")
-        if os.path.isdir(config.job_dir):
-            shutil.rmtree(config.job_dir)
-        else:
-            self.logger.info(f"No files found - only removing Redis entry")
-        self.redis.remove_job(user_id, job_id)
-
-        # Return filtered config
-        self._filter_config(config)
-        return config.to_json()

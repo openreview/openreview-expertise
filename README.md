@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/openreview/openreview-expertise.svg?style=svg)](https://circleci.com/gh/openreview/openreview-expertise)
+
 # Paper-reviewer affinity modeling for OpenReview
 
 A key part of matching papers to reviewers is having a good model of paper-reviewer affinity. This repository holds code and tools for generating affinity scores between papers and reviewers.
@@ -169,7 +171,7 @@ When SPECTER is run as a service, it creates ~1GB of extra files get stored in a
 ```
 
 ### Configuration
-Configuration files are located in `/expertise/service/config`. When started, the server will search for a `.cfg` file in `/expertise/service/config` that matches the environment variable `FLASK_ENV`, and will default to the values in `default.cfg`.
+Configuration files are located in `/expertise/service/config`. When started, the server will search for a `.cfg` file in `/expertise/service/config` that matches the environment variable `EXPERTISE_ENV`, and will default to the values in `default.cfg`.
 
 For example, with file `/expertise/service/config/development.cfg`:
 ```
@@ -178,15 +180,15 @@ LOG_FILE='development.log'
 
 OPENREVIEW_USERNAME='OpenReview.net'
 OPENREVIEW_PASSWORD='Or$3cur3P@ssw0rd'
-OPENREVIEW_BASEURL='http://localhost:3000'
+OPENREVIEW_BASEURL_V2='http://localhost:3001'
 ```
 
 Start the server with `development.cfg`:
 ```
-FLASK_ENV=development python -m expertise.service
+EXPERTISE_ENV=development python -m expertise.service
 ```
 
-Note that Flask will set `FLASK_ENV` to "production" by default, so if a file `production.cfg` exists, and the `FLASK_ENV` variable is unset, then the app will overwrite default values with those in `production.cfg`.
+Note that `EXPERTISE_ENV` defaults to "production", so if a file `production.cfg` exists and the `EXPERTISE_ENV` variable is unset, the app will overwrite default values with those in `production.cfg`.
 
 ## Configuration File
 
@@ -537,6 +539,49 @@ Running the openreview-expertise test suite requires some initial setup. First, 
 
 - [OpenReview API](https://github.com/openreview/openreview-api)
 - [OpenReview API2](https://github.com/openreview/openreview-api-v1)
+
+### Download model artifacts
+
+The predictors load their weights from a local directory tree. The tests expect this tree at `../expertise-utils/` (relative to the repo), matching the layout used in production.
+
+**Recommended — from the OpenReview GCS bucket.** This is the same path that CI and the Vertex AI pipeline workers use, so running tests this way exercises the production code path. You need `gcloud` installed and read access to `gs://openreview-expertise/`:
+
+```bash
+gcloud auth application-default login
+
+export AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/"
+export EXPERTISE_UTILS_DIR="$(pwd)/../expertise-utils"
+
+python -c "
+from expertise.service import load_model_artifacts
+load_model_artifacts(subdirs=[
+    'multifacet_recommender',
+    'hf_models/specter',
+    'hf_models/specter2_base',
+    'hf_models/specter2_adapter',
+    'hf_models/scincl',
+])
+"
+```
+
+Then export the paths the predictors look for:
+
+```bash
+export SPECTER_HF_DIR="$(pwd)/../expertise-utils/hf_models/specter"
+export SPECTER2_HF_DIR="$(pwd)/../expertise-utils/hf_models/specter2_base"
+export SPECTER2_ADAPTER_DIR="$(pwd)/../expertise-utils/hf_models/specter2_adapter"
+export SCINCL_HF_DIR="$(pwd)/../expertise-utils/hf_models/scincl"
+```
+
+You'll see `[source=BUCKET (local dir)]` in the test output, confirming the predictors are loading from the bucket-mirrored tree rather than from HuggingFace.
+
+**Fallback — from HuggingFace Hub (no bucket access).** If you don't have access to the GCS bucket, leave `SPECTER_HF_DIR`, `SPECTER2_HF_DIR`, `SPECTER2_ADAPTER_DIR`, and `SCINCL_HF_DIR` unset. The predictors fall back to the HuggingFace Hub IDs (`allenai/specter`, `allenai/specter2_aug2023refresh_base`, `allenai/specter2_aug2023refresh`, `malteos/scincl`) and download them on first use. You'll see `[source=HUGGINGFACE HUB (network)]` in the logs.
+
+**Caveat:** `tests/test_spectermfr.py` cannot run this way because the MFR checkpoint only lives in the OpenReview GCS bucket — it is not published to HuggingFace. Skip that file if you don't have bucket access:
+
+```bash
+pytest tests --ignore=tests/test_spectermfr.py
+```
 
 Run Tests
 ---------
