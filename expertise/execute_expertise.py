@@ -9,6 +9,12 @@ from .utils.utils import aggregate_by_group, generate_sparse_scores
 def execute_expertise(config):
 
     config = ModelConfig(config_dict=config)
+    default_embedding_compression = config['model_params'].get(
+        'embedding_compression',
+        config['model_params'].get('compression', None)
+    )
+    specter2_compression = config['model_params'].get('specter2_compression', default_embedding_compression)
+    scincl_compression = config['model_params'].get('scincl_compression', default_embedding_compression)
 
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
     venue_specific_weights = 'weight_specification' in config['dataset'].keys()
@@ -78,7 +84,9 @@ def execute_expertise(config):
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
             venue_specific_weights=venue_specific_weights,
             percentile_select=config['model_params'].get('percentile_select', None),
-            normalize_scores=config['model_params'].get('normalize_scores', True)
+            normalize_scores=config['model_params'].get('normalize_scores', True),
+            specter2_compression=specter2_compression,
+            scincl_compression=scincl_compression
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
@@ -113,7 +121,8 @@ def execute_expertise(config):
             dump_p2p=config['model_params'].get('dump_p2p', False),
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
             percentile_select=config['model_params'].get('percentile_select', None),
-            normalize_scores=config['model_params'].get('normalize_scores', True)
+            normalize_scores=config['model_params'].get('normalize_scores', True),
+            embedding_compression=scincl_compression
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
@@ -144,7 +153,8 @@ def execute_expertise(config):
             dump_p2p=config['model_params'].get('dump_p2p', False),
             compute_paper_paper=config['model_params'].get('compute_paper_paper', False),
             percentile_select=config['model_params'].get('percentile_select', None),
-            normalize_scores=config['model_params'].get('normalize_scores', True)
+            normalize_scores=config['model_params'].get('normalize_scores', True),
+            embedding_compression=specter2_compression
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)

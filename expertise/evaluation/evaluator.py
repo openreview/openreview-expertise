@@ -27,8 +27,53 @@ class OpenReviewExpertiseEvaluation(object):
         self.datasets = config.get('datasets')
         self.configs = config.get('configs')
         self.models = config.get('models')
+        self.model_param_overrides = config.get('model_params', {})
         self.use_cuda = config.get('use_coda', 'False')
         self.skip_settings = config.get('skip', {})
+
+    def _get_model_param_overrides(self, model):
+        overrides = {}
+        if not isinstance(self.model_param_overrides, dict):
+            return overrides
+
+        default_overrides = self.model_param_overrides.get('default', {})
+        if isinstance(default_overrides, dict):
+            overrides.update(default_overrides)
+
+        model_overrides = self.model_param_overrides.get(model, {})
+        if isinstance(model_overrides, dict):
+            overrides.update(model_overrides)
+
+        return overrides
+
+    def _build_model_config(self, model, directory, dataset_id):
+        model_config = {
+            "name": f"{model}_{dataset_id}",
+            "job_dir": directory,
+            "dataset": {
+                "directory": directory
+            },
+            "model": model,
+            "model_params": {
+                "use_title": True,
+                "use_abstract": True,
+                "average_score": False,
+                "max_score": True,
+                "skip_specter": False,
+                "specter_batch_size": 16,
+                "mfr_batch_size": 384,
+                "use_cuda": self.use_cuda,
+                "use_redis": False,
+                "dump_p2p": True,
+                "name": model,
+                "work_dir": os.path.join(directory, model),
+                "scores_path": os.path.join(directory, model),
+                "publications_path": os.path.join(directory, model),
+                "submissions_path": os.path.join(directory, model)
+            }
+        }
+        model_config["model_params"].update(self._get_model_param_overrides(model))
+        return model_config
 
     def run(self):
         for dataset in self.datasets:
@@ -52,32 +97,7 @@ class OpenReviewExpertiseEvaluation(object):
                     continue
 
                 for id, directory in dataset_directories.items():
-                    # Build a default config
-                    model_config = {
-                        "name": f"{model}_{id}",
-                        "job_dir": directory,
-                        "dataset": {
-                            "directory": directory
-                        },
-                        "model": model,
-                        "model_params": {
-                            "use_title": True,
-                            "use_abstract": True,
-                            "average_score": False,
-                            "max_score": True,
-                            "skip_specter": False,
-                            "specter_batch_size": 16,
-                            "mfr_batch_size": 384,
-                            "use_cuda": self.use_cuda,
-                            "use_redis": False,
-                            "dump_p2p": True,
-                            "name": model,
-                            "work_dir": os.path.join(directory, model),
-                            "scores_path": os.path.join(directory, model),
-                            "publications_path": os.path.join(directory, model),
-                            "submissions_path": os.path.join(directory, model)
-                        }
-                    }
+                    model_config = self._build_model_config(model, directory, id)
                     logging.info(f"Embedding {directory}-{id}")
                     execute_expertise(model_config)
             

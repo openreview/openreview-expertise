@@ -9,7 +9,7 @@ class EnsembleModel:
     def __init__(self, specter_dir, work_dir,
                  average_score=False, max_score=True, specter_batch_size=16, merge_alpha=0.5,
                  use_cuda=True, sparse_value=None, use_redis=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=None, normalize_scores=True,
-                 specter2_hf_dir=None, specter2_adapter_dir=None, scincl_hf_dir=None):
+                 specter2_hf_dir=None, specter2_adapter_dir=None, scincl_hf_dir=None, specter2_compression=None, scincl_compression=None):
         self.specter_predictor = Specter2Predictor(
             specter_dir=specter_dir,
             work_dir=os.path.join(work_dir, "specter"),
@@ -25,6 +25,7 @@ class EnsembleModel:
             normalize_scores=normalize_scores,
             specter2_hf_dir=specter2_hf_dir,
             specter2_adapter_dir=specter2_adapter_dir
+            embedding_compression=specter2_compression
         )
 
         self.scincl_predictor = SciNCLPredictor(
@@ -41,6 +42,7 @@ class EnsembleModel:
             percentile_select=percentile_select,
             normalize_scores=normalize_scores,
             scincl_hf_dir=scincl_hf_dir
+            embedding_compression=scincl_compression
         )
         self.merge_alpha = merge_alpha
         self.sparse_value = sparse_value

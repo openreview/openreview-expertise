@@ -1,6 +1,7 @@
 import time
 
 from collections import defaultdict
+import base64
 import json
 import os
 import torch
@@ -16,6 +17,15 @@ from adapters import AutoAdapterModel
 from .predictor import Predictor
 
 import logging
+
+KEEP_DIMS = [
+    1, 5, 8, 21, 25, 35, 39, 42, 43, 47, 48, 60, 61, 64, 65, 66, 67, 74, 75, 85, 93, 96, 100, 103, 112, 114,
+    123, 124, 128, 129, 131, 133, 169, 172, 191, 207, 234, 236, 237, 239, 245, 256, 262, 279, 288, 289, 314,
+    325, 327, 335, 343, 345, 350, 352, 355, 357, 359, 360, 365, 366, 371, 372, 377, 378, 379, 382, 387, 394,
+    401, 406, 408, 410, 418, 423, 424, 440, 441, 444, 445, 456, 470, 476, 481, 485, 489, 495, 501, 506, 519,
+    523, 527, 528, 529, 534, 535, 539, 541, 549, 568, 576, 580, 582, 584, 593, 602, 608, 616, 625, 637, 657,
+    661, 662, 666, 679, 685, 686, 690, 691, 695, 697, 703, 711, 714, 720, 731, 737, 743, 760
+]
 """
 archive_file: $SPECTER_FOLDER/model.tar.gz
 input_file: $SAMPLE_ID_TRAIN
@@ -40,7 +50,7 @@ silent
 class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=None,
-                 normalize_scores=True, specter2_hf_dir=None, specter2_adapter_dir=None):
+                 normalize_scores=True, specter2_hf_dir=None, specter2_adapter_dir=None, embedding_compression=None):
         self.model_name = 'specter2'
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
@@ -90,6 +100,15 @@ class Specter2Predictor(Predictor):
         self.model.to(self.cuda_device)
         self.model.eval()
 
+        if embedding_compression == 'int8':
+            embedding_compression = 'int8_per_vector'
+        if embedding_compression == 'int8_keep_dims':
+            embedding_compression = 'int8_per_vector_keep_dims'
+        valid_compressions = {None, 'float16', 'int8_per_vector', 'int8_per_vector_keep_dims'}
+        if embedding_compression not in valid_compressions:
+            raise ValueError(f"Unsupported SPECTER2 embedding_compression: {embedding_compression}")
+        self.embedding_compression = embedding_compression
+
     def _fetch_batches(self, dict_data, batch_size):
         iterator = iter(dict_data.items())
         for _ in itertools.count():
@@ -120,6 +139,86 @@ class Specter2Predictor(Predictor):
         del inputs
         torch.cuda.empty_cache()
         return jsonl_out
+
+    def _build_embedding_jsonl(self, paper, embedding):
+        embedding_array = embedding.detach().cpu().numpy().astype(np.float32)
+        data = {
+            'paper_id': paper['paper_id']
+        }
+
+        if self.embedding_compression is None:
+            data['embedding'] = embedding_array.tolist()
+        elif self.embedding_compression == 'float16':
+            data['embedding_compression'] = 'float16'
+            data['embedding_bytes'] = base64.b64encode(
+                np.ascontiguousarray(embedding_array.astype(np.float16)).tobytes()
+            ).decode('ascii')
+        elif self.embedding_compression == 'int8_per_vector':
+            max_abs = float(np.max(np.abs(embedding_array)))
+            if max_abs == 0.0:
+                scale = 1.0
+                quantized = np.zeros_like(embedding_array, dtype=np.int8)
+            else:
+                scale = max_abs / 127.0
+                quantized = np.clip(np.rint(embedding_array / scale), -127, 127).astype(np.int8)
+            data['embedding_compression'] = 'int8_per_vector'
+            data['embedding_scale'] = scale
+            data['embedding_bytes'] = base64.b64encode(
+                np.ascontiguousarray(quantized).tobytes()
+            ).decode('ascii')
+        elif self.embedding_compression == 'int8_per_vector_keep_dims':
+            kept_embedding = embedding_array[KEEP_DIMS]
+            max_abs = float(np.max(np.abs(kept_embedding)))
+            if max_abs == 0.0:
+                scale = 1.0
+                quantized = np.zeros_like(kept_embedding, dtype=np.int8)
+            else:
+                scale = max_abs / 127.0
+                quantized = np.clip(np.rint(kept_embedding / scale), -127, 127).astype(np.int8)
+            data['embedding_compression'] = 'int8_per_vector_keep_dims'
+            data['embedding_scale'] = scale
+            data['embedding_bytes'] = base64.b64encode(
+                np.ascontiguousarray(quantized).tobytes()
+            ).decode('ascii')
+        else:
+            raise ValueError(f"Unsupported SPECTER2 embedding_compression: {self.embedding_compression}")
+
+        if 'weight' in paper:
+            data['weight'] = paper['weight']
+        return json.dumps(data) + '\n'
+
+    def _restore_embedding(self, paper_data, paper_emb_size_default=768):
+        compression = paper_data.get('embedding_compression')
+        if compression is None:
+            paper_emb_size = len(paper_data['embedding'])
+            assert paper_emb_size == 0 or paper_emb_size == paper_emb_size_default
+            if paper_emb_size == 0:
+                return [0] * paper_emb_size_default
+            return paper_data['embedding']
+        if compression == 'float16':
+            restored = np.frombuffer(
+                base64.b64decode(paper_data['embedding_bytes']),
+                dtype=np.float16
+            ).astype(np.float32)
+            assert restored.shape[0] == paper_emb_size_default
+            return restored.tolist()
+        if compression == 'int8_per_vector':
+            restored = np.frombuffer(
+                base64.b64decode(paper_data['embedding_bytes']),
+                dtype=np.int8
+            ).astype(np.float32) * np.float32(paper_data['embedding_scale'])
+            assert restored.shape[0] == paper_emb_size_default
+            return restored.tolist()
+        if compression == 'int8_per_vector_keep_dims':
+            restored_keep_dims = np.frombuffer(
+                base64.b64decode(paper_data['embedding_bytes']),
+                dtype=np.int8
+            ).astype(np.float32) * np.float32(paper_data['embedding_scale'])
+            assert restored_keep_dims.shape[0] == len(KEEP_DIMS)
+            restored = np.zeros(paper_emb_size_default, dtype=np.float32)
+            restored[np.asarray(KEEP_DIMS, dtype=np.int64)] = restored_keep_dims
+            return restored.tolist()
+        raise ValueError(f"Unsupported SPECTER2 embedding_compression in cache: {compression}")
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
@@ -221,13 +320,9 @@ class Specter2Predictor(Predictor):
             for line in emb_file:
                 paper_data = json.loads(line.rstrip())
                 paper_id = paper_data['paper_id']
-                paper_emb_size = len(paper_data['embedding'])
-                assert paper_emb_size == 0 or paper_emb_size == paper_emb_size_default
-                if paper_emb_size == 0:
-                    paper_emb = [0] * paper_emb_size_default
+                if paper_data.get('embedding_compression') is None and len(paper_data['embedding']) == 0:
                     bad_id_set.add(paper_id)
-                else:
-                    paper_emb = paper_data['embedding']
+                paper_emb = self._restore_embedding(paper_data, paper_emb_size_default)
                 id_list.append(paper_id)
                 emb_list.append(paper_emb)
                 if load_weight:
