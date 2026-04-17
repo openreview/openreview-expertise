@@ -24,7 +24,7 @@ class EnsembleModel:
             percentile_select=percentile_select,
             normalize_scores=normalize_scores,
             specter2_hf_dir=specter2_hf_dir,
-            specter2_adapter_dir=specter2_adapter_dir
+            specter2_adapter_dir=specter2_adapter_dir,
             embedding_compression=specter2_compression
         )
 
@@ -41,7 +41,7 @@ class EnsembleModel:
             venue_specific_weights=venue_specific_weights,
             percentile_select=percentile_select,
             normalize_scores=normalize_scores,
-            scincl_hf_dir=scincl_hf_dir
+            scincl_hf_dir=scincl_hf_dir,
             embedding_compression=scincl_compression
         )
         self.merge_alpha = merge_alpha
