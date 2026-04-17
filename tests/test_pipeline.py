@@ -470,6 +470,11 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     error_message = 'No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
     mock_execute_expertise.side_effect = ExpectedDataError(error_message)
 
+    pipeline_client = openreview.api.OpenReviewClient(
+        token=openreview_client.token
+    )
+    pipeline_client.impersonate('PIPELINE.cc')
+
     # Prepare input API request string
     api_request_str = json.dumps({
         "name": "test_run2",
@@ -489,7 +494,7 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
             'scoreComputation': 'avg'
         },
         "user_id": "openreview.net",
-        "token": openreview_client.token,
+        "token": pipeline_client.token,
         "baseurl_v2": "http://localhost:3001",
         "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_prefix_err",
         "dump_embs": True,
