@@ -2,7 +2,6 @@ from collections import OrderedDict, defaultdict
 import numpy as np
 import spacy
 from spacy.lang.en.stop_words import STOP_WORDS
-import ipdb
 nlp = spacy.load('en_core_web_sm')
 
 class TextRank():

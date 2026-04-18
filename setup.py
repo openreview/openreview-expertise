@@ -23,7 +23,6 @@ setup(
         'torch',
         'scikit-learn',
         'tqdm',
-        'ipdb',
         'spacy==3.8.13',
         'en_core_web_sm@https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0.tar.gz',
         'sacremoses',

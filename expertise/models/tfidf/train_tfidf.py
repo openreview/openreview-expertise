@@ -6,8 +6,6 @@ from . import tfidf
 import expertise
 from datetime import datetime
 
-import ipdb
-
 def train(config):
     print('running tfidf train')
     experiment_dir = Path(config['experiment_dir']).resolve()

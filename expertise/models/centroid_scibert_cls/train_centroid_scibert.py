@@ -14,7 +14,6 @@ from expertise.utils.batcher import Batcher
 from expertise.config import ModelConfig
 
 current_path = os.path.abspath(os.path.dirname(__file__))
-import ipdb
 #def train(setup_path, train_path, config, dataset):
 def train(config):
 

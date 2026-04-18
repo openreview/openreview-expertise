@@ -6,7 +6,6 @@ from expertise.evaluators.hits_at_k import eval_hits_at_k
 from expertise.dataset import Dataset
 
 from expertise import utils
-import ipdb
 
 def setup(config):
     assert os.path.exists(config.tpms_scores_file), 'This model requires a pre-computed tpms score file.'

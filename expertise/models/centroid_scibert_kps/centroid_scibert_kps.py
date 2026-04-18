@@ -10,8 +10,6 @@ from expertise import utils
 from expertise.evaluators.mean_avg_precision import eval_map
 from expertise.evaluators.hits_at_k import eval_hits_at_k
 
-import ipdb
-
 class Model(torch.nn.Module):
     def __init__(self, config, vocab):
         super(Model, self).__init__()
@@ -83,11 +81,7 @@ class Model(torch.nn.Module):
 
         # do a linear transformation of the scibert vector into the centroid dimension
         # B x bert_embedding_dim
-        try:
-            embeddings = self.linear_layer(vector_batch)
-        except AttributeError as e:
-            ipdb.set_trace()
-            raise e
+        embeddings = self.linear_layer(vector_batch)
 
         return embeddings
 

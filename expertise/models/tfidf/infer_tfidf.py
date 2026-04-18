@@ -16,7 +16,6 @@ from gensim.similarities.docsim import SparseMatrixSimilarity
 
 import numpy as np
 from tqdm import tqdm
-import ipdb
 
 def infer(config):
     experiment_dir = Path(config['experiment_dir']).resolve()
