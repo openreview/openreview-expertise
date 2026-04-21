@@ -225,14 +225,14 @@ class TestExpertiseCloudService():
                         'type': "Group",
                         'memberOf': "CLD.cc/Reviewers",
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Note",
-                        'invitation': "CLD.cc/-/Submission" 
+                        'invitation': "CLD.cc/-/Submission"
                     },
                     "model": {
                             "name": "specter+mfr",
-                            'useTitle': False, 
-                            'useAbstract': True, 
+                            'useTitle': False,
+                            'useAbstract': True,
                             'skipSpecter': False,
                             'scoreComputation': 'avg'
                     },
@@ -250,7 +250,7 @@ class TestExpertiseCloudService():
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['name'] == 'test_run', f"Job name: {response['name']}, status: {response}"
-        assert response['status'] != 'Error', response
+        assert response['status'] != 'Error'
 
         # Let request process
         time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
@@ -265,7 +265,15 @@ class TestExpertiseCloudService():
         request = json.loads(request_blob.download_as_text())
         assert request['user_id'] == 'CLD.cc'
         assert request['machine_type'] == 'small'
-        
+
+        # Verify dataset files were uploaded to the bucket
+        dataset_prefix = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/"
+        dataset_blobs = list(gcs_test_bucket.list_blobs(prefix=dataset_prefix))
+        dataset_blob_names = [b.name.replace(dataset_prefix, '') for b in dataset_blobs]
+        assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
+        assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
+        assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
+
         setup_job_mocks()
         response = test_client.post(
             '/expertise',
@@ -275,7 +283,65 @@ class TestExpertiseCloudService():
                         'type': "Group",
                         'memberOf': "TMLR/Reviewers",
                     },
-                    "entityB": { 
+                    "entityB": {
+                        'type': "Note",
+                        'invitation': "TMLR/-/Submission"
+                    },
+                    "model": {
+                            "name": "specter+mfr",
+                            'useTitle': False, 
+                            'useAbstract': True, 
+                            'skipSpecter': False,
+                            'scoreComputation': 'avg'
+                    },
+                    "dataset": {
+                        'minimumPubDate': 0
+                    }
+                }
+            ),
+            content_type='application/json',
+            headers=tmlr_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+        time.sleep(LATENCY_OFFSET)
+
+        response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['name'] == 'test_run', f"Job name: {response['name']}, status: {response}"
+        assert response['status'] != 'Error', response
+
+        # Let request process
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
+        response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
+
+        # Check proper user ID
+        ## Checking live GCS
+        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
+        assert request_blob.exists(), "Request file should exist in GCS"
+        request = json.loads(request_blob.download_as_text())
+        assert request['user_id'] == 'TMLR'
+        assert request['machine_type'] == 'small'
+
+        # Verify dataset files were uploaded to the bucket
+        dataset_prefix = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/"
+        dataset_blobs = list(gcs_test_bucket.list_blobs(prefix=dataset_prefix))
+        dataset_blob_names = [b.name.replace(dataset_prefix, '') for b in dataset_blobs]
+        assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
+        assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
+        assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
+
+        setup_job_mocks()
+        response = test_client.post(
+            '/expertise',
+            data = json.dumps({
+                    "name": "test_run",
+                    "entityA": {
+                        'type': "Group",
+                        'memberOf': "TMLR/Reviewers",
+                    },
+                    "entityB": {
                         'type': "Note",
                         'invitation': "TMLR/-/Submission" 
                     },
@@ -309,9 +375,9 @@ class TestExpertiseCloudService():
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-        ## Expect 2*4 calls from the worker thread, 2*2 call from /expertise/status and 0 calls from /expertise/status/all
+        ## Expect 3*4 calls from the worker thread, 3*2 calls from /expertise/status and 0 calls from /expertise/status/all
         print(mock_pipeline_job.get.call_args_list)
-        assert len(mock_pipeline_job.get.call_args_list) == 12
+        assert len(mock_pipeline_job.get.call_args_list) == 18
 
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
@@ -349,6 +415,14 @@ class TestExpertiseCloudService():
         assert request['user_id'] == 'TMLR'
         assert request['machine_type'] == 'small'
 
+        # Verify dataset files were uploaded to the bucket
+        dataset_prefix = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/"
+        dataset_blobs = list(gcs_test_bucket.list_blobs(prefix=dataset_prefix))
+        dataset_blob_names = [b.name.replace(dataset_prefix, '') for b in dataset_blobs]
+        assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
+        assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
+        assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
+
         # Upload test results to GCS
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
@@ -358,6 +432,11 @@ class TestExpertiseCloudService():
 
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityB": "abcde","entityA": "user_user1","score": 0.987}\n{"entityB": "abcde","entityA": "user_user2","score": 0.987}')
+
+        # Upload embedding .jsonl files as execute_pipeline does — these must not be mistaken for score files
+        for emb_name in ['sub2vec_specter.jsonl', 'sub2vec_scincl.jsonl', 'pub2vec_specter.jsonl', 'pub2vec_scincl.jsonl']:
+            emb_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{emb_name}")
+            emb_blob.upload_from_string('{"paper_id": "abcd", "embedding": [0.1, 0.2]}')
 
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=tmlr_client.headers, query_string={'jobId': job_id})
@@ -488,6 +567,10 @@ class TestExpertiseCloudService():
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityA": "user_user2","entityB": "user_user1","score": 0.987}\n{"entityA": "user_user3","entityB": "user_user2","score": 0.987}')
 
+        for emb_name in ['sub2vec_specter.jsonl', 'sub2vec_scincl.jsonl', 'pub2vec_specter.jsonl', 'pub2vec_scincl.jsonl']:
+            emb_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{emb_name}")
+            emb_blob.upload_from_string('{"paper_id": "abcd", "embedding": [0.1, 0.2]}')
+
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
         assert response.json["metadata"] == {"meta": "data"}
@@ -616,6 +699,10 @@ class TestExpertiseCloudService():
 
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityA": "abcd","entityB": "edfg","score": 0.987}\n{"entityA": "hijk","entityB": "lmno","score": 0.987}')
+
+        for emb_name in ['sub2vec_specter.jsonl', 'sub2vec_scincl.jsonl', 'pub2vec_specter.jsonl', 'pub2vec_scincl.jsonl']:
+            emb_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{emb_name}")
+            emb_blob.upload_from_string('{"paper_id": "abcd", "embedding": [0.1, 0.2]}')
 
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
@@ -750,6 +837,10 @@ class TestExpertiseCloudService():
 
         scores_sparse_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.jsonl")
         scores_sparse_blob.upload_from_string('{"entityB": "ASDFASDF","entityA": "~Harold_Rice1","score": 0.987}\n{"entityB": "ASDFASDF","entityA": "~Zonia_Willms1","score": 0.987}')
+
+        for emb_name in ['sub2vec_specter.jsonl', 'sub2vec_scincl.jsonl', 'pub2vec_specter.jsonl', 'pub2vec_scincl.jsonl']:
+            emb_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{emb_name}")
+            emb_blob.upload_from_string('{"paper_id": "abcd", "embedding": [0.1, 0.2]}')
 
         # Searches for journal results from the given job_id assuming the job has completed
         response = test_client.get('/expertise/results', headers=abc_client.headers, query_string={'jobId': job_id})
@@ -992,11 +1083,19 @@ class TestExpertiseCloudService():
         job_dir = os.path.join(cfg["WORKING_DIR"], job_id)
         os.makedirs(job_dir, exist_ok=True)
 
-        api_req = APIRequest({
-            "name": "test_no_cloud",
-            "entityA": {"type": "Group", "memberOf": "CLD.cc/Reviewers"},
-            "entityB": {"type": "Note", "invitation": "CLD.cc/-/Submission"},
-        })
+        api_req = APIRequest(
+            {
+                "name": "test_no_cloud",
+                "entityA": {
+                    'type': "Group",
+                    'memberOf': "CLD.cc/Reviewers",
+                },
+                "entityB": {
+                    'type': "Note",
+                    'invitation': "CLD.cc/-/Submission"
+                },
+            }
+        )
 
         config = JobConfig(
             name="test_no_cloud",
