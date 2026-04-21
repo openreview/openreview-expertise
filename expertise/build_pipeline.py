@@ -7,9 +7,6 @@ from kfp.dsl import (
     InputPath,
     OutputPath,
     ContainerSpec,
-    If,
-    Elif,
-    Else
 )
 from kfp.registry import RegistryClient
 import argparse
@@ -136,11 +133,13 @@ if __name__ == '__main__':
         base_image=f"{args.region}-docker.pkg.dev/{args.project}/{args.repo}/{args.image}:{args.tag}"
     )
     def execute_expertise_pipeline_op(
-        gcs_request_path: str
+        gcs_request_path: str,
+        dataset_gcs_path: str = ''
     ) -> None:
         from expertise.execute_pipeline import run_pipeline
         run_pipeline(
-            gcs_dir=gcs_request_path
+            gcs_dir=gcs_request_path,
+            dataset_gcs_path=dataset_gcs_path if dataset_gcs_path else None
         )
 
     small_expertise_job_from_file_input = create_custom_training_job_from_component(
@@ -173,64 +172,82 @@ if __name__ == '__main__':
         boot_disk_size_gb=config['PIPELINE_DISK_SIZE_LARGE'],
     )
 
+    # Three separate pipelines — one per tier. Machine type is pre-computed by the
+    # BullMQ worker, so no conditional branching is needed inside any pipeline.
+
     @pipeline(
-        name=args.kfp_name,
-        description='Processes request for user-paper expertise scores using GCS path'
+        name=f"{args.kfp_name}-{config['SMALL_NAME']}",
+        description='Expertise pipeline for small jobs'
     )
-    def expertise_pipeline(
+    def small_expertise_pipeline(
         gcs_request_path: str,
-        machine_type: str = 'small'
+        dataset_gcs_path: str = ''
     ):
+        small_expertise_job_from_file_input(
+            project=args.project,
+            location=args.kfp_region,
+            gcs_request_path=gcs_request_path,
+            dataset_gcs_path=dataset_gcs_path
+        ).set_display_name("Running Small Expertise Pipeline")
 
-        # Conditional execution based on job size
-        with If(machine_type == config['SMALL_NAME']):  # small
-            run_small = small_expertise_job_from_file_input(
-                project=args.project,
-                location=args.kfp_region,
-                gcs_request_path=gcs_request_path
-            ).set_display_name("Running Small Expertise Pipeline")
-        with Elif(machine_type == config['MEDIUM_NAME']): # medium
-            run_medium = medium_expertise_job_from_file_input(
-                project=args.project,
-                location=args.kfp_region,
-                gcs_request_path=gcs_request_path
-            ).set_display_name("Running Medium Expertise Pipeline")
-        with Else():  # large
-            run_large = large_expertise_job_from_file_input(
-                project=args.project,
-                location=args.kfp_region,
-                gcs_request_path=gcs_request_path
-          ).set_display_name("Running Large Expertise Pipeline")
-
-    compiler.Compiler().compile(
-        pipeline_func=expertise_pipeline,
-        package_path='expertise_pipeline.yaml'
+    @pipeline(
+        name=f"{args.kfp_name}-{config['MEDIUM_NAME']}",
+        description='Expertise pipeline for medium jobs'
     )
+    def medium_expertise_pipeline(
+        gcs_request_path: str,
+        dataset_gcs_path: str = ''
+    ):
+        medium_expertise_job_from_file_input(
+            project=args.project,
+            location=args.kfp_region,
+            gcs_request_path=gcs_request_path,
+            dataset_gcs_path=dataset_gcs_path
+        ).set_display_name("Running Medium Expertise Pipeline")
 
-    client = RegistryClient(host=f"https://{args.kfp_region}-kfp.pkg.dev/{args.project}/{args.kfp_repo}")
-
-    # Check if the pipeline with this specific tag already exists
-    version_exists = False
-    try:
-        # Try to get the specific tag
-        existing_tag = client.get_tag(package_name=args.kfp_name, tag=args.tag)
-        if existing_tag:
-            version_exists = True
-            print(f"Pipeline '{args.kfp_name}' with tag '{args.tag}' already exists in registry")
-    except Exception as e:
-        # Tag doesn't exist, which is expected for new versions
-        print(f"Pipeline tag '{args.tag}' does not exist, uploading new version")
-
-    if version_exists:
-        print("Exiting without uploading new pipeline version.")
-        exit(0)
-    upload_tags = [args.tag]
-
-    print(f"Uploading pipeline '{args.kfp_name}' with tags: {upload_tags}")
-
-    templateName, versionName = client.upload_pipeline(
-        file_name="expertise_pipeline.yaml",
-        tags=upload_tags,
-        extra_headers={"description": args.kfp_description}
+    @pipeline(
+        name=f"{args.kfp_name}-{config['LARGE_NAME']}",
+        description='Expertise pipeline for large jobs'
     )
-    print(f"Pipeline uploaded: templateName='{templateName}', versionName='{versionName}'")
+    def large_expertise_pipeline(
+        gcs_request_path: str,
+        dataset_gcs_path: str = ''
+    ):
+        large_expertise_job_from_file_input(
+            project=args.project,
+            location=args.kfp_region,
+            gcs_request_path=gcs_request_path,
+            dataset_gcs_path=dataset_gcs_path
+        ).set_display_name("Running Large Expertise Pipeline")
+
+    pipelines = [
+        (small_expertise_pipeline,  f"{args.kfp_name}-{config['SMALL_NAME']}",  'expertise_pipeline_small.yaml'),
+        (medium_expertise_pipeline, f"{args.kfp_name}-{config['MEDIUM_NAME']}", 'expertise_pipeline_medium.yaml'),
+        (large_expertise_pipeline,  f"{args.kfp_name}-{config['LARGE_NAME']}",  'expertise_pipeline_large.yaml'),
+    ]
+
+    registry_client = RegistryClient(host=f"https://{args.kfp_region}-kfp.pkg.dev/{args.project}/{args.kfp_repo}")
+
+    for pipeline_func, pipeline_name, package_path in pipelines:
+        compiler.Compiler().compile(pipeline_func=pipeline_func, package_path=package_path)
+
+        version_exists = False
+        try:
+            existing_tag = registry_client.get_tag(package_name=pipeline_name, tag=args.tag)
+            if existing_tag:
+                version_exists = True
+                print(f"Pipeline '{pipeline_name}' with tag '{args.tag}' already exists in registry")
+        except Exception:
+            print(f"Pipeline tag '{args.tag}' does not exist for '{pipeline_name}', uploading new version")
+
+        if version_exists:
+            print(f"Skipping upload for '{pipeline_name}'.")
+            continue
+
+        print(f"Uploading pipeline '{pipeline_name}' with tag: {args.tag}")
+        templateName, versionName = registry_client.upload_pipeline(
+            file_name=package_path,
+            tags=[args.tag],
+            extra_headers={"description": args.kfp_description}
+        )
+        print(f"Pipeline uploaded: templateName='{templateName}', versionName='{versionName}'")

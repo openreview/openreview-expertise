@@ -59,10 +59,27 @@ def download_from_gcs(gcs_path):
     content = blob.download_as_text(encoding='utf-8')
     return json.loads(content)
 
+def download_dataset_from_gcs(gcs_path, local_dir):
+    """Download dataset files from GCS prefix into local_dir."""
+    _, bucket = load_gcs(gcs_path)
+    blob_prefix = '/'.join(gcs_path.split('/')[3:])
+
+    blobs = list(bucket.list_blobs(prefix=blob_prefix))
+    for blob in blobs:
+        relative_path = blob.name[len(blob_prefix):].lstrip('/')
+        if not relative_path:
+            continue
+        local_path = os.path.join(local_dir, relative_path)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        blob.download_to_filename(local_path)
+        print(f"Downloaded {blob.name} to {local_path}")
+
+
 def run_pipeline(
-        api_request_str=None, 
+        api_request_str=None,
         gcs_dir=None,
-        working_dir=None
+        working_dir=None,
+        dataset_gcs_path=None
     ):
 
     if gcs_dir is None and api_request_str is None:
@@ -87,14 +104,14 @@ def run_pipeline(
             raw_request = download_from_gcs(gcs_dir)
             print("Parsed request from GCS folder")
         
-        # Pop token, base URLs and other expected variable
+        # Pop base URLs and other expected variables
         print('Popping variables')
         for field in DELETED_FIELDS:
             raw_request.pop(field, None)
         token = raw_request.pop('token')
         baseurl_v2 = raw_request.pop('baseurl_v2')
         destination_prefix = raw_request.pop('gcs_folder')
-        dump_embs = False if 'dump_embs' not in raw_request else raw_request.pop('dump_embs')
+        # dump_embs removed - embeddings always uploaded
         dump_archives = False if 'dump_archives' not in raw_request else raw_request.pop('dump_archives')
         specter_dir = os.getenv('SPECTER_DIR')
         mfr_vocab_dir = os.getenv('MFR_VOCAB_DIR')
@@ -116,7 +133,7 @@ def run_pipeline(
         load_model_artifacts(subdirs=required_artifacts)
 
         print('Logging into OpenReview')
-        client_v2 = openreview.api.OpenReviewClient(baseurl_v2, token=token)
+        client_v2 = openreview.api.OpenReviewClient(baseurl=baseurl_v2, token=token)
 
         print('Creating job ID')
         job_id = generate_job_id()
@@ -124,14 +141,20 @@ def run_pipeline(
             working_dir = f"/app/{job_id}"
         os.makedirs(working_dir, exist_ok=True)
 
+        validated_request = APIRequest({
+            'name': raw_request['name'],
+            'entityA': raw_request['entityA'],
+            'entityB': raw_request['entityB'],
+            **{k: raw_request[k] for k in ['model', 'dataset', 'machineType'] if raw_request.get(k) is not None}
+        })
+
         print('Creating job config')
-        validated_request = APIRequest(raw_request)
         config = JobConfig.from_request(
             api_request = validated_request,
             starting_config = DEFAULT_CONFIG,
             openreview_client_v2= client_v2,
             server_config = server_config,
-            working_dir = working_dir
+            working_dir = working_dir,
         )
 
         if working_dir is not None:
@@ -141,9 +164,11 @@ def run_pipeline(
             for field in path_fields:
                 config.model_params[field] = working_dir
 
-        # Create Dataset and Execute Expertise
-        print('Creating dataset and executing expertise')
-        execute_create_dataset(client_v2, config.to_json())
+        if dataset_gcs_path:
+            print(f'Downloading pre-created dataset from {dataset_gcs_path}')
+            download_dataset_from_gcs(dataset_gcs_path, working_dir)
+
+        print('Executing expertise')
         execute_expertise(config.to_json())
     except Exception as e:
         # Write error to single JSONL line in GCS if bucket is available
@@ -168,7 +193,8 @@ def run_pipeline(
 
     for csv_file in [d for d in os.listdir(config.job_dir) if '.csv' in d]:
         result = []
-        destination_blob = f"{blob_prefix}/{csv_file.replace('.csv', '.jsonl')}"
+        dest_name = 'scores_sparse.jsonl' if '_sparse' in csv_file else 'scores.jsonl'
+        destination_blob = f"{blob_prefix}/{dest_name}"
         with open(os.path.join(config.job_dir, csv_file), 'r') as f:
             reader = csv.reader(f)
             for row in reader:
@@ -209,11 +235,12 @@ def run_pipeline(
             blob.upload_from_string(contents)
 
     # Dump archives
-    if dump_archives:
-        for jsonl_file in os.listdir(os.path.join(config.job_dir, 'archives')):
+    archives_dir = os.path.join(config.job_dir, 'archives')
+    if dump_archives and os.path.isdir(archives_dir):
+        for jsonl_file in os.listdir(archives_dir):
             result = []
             destination_blob = f"{blob_prefix}/archives/{jsonl_file}"
-            with open(os.path.join(config.job_dir, 'archives' ,jsonl_file), 'r') as f:
+            with open(os.path.join(archives_dir, jsonl_file), 'r') as f:
                 for line in f:
                     data = json.loads(line)
                     result.append({
@@ -224,30 +251,30 @@ def run_pipeline(
             contents = '\n'.join([json.dumps(r) for r in result])
             blob.upload_from_string(contents)
 
-    # Dump embeddings
-    if dump_embs:
-        for emb_file in [d for d in os.listdir(config.job_dir) if '.jsonl' in d]:
-            result = []
-            destination_blob = f"{blob_prefix}/{emb_file}"
-            with open(os.path.join(config.job_dir, emb_file), 'r') as f:
-                for line in f:
-                    data = json.loads(line)
-                    result.append({
-                        'paper_id': data['paper_id'],
-                        'embedding': data['embedding']
-                    })
-            blob = bucket.blob(destination_blob)
-            contents = '\n'.join([json.dumps(r) for r in result])
-            blob.upload_from_string(contents)
+    # Always dump embeddings to bucket
+    for emb_file in [d for d in os.listdir(config.job_dir) if '.jsonl' in d]:
+        result = []
+        destination_blob = f"{blob_prefix}/{emb_file}"
+        with open(os.path.join(config.job_dir, emb_file), 'r') as f:
+            for line in f:
+                data = json.loads(line)
+                result.append({
+                    'paper_id': data['paper_id'],
+                    'embedding': data['embedding']
+                })
+        blob = bucket.blob(destination_blob)
+        contents = '\n'.join([json.dumps(r) for r in result])
+        blob.upload_from_string(contents)
 
 if __name__ == '__main__':
     print('Starting pipeline')
     parser = argparse.ArgumentParser()
     parser.add_argument('--api_request_str', help='a JSON string or file containing all other arguments')
     parser.add_argument('--gcs_dir', help='GCS directory containing request.json')
+    parser.add_argument('--dataset_gcs_path', help='GCS path to pre-created dataset; skips dataset creation when provided')
     args = parser.parse_args()
-    
+
     if args.gcs_dir:
-        run_pipeline(gcs_dir=args.gcs_dir)
+        run_pipeline(gcs_dir=args.gcs_dir, dataset_gcs_path=args.dataset_gcs_path)
     else:
-        run_pipeline(api_request_str=args.api_request_str)
+        run_pipeline(api_request_str=args.api_request_str, dataset_gcs_path=args.dataset_gcs_path)

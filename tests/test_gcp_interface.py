@@ -4,6 +4,8 @@ import pytest
 import json
 import datetime
 import time
+import os
+import tempfile
 import openreview
 from copy import deepcopy
 from expertise.service.utils import GCPInterface, JobDescription, JobStatus, JobConfig, APIRequest
@@ -173,7 +175,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
         ),
         job_id=result,
         pipeline_root="gs://test-bucket/pipeline-root",
-        parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json", "machine_type": "small"},
+        parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json"},
         labels={"test": "label"}
     )
     mock_pipeline_instance.submit.assert_called_once_with(service_account=None)
@@ -235,12 +237,193 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     assert kwargs['pipeline_root'] == "gs://test-bucket/pipeline-root"
     params = kwargs['parameter_values']
     assert params["gcs_request_path"] == f"gs://test-bucket/{expected_folder_path}/request.json"
-    assert params["machine_type"] == "small"
     
     # Verify submit() is called with the service account
     mock_pipeline_instance.submit.assert_called_once_with(
         service_account='sa-under-test@test-project.iam.gserviceaccount.com'
     )
+
+# machine_type must not appear in pipeline parameter_values — it is used only to
+# select the per-tier pipeline and must not be forwarded into the job definition,
+# otherwise Vertex AI rejects the job with "parameter not found in input definitions".
+@patch("expertise.service.utils.time.time")
+@patch("expertise.service.utils.aip.PipelineJob")
+@patch("expertise.service.utils.storage.Client")
+def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock_pipeline_job, mock_time, openreview_client):
+    mock_time.return_value = 1234567890.123
+    mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+    mock_bucket.blob.return_value = mock_blob
+    mock_blob.upload_from_string.return_value = None
+    mock_pipeline_job.return_value = MagicMock()
+
+    config = {
+        'GCP_PROJECT_ID': 'test_project',
+        'GCP_PROJECT_NUMBER': '123456',
+        'GCP_REGION': 'us-central1',
+        'GCP_PIPELINE_ROOT': 'pipeline-root',
+        'GCP_PIPELINE_NAME': 'test-pipeline',
+        'GCP_PIPELINE_REPO': 'test-repo',
+        'GCP_PIPELINE_TAG': 'latest',
+        'GCP_BUCKET_NAME': 'test-bucket',
+        'GCP_JOBS_FOLDER': 'jobs',
+        'GCP_SERVICE_LABEL': {'test': 'label'},
+    }
+    gcp_interface = GCPInterface(config=config, openreview_client=openreview_client)
+
+    json_request = {
+        "name": "test_run_machine_type",
+        "entityA": {'type': "Group", 'memberOf': "GCP.cc/Reviewers"},
+        "entityB": {'type': "Note", 'invitation': "GCP.cc/-/Submission"},
+        "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'}
+    }
+    gcp_interface.create_job(deepcopy(json_request), job_id=generate_job_id(), machine_type='small')
+
+    _, kwargs = mock_pipeline_job.call_args
+    params = kwargs['parameter_values']
+    assert 'machine_type' not in params, (
+        "machine_type must not be passed as a pipeline parameter — it is used only "
+        "for tier-based pipeline selection and is not defined in any pipeline's input definitions"
+    )
+
+# Test case for `upload_dataset` — verifies that dataset files are actually uploaded to the bucket
+@patch("expertise.service.utils.transfer_manager")  # Mock transfer_manager
+@patch("expertise.service.utils.storage.Client")  # Mock GCS Client
+def test_upload_dataset(mock_storage_client, mock_transfer_manager, openreview_client):
+    mock_bucket = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
+    )
+
+    with tempfile.TemporaryDirectory() as job_dir:
+        # Create dataset files matching what create_dataset produces
+        archives_dir = os.path.join(job_dir, 'archives')
+        submissions_dir = os.path.join(job_dir, 'submissions')
+        os.makedirs(archives_dir)
+        os.makedirs(submissions_dir)
+
+        # Write test archive files
+        with open(os.path.join(archives_dir, '~User_One1.jsonl'), 'w') as f:
+            f.write(json.dumps({'id': 'paper1', 'content': {'title': 'Test Paper'}}) + '\n')
+        with open(os.path.join(archives_dir, '~User_Two1.jsonl'), 'w') as f:
+            f.write(json.dumps({'id': 'paper2', 'content': {'title': 'Another Paper'}}) + '\n')
+
+        # Write test submission files
+        with open(os.path.join(submissions_dir, 'sub1.jsonl'), 'w') as f:
+            f.write(json.dumps({'id': 'sub1', 'content': {'title': 'Submission 1'}}) + '\n')
+
+        # Write submissions.json
+        with open(os.path.join(job_dir, 'submissions.json'), 'w') as f:
+            json.dump({'count': 1}, f)
+
+        # Write metadata.json
+        with open(os.path.join(job_dir, 'metadata.json'), 'w') as f:
+            json.dump({'submission_count': 1}, f)
+
+        config = JobConfig(job_id='test-upload-job', job_dir=job_dir)
+
+        result = gcp_interface.upload_dataset(config)
+
+        # Verify the returned GCS path
+        assert result == "gs://test-bucket/jobs/test-upload-job/dataset"
+
+        # Verify transfer_manager.upload_many_from_filenames was called
+        mock_transfer_manager.upload_many_from_filenames.assert_called_once()
+        call_args = mock_transfer_manager.upload_many_from_filenames.call_args
+
+        # Verify it was called with the correct bucket
+        assert call_args[0][0] == mock_bucket
+
+        # Verify the filenames include archives, submissions, submissions.json, and metadata.json
+        uploaded_filenames = sorted(call_args[0][1])
+        assert 'archives/~User_One1.jsonl' in uploaded_filenames
+        assert 'archives/~User_Two1.jsonl' in uploaded_filenames
+        assert 'submissions/sub1.jsonl' in uploaded_filenames
+        assert 'submissions.json' in uploaded_filenames
+        assert 'metadata.json' in uploaded_filenames
+        assert len(uploaded_filenames) == 5
+
+        # Verify source_directory and blob_name_prefix
+        assert call_args[1]['source_directory'] == job_dir
+        assert call_args[1]['blob_name_prefix'] == "jobs/test-upload-job/dataset/"
+
+
+# Test that upload_dataset uses the provided vertex_id as the folder name,
+# so dataset and scores land in the same folder when vertex_id is pre-generated.
+@patch("expertise.service.utils.transfer_manager")
+@patch("expertise.service.utils.storage.Client")
+def test_upload_dataset_with_vertex_id(mock_storage_client, mock_transfer_manager, openreview_client):
+    mock_bucket = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
+    )
+
+    with tempfile.TemporaryDirectory() as job_dir:
+        with open(os.path.join(job_dir, 'submissions.json'), 'w') as f:
+            json.dump({}, f)
+
+        config = JobConfig(job_id='base-job-id', job_dir=job_dir)
+        vertex_id = 'base-job-id-1234567890000'
+
+        result = gcp_interface.upload_dataset(config, vertex_id=vertex_id)
+
+        assert result == "gs://test-bucket/jobs/base-job-id-1234567890000/dataset"
+        call_args = mock_transfer_manager.upload_many_from_filenames.call_args
+        assert call_args[1]['blob_name_prefix'] == "jobs/base-job-id-1234567890000/dataset/"
+
+
+# Test that upload_dataset handles an empty job directory without errors
+@patch("expertise.service.utils.transfer_manager")
+@patch("expertise.service.utils.storage.Client")
+def test_upload_dataset_empty_directory(mock_storage_client, mock_transfer_manager, openreview_client):
+    mock_bucket = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        openreview_client=openreview_client,
+        service_label={'test': 'label'}
+    )
+
+    with tempfile.TemporaryDirectory() as job_dir:
+        config = JobConfig(job_id='test-empty-job', job_dir=job_dir)
+
+        result = gcp_interface.upload_dataset(config)
+
+        assert result == "gs://test-bucket/jobs/test-empty-job/dataset"
+        # No files to upload, so transfer_manager should not be called
+        mock_transfer_manager.upload_many_from_filenames.assert_not_called()
+
 
 # Test case for the `get_job_status_by_job_id` method
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
@@ -291,14 +474,14 @@ def test_get_job_status_by_job_id(mock_storage_client, mock_pipeline_job_get, op
                 'type': "Group",
                 'memberOf': "ABC.cc/Area_Chairs",
             },
-            "entityB": { 
+            "entityB": {
                 'type': "Note",
-                'invitation': "ABC.cc/-/Submission" 
+                'invitation': "ABC.cc/-/Submission"
             },
             "model": {
                     "name": "specter+mfr",
-                    'useTitle': False, 
-                    'useAbstract': True, 
+                    'useTitle': False,
+                    'useAbstract': True,
                     'skipSpecter': False,
                     'scoreComputation': 'avg'
             },
@@ -358,14 +541,14 @@ def test_get_job_status_by_job_id_job_not_found(mock_storage_client, openreview_
                 'type': "Group",
                 'memberOf': "ABC.cc/Area_Chairs",
             },
-            "entityB": { 
+            "entityB": {
                 'type': "Note",
-                'invitation': "ABC.cc/-/Submission" 
+                'invitation': "ABC.cc/-/Submission"
             },
             "model": {
                     "name": "specter+mfr",
-                    'useTitle': False, 
-                    'useAbstract': True, 
+                    'useTitle': False,
+                    'useAbstract': True,
                     'skipSpecter': False,
                     'scoreComputation': 'avg'
             },
@@ -415,14 +598,14 @@ def test_get_job_status_by_job_id_insufficient_permissions(mock_storage_client, 
                 'type': "Group",
                 'memberOf': "ABC.cc/Area_Chairs",
             },
-            "entityB": { 
+            "entityB": {
                 'type': "Note",
-                'invitation': "ABC.cc/-/Submission" 
+                'invitation': "ABC.cc/-/Submission"
             },
             "model": {
                     "name": "specter+mfr",
-                    'useTitle': False, 
-                    'useAbstract': True, 
+                    'useTitle': False,
+                    'useAbstract': True,
                     'skipSpecter': False,
                     'scoreComputation': 'avg'
             },
@@ -479,14 +662,14 @@ def test_get_job_status_by_job_id_multiple_requests(mock_storage_client, mock_pi
                 'type': "Group",
                 'memberOf': "ABC.cc/Area_Chairs",
             },
-            "entityB": { 
+            "entityB": {
                 'type': "Note",
-                'invitation': "ABC.cc/-/Submission" 
+                'invitation': "ABC.cc/-/Submission"
             },
             "model": {
                     "name": "specter+mfr",
-                    'useTitle': False, 
-                    'useAbstract': True, 
+                    'useTitle': False,
+                    'useAbstract': True,
                     'skipSpecter': False,
                     'scoreComputation': 'avg'
             },
@@ -728,11 +911,19 @@ def test_get_job_results(mock_storage_client, openreview_client):
         "entityB": {"type": "Note"}
     })
 
+    # Simulate archive .jsonl files that exist alongside scores in real GCS
+    mock_archive_blob_1 = MagicMock()
+    mock_archive_blob_1.name = "jobs/job_1/~Profile_One1.jsonl"
+    mock_archive_blob_2 = MagicMock()
+    mock_archive_blob_2.name = "jobs/job_1/~Profile_Two1.jsonl"
+
     mock_storage_client.return_value.bucket.return_value.list_blobs.return_value = [
         mock_metadata_blob,
         mock_sparse_score_blob,
         mock_score_blob,
-        mock_request_blob
+        mock_request_blob,
+        mock_archive_blob_1,
+        mock_archive_blob_2,
     ]
 
     # Initialize GCPInterface with test parameters
@@ -858,7 +1049,7 @@ def test_get_job_results_group_scoring(mock_storage_client):
     mock_file.close.return_value = None
 
     mock_group_score_blob = MagicMock()
-    mock_group_score_blob.name = "jobs/job_1/group_scores.jsonl"
+    mock_group_score_blob.name = "jobs/job_1/scores.jsonl"
     mock_group_score_blob.download_as_string.return_value = '{"entityA": "m_user1","entityB": "s_user1","score": 0.987}\n{"entityA": "m_user2","entityB": "s_user2","score": 0.987}'
     mock_group_score_blob.open.return_value = mock_file
 
@@ -912,11 +1103,19 @@ def test_get_job_results_group_scoring(mock_storage_client):
 def test_get_job_status_by_job_id_returns_redis_when_no_cloud_id(mock_storage_client, mock_pipeline_job_get, openreview_client):
     from expertise.service.utils import APIRequest, JobConfig, GCPInterface, JobStatus, JobDescription
     # Minimal request and config with no cloud_id
-    api_req = APIRequest({
-        "name": "test_job",
-        "entityA": {"type": "Group", "memberOf": "Some.Venue/Reviewers"},
-        "entityB": {"type": "Note", "invitation": "Some.Venue/-/Submission"}
-    })
+    api_req = APIRequest(
+        {
+            "name": "test_job",
+            "entityA": {
+                'type': "Group",
+                'memberOf': "Some.Venue/Reviewers",
+            },
+            "entityB": {
+                'type': "Note",
+                'invitation': "Some.Venue/-/Submission"
+            }
+        }
+    )
     cfg = JobConfig(
         name="test",
         user_id="openreview.net",
