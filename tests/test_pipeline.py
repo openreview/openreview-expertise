@@ -101,7 +101,7 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     ## Build metadata
     metadata_file = os.path.join(working_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
-        f.write(json.dumps({"submission_count": 2, "no_publications_count": 0}))
+        f.write(json.dumps({"submission_count": 2, "archives_count": 4, "no_publications_count": 0}))
 
     ## Build archives
     archives_dir = os.path.join(working_dir, 'archives')
@@ -144,6 +144,7 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     assert metadata_blob.exists()
     metadata_content = json.loads(metadata_blob.download_as_text())
     assert metadata_content["submission_count"] == 2
+    assert metadata_content["archives_count"] == 4
     assert metadata_content["no_publications_count"] == 0
 
     # Check for pub2vec.jsonl file
@@ -216,7 +217,7 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     ## Build metadata
     metadata_file = os.path.join(working_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
-        f.write(json.dumps({"submission_count": 2, "no_publications_count": 0}))
+        f.write(json.dumps({"submission_count": 2, "archives_count": 4, "no_publications_count": 0}))
 
     ## Write a request file to GCS
     request_blob_name = f"{gcs_jobs_prefix}/test_prefix_gcs_dir/request.json"
@@ -251,6 +252,7 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     assert metadata_blob.exists()
     metadata_content = json.loads(metadata_blob.download_as_text())
     assert metadata_content["submission_count"] == 2
+    assert metadata_content["archives_count"] == 4
     assert metadata_content["no_publications_count"] == 0
 
     # Check for pub2vec.jsonl file
@@ -355,6 +357,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     assert metadata_blob.exists()
     metadata_content = json.loads(metadata_blob.download_as_text())
     assert metadata_content["submission_count"] == 7
+    assert metadata_content["archives_count"] == 4
     assert metadata_content["no_publications_count"] == 0
 
     # Check for pub2vec.jsonl file
@@ -419,7 +422,7 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     ## Build metadata
     metadata_file = os.path.join(working_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
-        f.write(json.dumps({"submission_count": 2, "no_publications_count": 0}))
+        f.write(json.dumps({"submission_count": 2, "archives_count": 0, "no_publications_count": 0}))
 
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
@@ -457,6 +460,7 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     assert metadata_blob.exists()
     metadata_content = json.loads(metadata_blob.download_as_text())
     assert metadata_content["submission_count"] == 2
+    assert metadata_content["archives_count"] == 0
     assert metadata_content["no_publications_count"] == 0
 
     shutil.rmtree(working_dir)  # Clean up
