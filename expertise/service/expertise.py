@@ -825,7 +825,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         config = self.redis.load_job(redis_id, user_id)
         openreview_client_v2 = openreview.api.OpenReviewClient(token=or_token, baseurl=config.baseurl_v2)
 
-        # Task 1: Create dataset locally before submitting to VertexAI
+        asyncio.run_coroutine_threadsafe(job.log('Task 1: fetching data from OpenReview and building dataset'), self.queue_loop)
         try:
             execute_create_dataset(openreview_client_v2, config=config.to_json())
         except ExpectedDataError as e:
@@ -839,12 +839,13 @@ class ExpertiseCloudService(BaseExpertiseService):
                 self.update_status(config, JobStatus.ERROR, str(e))
             raise e.with_traceback(e.__traceback__)
 
-        # Upload dataset to GCS and submit VertexAI job (expertise only, Task 2)
         config = self.redis.load_job(redis_id, user_id)
         config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
+        asyncio.run_coroutine_threadsafe(job.log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset'), self.queue_loop)
         dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
         machine_type = self.compute_machine_type_from_dataset(config)
         self.logger.info(f"Machine type for {redis_id}: {machine_type}")
+        asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})'), self.queue_loop)
 
         try:
             self.cloud.create_job(
