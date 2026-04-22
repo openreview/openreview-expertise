@@ -5,6 +5,7 @@ import os
 import shutil
 import openreview
 from conftest import GCSTestHelper
+from expertise.service.utils import ExpectedDataError
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -96,6 +97,18 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
     with open(embeddings_dir, 'w') as f:
         f.write(json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}))
+
+    ## Build metadata
+    metadata_file = os.path.join(working_dir, 'metadata.json')
+    with open(metadata_file, 'w') as f:
+        f.write(json.dumps({"submission_count": 2, "no_publications_count": 0}))
+
+    ## Build archives
+    archives_dir = os.path.join(working_dir, 'archives')
+    os.makedirs(archives_dir, exist_ok=True)
+    for i in range(4):
+        with open(os.path.join(archives_dir, f'archive_{i}.jsonl'), 'w') as f:
+            f.write(json.dumps({"id": f"user_{i}", "content": {"title": f"Paper {i}"}}))
 
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
@@ -200,6 +213,11 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     with open(embeddings_dir, 'w') as f:
         f.write(json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}))
 
+    ## Build metadata
+    metadata_file = os.path.join(working_dir, 'metadata.json')
+    with open(metadata_file, 'w') as f:
+        f.write(json.dumps({"submission_count": 2, "no_publications_count": 0}))
+
     ## Write a request file to GCS
     request_blob_name = f"{gcs_jobs_prefix}/test_prefix_gcs_dir/request.json"
     blob = gcs_test_bucket.blob(request_blob_name)
@@ -302,6 +320,18 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     with open(embeddings_dir, 'w') as f:
         f.write(json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}))
 
+    ## Build metadata
+    metadata_file = os.path.join(working_dir, 'metadata.json')
+    with open(metadata_file, 'w') as f:
+        f.write(json.dumps({"submission_count": 7, "no_publications_count": 0}))
+
+    ## Build archives
+    archives_dir = os.path.join(working_dir, 'archives')
+    os.makedirs(archives_dir, exist_ok=True)
+    for i in range(4):
+        with open(os.path.join(archives_dir, f'archive_{i}.jsonl'), 'w') as f:
+            f.write(json.dumps({"id": f"user_{i}", "content": {"title": f"Paper {i}"}}))
+
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
     run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
@@ -386,6 +416,11 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     with open(sparse_file, 'w') as f:
         f.write("sub_one,sub_two,0.5\nsub_one,sub_two,0.5")
 
+    ## Build metadata
+    metadata_file = os.path.join(working_dir, 'metadata.json')
+    with open(metadata_file, 'w') as f:
+        f.write(json.dumps({"submission_count": 2, "no_publications_count": 0}))
+
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
     run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
@@ -432,9 +467,9 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
 def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
-    mock_execute_expertise.return_value = None
+    error_message = 'No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
+    mock_execute_expertise.side_effect = ExpectedDataError(error_message)
 
-    # Use TMLR client to test permissions
     pipeline_client = openreview.api.OpenReviewClient(
         token=openreview_client.token
     )
@@ -447,9 +482,9 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
             'type': "Group",
             'memberOf': "PIPELINE.cc/Reviewers",
         },
-        "entityB": { 
+        "entityB": {
             'type': "Note",
-            'invitation': "PIPELINE_ERR.cc/-/Submission" 
+            'invitation': "PIPELINE_ERR.cc/-/Submission"
         },
         "model": {
             "name": "specter+mfr",
@@ -475,14 +510,12 @@ def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openr
     working_dir = './test_pipeline'
     os.makedirs(working_dir, exist_ok=True)
 
-    ## Skip file building - never happens in error
-
     # Call the function
-    from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
+    from expertise.execute_pipeline import run_pipeline
     try:
         run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
     except Exception as e:
-        assert str(e) == 'No papers found for: invitation_ids: [\'PIPELINE_ERR.cc/-/Submission\']'
+        assert str(e) == error_message
 
     # Assertions
     # Check that blobs were created and data was uploaded to GCS

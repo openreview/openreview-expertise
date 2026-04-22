@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
+from google.cloud.storage import transfer_manager
 from google.cloud.aiplatform_v1.types import PipelineState
 from copy import deepcopy
 from expertise.config import ModelConfig
@@ -50,7 +51,6 @@ class JobStatus(str, Enum):
     INITIALIZED = 'Initialized'
     QUEUED = 'Queued'
     FETCHING_DATA  = 'Fetching Data'
-    EXPERTISE_QUEUED = 'Queued for Expertise'
     RUN_EXPERTISE = 'Running Expertise'
     COMPLETED = 'Completed'
     DATA_ERROR = 'Data Error'
@@ -61,7 +61,6 @@ class JobDescription(dict, Enum):
         JobStatus.INITIALIZED: 'Server received config and allocated space',
         JobStatus.QUEUED: 'Job is waiting to start fetching OpenReview data',
         JobStatus.FETCHING_DATA: 'Job is currently fetching data from OpenReview',
-        JobStatus.EXPERTISE_QUEUED: 'Job has assembled the data and is waiting in queue for the expertise model',
         JobStatus.RUN_EXPERTISE: 'Job is running the selected expertise model to compute scores',
         JobStatus.COMPLETED: 'Job is complete and the computed scores are ready',
         JobStatus.DATA_ERROR: 'Job completed but no scores were computed because of an issue with the data',
@@ -72,7 +71,7 @@ class APIRequest(object):
     Validates and load objects and fields from POST requests
     """
     def __init__(self, request):
-            
+
         self.entityA = {}
         self.entityB = {}
         self.model = {}
@@ -105,7 +104,7 @@ class APIRequest(object):
         # Optionally check for dataset object
         self.dataset = request.pop('dataset', {})
 
-        # Optinally check for machine type
+        # Optionally check for machine type
         self.machine_type = request.pop('machineType', None)
 
         # Check for empty request
@@ -788,6 +787,12 @@ class GCPInterface(object):
             self.jobs_folder = config['GCP_JOBS_FOLDER']
             self.service_label = config['GCP_SERVICE_LABEL']
             self.service_account = config.get('GCP_SERVICE_ACCOUNT')
+            # Per-tier pipeline names derived from base name + machine tier suffix
+            self.pipeline_name_by_tier = {
+                config.get('SMALL_NAME', 'small'):  f"{self.pipeline_name}-{config.get('SMALL_NAME', 'small')}",
+                config.get('MEDIUM_NAME', 'medium'): f"{self.pipeline_name}-{config.get('MEDIUM_NAME', 'medium')}",
+                config.get('LARGE_NAME', 'large'):  f"{self.pipeline_name}-{config.get('LARGE_NAME', 'large')}",
+            }
         else:
             self.project_id = project_id
             self.project_number = project_number
@@ -910,7 +915,37 @@ class GCPInterface(object):
 
             return f"{match_note_value}-{submission_note_value}"
 
-    def create_job(self, json_request: dict, job_id: str, user_id: str = None, client = None, machine_type = None):
+    def upload_dataset(self, config, vertex_id=None):
+        """Upload dataset files from config.job_dir to GCS. Returns the GCS path."""
+        job_dir = config.job_dir
+        folder_name = vertex_id if vertex_id else config.job_id
+        folder_path = f"{self.jobs_folder}/{folder_name}/dataset"
+
+        filenames = []
+        dataset_items = ['archives', 'submissions', 'submissions.json', 'metadata.json']
+        for item in dataset_items:
+            local_path = os.path.join(job_dir, item)
+            if os.path.isdir(local_path):
+                for root, dirs, files in os.walk(local_path):
+                    for fname in files:
+                        filenames.append(os.path.relpath(os.path.join(root, fname), job_dir))
+            elif os.path.isfile(local_path):
+                filenames.append(item)
+
+        if filenames:
+            transfer_manager.upload_many_from_filenames(
+                self.bucket,
+                filenames,
+                source_directory=job_dir,
+                blob_name_prefix=f"{folder_path}/",
+            )
+            self.logger.info(f"Uploaded {len(filenames)} files to gs://{self.bucket_name}/{folder_path}/")
+
+        dataset_gcs_path = f"gs://{self.bucket_name}/{folder_path}"
+        self.logger.info(f"Dataset uploaded to {dataset_gcs_path}")
+        return dataset_gcs_path
+
+    def create_job(self, json_request: dict, job_id: str, user_id: str = None, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -943,9 +978,13 @@ class GCPInterface(object):
             )
             self.logger.info(f"JSON file '{file_name}' written to '{folder_path}' in bucket '{bucket_name}'.")
 
-        or_client = client if client else self.client
-        api_request = APIRequest(json_request)
-        valid_vertex_id = job_id + '-' + str(int(time.time() * 1000))
+        api_request = APIRequest({
+            'name': json_request['name'],
+            'entityA': json_request['entityA'],
+            'entityB': json_request['entityB'],
+            **{k: json_request[k] for k in ['model', 'dataset', 'machineType'] if json_request.get(k) is not None}
+        })
+        valid_vertex_id = vertex_id if vertex_id else job_id + '-' + str(int(time.time() * 1000))
 
         folder_path = f"{self.jobs_folder}/{valid_vertex_id}"
         data = api_request.to_json()
@@ -954,15 +993,15 @@ class GCPInterface(object):
         data['name'] = valid_vertex_id
 
         # Popped fields
-        data['token'] = or_client.token
-        data['baseurl_v2'] = openreview.tools.get_base_urls(or_client)[1]
+        data['baseurl_v2'] = openreview.tools.get_base_urls(self.client)[1]
+        data['token'] = self.client.token
         data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
         #data['dump_embs'] = True
         #data['dump_archives'] = True
 
         # Deleted metadata fields before hitting the pipeline
         data['machine_type'] = machine_type
-        data['user_id'] = user_id if user_id else get_user_id(or_client)
+        data['user_id'] = user_id if user_id else get_user_id(self.client)
         data['cdate'] = int(time.time() * 1000)
 
         write_json_to_gcs(self.bucket_name, folder_path, self.request_fname, data)
@@ -972,13 +1011,17 @@ class GCPInterface(object):
 
         parameter_values = {
             'gcs_request_path': gcs_request_path,
-            'machine_type': machine_type,
         }
+        if dataset_gcs_path:
+            parameter_values['dataset_gcs_path'] = dataset_gcs_path
+
+        # Select the per-tier pipeline; fall back to base name if tier mapping unavailable
+        tier_pipeline_name = getattr(self, 'pipeline_name_by_tier', {}).get(machine_type, self.pipeline_name)
 
         # Build PipelineJob kwargs and parameters
         job = aip.PipelineJob(
             display_name = valid_vertex_id,
-            template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{self.pipeline_name}/{self.pipeline_tag}",
+            template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{tier_pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
             parameter_values = parameter_values,
@@ -1219,10 +1262,10 @@ class GCPInterface(object):
             :returns generator: A generator that yields chunks of scores and finally the metadata
             """
             metadata_files = [
-                blob for blob in all_blobs if 'metadata.json' in blob.name
+                blob for blob in all_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name
             ]
             score_files = [
-                blob for blob in all_blobs if '.jsonl' in blob.name and job_id in blob.name
+                blob for blob in all_blobs if blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
             ]
 
             if len(metadata_files) != 1:
@@ -1293,6 +1336,16 @@ class GCPInterface(object):
             raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
         if len(authenticated_requests) > 1:
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
+
+        # Validate score and metadata files exist before returning the streaming generator.
+        # If validation is deferred into the generator, exceptions fire after the HTTP
+        # response has already started — causing a broken chunked response on the client.
+        score_files = [blob for blob in job_blobs if blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')]
+        metadata_files = [blob for blob in job_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name]
+        if len(metadata_files) != 1:
+            raise openreview.OpenReviewException(f'Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}')
+        if len(score_files) < 1 or len(score_files) > 2:
+            raise openreview.OpenReviewException(f'Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}')
 
         return _get_scores_and_metadata_streaming(job_blobs, job_id)
 
