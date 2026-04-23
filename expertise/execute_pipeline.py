@@ -1,10 +1,8 @@
 import argparse
 import os
-import openreview
-import shortuuid
 import json
 import csv
-from expertise.execute_expertise import execute_create_dataset, execute_expertise
+from expertise.execute_expertise import execute_expertise
 from expertise.service import load_model_artifacts, artifacts_for_model
 from expertise.service.utils import APIRequest, JobConfig, ExpectedDataError
 from expertise.utils.utils import generate_job_id
@@ -104,23 +102,19 @@ def run_pipeline(
             raw_request = download_from_gcs(gcs_dir)
             print("Parsed request from GCS folder")
         
-        # Pop base URLs and other expected variables
+        # Pop pipeline-only metadata. The pipeline doesn't authenticate against
+        # OpenReview, so token/baseurl_v2 are not part of the upload anymore.
         print('Popping variables')
         for field in DELETED_FIELDS:
             raw_request.pop(field, None)
-        token = raw_request.pop('token')
-        baseurl_v2 = raw_request.pop('baseurl_v2')
         destination_prefix = raw_request.pop('gcs_folder')
         # dump_embs removed - embeddings always uploaded
         dump_archives = False if 'dump_archives' not in raw_request else raw_request.pop('dump_archives')
-        specter_dir = os.getenv('SPECTER_DIR')
-        mfr_vocab_dir = os.getenv('MFR_VOCAB_DIR')
-        mfr_checkpoint_dir = os.getenv('MFR_CHECKPOINT_DIR')
-        server_config ={
-            'OPENREVIEW_BASEURL_V2': baseurl_v2,
-            'SPECTER_DIR': specter_dir,
-            'MFR_VOCAB_DIR': mfr_vocab_dir,
-            'MFR_CHECKPOINT_DIR': mfr_checkpoint_dir,
+        server_config = {
+            'OPENREVIEW_BASEURL_V2': os.getenv('OPENREVIEW_BASEURL_V2', ''),
+            'SPECTER_DIR': os.getenv('SPECTER_DIR'),
+            'MFR_VOCAB_DIR': os.getenv('MFR_VOCAB_DIR'),
+            'MFR_CHECKPOINT_DIR': os.getenv('MFR_CHECKPOINT_DIR'),
         }
         _, bucket = load_gcs(destination_prefix)
         blob_prefix = '/'.join(destination_prefix.split('/')[3:])
@@ -132,15 +126,16 @@ def run_pipeline(
         print(f'Loading model artifacts for model={requested_model}: {required_artifacts}')
         load_model_artifacts(subdirs=required_artifacts)
 
-        print('Logging into OpenReview')
-        client_v2 = openreview.api.OpenReviewClient(baseurl=baseurl_v2, token=token)
-
         print('Creating job ID')
         job_id = generate_job_id()
         if working_dir is None:
             working_dir = f"/app/{job_id}"
         os.makedirs(working_dir, exist_ok=True)
 
+        # APIRequest.validate(client) is NOT called here — the pipeline performs
+        # no remote lookups and consumes nothing that validate() resolves
+        # (user_id, edge invitation labels). Permissions were enforced on the
+        # worker side. from_request runs as pure transformation.
         validated_request = APIRequest({
             'name': raw_request['name'],
             'entityA': raw_request['entityA'],
@@ -152,7 +147,6 @@ def run_pipeline(
         config = JobConfig.from_request(
             api_request = validated_request,
             starting_config = DEFAULT_CONFIG,
-            openreview_client_v2= client_v2,
             server_config = server_config,
             working_dir = working_dir,
         )
