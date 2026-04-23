@@ -325,7 +325,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     ## Build metadata
     metadata_file = os.path.join(working_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
-        f.write(json.dumps({"submission_count": 7, "no_publications_count": 0}))
+        f.write(json.dumps({"submission_count": 7, "archives_count": 4, "no_publications_count": 0}))
 
     ## Build archives
     archives_dir = os.path.join(working_dir, 'archives')
