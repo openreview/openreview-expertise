@@ -85,7 +85,7 @@ jobs:
             cd ~/openreview-expertise
             pip install torch --index-url https://download.pytorch.org/whl/cu124
             pip install filelock
-            pip install -e .
+            pip install -e '.[dev]'
             # Persist venv activation for subsequent steps
             echo "source ~/venv/bin/activate" >> "$BASH_ENV"
       - run:
@@ -219,7 +219,8 @@ jobs:
               -e "GOOGLE_APPLICATION_CREDENTIALS" \
               --entrypoint="" \
               expertise-test:${CIRCLE_SHA1:0:12} \
-              sh -c "cd /app/openreview-expertise && \
+              sh -c "pip install --no-cache-dir pytest==7.3.0 && \
+                     cd /app/openreview-expertise && \
                      python -c 'from expertise.service import load_model_artifacts; load_model_artifacts(subdirs=[\"multifacet_recommender\", \"hf_models/specter\", \"hf_models/specter2_base\", \"hf_models/specter2_adapter\", \"hf_models/scincl\"])' && \
                      python -m pytest tests/test_pipeline.py tests/test_specter2scincl.py -v --tb=short"
       - run:

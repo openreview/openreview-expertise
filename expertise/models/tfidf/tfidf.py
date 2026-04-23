@@ -10,8 +10,6 @@ from gensim.similarities import SparseMatrixSimilarity
 from gensim.models import TfidfModel
 from gensim import corpora
 
-import ipdb
-
 class Model():
     def __init__(self, kp_archives_by_paperid, kp_archives_by_userid):
 

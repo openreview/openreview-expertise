@@ -5,7 +5,6 @@ import argparse
 import os
 from expertise.config import ModelConfig
 import random
-import ipdb
 def prepare_kfold(args, k):
     config_path = os.path.abspath(args.config_path)
     experiment_path = os.path.dirname(config_path)
