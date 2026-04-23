@@ -22,6 +22,9 @@ jobs:
     environment:
       PYTHON_VERSION: 3.11
       GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
+      DEBIAN_FRONTEND: noninteractive
+      NEEDRESTART_MODE: a
+      NEEDRESTART_SUSPEND: "1"
     steps:
       - checkout
       - run:
@@ -42,27 +45,26 @@ jobs:
             gcloud auth list
             gcloud projects list
       - run:
-          name: Setup Miniconda
+          name: Install Python ${PYTHON_VERSION}
           command: |
-            sudo apt update
-            sudo apt install -y wget
-            sudo apt install -y make gcc
-            sudo apt install -y curl
-            sudo apt install -y build-essential
-            sudo apt install -y git
-            sudo apt install -y sudo
-            DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC sudo apt install -y tzdata
-            cd $HOME
-            wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh
-            printf '%s' "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c
-            bash miniconda.sh -b -p $HOME/miniconda
+            export APT_OPTS="NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive"
+            sudo env $APT_OPTS apt-get update
+            sudo env $APT_OPTS apt-get install -y software-properties-common
+            sudo env $APT_OPTS add-apt-repository -y ppa:deadsnakes/ppa
+            sudo env $APT_OPTS apt-get update
+            sudo env $APT_OPTS apt-get install -y \
+              python${PYTHON_VERSION} \
+              python${PYTHON_VERSION}-venv \
+              python${PYTHON_VERSION}-dev
+            sudo env $APT_OPTS apt-get install -y wget make gcc curl build-essential git sudo
+            sudo env $APT_OPTS TZ=Etc/UTC apt-get install -y tzdata
       - run:
           name: Install Node 22
           command: |
-            sudo apt-get remove -y nodejs
+            sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get remove -y nodejs
             sudo rm -f /usr/local/bin/node /usr/local/bin/npm
             curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-            sudo apt-get install -y nodejs
+            sudo NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
             export PATH=/usr/bin:$PATH
             node -v
             npm -v
@@ -75,22 +77,17 @@ jobs:
       - run:
           name: Setup environment
           command: |
-            export PATH="$HOME/miniconda/bin:$PATH"
-            conda update -y conda
-            python -m ensurepip --upgrade
+            python${PYTHON_VERSION} -m venv ~/venv
+            source ~/venv/bin/activate
             python -m pip install --upgrade pip setuptools wheel setuptools_rust
-            conda create -n expertise python=$PYTHON_VERSION -c conda-forge
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
             python --version
             mkdir ~/expertise-utils
-            cd ~/expertise-utils
-            conda install "pytorch>=2.3" pytorch-cuda=12.4 -c pytorch -c nvidia
-            conda install -y filelock
-            conda install -y intel-openmp==2019.4
             cd ~/openreview-expertise
-            python -m pip install -e '.[dev]'
-            python -m pip install -I protobuf==3.20.1
+            pip install torch --index-url https://download.pytorch.org/whl/cu124
+            pip install filelock
+            pip install -e .
+            # Persist venv activation for subsequent steps
+            echo "source ~/venv/bin/activate" >> "$BASH_ENV"
       - run:
           name: Download model artifacts from GCS bucket
           # Mirror the bucket path that Vertex AI pipeline workers use, so
@@ -98,8 +95,6 @@ jobs:
           # code path in production (bucket -> local dir -> from_pretrained).
           # Covers MFR + all HuggingFace snapshots so nothing falls back to HF.
           command: |
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
             cd ~/openreview-expertise
             export AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/"
             export EXPERTISE_UTILS_DIR="$HOME/expertise-utils"
@@ -159,15 +154,14 @@ jobs:
       - run:
           name: Start API V1
           command: |
-            export PATH=/usr/bin:$PATH
+            source ~/venv/bin/activate
+            cd ~/openreview
+            # Pin PATH after cd so nvm's cd-hook cannot shuffle Node 16 in front of /usr/bin (Node 22)
+            export PATH="$VIRTUAL_ENV/bin:/usr/bin:/usr/local/bin:$PATH"
             node -v
             which node
-            whereis node
             which npm
-            whereis npm
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            cd ~/openreview
+            which python
             /usr/local/bin/npm run cleanStart
           background: true
       - run:
@@ -179,15 +173,14 @@ jobs:
       - run:
           name: Start API V2
           command: |
-            export PATH=/usr/bin:$PATH
+            source ~/venv/bin/activate
+            cd ~/openreview-v2
+            # Pin PATH after cd so nvm's cd-hook cannot shuffle Node 16 in front of /usr/bin (Node 22)
+            export PATH="$VIRTUAL_ENV/bin:/usr/bin:/usr/local/bin:$PATH"
             node -v
             which node
-            whereis node
             which npm
-            whereis npm
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            cd ~/openreview-v2
+            which python
             /usr/local/bin/npm run cleanStart
           background: true
       - run:
@@ -199,8 +192,6 @@ jobs:
       - run:
           name: Run tests
           command: |
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
             cd ~/openreview-expertise
             TEST_FILES=$(circleci tests glob "tests/test_*.py")
             mkdir reports
@@ -209,9 +200,6 @@ jobs:
       - run:
           name: Build and test container locally
           command: |
-            source ~/miniconda/etc/profile.d/conda.sh
-            conda activate expertise
-            
             # Build image locally (no push)
             echo "Building Docker image locally..."
             docker build -t expertise-test:${CIRCLE_SHA1:0:12} .

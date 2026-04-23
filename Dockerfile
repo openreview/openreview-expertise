@@ -5,7 +5,9 @@ WORKDIR /app
 ENV PYTHON_VERSION=3.11 \
     HOME="/app" \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/miniconda/bin:${PATH}" \
+    PIP_ROOT_USER_ACTION=ignore \
+    VIRTUAL_ENV="/app/venv" \
+    PATH="/app/venv/bin:${PATH}" \
     AIP_STORAGE_URI="gs://openreview-expertise/expertise-utils/" \
     SPECTER_DIR="/app/expertise-utils/specter/" \
     MFR_VOCAB_DIR="/app/expertise-utils/multifacet_recommender/feature_vocab_file" \
@@ -18,34 +20,26 @@ ENV PYTHON_VERSION=3.11 \
 COPY . /app/openreview-expertise
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
-    wget \
-    ca-certificates \
-    build-essential \
+        libgomp1 \
+        ca-certificates \
+        build-essential \
+        software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python${PYTHON_VERSION} \
+        python${PYTHON_VERSION}-venv \
+        python${PYTHON_VERSION}-dev \
     && rm -rf /var/lib/apt/lists/* \
     \
-    && cd $HOME \
-    && wget "https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh" -O miniconda.sh \
-    && echo "62ef806265659c47e37e22e8f9adce29e75c4ea0497e619c280f54c823887c4f  miniconda.sh" | sha256sum -c - \
-    && bash miniconda.sh -b -p $HOME/miniconda \
-    && rm miniconda.sh \
-    \
-    && conda update -y conda \
-    && conda create -y -n expertise python=$PYTHON_VERSION -c conda-forge \
-    \
-    && . $HOME/miniconda/etc/profile.d/conda.sh \
-    && conda activate expertise \
-    && conda install -y filelock intel-openmp faiss-cpu -c pytorch \
-    && conda install --force-reinstall pytorch pytorch-cuda=12.4 -c pytorch -c nvidia \
-    && python -m pip install --no-cache-dir -e $HOME/openreview-expertise \
-    && python -m pip install --no-cache-dir -I protobuf==3.20.1 \
-    && conda clean --all -y \
-    && apt-get purge -y build-essential wget \
+    && python${PYTHON_VERSION} -m venv ${VIRTUAL_ENV} \
+    && pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu124 \
+    && pip install --no-cache-dir filelock faiss-cpu \
+    && pip install --no-cache-dir -e /app/openreview-expertise \
+    && apt-get purge -y build-essential software-properties-common \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
-
-# Add conda environment bin to PATH so that 'python' uses the environment by default
-ENV PATH="/app/miniconda/envs/expertise/bin:${PATH}"
 
 # HuggingFace models (specter, specter2 base + adapter, scincl) are not baked into
 # the image — they are fetched from gs://openreview-expertise/expertise-utils/hf_models/
