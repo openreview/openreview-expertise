@@ -955,7 +955,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 2
-        assert metadata['archives_count'] == 7
+        assert metadata['archives_count'] == 10
         response = response.json['results']
 
         all_users = set()
@@ -980,13 +980,13 @@ class TestExpertiseService():
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 2
-        assert metadata['archives_count'] == 7
+        assert metadata['archives_count'] == 10
         results_a = response.json['results']
 
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id2']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 2
-        assert metadata['archives_count'] == 7
+        assert metadata['archives_count'] == 10
         results_b = response.json['results']
 
         assert len(results_a) == len(results_b)
@@ -1769,7 +1769,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 1
-        assert metadata['archives_count'] == 7
+        assert metadata['archives_count'] == 10
         response = response.json['results']
         for item in response:
             submission_id, profile_id, score = item['entityB'], item['entityA'], float(item['score'])
@@ -1865,7 +1865,7 @@ class TestExpertiseService():
             response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{id}", 'deleteOnGet': True})
             metadata = response.json['metadata']
             assert metadata['submission_count'] == 1
-            assert metadata['archives_count'] == 7
+            assert metadata['archives_count'] == 10
             response = response.json['results']
             for item in response:
                 submission_id, profile_id, score = item['entityB'], item['entityA'], float(item['score'])
@@ -2197,7 +2197,7 @@ class TestExpertiseService():
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 10 ## Additional from new conferences, 10 from new publication
-        assert metadata['archives_count'] == 7
+        assert metadata['archives_count'] == 10
         response = response.json['results']
         for item in response:
             match_id, submitter_id, score = item['entityA'], item['entityB'], float(item['score'])
