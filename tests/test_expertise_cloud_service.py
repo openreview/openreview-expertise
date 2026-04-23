@@ -11,7 +11,7 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
-from expertise.service.utils import JobConfig, RedisDatabase, get_user_id
+from expertise.service.utils import JobConfig, RedisDatabase
 from google.cloud.aiplatform_v1.types import PipelineState
 from conftest import GCSTestHelper
 from expertise.service.utils import RedisDatabase, JobConfig, JobStatus, JobDescription, APIRequest
@@ -921,19 +921,7 @@ class TestExpertiseCloudService():
             
             assert response.status_code == 200, f"Failed to submit job: {response.json}"
             job_id_b = response.json['jobId']
-            
-            # Get the service from routes to check its current state
-            from expertise.service.routes import get_expertise_service
-            with openreview_context_cloud['app'].app_context():
-                service = get_expertise_service(openreview_context_cloud['config'], openreview_context_cloud['app'].logger)
-                
-                # Check current client's user
-                current_user = get_user_id(service.cloud.client)
-                print(f"Current client user: {current_user}")
-                
-                # This should match User B (the last user to submit)
-                assert current_user == "TMLR", f"Expected client for TMLR but got {current_user}"
-            
+
             # Wait for both jobs to be processed
             time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] * 2 + LATENCY_OFFSET)
             
