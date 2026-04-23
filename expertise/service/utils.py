@@ -77,6 +77,13 @@ class APIRequest(object):
         self.model = {}
         self.dataset = {}
         self.machine_type = None
+        # Populated by validate(client) — the OpenReview-dependent fields.
+        # JobConfig.from_request reads these directly and makes no remote calls.
+        self.user_id = None
+        self.inclusion_inv = None
+        self.exclusion_inv = None
+        self.alternate_inclusion_inv = None
+        self.alternate_exclusion_inv = None
         root_key = 'request'
 
         def _get_field_from_request(field):
@@ -159,7 +166,51 @@ class APIRequest(object):
         # Check for extra entity fields
         if len(source_entity.keys()) > 0:
             raise openreview.OpenReviewException(f"Bad request: unexpected fields in {entity_id}: {list(source_entity.keys())}")
-        
+
+    def validate(self, openreview_client):
+        """Resolve the fields that need an OpenReview client: the caller's
+        user_id and any expertise-edge invitation labels. Also enforces caller
+        permissions (e.g. machine_type is restricted to superusers). Must be
+        called before this APIRequest is consumed by JobConfig.from_request,
+        which itself makes no remote calls and does no permission checks."""
+        self.user_id = get_user_id(openreview_client)
+
+        if self.user_id not in SUPERUSER_IDS and self.machine_type is not None:
+            raise openreview.OpenReviewException(
+                'Forbidden: Insufficient permissions to set machine type'
+            )
+
+        if self.entityA.get('type') == 'Group':
+            edge_inv = self.entityA.get('expertise')
+            if edge_inv:
+                edge_inv_id = self._extract_edge_inv_id(edge_inv)
+                label = self._fetch_edge_label(openreview_client, edge_inv_id)
+                if 'exclude' not in label.lower():
+                    self.inclusion_inv = edge_inv_id
+                else:
+                    self.exclusion_inv = edge_inv_id
+
+        if self.entityB.get('type') == 'Group':
+            edge_inv = self.entityB.get('expertise')
+            if edge_inv:
+                edge_inv_id = self._extract_edge_inv_id(edge_inv)
+                label = self._fetch_edge_label(openreview_client, edge_inv_id)
+                if 'include' in label.lower():
+                    self.alternate_inclusion_inv = edge_inv_id
+                else:
+                    self.alternate_exclusion_inv = edge_inv_id
+
+    @staticmethod
+    def _extract_edge_inv_id(edge_inv):
+        edge_inv_id = edge_inv.get('exclusion', {}).get('invitation') or edge_inv.get('invitation')
+        if not edge_inv_id:
+            raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
+        return edge_inv_id
+
+    @staticmethod
+    def _fetch_edge_label(openreview_client, edge_inv_id):
+        return openreview_client.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum', ['Include'])[0]
+
     def to_json(self):
         body = {
             'name': self.name,
@@ -481,7 +532,6 @@ class JobConfig(object):
     def from_request(api_request: APIRequest,
         job_id=None,
         starting_config = {},
-        openreview_client_v2 = None,
         server_config = {},
         working_dir = None):
         """
@@ -522,13 +572,14 @@ class JobConfig(object):
 
         # Set metadata fields from request
         config.name = api_request.name
-        config.user_id = get_user_id(openreview_client_v2)
+        # user_id is resolved by APIRequest.validate(client); no remote call here.
+        config.user_id = api_request.user_id
         config.job_id = generate_job_id() if job_id is None else job_id
         config.baseurl_v2 = server_config['OPENREVIEW_BASEURL_V2']
         config.api_request = api_request    
         
-        if config.user_id not in SUPERUSER_IDS and api_request.machine_type is not None:
-            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to set machine type')
+        # Permission check (machine_type only for superusers) lives in
+        # APIRequest.validate(client) — from_request is pure transformation.
         config.machine_type = api_request.machine_type
 
         root_dir = os.path.join(working_dir, config.job_id)
@@ -548,44 +599,20 @@ class JobConfig(object):
 
         # TODO: Need new keyword
 
+        # Edge-invitation labels are resolved by APIRequest.validate(client);
+        # we just copy the resolved fields onto the JobConfig here.
         if api_request.entityA['type'] == 'Group':
             if 'memberOf' in api_request.entityA:
                 config.match_group = [api_request.entityA['memberOf']]
             elif 'reviewerIds' in api_request.entityA:
                 config.reviewer_ids = api_request.entityA['reviewerIds']
-            edge_inv = api_request.entityA.get('expertise', None)
-
-            if edge_inv:
-                edge_inv_id = edge_inv.get('exclusion', {}).get('invitation', None)
-                if edge_inv_id is None:
-                    edge_inv_id = edge_inv.get('invitation', None)
-                if edge_inv_id is None or len(edge_inv_id) <= 0:
-                    raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
-
-                label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
-
-                if 'exclude' not in label.lower():
-                    config.inclusion_inv = edge_inv_id
-                else:
-                    config.exclusion_inv = edge_inv_id
+            config.inclusion_inv = api_request.inclusion_inv
+            config.exclusion_inv = api_request.exclusion_inv
 
         if api_request.entityB['type'] == 'Group':
             config.alternate_match_group = [api_request.entityB['memberOf']]
-            edge_inv = api_request.entityB.get('expertise', None)
-
-            if edge_inv:
-                edge_inv_id = edge_inv.get('exclusion', {}).get('invitation', None)
-                if edge_inv_id is None:
-                    edge_inv_id = edge_inv.get('invitation', None)
-                if edge_inv_id is None:
-                    raise openreview.OpenReviewException('Bad request: Expertise invitation indicated but ID not provided')
-
-                label = openreview_client_v2.get_invitation(edge_inv_id).edit.get('label', {}).get('param', {}).get('enum',['Include'])[0]
-
-                if 'include' in label.lower():
-                    config.alternate_inclusion_inv = edge_inv_id
-                else:
-                    config.alternate_exclusion_inv = edge_inv_id
+            config.alternate_inclusion_inv = api_request.alternate_inclusion_inv
+            config.alternate_exclusion_inv = api_request.alternate_exclusion_inv
 
         # Handle Note cases
         config.paper_invitation = None
@@ -765,10 +792,9 @@ class GCPInterface(object):
         pipeline_root=None,
         pipeline_name=None,
         pipeline_repo=None,
-        bucket_name=None, 
+        bucket_name=None,
         jobs_folder=None,
         service_label=None,
-        openreview_client=None,
         pipeline_tag='latest',
         logger=None,
         gcs_client=None,
@@ -819,7 +845,6 @@ class GCPInterface(object):
             self.service_label
         ]
         
-        self.client = openreview_client
         self.request_fname = "request.json"
         if logger is None:
             logger = logging.getLogger(__name__)
@@ -845,9 +870,6 @@ class GCPInterface(object):
         )
         self.logger.info(f"Get bucket {self.bucket_name}")
         self.bucket = self.gcs_client.bucket(self.bucket_name)
-
-    def set_client(self, client):
-        self.client = client
 
     def _resolve_job_status(self, job_id, job):
         descriptions = JobDescription.VALS.value
@@ -945,7 +967,7 @@ class GCPInterface(object):
         self.logger.info(f"Dataset uploaded to {dataset_gcs_path}")
         return dataset_gcs_path
 
-    def create_job(self, json_request: dict, job_id: str, user_id: str = None, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
+    def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -992,16 +1014,12 @@ class GCPInterface(object):
         # Expected fields
         data['name'] = valid_vertex_id
 
-        # Popped fields
-        data['baseurl_v2'] = openreview.tools.get_base_urls(self.client)[1]
-        data['token'] = self.client.token
+        # The pipeline doesn't authenticate against OpenReview, so we don't
+        # ship a token or baseurl. Status checks read user_id/machine_type/cdate
+        # from the top of this payload; the rest is the original request shape.
         data['gcs_folder'] = f"gs://{self.bucket_name}/{folder_path}"
-        #data['dump_embs'] = True
-        #data['dump_archives'] = True
-
-        # Deleted metadata fields before hitting the pipeline
         data['machine_type'] = machine_type
-        data['user_id'] = user_id if user_id else get_user_id(self.client)
+        data['user_id'] = user_id
         data['cdate'] = int(time.time() * 1000)
 
         write_json_to_gcs(self.bucket_name, folder_path, self.request_fname, data)
