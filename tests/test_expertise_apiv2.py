@@ -323,6 +323,7 @@ class TestExpertiseV2():
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
         metadata = response.json['metadata']
         assert metadata['submission_count'] == 1
+        assert metadata['archives_count'] == 5
         response = response.json['results']
         medical_score, translation_score = 0, 0
         target_id = None

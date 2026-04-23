@@ -413,7 +413,7 @@ def test_upload_dataset(mock_storage_client, mock_transfer_manager, openreview_c
 
         # Write metadata.json
         with open(os.path.join(job_dir, 'metadata.json'), 'w') as f:
-            json.dump({'submission_count': 1}, f)
+            json.dump({'submission_count': 1, 'archives_count': 2}, f)
 
         config = JobConfig(job_id='test-upload-job', job_dir=job_dir)
 

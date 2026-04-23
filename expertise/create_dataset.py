@@ -747,7 +747,7 @@ class OpenReviewExpertise(object):
                 with open(self.archive_dir.joinpath(reviewer_id + '.jsonl'), 'w') as f:
                     for paper in pubs:
                         f.write(json.dumps(paper) + '\n')
-            self.metadata['archives_count'] = len(expertise)
+            self.metadata['archives_count'] = sum(len(pubs) for pubs in expertise.values())
 
         if 'match_paper_invitation' in self.config or 'match_paper_id' in self.config or 'match_paper_venueid' in self.config or 'match_provided_submissions' in self.config:
             self.archive_dir = self.dataset_dir.joinpath('archives')
@@ -757,6 +757,7 @@ class OpenReviewExpertise(object):
             with open(self.archive_dir.joinpath('match_submissions.jsonl'), 'w') as f:
                 for paper in papers.values():
                     f.write(json.dumps(paper) + '\n')
+            self.metadata['archives_count'] = self.metadata.get('archives_count', 0) + len(papers)
 
         # Retrieve match groups to detect group-group matching
         group_group_matching = 'alternate_match_group' in self.config.keys()
