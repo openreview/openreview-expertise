@@ -85,7 +85,7 @@ jobs:
             cd ~/openreview-expertise
             pip install torch --index-url https://download.pytorch.org/whl/cu124
             pip install filelock
-            pip install -e .
+            pip install -e '.[dev]'
             # Persist venv activation for subsequent steps
             echo "source ~/venv/bin/activate" >> "$BASH_ENV"
       - run:
