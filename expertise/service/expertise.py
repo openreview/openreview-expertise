@@ -322,9 +322,14 @@ class BaseExpertiseService:
         """
         Validate and build a JobConfig for a request.
 
-        :param request: Submitted job request
-        :param job_id: Optional job id to reuse
-        :returns: (JobConfig, token)
+        Wraps the request in an APIRequest, calls APIRequest.validate(client)
+        to resolve OpenReview-dependent fields (user_id, expertise-edge
+        invitation labels) and enforce caller permissions (machine_type),
+        then transforms it into a JobConfig via JobConfig.from_request.
+
+        :param client: Authenticated OpenReview client for the calling user
+        :param request: Submitted job request body
+        :returns: The resolved JobConfig
         """
 
         self.logger.info(f"Incoming request - {request}")

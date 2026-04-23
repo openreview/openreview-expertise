@@ -170,9 +170,19 @@ class APIRequest(object):
     def validate(self, openreview_client):
         """Resolve the fields that need an OpenReview client: the caller's
         user_id and any expertise-edge invitation labels. Also enforces caller
-        permissions (e.g. machine_type is restricted to superusers). Must be
-        called before this APIRequest is consumed by JobConfig.from_request,
-        which itself makes no remote calls and does no permission checks."""
+        permissions (e.g. machine_type is restricted to superusers).
+
+        Required on the *worker* path — call this once on the same APIRequest
+        instance that will be passed to JobConfig.from_request, so the resolved
+        fields are populated and the permission check runs against the caller's
+        identity.
+
+        Not required on the Vertex AI pipeline path. JobConfig.from_request is
+        pure transformation and the pipeline doesn't consume any field that
+        validate() resolves (user_id, inclusion_inv/exclusion_inv, etc.) nor
+        does it re-enforce permissions — those were already checked on the
+        worker side. The pipeline therefore performs zero remote OpenReview
+        calls."""
         self.user_id = get_user_id(openreview_client)
 
         if self.user_id not in SUPERUSER_IDS and self.machine_type is not None:
