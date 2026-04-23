@@ -494,13 +494,14 @@ class JobConfig(object):
         self.api_request = None
 
     def to_json(self):
+        # baseurl / baseurl_v2 deliberately omitted: runtime-only fields the
+        # worker uses to construct the OpenReview client for dataset creation;
+        # never consumed by anything reading job_config.json from disk/GCS.
         json_keys = [
             'name',
             'user_id',
             'job_id',
             'cloud_id',
-            'baseurl',
-            'baseurl_v2',
             'job_dir',
             'cdate',
             'mdate',
@@ -750,8 +751,6 @@ class JobConfig(object):
             name = job_config.get('name'),
             user_id = job_config.get('user_id'),
             job_id = job_config.get('job_id'),
-            baseurl = job_config.get('baseurl'),
-            baseurl_v2 = job_config.get('baseurl_v2'),
             job_dir = job_config.get('job_dir'),
             cdate = job_config.get('cdate'),
             mdate = job_config.get('mdate'),
