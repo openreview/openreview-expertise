@@ -6,7 +6,9 @@ import datetime
 import time
 import os
 import tempfile
+import threading
 import openreview
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from expertise.service.utils import GCPInterface, JobDescription, JobStatus, JobConfig, APIRequest
 from google.cloud.aiplatform_v1.types import PipelineState
@@ -80,7 +82,7 @@ def _setup_abc_cc(clean_start_conference, client, openreview_client):
 @patch("expertise.service.utils.time.time")  # Mock time.time()
 @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
-def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openreview_client):
+def test_create_job(mock_storage_client, mock_pipeline_job, mock_time):
     # Mock time.time() to return a fixed value
     mock_time.return_value = 1234567890.123  # Fixed timestamp for testing
     
@@ -107,7 +109,6 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -133,11 +134,11 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
 
     # Generate a test job_id
     test_job_id = generate_job_id()
-    
+
     # Call the `create_job` method
     # deepcopy because APIRequest() destroys the original
-    result = gcp_interface.create_job(deepcopy(json_request), job_id=test_job_id, machine_type='small', user_id='openreview.net')
-    
+    result = gcp_interface.create_job(deepcopy(json_request), job_id=test_job_id, user_id='openreview.net', machine_type='small')
+
     expected_timestamp_ms = int(1234567890.123 * 1000)  # 1234567890123
     expected_valid_vertex_id = f"{test_job_id}-{expected_timestamp_ms}"
     assert result == expected_valid_vertex_id
@@ -160,11 +161,12 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
     assert submitted_json['name'] == result
     assert submitted_json['entityA'] == json_request['entityA']
     assert submitted_json['entityB'] == json_request['entityB']
-    assert submitted_json['token'] == openreview_client.token
-    assert submitted_json['baseurl_v2'] == 'http://localhost:3001'
     assert submitted_json['gcs_folder'] == f"gs://test-bucket/{expected_folder_path}"
     assert submitted_json['user_id'] == 'openreview.net'
     assert submitted_json['cdate'] == expected_timestamp_ms  # Verify timestamp is stored
+    # Pipeline doesn't authenticate, so neither token nor baseurl is uploaded.
+    assert 'token' not in submitted_json
+    assert 'baseurl_v2' not in submitted_json
 
     # 3. Verify PipelineJob submission
     mock_pipeline_job.assert_called_once_with(
@@ -184,7 +186,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time, openrevie
 @patch("expertise.service.utils.time.time")  # Mock time.time()
 @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
-def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job, mock_time, openreview_client):
+def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job, mock_time):
     mock_time.return_value = 1234567890.123
 
     # Setup mock storage client
@@ -212,8 +214,7 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
         'GCP_SERVICE_ACCOUNT': 'sa-under-test@test-project.iam.gserviceaccount.com',
     }
     gcp_interface = GCPInterface(
-        config=config,
-        openreview_client=openreview_client
+        config=config
     )
 
     json_request = {
@@ -223,7 +224,7 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
         "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'}
     }
     test_job_id = generate_job_id()
-    result = gcp_interface.create_job(deepcopy(json_request), job_id=test_job_id, machine_type='small')
+    result = gcp_interface.create_job(deepcopy(json_request), job_id=test_job_id, user_id='openreview.net', machine_type='small')
 
     expected_timestamp_ms = int(1234567890.123 * 1000)
     expected_valid_vertex_id = f"{test_job_id}-{expected_timestamp_ms}"
@@ -249,7 +250,7 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
 @patch("expertise.service.utils.time.time")
 @patch("expertise.service.utils.aip.PipelineJob")
 @patch("expertise.service.utils.storage.Client")
-def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock_pipeline_job, mock_time, openreview_client):
+def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock_pipeline_job, mock_time):
     mock_time.return_value = 1234567890.123
     mock_bucket = MagicMock()
     mock_blob = MagicMock()
@@ -270,7 +271,7 @@ def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock
         'GCP_JOBS_FOLDER': 'jobs',
         'GCP_SERVICE_LABEL': {'test': 'label'},
     }
-    gcp_interface = GCPInterface(config=config, openreview_client=openreview_client)
+    gcp_interface = GCPInterface(config=config)
 
     json_request = {
         "name": "test_run_machine_type",
@@ -278,7 +279,7 @@ def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock
         "entityB": {'type': "Note", 'invitation': "GCP.cc/-/Submission"},
         "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'}
     }
-    gcp_interface.create_job(deepcopy(json_request), job_id=generate_job_id(), machine_type='small')
+    gcp_interface.create_job(deepcopy(json_request), job_id=generate_job_id(), user_id='openreview.net', machine_type='small')
 
     _, kwargs = mock_pipeline_job.call_args
     params = kwargs['parameter_values']
@@ -286,6 +287,89 @@ def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock
         "machine_type must not be passed as a pipeline parameter — it is used only "
         "for tier-based pipeline selection and is not defined in any pipeline's input definitions"
     )
+
+# Race-condition regression: a single shared GCPInterface (the production singleton)
+# must not leak one caller's identity into another caller's request.json. The original
+# bug was a shared self.client attribute that concurrent requests overwrote; today
+# create_job takes user_id per call and does not retain a client, so there's no
+# shared mutable state to leak. This test pins that property.
+@patch("expertise.service.utils.aip.PipelineJob")
+@patch("expertise.service.utils.storage.Client")
+def test_create_job_isolates_user_across_concurrent_calls(mock_storage_client, mock_pipeline_job):
+    captured_payloads = []
+    captured_lock = threading.Lock()
+
+    def make_blob(*args, **kwargs):
+        blob = MagicMock()
+        def upload_from_string(*args, **kwargs):
+            data = kwargs.get('data')
+            if data is None and args:
+                data = args[0]
+            if isinstance(data, str) and data.startswith('{'):
+                with captured_lock:
+                    captured_payloads.append(json.loads(data))
+        blob.upload_from_string.side_effect = upload_from_string
+        return blob
+
+    fake_bucket = MagicMock()
+    fake_bucket.blob.side_effect = make_blob
+    fake_bucket.list_blobs.return_value = []
+    mock_storage_client.return_value.bucket.return_value = fake_bucket
+    mock_storage_client.return_value.get_bucket.return_value = fake_bucket
+    mock_pipeline_job.return_value = MagicMock()
+
+    # ONE shared GCPInterface — mirrors the production singleton in ExpertiseCloudService.
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    NUM_USERS = 16
+    barrier = threading.Barrier(NUM_USERS)
+
+    def submit(i):
+        # Synchronize so all threads enter create_job at the same moment — this
+        # would have caused user_id cross-contamination under the old shared
+        # self.client singleton design.
+        barrier.wait()
+        return gcp_interface.create_job(
+            {
+                "name": f"job-{i}",
+                "entityA": {'type': "Group", 'memberOf': "GCP.cc/Reviewers"},
+                "entityB": {'type': "Note", 'invitation': "GCP.cc/-/Submission"},
+                "model": {"name": "specter+mfr"},
+            },
+            job_id=f"job-{i}",
+            user_id=f"user-{i}",
+            machine_type='small',
+        )
+
+    with ThreadPoolExecutor(max_workers=NUM_USERS) as executor:
+        list(executor.map(submit, range(NUM_USERS)))
+
+    # One request.json per call; each must carry that call's own user_id, and
+    # nothing authentication-related should ever land in the upload.
+    assert len(captured_payloads) == NUM_USERS, (
+        f"Expected {NUM_USERS} request.json uploads, got {len(captured_payloads)}"
+    )
+
+    captured_user_ids = sorted(p['user_id'] for p in captured_payloads)
+    expected_user_ids = sorted(f"user-{i}" for i in range(NUM_USERS))
+    assert captured_user_ids == expected_user_ids, (
+        f"user_id leak across concurrent calls. Expected {expected_user_ids}, "
+        f"got {captured_user_ids}"
+    )
+
+    for payload in captured_payloads:
+        assert 'token' not in payload
+        assert 'baseurl_v2' not in payload
 
 # Test case for `upload_dataset` — verifies that dataset files are actually uploaded to the bucket
 @patch("expertise.service.utils.transfer_manager")  # Mock transfer_manager
@@ -303,7 +387,6 @@ def test_upload_dataset(mock_storage_client, mock_transfer_manager, openreview_c
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -377,7 +460,6 @@ def test_upload_dataset_with_vertex_id(mock_storage_client, mock_transfer_manage
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -411,7 +493,6 @@ def test_upload_dataset_empty_directory(mock_storage_client, mock_transfer_manag
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -457,7 +538,6 @@ def test_get_job_status_by_job_id(mock_storage_client, mock_pipeline_job_get, op
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -526,7 +606,6 @@ def test_get_job_status_by_job_id_job_not_found(mock_storage_client, openreview_
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -583,7 +662,6 @@ def test_get_job_status_by_job_id_insufficient_permissions(mock_storage_client, 
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -647,7 +725,6 @@ def test_get_job_status_by_job_id_multiple_requests(mock_storage_client, mock_pi
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -735,7 +812,6 @@ def test_get_job_status(mock_storage_client, mock_pipeline_job_get, openreview_c
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -823,7 +899,6 @@ def test_get_job_status_multiple_filters(mock_storage_client, mock_pipeline_job_
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -866,7 +941,6 @@ def test_get_job_status_insufficient_permissions(mock_storage_client, openreview
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -936,7 +1010,6 @@ def test_get_job_results(mock_storage_client, openreview_client):
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -985,7 +1058,6 @@ def test_get_job_results_missing_metadata(mock_storage_client, openreview_client
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -1019,7 +1091,6 @@ def test_get_job_results_insufficient_permissions(mock_storage_client, openrevie
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={'test': 'label'}
     )
 
@@ -1077,7 +1148,6 @@ def test_get_job_results_group_scoring(mock_storage_client):
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=MagicMock()
     )
 
     # Call the method
@@ -1137,7 +1207,6 @@ def test_get_job_status_by_job_id_returns_redis_when_no_cloud_id(mock_storage_cl
         pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
-        openreview_client=openreview_client,
         service_label={"test": "label"},
     )
 
