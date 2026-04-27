@@ -821,6 +821,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         openreview_client_v2 = openreview.api.OpenReviewClient(token=or_token, baseurl=config.baseurl_v2)
 
         asyncio.run_coroutine_threadsafe(job.log('Task 1: fetching data from OpenReview and building dataset'), self.queue_loop)
+        self.update_status(config, JobStatus.FETCHING_DATA)
         try:
             execute_create_dataset(openreview_client_v2, config=config.to_json())
         except ExpectedDataError as e:

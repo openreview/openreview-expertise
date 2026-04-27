@@ -371,12 +371,21 @@ def test_create_job_isolates_user_across_concurrent_calls(mock_storage_client, m
         assert 'token' not in payload
         assert 'baseurl_v2' not in payload
 
-# Test case for `upload_dataset` — verifies that dataset files are actually uploaded to the bucket
-@patch("expertise.service.utils.transfer_manager")  # Mock transfer_manager
-@patch("expertise.service.utils.storage.Client")  # Mock GCS Client
-def test_upload_dataset(mock_storage_client, mock_transfer_manager, openreview_client):
+# Test case for `upload_dataset` — verifies the dataset is packaged into a single tarball
+# and uploaded as one GCS blob.
+@patch("expertise.service.utils.storage.Client")
+def test_upload_dataset(mock_storage_client, openreview_client):
     mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_bucket.blob.return_value = mock_blob
     mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    # Capture tarball bytes before upload_dataset deletes the temp file
+    captured = {}
+    def _capture_upload(path):
+        import shutil
+        captured['path'] = shutil.copy(path, tempfile.mktemp(suffix='.tar.gz'))
+    mock_blob.upload_from_filename.side_effect = _capture_upload
 
     gcp_interface = GCPInterface(
         project_id="test_project",
@@ -391,27 +400,22 @@ def test_upload_dataset(mock_storage_client, mock_transfer_manager, openreview_c
     )
 
     with tempfile.TemporaryDirectory() as job_dir:
-        # Create dataset files matching what create_dataset produces
         archives_dir = os.path.join(job_dir, 'archives')
         submissions_dir = os.path.join(job_dir, 'submissions')
         os.makedirs(archives_dir)
         os.makedirs(submissions_dir)
 
-        # Write test archive files
         with open(os.path.join(archives_dir, '~User_One1.jsonl'), 'w') as f:
             f.write(json.dumps({'id': 'paper1', 'content': {'title': 'Test Paper'}}) + '\n')
         with open(os.path.join(archives_dir, '~User_Two1.jsonl'), 'w') as f:
             f.write(json.dumps({'id': 'paper2', 'content': {'title': 'Another Paper'}}) + '\n')
 
-        # Write test submission files
         with open(os.path.join(submissions_dir, 'sub1.jsonl'), 'w') as f:
             f.write(json.dumps({'id': 'sub1', 'content': {'title': 'Submission 1'}}) + '\n')
 
-        # Write submissions.json
         with open(os.path.join(job_dir, 'submissions.json'), 'w') as f:
             json.dump({'count': 1}, f)
 
-        # Write metadata.json
         with open(os.path.join(job_dir, 'metadata.json'), 'w') as f:
             json.dump({'submission_count': 1, 'archives_count': 2}, f)
 
@@ -419,36 +423,31 @@ def test_upload_dataset(mock_storage_client, mock_transfer_manager, openreview_c
 
         result = gcp_interface.upload_dataset(config)
 
-        # Verify the returned GCS path
-        assert result == "gs://test-bucket/jobs/test-upload-job/dataset"
+        # Returned path points at the single tarball blob
+        assert result == "gs://test-bucket/jobs/test-upload-job/dataset/dataset.tar.gz"
 
-        # Verify transfer_manager.upload_many_from_filenames was called
-        mock_transfer_manager.upload_many_from_filenames.assert_called_once()
-        call_args = mock_transfer_manager.upload_many_from_filenames.call_args
+        # Exactly one blob created at the tarball path
+        mock_bucket.blob.assert_called_once_with("jobs/test-upload-job/dataset/dataset.tar.gz")
+        mock_blob.upload_from_filename.assert_called_once()
 
-        # Verify it was called with the correct bucket
-        assert call_args[0][0] == mock_bucket
-
-        # Verify the filenames include archives, submissions, submissions.json, and metadata.json
-        uploaded_filenames = sorted(call_args[0][1])
-        assert 'archives/~User_One1.jsonl' in uploaded_filenames
-        assert 'archives/~User_Two1.jsonl' in uploaded_filenames
-        assert 'submissions/sub1.jsonl' in uploaded_filenames
-        assert 'submissions.json' in uploaded_filenames
-        assert 'metadata.json' in uploaded_filenames
-        assert len(uploaded_filenames) == 5
-
-        # Verify source_directory and blob_name_prefix
-        assert call_args[1]['source_directory'] == job_dir
-        assert call_args[1]['blob_name_prefix'] == "jobs/test-upload-job/dataset/"
+        # Verify the uploaded tarball contains all expected entries
+        import tarfile as _tarfile
+        with _tarfile.open(captured['path'], 'r:gz') as tar:
+            names = sorted(tar.getnames())
+        assert 'archives/~User_One1.jsonl' in names
+        assert 'archives/~User_Two1.jsonl' in names
+        assert 'submissions/sub1.jsonl' in names
+        assert 'submissions.json' in names
+        assert 'metadata.json' in names
 
 
 # Test that upload_dataset uses the provided vertex_id as the folder name,
 # so dataset and scores land in the same folder when vertex_id is pre-generated.
-@patch("expertise.service.utils.transfer_manager")
 @patch("expertise.service.utils.storage.Client")
-def test_upload_dataset_with_vertex_id(mock_storage_client, mock_transfer_manager, openreview_client):
+def test_upload_dataset_with_vertex_id(mock_storage_client, openreview_client):
     mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_bucket.blob.return_value = mock_blob
     mock_storage_client.return_value.bucket.return_value = mock_bucket
 
     gcp_interface = GCPInterface(
@@ -472,15 +471,16 @@ def test_upload_dataset_with_vertex_id(mock_storage_client, mock_transfer_manage
 
         result = gcp_interface.upload_dataset(config, vertex_id=vertex_id)
 
-        assert result == "gs://test-bucket/jobs/base-job-id-1234567890000/dataset"
-        call_args = mock_transfer_manager.upload_many_from_filenames.call_args
-        assert call_args[1]['blob_name_prefix'] == "jobs/base-job-id-1234567890000/dataset/"
+        assert result == "gs://test-bucket/jobs/base-job-id-1234567890000/dataset/dataset.tar.gz"
+        mock_bucket.blob.assert_called_once_with(
+            "jobs/base-job-id-1234567890000/dataset/dataset.tar.gz"
+        )
+        mock_blob.upload_from_filename.assert_called_once()
 
 
-# Test that upload_dataset handles an empty job directory without errors
-@patch("expertise.service.utils.transfer_manager")
+# Test that upload_dataset handles an empty job directory without performing any upload
 @patch("expertise.service.utils.storage.Client")
-def test_upload_dataset_empty_directory(mock_storage_client, mock_transfer_manager, openreview_client):
+def test_upload_dataset_empty_directory(mock_storage_client, openreview_client):
     mock_bucket = MagicMock()
     mock_storage_client.return_value.bucket.return_value = mock_bucket
 
@@ -501,9 +501,76 @@ def test_upload_dataset_empty_directory(mock_storage_client, mock_transfer_manag
 
         result = gcp_interface.upload_dataset(config)
 
-        assert result == "gs://test-bucket/jobs/test-empty-job/dataset"
-        # No files to upload, so transfer_manager should not be called
-        mock_transfer_manager.upload_many_from_filenames.assert_not_called()
+        assert result == "gs://test-bucket/jobs/test-empty-job/dataset/dataset.tar.gz"
+        # No items present → no blob created and no upload performed.
+        mock_bucket.blob.assert_not_called()
+
+
+# Round-trip: upload tars a fixture directory, downloading + extracting reproduces the layout.
+@patch("expertise.execute_pipeline.storage.Client")
+@patch("expertise.service.utils.storage.Client")
+def test_upload_download_roundtrip(mock_upload_client, mock_download_client, openreview_client):
+    # The upload mock will copy the tarball to a persistent path so the download mock can read it.
+    tarball_copy = tempfile.mktemp(suffix='.tar.gz')
+
+    # Same bucket instance shared between upload and download mocks
+    shared_bucket = MagicMock()
+    upload_blob = MagicMock()
+    def _copy_upload(path):
+        import shutil
+        shutil.copy2(path, tarball_copy)
+    upload_blob.upload_from_filename.side_effect = _copy_upload
+    download_blob = MagicMock()
+    def _serve_download(path):
+        import shutil
+        shutil.copy2(tarball_copy, path)
+    download_blob.download_to_filename.side_effect = _serve_download
+
+    def _get_blob(name):
+        # Return upload_blob for upload operations, download_blob for download
+        if 'upload' in str(name):
+            return upload_blob
+        return download_blob
+    shared_bucket.blob.return_value = download_blob
+    shared_bucket.blob.side_effect = lambda name: upload_blob if 'dataset.tar.gz' in name else download_blob
+
+    mock_upload_client.return_value.bucket.return_value = shared_bucket
+    mock_download_client.return_value.bucket.return_value = shared_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'}
+    )
+
+    with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as dst_dir:
+        archives_dir = os.path.join(src_dir, 'archives')
+        os.makedirs(archives_dir)
+        with open(os.path.join(archives_dir, '~User_One1.jsonl'), 'w') as f:
+            f.write(json.dumps({'id': 'p1', 'content': {'title': 'A'}}) + '\n')
+        with open(os.path.join(src_dir, 'submissions.json'), 'w') as f:
+            json.dump({'count': 1}, f)
+        with open(os.path.join(src_dir, 'metadata.json'), 'w') as f:
+            json.dump({'submission_count': 1, 'archives_count': 1}, f)
+
+        config = JobConfig(job_id='roundtrip-job', job_dir=src_dir)
+        gcs_path = gcp_interface.upload_dataset(config)
+
+        from expertise.execute_pipeline import download_dataset_from_gcs
+        download_dataset_from_gcs(gcs_path, dst_dir)
+
+        # Layout matches input
+        assert os.path.isfile(os.path.join(dst_dir, 'submissions.json'))
+        assert os.path.isfile(os.path.join(dst_dir, 'metadata.json'))
+        assert os.path.isfile(os.path.join(dst_dir, 'archives', '~User_One1.jsonl'))
+        with open(os.path.join(dst_dir, 'archives', '~User_One1.jsonl')) as f:
+            assert json.loads(f.readline())['id'] == 'p1'
 
 
 # Test case for the `get_job_status_by_job_id` method
