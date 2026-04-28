@@ -1164,7 +1164,7 @@ class TestExpertiseCloudService():
                 "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
                 "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
                 "model": {
-                    "name": "specter+mfr",
+                    "name": "specter2+scincl",
                     'useTitle': False,
                     'useAbstract': True,
                     'skipSpecter': False,
