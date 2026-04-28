@@ -515,24 +515,16 @@ def test_upload_download_roundtrip(mock_upload_client, mock_download_client, ope
 
     # Same bucket instance shared between upload and download mocks
     shared_bucket = MagicMock()
-    upload_blob = MagicMock()
+    blob = MagicMock()
     def _copy_upload(path):
         import shutil
         shutil.copy2(path, tarball_copy)
-    upload_blob.upload_from_filename.side_effect = _copy_upload
-    download_blob = MagicMock()
+    blob.upload_from_filename.side_effect = _copy_upload
     def _serve_download(path):
         import shutil
         shutil.copy2(tarball_copy, path)
-    download_blob.download_to_filename.side_effect = _serve_download
-
-    def _get_blob(name):
-        # Return upload_blob for upload operations, download_blob for download
-        if 'upload' in str(name):
-            return upload_blob
-        return download_blob
-    shared_bucket.blob.return_value = download_blob
-    shared_bucket.blob.side_effect = lambda name: upload_blob if 'dataset.tar.gz' in name else download_blob
+    blob.download_to_filename.side_effect = _serve_download
+    shared_bucket.blob.return_value = blob
 
     mock_upload_client.return_value.bucket.return_value = shared_bucket
     mock_download_client.return_value.bucket.return_value = shared_bucket
