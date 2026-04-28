@@ -10,7 +10,7 @@ import threading
 import openreview
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from expertise.service.utils import GCPInterface, JobDescription, JobStatus, JobConfig, APIRequest
+from expertise.service.utils import GCPInterface, JobDescription, JobStatus, JobConfig, APIRequest, ExpectedDataError
 from google.cloud.aiplatform_v1.types import PipelineState
 from expertise.utils.utils import generate_job_id
 
@@ -499,10 +499,9 @@ def test_upload_dataset_empty_directory(mock_storage_client, openreview_client):
     with tempfile.TemporaryDirectory() as job_dir:
         config = JobConfig(job_id='test-empty-job', job_dir=job_dir)
 
-        result = gcp_interface.upload_dataset(config)
+        with pytest.raises(ExpectedDataError):
+            gcp_interface.upload_dataset(config)
 
-        assert result == "gs://test-bucket/jobs/test-empty-job/dataset/dataset.tar.gz"
-        # No items present → no blob created and no upload performed.
         mock_bucket.blob.assert_not_called()
 
 

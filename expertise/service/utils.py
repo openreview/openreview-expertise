@@ -963,8 +963,7 @@ class GCPInterface(object):
         items_to_pack = [item for item in dataset_items if os.path.exists(os.path.join(job_dir, item))]
 
         if not items_to_pack:
-            self.logger.info(f"No dataset items found in {job_dir}; skipping tarball upload")
-            return dataset_gcs_path
+            raise ExpectedDataError(f"No dataset items found in {job_dir}")
 
         with tempfile.NamedTemporaryFile(suffix='.tar.gz', delete=False) as tmp:
             tarball_path = tmp.name

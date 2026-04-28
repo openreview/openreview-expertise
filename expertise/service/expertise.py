@@ -838,7 +838,11 @@ class ExpertiseCloudService(BaseExpertiseService):
         config = self.redis.load_job(redis_id, user_id)
         config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
         asyncio.run_coroutine_threadsafe(job.log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset'), self.queue_loop)
-        dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
+        try:
+            dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
+        except ExpectedDataError as e:
+            self.update_status(config, JobStatus.DATA_ERROR, str(e))
+            return
         machine_type = self.compute_machine_type_from_dataset(config)
         self.logger.info(f"Machine type for {redis_id}: {machine_type}")
         asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})'), self.queue_loop)
@@ -877,6 +881,9 @@ class ExpertiseCloudService(BaseExpertiseService):
                     self.logger.info(f"INFO: after status check")
                     # Only update non-stale status
                     if config.status != status['status'] or config.description != status['description']:
+                        # Vertex reports QUEUED/INITIALIZED while we're still fetching data — skip regression
+                        if config.status == JobStatus.FETCHING_DATA and status['status'] in (JobStatus.QUEUED, JobStatus.INITIALIZED):
+                            continue
                         self.logger.info(f"INFO: before update status")
                         self.update_status(config, status['status'], status['description'])
                         self.logger.info(f"INFO: after update status")
