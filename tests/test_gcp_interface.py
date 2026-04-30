@@ -440,6 +440,12 @@ def test_upload_dataset(mock_storage_client, openreview_client):
         assert 'submissions.json' in names
         assert 'metadata.json' in names
 
+        # Source files in job_dir are removed after a successful upload
+        assert not os.path.exists(archives_dir)
+        assert not os.path.exists(submissions_dir)
+        assert not os.path.exists(os.path.join(job_dir, 'submissions.json'))
+        assert not os.path.exists(os.path.join(job_dir, 'metadata.json'))
+
 
 # Test that upload_dataset uses the provided vertex_id as the folder name,
 # so dataset and scores land in the same folder when vertex_id is pre-generated.

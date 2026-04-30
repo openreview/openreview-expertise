@@ -68,15 +68,11 @@ def download_dataset_from_gcs(gcs_path, local_dir):
 
     with tempfile.NamedTemporaryFile(suffix='.tar.gz', delete=False) as tmp:
         tarball_path = tmp.name
-    try:
-        bucket.blob(blob_name).download_to_filename(tarball_path)
-        print(f"Downloaded {blob_name} to {tarball_path}")
-        with tarfile.open(tarball_path, 'r:gz') as tar:
-            tar.extractall(local_dir)
-        print(f"Extracted dataset into {local_dir}")
-    finally:
-        if os.path.exists(tarball_path):
-            os.remove(tarball_path)
+    bucket.blob(blob_name).download_to_filename(tarball_path)
+    print(f"Downloaded {blob_name} to {tarball_path}")
+    with tarfile.open(tarball_path, 'r:gz') as tar:
+        tar.extractall(local_dir)
+    print(f"Extracted dataset into {local_dir}")
 
 
 def run_pipeline(

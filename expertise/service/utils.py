@@ -1,6 +1,7 @@
 import openreview
 import shortuuid
 import os
+import shutil
 import tarfile
 import tempfile
 import time
@@ -973,6 +974,12 @@ class GCPInterface(object):
                     tar.add(os.path.join(job_dir, item), arcname=item)
             self.bucket.blob(blob_name).upload_from_filename(tarball_path)
             self.logger.info(f"Uploaded dataset tarball to {dataset_gcs_path}")
+            for item in items_to_pack:
+                path = os.path.join(job_dir, item)
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
         finally:
             if os.path.exists(tarball_path):
                 os.remove(tarball_path)
