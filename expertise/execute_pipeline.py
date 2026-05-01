@@ -2,6 +2,8 @@ import argparse
 import os
 import json
 import csv
+import tarfile
+import tempfile
 from expertise.execute_expertise import execute_expertise
 from expertise.service import load_model_artifacts, artifacts_for_model
 from expertise.service.utils import APIRequest, JobConfig, ExpectedDataError
@@ -58,19 +60,19 @@ def download_from_gcs(gcs_path):
     return json.loads(content)
 
 def download_dataset_from_gcs(gcs_path, local_dir):
-    """Download dataset files from GCS prefix into local_dir."""
+    """Download a dataset tarball from GCS and extract it into local_dir."""
     _, bucket = load_gcs(gcs_path)
-    blob_prefix = '/'.join(gcs_path.split('/')[3:])
+    blob_name = '/'.join(gcs_path.split('/')[3:])
 
-    blobs = list(bucket.list_blobs(prefix=blob_prefix))
-    for blob in blobs:
-        relative_path = blob.name[len(blob_prefix):].lstrip('/')
-        if not relative_path:
-            continue
-        local_path = os.path.join(local_dir, relative_path)
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-        blob.download_to_filename(local_path)
-        print(f"Downloaded {blob.name} to {local_path}")
+    os.makedirs(local_dir, exist_ok=True)
+
+    with tempfile.NamedTemporaryFile(suffix='.tar.gz', delete=False) as tmp:
+        tarball_path = tmp.name
+    bucket.blob(blob_name).download_to_filename(tarball_path)
+    print(f"Downloaded {blob_name} to {tarball_path}")
+    with tarfile.open(tarball_path, 'r:gz') as tar:
+        tar.extractall(local_dir)
+    print(f"Extracted dataset into {local_dir}")
 
 
 def run_pipeline(

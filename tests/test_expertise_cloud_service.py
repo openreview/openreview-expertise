@@ -267,12 +267,17 @@ class TestExpertiseCloudService():
         assert request['machine_type'] == 'small'
 
         # Verify dataset files were uploaded to the bucket
-        dataset_prefix = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/"
-        dataset_blobs = list(gcs_test_bucket.list_blobs(prefix=dataset_prefix))
-        dataset_blob_names = [b.name.replace(dataset_prefix, '') for b in dataset_blobs]
-        assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
-        assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
-        assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
+        tarball_blob_name = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/dataset.tar.gz"
+        tarball_blob = gcs_test_bucket.blob(tarball_blob_name)
+        assert tarball_blob.exists(), f"Dataset tarball not found at {tarball_blob_name}"
+        import tarfile as _tarfile
+        import tempfile as _tempfile
+        with _tempfile.NamedTemporaryFile(suffix='.tar.gz') as _tmp:
+            tarball_blob.download_to_filename(_tmp.name)
+            with _tarfile.open(_tmp.name, 'r:gz') as _tar:
+                _names = _tar.getnames()
+        assert 'submissions.json' in _names, f"submissions.json not in tarball. Found: {_names}"
+        assert any(n.startswith('archives/') for n in _names), f"No archive entries in tarball. Found: {_names}"
 
         setup_job_mocks()
         response = test_client.post(
@@ -325,12 +330,17 @@ class TestExpertiseCloudService():
         assert request['machine_type'] == 'small'
 
         # Verify dataset files were uploaded to the bucket
-        dataset_prefix = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/"
-        dataset_blobs = list(gcs_test_bucket.list_blobs(prefix=dataset_prefix))
-        dataset_blob_names = [b.name.replace(dataset_prefix, '') for b in dataset_blobs]
-        assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
-        assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
-        assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
+        tarball_blob_name = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/dataset.tar.gz"
+        tarball_blob = gcs_test_bucket.blob(tarball_blob_name)
+        assert tarball_blob.exists(), f"Dataset tarball not found at {tarball_blob_name}"
+        import tarfile as _tarfile
+        import tempfile as _tempfile
+        with _tempfile.NamedTemporaryFile(suffix='.tar.gz') as _tmp:
+            tarball_blob.download_to_filename(_tmp.name)
+            with _tarfile.open(_tmp.name, 'r:gz') as _tar:
+                _names = _tar.getnames()
+        assert 'submissions.json' in _names, f"submissions.json not in tarball. Found: {_names}"
+        assert any(n.startswith('archives/') for n in _names), f"No archive entries in tarball. Found: {_names}"
 
         setup_job_mocks()
         response = test_client.post(
@@ -416,12 +426,17 @@ class TestExpertiseCloudService():
         assert request['machine_type'] == 'small'
 
         # Verify dataset files were uploaded to the bucket
-        dataset_prefix = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/"
-        dataset_blobs = list(gcs_test_bucket.list_blobs(prefix=dataset_prefix))
-        dataset_blob_names = [b.name.replace(dataset_prefix, '') for b in dataset_blobs]
-        assert len(dataset_blobs) > 0, f"No dataset files found in bucket at {dataset_prefix}"
-        assert 'submissions.json' in dataset_blob_names, f"submissions.json not found in bucket. Found: {dataset_blob_names}"
-        assert any(name.startswith('archives/') for name in dataset_blob_names), f"No archive files found in bucket. Found: {dataset_blob_names}"
+        tarball_blob_name = f"{gcs_jobs_prefix}/{config.cloud_id}/dataset/dataset.tar.gz"
+        tarball_blob = gcs_test_bucket.blob(tarball_blob_name)
+        assert tarball_blob.exists(), f"Dataset tarball not found at {tarball_blob_name}"
+        import tarfile as _tarfile
+        import tempfile as _tempfile
+        with _tempfile.NamedTemporaryFile(suffix='.tar.gz') as _tmp:
+            tarball_blob.download_to_filename(_tmp.name)
+            with _tarfile.open(_tmp.name, 'r:gz') as _tar:
+                _names = _tar.getnames()
+        assert 'submissions.json' in _names, f"submissions.json not in tarball. Found: {_names}"
+        assert any(n.startswith('archives/') for n in _names), f"No archive entries in tarball. Found: {_names}"
 
         # Upload test results to GCS
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
@@ -1114,3 +1129,72 @@ class TestExpertiseCloudService():
         assert body["status"] == JobStatus.QUEUED
         assert body["description"] == JobDescription.VALS.value[JobStatus.QUEUED]
         assert body["request"] == api_req.to_json()
+
+    @patch("expertise.service.expertise.execute_create_dataset")
+    def test_status_transitions_to_fetching_data_before_dataset_creation(self, mock_create_dataset, openreview_client, openreview_context_cloud):
+        from expertise.service.utils import ExpectedDataError
+
+        cfg = openreview_context_cloud['config']
+        test_client = openreview_context_cloud['test_client']
+
+        redis = RedisDatabase(
+            host=cfg['REDIS_ADDR'],
+            port=cfg['REDIS_PORT'],
+            db=cfg['REDIS_CONFIG_DB'],
+            sync_on_disk=False,
+        )
+
+        captured = {}
+
+        def capture_then_short_circuit(*args, **kwargs):
+            cfg_dict = kwargs.get('config') or args[1]
+            loaded = redis.load_job(cfg_dict['job_id'], cfg_dict['user_id'])
+            captured['status_at_create'] = loaded.status
+            raise ExpectedDataError("intentional short-circuit to capture mid-flow status")
+
+        mock_create_dataset.side_effect = capture_then_short_circuit
+
+        abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
+        abc_client.impersonate('CLD.cc')
+
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                "name": "test_status_transition",
+                "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
+                "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
+                "model": {
+                    "name": "specter2+scincl",
+                    'useTitle': False,
+                    'useAbstract': True,
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg',
+                },
+                "dataset": {'minimumPubDate': 0},
+            }),
+            content_type='application/json',
+            headers=abc_client.headers,
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+
+        # Immediately after enqueue, the worker hasn't run yet — status is QUEUED.
+        status_resp = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
+        assert status_resp['status'] == JobStatus.QUEUED, status_resp
+
+        # Wait for the worker to dequeue and hit the patched execute_create_dataset.
+        deadline = time.time() + 30
+        while 'status_at_create' not in captured and time.time() < deadline:
+            time.sleep(0.5)
+        assert 'status_at_create' in captured, "Worker never invoked execute_create_dataset"
+
+        # The persisted status at the moment the worker began dataset creation must be FETCHING_DATA.
+        assert captured['status_at_create'] == JobStatus.FETCHING_DATA, (
+            f"Expected status FETCHING_DATA at execute_create_dataset entry, got {captured['status_at_create']!r}"
+        )
+
+        # ExpectedDataError handling resolves the job to Data Error — confirms the worker followed the
+        # update_status → execute_create_dataset → exception-handling path we're exercising.
+        time.sleep(LATENCY_OFFSET)
+        final = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
+        assert final['status'] == JobStatus.DATA_ERROR, final

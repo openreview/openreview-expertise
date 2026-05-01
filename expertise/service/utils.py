@@ -1,6 +1,9 @@
 import openreview
 import shortuuid
 import os
+import shutil
+import tarfile
+import tempfile
 import time
 import json
 import re
@@ -11,7 +14,6 @@ from unittest.mock import MagicMock
 from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
-from google.cloud.storage import transfer_manager
 from google.cloud.aiplatform_v1.types import PipelineState
 from copy import deepcopy
 from expertise.config import ModelConfig
@@ -947,33 +949,41 @@ class GCPInterface(object):
             return f"{match_note_value}-{submission_note_value}"
 
     def upload_dataset(self, config, vertex_id=None):
-        """Upload dataset files from config.job_dir to GCS. Returns the GCS path."""
+        """Package dataset files from config.job_dir into a single tarball and upload to GCS.
+
+        Returns the full GCS path to the uploaded tarball, or to its intended location
+        if there were no dataset items to package (no upload performed).
+        """
         job_dir = config.job_dir
         folder_name = vertex_id if vertex_id else config.job_id
         folder_path = f"{self.jobs_folder}/{folder_name}/dataset"
+        blob_name = f"{folder_path}/dataset.tar.gz"
+        dataset_gcs_path = f"gs://{self.bucket_name}/{blob_name}"
 
-        filenames = []
         dataset_items = ['archives', 'submissions', 'submissions.json', 'metadata.json']
-        for item in dataset_items:
-            local_path = os.path.join(job_dir, item)
-            if os.path.isdir(local_path):
-                for root, dirs, files in os.walk(local_path):
-                    for fname in files:
-                        filenames.append(os.path.relpath(os.path.join(root, fname), job_dir))
-            elif os.path.isfile(local_path):
-                filenames.append(item)
+        items_to_pack = [item for item in dataset_items if os.path.exists(os.path.join(job_dir, item))]
 
-        if filenames:
-            transfer_manager.upload_many_from_filenames(
-                self.bucket,
-                filenames,
-                source_directory=job_dir,
-                blob_name_prefix=f"{folder_path}/",
-            )
-            self.logger.info(f"Uploaded {len(filenames)} files to gs://{self.bucket_name}/{folder_path}/")
+        if not items_to_pack:
+            raise ExpectedDataError(f"No dataset items found in {job_dir}")
 
-        dataset_gcs_path = f"gs://{self.bucket_name}/{folder_path}"
-        self.logger.info(f"Dataset uploaded to {dataset_gcs_path}")
+        with tempfile.NamedTemporaryFile(suffix='.tar.gz', delete=False) as tmp:
+            tarball_path = tmp.name
+        try:
+            with tarfile.open(tarball_path, 'w:gz') as tar:
+                for item in items_to_pack:
+                    tar.add(os.path.join(job_dir, item), arcname=item)
+            self.bucket.blob(blob_name).upload_from_filename(tarball_path)
+            self.logger.info(f"Uploaded dataset tarball to {dataset_gcs_path}")
+            for item in items_to_pack:
+                path = os.path.join(job_dir, item)
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+        finally:
+            if os.path.exists(tarball_path):
+                os.remove(tarball_path)
+
         return dataset_gcs_path
 
     def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
