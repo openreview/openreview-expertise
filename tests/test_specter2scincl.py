@@ -442,6 +442,3 @@ def test_self_similarity_score_within_bounds(tmp_path):
         f"product to marginally exceed 1.0 (observed = {expected_raw_dot}). "
         f"Fix: clamp scores to [0, 1] before returning from all_scores()."
     )
-
-
-

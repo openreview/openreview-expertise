@@ -1290,3 +1290,281 @@ def test_get_job_status_by_job_id_returns_redis_when_no_cloud_id(mock_storage_cl
     # No cloud lookups
     mock_storage_client.return_value.bucket.return_value.list_blobs.assert_not_called()
     mock_pipeline_job_get.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# find_recent_venue_jobs / merge_cached_publication_embeddings
+# ---------------------------------------------------------------------------
+
+class _FakeBlobIterator:
+    """Mimics the iterator returned by bucket.list_blobs(delimiter='/').
+    The prefixes attribute is populated as a side effect of iteration."""
+    def __init__(self, prefixes):
+        self.prefixes = prefixes
+    def __iter__(self):
+        return iter([])
+
+
+@patch("expertise.service.utils.storage.Client")
+def test_find_recent_venue_jobs(mock_storage_client):
+    """Discovery filters by timestamp suffix, reads request.json, and matches venue."""
+    mock_bucket = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    mock_bucket.list_blobs.return_value = _FakeBlobIterator([
+        "jobs/job-a-1719500000000/",
+        "jobs/job-b-1719600000000/",
+        "jobs/job-c-1719400000000/",  # too old
+    ])
+
+    def _make_blob(content):
+        blob = MagicMock()
+        blob.download_as_string.return_value = json.dumps(content)
+        return blob
+
+    def _blob_for_path(path):
+        if path == "jobs/job-a-1719500000000/request.json":
+            return _make_blob({
+                "entityA": {"type": "Group", "memberOf": "ICLR.cc/2026/Conference/Reviewers"},
+                "entityB": {"type": "Note", "invitation": "ICLR.cc/2026/Conference/-/Submission"}
+            })
+        if path == "jobs/job-b-1719600000000/request.json":
+            return _make_blob({
+                "entityA": {"type": "Group", "memberOf": "NeurIPS.cc/2025/Conference/Reviewers"},
+                "entityB": {"type": "Note", "invitation": "NeurIPS.cc/2025/Conference/-/Submission"}
+            })
+        return MagicMock()
+
+    mock_bucket.blob.side_effect = _blob_for_path
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    since_ms = 1719450000000  # only a and b are newer than this
+    result = gcp_interface.find_recent_venue_jobs(
+        venue_key="ICLR.cc/2026/Conference",
+        since_ms=since_ms,
+        limit=5,
+    )
+
+    assert result == ["job-a-1719500000000"]
+
+
+@patch("expertise.service.utils.storage.Client")
+def test_find_recent_venue_jobs_respects_limit_and_exclusion(mock_storage_client):
+    """Limit trims results; exclude_cloud_id drops the matching job even if it matches."""
+    mock_bucket = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    mock_bucket.list_blobs.return_value = _FakeBlobIterator([
+        "jobs/job-new-1719600000000/",
+        "jobs/job-old-1719500000000/",
+    ])
+
+    def _make_blob(content):
+        blob = MagicMock()
+        blob.download_as_string.return_value = json.dumps(content)
+        return blob
+
+    def _blob_for_path(path):
+        if "request.json" in path:
+            return _make_blob({
+                "entityA": {"type": "Group", "memberOf": "TMLR/Reviewers"},
+                "entityB": {"type": "Note", "invitation": "TMLR/-/Submission"}
+            })
+        return MagicMock()
+
+    mock_bucket.blob.side_effect = _blob_for_path
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    result = gcp_interface.find_recent_venue_jobs(
+        venue_key="TMLR",
+        since_ms=0,
+        limit=1,
+        exclude_cloud_id="job-new-1719600000000",
+    )
+
+    # Excluded the newer one, so only old remains, and limit=1 still returns it
+    assert result == ["job-old-1719500000000"]
+
+
+@patch("expertise.service.utils.storage.Client")
+def test_merge_cached_publication_embeddings(mock_storage_client, tmp_path):
+    """Downloads and merges embeddings; most-recent-wins on duplicate paper_ids."""
+    mock_bucket = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    def _make_blob(text):
+        blob = MagicMock()
+        blob.download_as_text.return_value = text
+        return blob
+
+    def _blob_for_path(path):
+        if path == "jobs/job-a/pub2vec_specter.jsonl":
+            return _make_blob(
+                '{"paper_id": "p1", "embedding": [0.1, 0.2]}\n'
+                '{"paper_id": "p2", "embedding": [0.3, 0.4]}\n'
+            )
+        if path == "jobs/job-b/pub2vec_specter.jsonl":
+            return _make_blob(
+                '{"paper_id": "p2", "embedding": [0.5, 0.6]}\n'  # newer override
+                '{"paper_id": "p3", "embedding": [0.7, 0.8]}\n'
+            )
+        return MagicMock()
+
+    mock_bucket.blob.side_effect = _blob_for_path
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    dest_path = tmp_path / "merged.jsonl"
+    count = gcp_interface.merge_cached_publication_embeddings(
+        cloud_ids=["job-b", "job-a"],  # newest first; first occurrence wins
+        model_name="specter",
+        dest_path=str(dest_path),
+    )
+
+    assert count == 3
+    lines = dest_path.read_text().strip().split('\n')
+    assert len(lines) == 3
+    data = {json.loads(l)['paper_id']: json.loads(l)['embedding'] for l in lines}
+    assert data['p1'] == [0.1, 0.2]  # from job-a (only occurrence)
+    assert data['p2'] == [0.5, 0.6]  # from job-b (newer, first in list)
+    assert data['p3'] == [0.7, 0.8]  # from job-b
+
+
+@patch("expertise.service.utils.storage.Client")
+def test_merge_cached_publication_embeddings_fallback_to_legacy_name(mock_storage_client, tmp_path):
+    """When pub2vec_{model}.jsonl is absent, falls back to pub2vec.jsonl."""
+    mock_bucket = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    def _make_blob(text):
+        blob = MagicMock()
+        blob.download_as_text.return_value = text
+        return blob
+
+    def _blob_for_path(path):
+        if path == "jobs/job-a/pub2vec_scincl.jsonl":
+            # First candidate fails
+            blob = MagicMock()
+            blob.download_as_text.side_effect = Exception("not found")
+            return blob
+        if path == "jobs/job-a/pub2vec.jsonl":
+            return _make_blob('{"paper_id": "p1", "embedding": [0.9]}\n')
+        return MagicMock()
+
+    mock_bucket.blob.side_effect = _blob_for_path
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    dest_path = tmp_path / "merged.jsonl"
+    count = gcp_interface.merge_cached_publication_embeddings(
+        cloud_ids=["job-a"],
+        model_name="scincl",
+        dest_path=str(dest_path),
+    )
+
+    assert count == 1
+    lines = dest_path.read_text().strip().split('\n')
+    assert json.loads(lines[0])['paper_id'] == 'p1'
+
+
+@patch("expertise.service.utils.storage.Client")
+def test_upload_dataset_includes_cached_embeddings(mock_storage_client):
+    """Cached pub2vec files in job_dir are packed into the tarball and deleted."""
+    mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_bucket.blob.return_value = mock_blob
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    captured = {}
+    def _capture_upload(path):
+        import shutil
+        captured['path'] = shutil.copy(path, tempfile.mktemp(suffix='.tar.gz'))
+    mock_blob.upload_from_filename.side_effect = _capture_upload
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    with tempfile.TemporaryDirectory() as job_dir:
+        archives_dir = os.path.join(job_dir, 'archives')
+        os.makedirs(archives_dir)
+        with open(os.path.join(archives_dir, '~User_One1.jsonl'), 'w') as f:
+            f.write(json.dumps({'id': 'paper1'}) + '\n')
+
+        with open(os.path.join(job_dir, 'submissions.json'), 'w') as f:
+            json.dump({}, f)
+        with open(os.path.join(job_dir, 'metadata.json'), 'w') as f:
+            json.dump({'count': 1}, f)
+
+        # Create cached embedding files
+        with open(os.path.join(job_dir, 'cached_pub2vec_specter.jsonl'), 'w') as f:
+            f.write('{"paper_id": "p1", "embedding": [0.1]}\n')
+        with open(os.path.join(job_dir, 'cached_pub2vec_scincl.jsonl'), 'w') as f:
+            f.write('{"paper_id": "p1", "embedding": [0.2]}\n')
+
+        config = JobConfig(job_id='cache-test-job', job_dir=job_dir)
+        result = gcp_interface.upload_dataset(config)
+
+        assert result == "gs://test-bucket/jobs/cache-test-job/dataset/dataset.tar.gz"
+
+        import tarfile as _tarfile
+        with _tarfile.open(captured['path'], 'r:gz') as tar:
+            names = sorted(tar.getnames())
+
+        assert 'cached_pub2vec_specter.jsonl' in names
+        assert 'cached_pub2vec_scincl.jsonl' in names
+        assert 'archives/~User_One1.jsonl' in names
+
+        # Cached files are removed after upload
+        assert not os.path.exists(os.path.join(job_dir, 'cached_pub2vec_specter.jsonl'))
+        assert not os.path.exists(os.path.join(job_dir, 'cached_pub2vec_scincl.jsonl'))
