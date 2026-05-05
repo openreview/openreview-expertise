@@ -442,3 +442,94 @@ def test_self_similarity_score_within_bounds(tmp_path):
         f"product to marginally exceed 1.0 (observed = {expected_raw_dot}). "
         f"Fix: clamp scores to [0, 1] before returning from all_scores()."
     )
+
+
+def test_cached_embeddings_produce_identical_results(tmp_path):
+    """
+    Verify that embeddings loaded from cache produce byte-for-byte identical
+    output compared to fresh embeddings. This prevents precision loss from
+    JSON round-tripping (see PR #367 discussion).
+    """
+    # Setup test data
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    archive_entries = [
+        {"id": "Paper1", "content": {"title": "Test Paper One", "abstract": "Abstract one."}},
+        {"id": "Paper2", "content": {"title": "Test Paper Two", "abstract": "Abstract two."}},
+    ]
+    (archive_dir / "~Author1.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in archive_entries) + "\n"
+    )
+
+    submissions_dir = tmp_path / "submissions"
+    submissions_dir.mkdir()
+    submission_entries = [
+        {"id": "Sub1", "content": {"title": "Submission One", "abstract": "Submission abstract one."}},
+    ]
+    (submissions_dir / "Sub1.jsonl").write_text(json.dumps(submission_entries[0]) + "\n")
+
+    archives_dataset = ArchivesDataset(archives_path=archive_dir)
+    submissions_dataset = SubmissionsDataset(submissions_path=submissions_dir)
+
+    work_dir_fresh = tmp_path / "fresh"
+    work_dir_cached = tmp_path / "cached"
+    work_dir_fresh.mkdir()
+    work_dir_cached.mkdir()
+
+    # First run: generate fresh embeddings
+    model_fresh = specter2_scincl.EnsembleModel(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(work_dir_fresh),
+        average_score=True,
+        max_score=False,
+        use_cuda=False,
+        normalize_scores=False,  # Disable normalization to avoid min-max effects
+        use_redis=False,
+    )
+    model_fresh.set_archives_dataset(archives_dataset)
+    model_fresh.set_submissions_dataset(submissions_dataset)
+
+    fresh_pub_path = work_dir_fresh / "pub2vec_specter.jsonl"
+    fresh_sub_path = work_dir_fresh / "sub2vec_specter.jsonl"
+    fresh_pub_path.parent.mkdir(exist_ok=True)
+    fresh_sub_path.parent.mkdir(exist_ok=True)
+
+    model_fresh.specter_predictor.embed_publications(fresh_pub_path)
+    model_fresh.specter_predictor.embed_submissions(fresh_sub_path)
+
+    # Copy fresh embeddings to create "cached" version
+    cached_pub_path = work_dir_cached / "cached_pub2vec_specter.jsonl"
+    cached_pub_path.parent.mkdir(exist_ok=True)
+    cached_pub_path.write_text(fresh_pub_path.read_text())
+
+    # Second run: use cached embeddings
+    model_cached = specter2_scincl.EnsembleModel(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(work_dir_cached),
+        average_score=True,
+        max_score=False,
+        use_cuda=False,
+        normalize_scores=False,
+        use_redis=False,
+    )
+    model_cached.set_archives_dataset(archives_dataset)
+    model_cached.set_submissions_dataset(submissions_dataset)
+
+    # Create the cached file in the right location for the predictor to find it
+    # The cached file should be at: <dir>/cached_<basename> next to <dir>/<basename>
+    output_pub_path = work_dir_cached / "pub2vec_specter.jsonl"
+    output_sub_path = work_dir_cached / "sub2vec_specter.jsonl"
+
+    # Run embed_publications - it should use the cached embeddings
+    model_cached.specter_predictor.embed_publications(output_pub_path)
+    model_cached.specter_predictor.embed_submissions(output_sub_path)
+
+    # Compare the output files byte-for-byte
+    fresh_content = fresh_pub_path.read_text()
+    cached_content = output_pub_path.read_text()
+
+    assert fresh_content == cached_content, (
+        f"Cached embeddings produced different output than fresh embeddings.\n"
+        f"Fresh ({len(fresh_content)} chars): {fresh_content[:200]}...\n"
+        f"Cached ({len(cached_content)} chars): {cached_content[:200]}..."
+    )
