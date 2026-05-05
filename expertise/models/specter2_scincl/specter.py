@@ -204,7 +204,19 @@ class Specter2Predictor(Predictor):
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
 
+        cached, cached_lines = self._load_cached_publication_embeddings(publications_path)
         pub_jsonl = []
+        if cached:
+            remaining = {}
+            for paper_id, paper in paper_data.items():
+                line = cached_lines.get(paper_id)
+                if line is not None:
+                    pub_jsonl.append(line)
+                else:
+                    remaining[paper_id] = paper
+            print(f"Reusing {len(pub_jsonl)} cached publication embeddings; computing {len(remaining)}.")
+            paper_data = remaining
+
         for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
             pub_jsonl.extend(self._batch_predict(batch_data))
 

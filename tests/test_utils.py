@@ -1,6 +1,7 @@
 import os
 import pytest
 import re
+import json
 import time
 from collections import Counter
 from expertise.utils.utils import generate_job_id, JOB_ID_ALPHABET
@@ -139,3 +140,92 @@ def test_artifacts_for_model_unknown_model_falls_back_to_all():
     model added to the API doesn't break the pipeline before the map is updated."""
     assert artifacts_for_model('some-unreleased-model') is None
     assert artifacts_for_model(None) is None
+
+
+# ---------------------------------------------------------------------------
+# extract_venue_key / parse_cloud_id_timestamp — venue-scoped embedding cache.
+# These are pure-logic helpers used to discover prior-job artifacts on GCS.
+# ---------------------------------------------------------------------------
+from expertise.service.utils import extract_venue_key, parse_cloud_id_timestamp
+
+
+@pytest.mark.parametrize("request_dict, expected", [
+    # entityA Group / memberOf — strip role suffix
+    ({'entityA': {'type': 'Group', 'memberOf': 'ICLR.cc/2026/Conference/Reviewers'},
+      'entityB': {'type': 'Note', 'invitation': 'ICLR.cc/2026/Conference/-/Submission'}},
+     'ICLR.cc/2026/Conference'),
+    # entityA Note / invitation — split on /-/
+    ({'entityA': {'type': 'Note', 'invitation': 'TMLR/-/Submission'},
+      'entityB': {'type': 'Note', 'invitation': 'TMLR/-/Submission'}},
+     'TMLR'),
+    # entityA has neither memberOf nor invitation; entityB has memberOf
+    ({'entityA': {'type': 'Note', 'id': 'abc'},
+      'entityB': {'type': 'Group', 'memberOf': 'NeurIPS.cc/2025/Workshop/Reviewers'}},
+     'NeurIPS.cc/2025/Workshop'),
+    # memberOf without slashes — return as-is
+    ({'entityA': {'type': 'Group', 'memberOf': 'JustAGroup'}, 'entityB': {}},
+     'JustAGroup'),
+    # nothing matchable
+    ({'entityA': {}, 'entityB': {}}, None),
+    # invitation without /-/ falls through to None
+    ({'entityA': {'invitation': 'no-divider'}, 'entityB': {}}, None),
+    # non-dict input
+    (None, None),
+    ('not-a-dict', None),
+])
+def test_extract_venue_key(request_dict, expected):
+    assert extract_venue_key(request_dict) == expected
+
+
+@pytest.mark.parametrize("cloud_id, expected", [
+    ('abc12345-1719500000000', 1719500000000),
+    ('multi-dash-job-id-99', 99),
+    ('no-suffix-letters', None),
+    ('', None),
+    (None, None),
+])
+def test_parse_cloud_id_timestamp(cloud_id, expected):
+    assert parse_cloud_id_timestamp(cloud_id) == expected
+
+
+# ---------------------------------------------------------------------------
+# Predictor base-class helpers: cached publication embeddings
+# ---------------------------------------------------------------------------
+# Bypass the package __init__ which imports transformers (version conflict
+# in this env prevents loading specter.py/scincl.py).
+import importlib.util
+_predictor_spec = importlib.util.spec_from_file_location(
+    "predictor",
+    os.path.join(os.path.dirname(expertise.service.__file__), "../models/specter2_scincl/predictor.py")
+)
+_predictor_mod = importlib.util.module_from_spec(_predictor_spec)
+_predictor_spec.loader.exec_module(_predictor_mod)
+Predictor = _predictor_mod.Predictor
+
+
+def test_load_cached_publication_embeddings(tmp_path):
+    """Predictor loads cached embeddings from adjacent cached_<basename>.jsonl."""
+    base_path = tmp_path / "pub2vec_specter.jsonl"
+    cache_path = tmp_path / "cached_pub2vec_specter.jsonl"
+
+    predictor = Predictor()
+
+    # No cache file -> empty dicts
+    assert predictor._load_cached_publication_embeddings(str(base_path)) == ({}, {})
+
+    # Write cache with two valid papers and one bad json line
+    cache_path.write_text(
+        '{"paper_id": "p1", "embedding": [0.1, 0.2]}\n'
+        'bad json line\n'
+        '{"paper_id": "p2", "embedding": [0.3, 0.4]}\n'
+    )
+    lookup, jsonl_lines = predictor._load_cached_publication_embeddings(str(base_path))
+    assert lookup == {
+        "p1": [0.1, 0.2],
+        "p2": [0.3, 0.4],
+    }
+    # jsonl_lines contains the original lines for direct writing
+    assert jsonl_lines == {
+        "p1": '{"paper_id": "p1", "embedding": [0.1, 0.2]}\n',
+        "p2": '{"paper_id": "p2", "embedding": [0.3, 0.4]}\n',
+    }
