@@ -960,7 +960,7 @@ class GCPInterface(object):
         blob_name = f"{folder_path}/dataset.tar.gz"
         dataset_gcs_path = f"gs://{self.bucket_name}/{blob_name}"
 
-        dataset_items = ['archives', 'submissions', 'submissions.json', 'metadata.json']
+        dataset_items = ['archives', 'submissions', 'submissions.json', 'metadata.json', 'publications_by_profile_id.json']
         items_to_pack = [item for item in dataset_items if os.path.exists(os.path.join(job_dir, item))]
 
         if not items_to_pack:
