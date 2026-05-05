@@ -2,8 +2,7 @@ FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
 
 WORKDIR /app
 
-ENV PYTHON_VERSION=3.11 \
-    HOME="/app" \
+ENV HOME="/app" \
     PYTHONUNBUFFERED=1 \
     PIP_ROOT_USER_ACTION=ignore \
     VIRTUAL_ENV="/app/venv" \
@@ -23,21 +22,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgomp1 \
         ca-certificates \
         build-essential \
-        software-properties-common \
-    && add-apt-repository -y ppa:deadsnakes/ppa \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-        python${PYTHON_VERSION} \
-        python${PYTHON_VERSION}-venv \
-        python${PYTHON_VERSION}-dev \
+        python3.12 \
+        python3.12-venv \
+        python3.12-dev \
     && rm -rf /var/lib/apt/lists/* \
     \
-    && python${PYTHON_VERSION} -m venv ${VIRTUAL_ENV} \
+    && python3.12 -m venv ${VIRTUAL_ENV} \
     && pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu124 \
     && pip install --no-cache-dir filelock faiss-cpu \
     && pip install --no-cache-dir -e /app/openreview-expertise \
-    && apt-get purge -y build-essential software-properties-common \
+    && apt-get purge -y build-essential \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
