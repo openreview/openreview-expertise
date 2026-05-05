@@ -20,7 +20,7 @@ jobs:
     parallelism: 1
     working_directory: ~/openreview-expertise
     environment:
-      PYTHON_VERSION: 3.11
+      PYTHON_VERSION: 3.12
       GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
       DEBIAN_FRONTEND: noninteractive
       NEEDRESTART_MODE: a
@@ -45,19 +45,18 @@ jobs:
             gcloud auth list
             gcloud projects list
       - run:
-          name: Install Python ${PYTHON_VERSION}
+          name: Install Python ${PYTHON_VERSION} via uv
           command: |
             export APT_OPTS="NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive"
             sudo env $APT_OPTS apt-get update
-            sudo env $APT_OPTS apt-get install -y software-properties-common
-            sudo env $APT_OPTS add-apt-repository -y ppa:deadsnakes/ppa
-            sudo env $APT_OPTS apt-get update
-            sudo env $APT_OPTS apt-get install -y \
-              python${PYTHON_VERSION} \
-              python${PYTHON_VERSION}-venv \
-              python${PYTHON_VERSION}-dev
             sudo env $APT_OPTS apt-get install -y wget make gcc curl build-essential git sudo
             sudo env $APT_OPTS TZ=Etc/UTC apt-get install -y tzdata
+            # uv ships prebuilt CPython (python-build-standalone), so we get
+            # ${PYTHON_VERSION} without depending on ppa:deadsnakes.
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$BASH_ENV"
+            export PATH="$HOME/.local/bin:$PATH"
+            uv python install ${PYTHON_VERSION}
       - run:
           name: Install Node 22
           command: |
@@ -77,7 +76,7 @@ jobs:
       - run:
           name: Setup environment
           command: |
-            python${PYTHON_VERSION} -m venv ~/venv
+            uv venv --python ${PYTHON_VERSION} --seed ~/venv
             source ~/venv/bin/activate
             python -m pip install --upgrade pip setuptools wheel setuptools_rust
             python --version
