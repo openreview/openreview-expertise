@@ -419,6 +419,10 @@ def test_upload_dataset(mock_storage_client, openreview_client):
         with open(os.path.join(job_dir, 'metadata.json'), 'w') as f:
             json.dump({'submission_count': 1, 'archives_count': 2}, f)
 
+        # Group-group jobs produce this file; aggregate_by_group reads it after extraction.
+        with open(os.path.join(job_dir, 'publications_by_profile_id.json'), 'w') as f:
+            json.dump({'~User_One1': [{'id': 'paper1'}]}, f)
+
         config = JobConfig(job_id='test-upload-job', job_dir=job_dir)
 
         result = gcp_interface.upload_dataset(config)
@@ -439,12 +443,14 @@ def test_upload_dataset(mock_storage_client, openreview_client):
         assert 'submissions/sub1.jsonl' in names
         assert 'submissions.json' in names
         assert 'metadata.json' in names
+        assert 'publications_by_profile_id.json' in names
 
         # Source files in job_dir are removed after a successful upload
         assert not os.path.exists(archives_dir)
         assert not os.path.exists(submissions_dir)
         assert not os.path.exists(os.path.join(job_dir, 'submissions.json'))
         assert not os.path.exists(os.path.join(job_dir, 'metadata.json'))
+        assert not os.path.exists(os.path.join(job_dir, 'publications_by_profile_id.json'))
 
 
 # Test that upload_dataset uses the provided vertex_id as the folder name,

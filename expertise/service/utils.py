@@ -989,7 +989,7 @@ class GCPInterface(object):
         blob_name = f"{folder_path}/dataset.tar.gz"
         dataset_gcs_path = f"gs://{self.bucket_name}/{blob_name}"
 
-        dataset_items = ['archives', 'submissions', 'submissions.json', 'metadata.json']
+        dataset_items = ['archives', 'submissions', 'submissions.json', 'metadata.json', 'publications_by_profile_id.json']
         cached_jsonls = sorted(
             f for f in os.listdir(job_dir)
             if f.startswith('cached_pub2vec_') and f.endswith('.jsonl')
@@ -999,6 +999,7 @@ class GCPInterface(object):
             item for item in dataset_items + cached_jsonls
             if os.path.exists(os.path.join(job_dir, item))
         ]
+
 
         if not items_to_pack:
             raise ExpectedDataError(f"No dataset items found in {job_dir}")
