@@ -16,7 +16,7 @@ jobs:
     machine:
       image: ubuntu-2404:2026.02.2
     # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
-    resource_class: large
+    resource_class: large.gen2
     parallelism: 1
     working_directory: ~/openreview-expertise
     environment:
