@@ -204,14 +204,14 @@ class Specter2Predictor(Predictor):
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
 
-        cached = self._load_cached_publication_embeddings(publications_path)
+        cached, cached_lines = self._load_cached_publication_embeddings(publications_path)
         pub_jsonl = []
         if cached:
             remaining = {}
             for paper_id, paper in paper_data.items():
-                emb = cached.get(paper_id)
-                if emb is not None:
-                    pub_jsonl.append(self._build_cached_embedding_jsonl(paper, emb))
+                line = cached_lines.get(paper_id)
+                if line is not None:
+                    pub_jsonl.append(line)
                 else:
                     remaining[paper_id] = paper
             print(f"Reusing {len(pub_jsonl)} cached publication embeddings; computing {len(remaining)}.")
