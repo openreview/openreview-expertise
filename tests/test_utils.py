@@ -210,8 +210,8 @@ def test_load_cached_publication_embeddings(tmp_path):
 
     predictor = Predictor()
 
-    # No cache file -> empty dict
-    assert predictor._load_cached_publication_embeddings(str(base_path)) == {}
+    # No cache file -> empty dicts
+    assert predictor._load_cached_publication_embeddings(str(base_path)) == ({}, {})
 
     # Write cache with two valid papers and one bad json line
     cache_path.write_text(
@@ -219,34 +219,13 @@ def test_load_cached_publication_embeddings(tmp_path):
         'bad json line\n'
         '{"paper_id": "p2", "embedding": [0.3, 0.4]}\n'
     )
-    cached = predictor._load_cached_publication_embeddings(str(base_path))
-    assert cached == {
+    lookup, jsonl_lines = predictor._load_cached_publication_embeddings(str(base_path))
+    assert lookup == {
         "p1": [0.1, 0.2],
         "p2": [0.3, 0.4],
     }
-
-
-def test_build_cached_embedding_jsonl_preserves_weight():
-    """_build_cached_embedding_jsonl carries weight through from cached data."""
-    predictor = Predictor()
-    line = predictor._build_cached_embedding_jsonl(
-        {"paper_id": "p1", "weight": 2.5},
-        [0.1, 0.2],
-    )
-    data = json.loads(line)
-    assert data['paper_id'] == 'p1'
-    assert data['embedding'] == [0.1, 0.2]
-    assert data['weight'] == 2.5
-
-
-def test_build_cached_embedding_jsonl_without_weight():
-    """_build_cached_embedding_jsonl omits weight when the paper dict lacks it."""
-    predictor = Predictor()
-    line = predictor._build_cached_embedding_jsonl(
-        {"paper_id": "p1"},
-        [0.1, 0.2],
-    )
-    data = json.loads(line)
-    assert data['paper_id'] == 'p1'
-    assert data['embedding'] == [0.1, 0.2]
-    assert 'weight' not in data
+    # jsonl_lines contains the original lines for direct writing
+    assert jsonl_lines == {
+        "p1": '{"paper_id": "p1", "embedding": [0.1, 0.2]}\n',
+        "p2": '{"paper_id": "p2", "embedding": [0.3, 0.4]}\n',
+    }
