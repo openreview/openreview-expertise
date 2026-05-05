@@ -14,13 +14,13 @@ orbs:
 jobs:
   build:
     machine:
-      image: ubuntu-2204:2022.10.2
+      image: ubuntu-2404:2026.02.2
     # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     resource_class: large
     parallelism: 1
     working_directory: ~/openreview-expertise
     environment:
-      PYTHON_VERSION: 3.11
+      PYTHON_VERSION: 3.12
       GOOGLE_CLOUD_PROJECT: $GOOGLE_PROJECT_ID
       DEBIAN_FRONTEND: noninteractive
       NEEDRESTART_MODE: a
@@ -48,9 +48,6 @@ jobs:
           name: Install Python ${PYTHON_VERSION}
           command: |
             export APT_OPTS="NEEDRESTART_MODE=a DEBIAN_FRONTEND=noninteractive"
-            sudo env $APT_OPTS apt-get update
-            sudo env $APT_OPTS apt-get install -y software-properties-common
-            sudo env $APT_OPTS add-apt-repository -y ppa:deadsnakes/ppa
             sudo env $APT_OPTS apt-get update
             sudo env $APT_OPTS apt-get install -y \
               python${PYTHON_VERSION} \
