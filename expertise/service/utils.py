@@ -980,12 +980,17 @@ class GCPInterface(object):
     def upload_dataset(self, config, vertex_id=None):
         """Package dataset files from config.job_dir into a single tarball and upload to GCS.
 
-        Returns the full GCS path to the uploaded tarball, or to its intended location
-        if there were no dataset items to package (no upload performed).
+        Cached publication embeddings (cached_pub2vec_*.jsonl) are uploaded directly
+        to the job's GCS root, not packed into the tarball. They're large and gzip
+        poorly (embeddings are near-random floats), so single-threaded gzip becomes
+        the bottleneck; uncompressed upload over the same network is faster.
+
+        Returns the full GCS path to the uploaded tarball.
         """
         job_dir = config.job_dir
         folder_name = vertex_id if vertex_id else config.job_id
-        folder_path = f"{self.jobs_folder}/{folder_name}/dataset"
+        job_root_path = f"{self.jobs_folder}/{folder_name}"
+        folder_path = f"{job_root_path}/dataset"
         blob_name = f"{folder_path}/dataset.tar.gz"
         dataset_gcs_path = f"gs://{self.bucket_name}/{blob_name}"
 
@@ -996,10 +1001,9 @@ class GCPInterface(object):
             and os.path.isfile(os.path.join(job_dir, f))
         ) if os.path.isdir(job_dir) else []
         items_to_pack = [
-            item for item in dataset_items + cached_jsonls
+            item for item in dataset_items
             if os.path.exists(os.path.join(job_dir, item))
         ]
-
 
         if not items_to_pack:
             raise ExpectedDataError(f"No dataset items found in {job_dir}")
@@ -1012,7 +1016,17 @@ class GCPInterface(object):
                     tar.add(os.path.join(job_dir, item), arcname=item)
             self.bucket.blob(blob_name).upload_from_filename(tarball_path)
             self.logger.info(f"Uploaded dataset tarball to {dataset_gcs_path}")
-            for item in items_to_pack:
+
+            for cached_name in cached_jsonls:
+                cached_blob_name = f"{job_root_path}/{cached_name}"
+                self.bucket.blob(cached_blob_name).upload_from_filename(
+                    os.path.join(job_dir, cached_name)
+                )
+                self.logger.info(
+                    f"Uploaded cached embeddings to gs://{self.bucket_name}/{cached_blob_name}"
+                )
+
+            for item in items_to_pack + cached_jsonls:
                 path = os.path.join(job_dir, item)
                 if os.path.isdir(path):
                     shutil.rmtree(path)
