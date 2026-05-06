@@ -35,6 +35,8 @@ setup(
         'importlib-metadata==4.13.0',
         'google-cloud-storage',
         'google-cloud-aiplatform',
+        'kfp>=2.0.0',
+        'google-cloud-pipeline-components>=2.0.0',
         'bullmq==2.11.0'
     ],
     extras_require={
