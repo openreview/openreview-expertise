@@ -576,6 +576,99 @@ def test_upload_download_roundtrip(mock_upload_client, mock_download_client, ope
             assert json.loads(f.readline())['id'] == 'p1'
 
 
+@patch("expertise.execute_pipeline.storage.Client")
+@patch("expertise.service.utils.storage.Client")
+def test_upload_download_roundtrip_with_cached_embeddings(
+    mock_upload_client, mock_download_client
+):
+    """upload + download together preserve cached_pub2vec_*.jsonl files alongside
+    the dataset tarball, even though they live outside the tarball at the job root."""
+    storage_dir = tempfile.mkdtemp()
+
+    def _blob_path(blob_name):
+        return os.path.join(storage_dir, blob_name.replace('/', '__'))
+
+    shared_bucket = MagicMock()
+
+    def _make_blob(blob_name):
+        blob_obj = MagicMock()
+        blob_obj.name = blob_name
+        def _upload(path):
+            import shutil
+            shutil.copy2(path, _blob_path(blob_name))
+        def _download(path):
+            import shutil
+            shutil.copy2(_blob_path(blob_name), path)
+        blob_obj.upload_from_filename.side_effect = _upload
+        blob_obj.download_to_filename.side_effect = _download
+        return blob_obj
+    shared_bucket.blob.side_effect = _make_blob
+
+    def _list_blobs(prefix=None, delimiter=None, **kwargs):
+        results = []
+        for filename in os.listdir(storage_dir):
+            blob_name = filename.replace('__', '/')
+            if prefix and not blob_name.startswith(prefix):
+                continue
+            if delimiter:
+                rest = blob_name[len(prefix):]
+                if delimiter in rest:
+                    continue
+            results.append(_make_blob(blob_name))
+        return results
+    shared_bucket.list_blobs.side_effect = _list_blobs
+
+    mock_upload_client.return_value.bucket.return_value = shared_bucket
+    mock_download_client.return_value.bucket.return_value = shared_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'}
+    )
+
+    try:
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as dst_dir:
+            archives_dir = os.path.join(src_dir, 'archives')
+            os.makedirs(archives_dir)
+            with open(os.path.join(archives_dir, '~User_One1.jsonl'), 'w') as f:
+                f.write(json.dumps({'id': 'p1'}) + '\n')
+            with open(os.path.join(src_dir, 'submissions.json'), 'w') as f:
+                json.dump({'count': 1}, f)
+            with open(os.path.join(src_dir, 'metadata.json'), 'w') as f:
+                json.dump({'submission_count': 1, 'archives_count': 1}, f)
+            with open(os.path.join(src_dir, 'cached_pub2vec_specter.jsonl'), 'w') as f:
+                f.write('{"paper_id": "p1", "embedding": [0.1]}\n')
+            with open(os.path.join(src_dir, 'cached_pub2vec_scincl.jsonl'), 'w') as f:
+                f.write('{"paper_id": "p1", "embedding": [0.2]}\n')
+
+            config = JobConfig(job_id='cached-roundtrip-job', job_dir=src_dir)
+            gcs_path = gcp_interface.upload_dataset(config)
+
+            from expertise.execute_pipeline import download_dataset_from_gcs
+            download_dataset_from_gcs(gcs_path, dst_dir)
+
+            assert os.path.isfile(os.path.join(dst_dir, 'archives', '~User_One1.jsonl'))
+            assert os.path.isfile(os.path.join(dst_dir, 'submissions.json'))
+            cached_specter = os.path.join(dst_dir, 'cached_pub2vec_specter.jsonl')
+            cached_scincl = os.path.join(dst_dir, 'cached_pub2vec_scincl.jsonl')
+            assert os.path.isfile(cached_specter)
+            assert os.path.isfile(cached_scincl)
+            with open(cached_specter) as f:
+                assert json.loads(f.readline())['embedding'] == [0.1]
+            with open(cached_scincl) as f:
+                assert json.loads(f.readline())['embedding'] == [0.2]
+    finally:
+        import shutil
+        shutil.rmtree(storage_dir, ignore_errors=True)
+
+
 # Test case for the `get_job_status_by_job_id` method
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
@@ -1516,18 +1609,26 @@ def test_merge_cached_publication_embeddings_fallback_to_legacy_name(mock_storag
 
 
 @patch("expertise.service.utils.storage.Client")
-def test_upload_dataset_includes_cached_embeddings(mock_storage_client):
-    """Cached pub2vec files in job_dir are packed into the tarball and deleted."""
+def test_upload_dataset_uploads_cached_embeddings_separately(mock_storage_client):
+    """Cached pub2vec files are uploaded individually to the job root, not packed
+    into the tarball. They're deleted locally after upload."""
+    import shutil
+
     mock_bucket = MagicMock()
-    mock_blob = MagicMock()
-    mock_bucket.blob.return_value = mock_blob
     mock_storage_client.return_value.bucket.return_value = mock_bucket
 
-    captured = {}
-    def _capture_upload(path):
-        import shutil
-        captured['path'] = shutil.copy(path, tempfile.mktemp(suffix='.tar.gz'))
-    mock_blob.upload_from_filename.side_effect = _capture_upload
+    uploads = {}
+    def _make_blob(name):
+        blob = MagicMock()
+        def _capture(path):
+            if name.endswith('.tar.gz'):
+                uploads[name] = shutil.copy(path, tempfile.mktemp(suffix='.tar.gz'))
+            else:
+                with open(path, 'r') as f:
+                    uploads[name] = f.read()
+        blob.upload_from_filename.side_effect = _capture
+        return blob
+    mock_bucket.blob.side_effect = _make_blob
 
     gcp_interface = GCPInterface(
         project_id="test_project",
@@ -1552,7 +1653,6 @@ def test_upload_dataset_includes_cached_embeddings(mock_storage_client):
         with open(os.path.join(job_dir, 'metadata.json'), 'w') as f:
             json.dump({'count': 1}, f)
 
-        # Create cached embedding files
         with open(os.path.join(job_dir, 'cached_pub2vec_specter.jsonl'), 'w') as f:
             f.write('{"paper_id": "p1", "embedding": [0.1]}\n')
         with open(os.path.join(job_dir, 'cached_pub2vec_scincl.jsonl'), 'w') as f:
@@ -1563,14 +1663,18 @@ def test_upload_dataset_includes_cached_embeddings(mock_storage_client):
 
         assert result == "gs://test-bucket/jobs/cache-test-job/dataset/dataset.tar.gz"
 
+        tarball_path = uploads['jobs/cache-test-job/dataset/dataset.tar.gz']
         import tarfile as _tarfile
-        with _tarfile.open(captured['path'], 'r:gz') as tar:
+        with _tarfile.open(tarball_path, 'r:gz') as tar:
             names = sorted(tar.getnames())
 
-        assert 'cached_pub2vec_specter.jsonl' in names
-        assert 'cached_pub2vec_scincl.jsonl' in names
         assert 'archives/~User_One1.jsonl' in names
+        assert not any(n.startswith('cached_pub2vec_') for n in names)
 
-        # Cached files are removed after upload
+        assert uploads['jobs/cache-test-job/cached_pub2vec_specter.jsonl'] == \
+            '{"paper_id": "p1", "embedding": [0.1]}\n'
+        assert uploads['jobs/cache-test-job/cached_pub2vec_scincl.jsonl'] == \
+            '{"paper_id": "p1", "embedding": [0.2]}\n'
+
         assert not os.path.exists(os.path.join(job_dir, 'cached_pub2vec_specter.jsonl'))
         assert not os.path.exists(os.path.join(job_dir, 'cached_pub2vec_scincl.jsonl'))

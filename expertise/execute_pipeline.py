@@ -60,7 +60,13 @@ def download_from_gcs(gcs_path):
     return json.loads(content)
 
 def download_dataset_from_gcs(gcs_path, local_dir):
-    """Download a dataset tarball from GCS and extract it into local_dir."""
+    """Download a dataset tarball from GCS and extract it into local_dir.
+
+    Cached publication embeddings (cached_pub2vec_*.jsonl) are stored alongside
+    the dataset/ folder at the job's GCS root rather than inside the tarball
+    (see upload_dataset for rationale). Pull them directly into local_dir so
+    the predictor finds them next to pub2vec_*.jsonl as before.
+    """
     _, bucket = load_gcs(gcs_path)
     blob_name = '/'.join(gcs_path.split('/')[3:])
 
@@ -73,6 +79,14 @@ def download_dataset_from_gcs(gcs_path, local_dir):
     with tarfile.open(tarball_path, 'r:gz') as tar:
         tar.extractall(local_dir)
     print(f"Extracted dataset into {local_dir}")
+
+    job_root_prefix = blob_name.rsplit('/', 2)[0] + '/'
+    for blob in bucket.list_blobs(prefix=job_root_prefix, delimiter='/'):
+        name = blob.name.rsplit('/', 1)[-1]
+        if name.startswith('cached_pub2vec_') and name.endswith('.jsonl'):
+            dest = os.path.join(local_dir, name)
+            blob.download_to_filename(dest)
+            print(f"Downloaded cached embeddings {name} to {dest}")
 
 
 def run_pipeline(
