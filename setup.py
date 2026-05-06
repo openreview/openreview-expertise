@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='openreview-expertise',
-    version='2.1.8',
+    version='2.1.9',
     description='OpenReview paper-reviewer affinity modeling',
     url='https://github.com/openreview/openreview-expertise',
     author='OpenReview',
