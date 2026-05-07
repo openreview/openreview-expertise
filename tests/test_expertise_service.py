@@ -640,26 +640,23 @@ class TestExpertiseService():
             if profile_id == '~Royal_Toy1':
                 zeroed_royal_scores[submission_id] = score
 
-        # Check weights applied in both embedding files:
-        specter_file = f"./tests/jobs/{job_id}/pub2vec_specter.jsonl"
-        scincl_file = f"./tests/jobs/{job_id}/pub2vec_scincl.jsonl"
+        # Check weights applied in both metadata files (weights live alongside
+        # title/abstract metadata, not in the embedding files):
+        specter_meta_file = f"./tests/jobs/{job_id}/specter/specter_reviewer_paper_data.json"
+        scincl_meta_file = f"./tests/jobs/{job_id}/scincl/scincl_reviewer_paper_data.json"
+
+        with open(specter_meta_file) as f:
+            specter_meta = json.load(f)
+        with open(scincl_meta_file) as f:
+            scincl_meta = json.load(f)
 
         all_publication_ids = set()
-        with open(specter_file, 'r') as f, open(scincl_file, 'r') as g:
-            for specter_line, scincl_line in zip(f, g):
-                # Parse both lines
-                specter_pub = json.loads(specter_line.strip())
-                scincl_pub = json.loads(scincl_line.strip())
-
-                # Validate both publications have weight field
-                assert 'weight' in specter_pub, f"Missing weight in specter publication {specter_pub.get('paper_id')}"
-                assert 'weight' in scincl_pub, f"Missing weight in scincl publication {scincl_pub.get('paper_id')}"
-
-                # Check weights for both publications
-                for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
-                    all_publication_ids.add(pub['paper_id'])
-                    expected_weight = 10 if pub['paper_id'] == upweighted_note_id else 1
-                    assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
+        for meta, model_name in [(specter_meta, 'specter'), (scincl_meta, 'scincl')]:
+            for paper_id, pub in meta.items():
+                all_publication_ids.add(paper_id)
+                assert 'weight' in pub, f"Missing weight in {model_name} publication {paper_id}"
+                expected_weight = 10 if paper_id == upweighted_note_id else 1
+                assert pub['weight'] == expected_weight, f"{model_name} publication {paper_id} has weight {pub['weight']}, expected {expected_weight}"
 
         assert upweighted_note_id not in all_publication_ids
 
@@ -739,24 +736,20 @@ class TestExpertiseService():
             if profile_id == '~Royal_Toy1':
                 openreview_royal_scores[submission_id] = score
 
-        # Check weights applied in both embedding files (now it should be weight 5):
-        specter_file = f"./tests/jobs/{job_id}/pub2vec_specter.jsonl"
-        scincl_file = f"./tests/jobs/{job_id}/pub2vec_scincl.jsonl"
+        # Check weights applied in both metadata files:
+        specter_meta_file = f"./tests/jobs/{job_id}/specter/specter_reviewer_paper_data.json"
+        scincl_meta_file = f"./tests/jobs/{job_id}/scincl/scincl_reviewer_paper_data.json"
 
-        with open(specter_file, 'r') as f, open(scincl_file, 'r') as g:
-            for specter_line, scincl_line in zip(f, g):
-                # Parse both lines
-                specter_pub = json.loads(specter_line.strip())
-                scincl_pub = json.loads(scincl_line.strip())
+        with open(specter_meta_file) as f:
+            specter_meta = json.load(f)
+        with open(scincl_meta_file) as f:
+            scincl_meta = json.load(f)
 
-                # Validate both publications have weight field
-                assert 'weight' in specter_pub, f"Missing weight in specter publication {specter_pub.get('paper_id')}"
-                assert 'weight' in scincl_pub, f"Missing weight in scincl publication {scincl_pub.get('paper_id')}"
-
-                # Check weights for both publications
-                for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
-                    expected_weight = 10 if pub['paper_id'] == upweighted_note_id else 1
-                    assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
+        for meta, model_name in [(specter_meta, 'specter'), (scincl_meta, 'scincl')]:
+            for paper_id, pub in meta.items():
+                assert 'weight' in pub, f"Missing weight in {model_name} publication {paper_id}"
+                expected_weight = 10 if paper_id == upweighted_note_id else 1
+                assert pub['weight'] == expected_weight, f"{model_name} publication {paper_id} has weight {pub['weight']}, expected {expected_weight}"
 
         # Make a request
         response = test_client.post(

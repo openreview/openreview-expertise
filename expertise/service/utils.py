@@ -46,8 +46,9 @@ def extract_venue_key(api_request):
     """Return a venue prefix derived from a request payload, or None.
 
     Group entities use memberOf with a role suffix (e.g. ".../Reviewers");
-    Note entities use an invitation that contains "/-/". Stripping those
-    yields a prefix shared across requests for the same venue.
+    Note entities use either an invitation that contains "/-/" or a
+    withVenueid that is the venue id itself. Stripping the role/invitation
+    suffix yields a prefix shared across requests for the same venue.
     """
     if not isinstance(api_request, dict):
         return None
@@ -59,6 +60,14 @@ def extract_venue_key(api_request):
         invitation = entity.get('invitation')
         if invitation and '/-/' in invitation:
             return invitation.split('/-/')[0]
+        venueid = entity.get('withVenueid')
+        if venueid:
+            # Submissions under review carry venueids like
+            # 'NeurIPS.cc/2026/Conference/Submission'; strip the trailing
+            # segment so the prefix matches the memberOf-derived key
+            # ('NeurIPS.cc/2026/Conference'). Heuristic — works for the
+            # current ".../Submission" convention.
+            return venueid.rsplit('/', 1)[0] if '/' in venueid else venueid
     return None
 
 def parse_cloud_id_timestamp(cloud_id):

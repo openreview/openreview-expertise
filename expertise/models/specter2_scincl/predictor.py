@@ -8,8 +8,6 @@ class Predictor:
             'paper_id': paper['paper_id'],
             'embedding': embedding.detach().cpu().numpy().tolist()
         }
-        if 'weight' in paper:
-            data['weight'] = paper['weight']
         return json.dumps(data) + '\n'
 
     def _load_cached_publication_embeddings(self, publications_path):
