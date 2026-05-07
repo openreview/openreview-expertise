@@ -62,7 +62,12 @@ def extract_venue_key(api_request):
             return invitation.split('/-/')[0]
         venueid = entity.get('withVenueid')
         if venueid:
-            return venueid
+            # Submissions under review carry venueids like
+            # 'NeurIPS.cc/2026/Conference/Submission'; strip the trailing
+            # segment so the prefix matches the memberOf-derived key
+            # ('NeurIPS.cc/2026/Conference'). Heuristic — works for the
+            # current ".../Submission" convention.
+            return venueid.rsplit('/', 1)[0] if '/' in venueid else venueid
     return None
 
 def parse_cloud_id_timestamp(cloud_id):
