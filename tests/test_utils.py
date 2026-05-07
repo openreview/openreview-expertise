@@ -169,6 +169,14 @@ from expertise.service.utils import extract_venue_key, parse_cloud_id_timestamp
     ({'entityA': {}, 'entityB': {}}, None),
     # invitation without /-/ falls through to None
     ({'entityA': {'invitation': 'no-divider'}, 'entityB': {}}, None),
+    # entityB Note / withVenueid — split jobs use this when invitation is absent
+    ({'entityA': {'type': 'Group', 'reviewerIds': ['~A1', '~B1']},
+      'entityB': {'type': 'Note', 'withVenueid': 'ICLR.cc/2026/Conference'}},
+     'ICLR.cc/2026/Conference'),
+    # withVenueid alongside invitation — invitation wins (checked first)
+    ({'entityA': {'type': 'Note', 'invitation': 'TMLR/-/Submission', 'withVenueid': 'OTHER'},
+      'entityB': {}},
+     'TMLR'),
     # non-dict input
     (None, None),
     ('not-a-dict', None),
