@@ -599,15 +599,24 @@ def test_venue_specific_weights_with_weightless_cache(tmp_path):
     scincl_pub_path.unlink()
 
     # Re-run with weightless cache present. all_scores must not raise KeyError.
-    model.embed_publications(specter_pub_path, scincl_pub_path)
+    # Spy on _batch_predict so we can prove the cache was the source of truth
+    # rather than the model. If the cache wasn't consumed, embed_publications
+    # would re-run inference and call _batch_predict at least once per predictor.
+    with patch.object(model.specter_predictor, '_batch_predict', wraps=model.specter_predictor._batch_predict) as specter_spy, \
+         patch.object(model.scincl_predictor, '_batch_predict', wraps=model.scincl_predictor._batch_predict) as scincl_spy:
+        model.embed_publications(specter_pub_path, scincl_pub_path)
+        assert specter_spy.call_count == 0, (
+            f"Expected cache hit for all papers, but specter._batch_predict ran {specter_spy.call_count} times"
+        )
+        assert scincl_spy.call_count == 0, (
+            f"Expected cache hit for all papers, but scincl._batch_predict ran {scincl_spy.call_count} times"
+        )
+
     model.embed_submissions(specter_sub_path, scincl_sub_path)
 
-    # Sanity: cache was actually consumed (no 'weight' key in publication lines).
-    for path in (specter_pub_path, scincl_pub_path):
-        for line in path.read_text().splitlines():
-            assert "weight" not in json.loads(line), (
-                f"Publication embedding lines should not carry 'weight' anymore: {path}"
-            )
+    # Cache lines should pass through verbatim (byte-equal to what we wrote).
+    assert specter_pub_path.read_text() == specter_cache.read_text()
+    assert scincl_pub_path.read_text() == scincl_cache.read_text()
 
     scores_path = work_dir / "scores.csv"
     scores = model.all_scores(
