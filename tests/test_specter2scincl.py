@@ -533,3 +533,90 @@ def test_cached_embeddings_produce_identical_results(tmp_path):
         f"Fresh ({len(fresh_content)} chars): {fresh_content[:200]}...\n"
         f"Cached ({len(cached_content)} chars): {cached_content[:200]}..."
     )
+
+
+def test_venue_specific_weights_with_weightless_cache(tmp_path):
+    """Regression test: when venue_specific_weights is on and the publications
+    file (e.g. reused from a prior cached job) has no 'weight' field per line,
+    all_scores must still succeed by reading weights from the metadata file
+    rather than the embedding line. Previously this raised KeyError: 'weight'."""
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    archive_entries = [
+        {"id": "Paper1", "content": {"title": "Test Paper One", "abstract": "Abstract one.", "weight": 1.4}},
+        {"id": "Paper2", "content": {"title": "Test Paper Two", "abstract": "Abstract two.", "weight": 1.0}},
+    ]
+    (archive_dir / "~Author1.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in archive_entries) + "\n"
+    )
+
+    submissions_dir = tmp_path / "submissions"
+    submissions_dir.mkdir()
+    submission_entry = {"id": "Sub1", "content": {"title": "Submission One", "abstract": "Submission abstract one."}}
+    (submissions_dir / "Sub1.jsonl").write_text(json.dumps(submission_entry) + "\n")
+
+    archives_dataset = ArchivesDataset(archives_path=archive_dir)
+    submissions_dataset = SubmissionsDataset(submissions_path=submissions_dir)
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    model = specter2_scincl.EnsembleModel(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(work_dir),
+        average_score=True,
+        max_score=False,
+        use_cuda=False,
+        normalize_scores=False,
+        use_redis=False,
+        venue_specific_weights=True,
+    )
+    model.set_archives_dataset(archives_dataset)
+    model.set_submissions_dataset(submissions_dataset)
+
+    specter_pub_path = work_dir / "pub2vec_specter.jsonl"
+    scincl_pub_path = work_dir / "pub2vec_scincl.jsonl"
+    specter_sub_path = work_dir / "sub2vec_specter.jsonl"
+    scincl_sub_path = work_dir / "sub2vec_scincl.jsonl"
+
+    # Embed once to get real embeddings, then strip the embedding lines into
+    # weightless cached_pub2vec_*.jsonl files to simulate cache from a prior
+    # job that ran without venue_specific_weights.
+    model.embed_publications(specter_pub_path, scincl_pub_path)
+
+    def strip_weight_into_cache(src, dst):
+        with open(src) as f_in, open(dst, "w") as f_out:
+            for line in f_in:
+                entry = json.loads(line)
+                entry.pop("weight", None)
+                f_out.write(json.dumps(entry) + "\n")
+
+    specter_cache = work_dir / "cached_pub2vec_specter.jsonl"
+    scincl_cache = work_dir / "cached_pub2vec_scincl.jsonl"
+    strip_weight_into_cache(specter_pub_path, specter_cache)
+    strip_weight_into_cache(scincl_pub_path, scincl_cache)
+    specter_pub_path.unlink()
+    scincl_pub_path.unlink()
+
+    # Re-run with weightless cache present. all_scores must not raise KeyError.
+    model.embed_publications(specter_pub_path, scincl_pub_path)
+    model.embed_submissions(specter_sub_path, scincl_sub_path)
+
+    # Sanity: cache was actually consumed (no 'weight' key in publication lines).
+    for path in (specter_pub_path, scincl_pub_path):
+        for line in path.read_text().splitlines():
+            assert "weight" not in json.loads(line), (
+                f"Publication embedding lines should not carry 'weight' anymore: {path}"
+            )
+
+    scores_path = work_dir / "scores.csv"
+    scores = model.all_scores(
+        specter_publications_path=specter_pub_path,
+        scincl_publications_path=scincl_pub_path,
+        specter_submissions_path=specter_sub_path,
+        scincl_submissions_path=scincl_sub_path,
+        scores_path=scores_path,
+    )
+
+    assert scores, "Expected at least one score row"
+    assert scores_path.exists()
