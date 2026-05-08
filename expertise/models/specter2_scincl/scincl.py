@@ -274,18 +274,19 @@ class SciNCLPredictor(Predictor):
             with open(p2p_path, 'w') as f:
                 json.dump(p2p_dict, f, indent=4)
 
-        # Normalize all scores
+        # Normalize all scores in-place to avoid allocating a second full
+        # paper_num_test x paper_num_train tensor (would double peak memory).
         if self.normalize_scores:
             print("Normalizing scores...")
             min_val = p2p_aff.min()
             max_val = p2p_aff.max()
             if max_val - min_val == 0:
-                p2p_aff_norm = torch.clamp(p2p_aff, 0.0, 1.0)
+                p2p_aff.clamp_(0.0, 1.0)
             else:
-                p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+                p2p_aff.sub_(min_val).div_(max_val - min_val)
         else:
             print("Skipping normalization of scores...")
-            p2p_aff_norm = p2p_aff
+        p2p_aff_norm = p2p_aff
 
         csv_scores = []
         self.preliminary_scores = []
