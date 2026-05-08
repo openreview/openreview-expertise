@@ -207,35 +207,28 @@ def run_pipeline(
         paper_paper_matching = validated_request.entityA.get('type', '') == 'Note' and \
             validated_request.entityB.get('type', '') == 'Note'
 
+        # Stream-convert score CSVs to JSONL directly into the GCS upload
+        # stream. Avoids loading the full result set (potentially 100M+ rows)
+        # into a Python list before serializing — that path peaked at ~95 GB
+        # of host memory for large jobs and triggered OOM kills.
         for csv_file in [d for d in os.listdir(config.job_dir) if '.csv' in d]:
-            result = []
             dest_name = 'scores_sparse.jsonl' if '_sparse' in csv_file else 'scores.jsonl'
             destination_blob = f"{blob_prefix}/{dest_name}"
-            with open(os.path.join(config.job_dir, csv_file), 'r') as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    if group_group_matching:
-                        result.append({
-                            'entityA': row[0],
-                            'entityB': row[1],
-                            'score': float(row[2])
-                        })
-                    elif paper_paper_matching:
-                        result.append({
-                            'entityA': row[0],
-                            'entityB': row[1],
-                            'score': float(row[2])
-                        })
-                    else:
-                        result.append({
-                            'entityB': row[0],
-                            'entityA': row[1],
-                            'score': float(row[2])
-                        })
-
             blob = bucket.blob(destination_blob)
-            contents = '\n'.join([json.dumps(r) for r in result])
-            blob.upload_from_string(contents)
+            src = os.path.join(config.job_dir, csv_file)
+
+            with blob.open('w') as out, open(src, 'r') as f:
+                reader = csv.reader(f)
+                first = True
+                for row in reader:
+                    if group_group_matching or paper_paper_matching:
+                        obj = {'entityA': row[0], 'entityB': row[1], 'score': float(row[2])}
+                    else:
+                        obj = {'entityB': row[0], 'entityA': row[1], 'score': float(row[2])}
+                    if not first:
+                        out.write('\n')
+                    out.write(json.dumps(obj))
+                    first = False
 
         # Dump config
         destination_blob = f"{blob_prefix}/job_config.json"
