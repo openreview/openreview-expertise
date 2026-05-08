@@ -266,6 +266,7 @@ class SciNCLPredictor(Predictor):
         # Note: Venue-specific weights are now applied per-reviewer in the scoring loop below
 
         if self.dump_p2p:
+            print('Dumping paper-to-paper scores...', flush=True)
             p2p_dict = {}
             for i in range(paper_num_test):
                 p2p_dict[test_id_list[i]] = {}
@@ -291,6 +292,7 @@ class SciNCLPredictor(Predictor):
         csv_scores = []
         self.preliminary_scores = []
 
+        print("Computing scincl per-reviewer scores...", flush=True)
         if self.compute_paper_paper:
             for i in range(paper_num_train):
                 for j in range(paper_num_test):
@@ -334,12 +336,15 @@ class SciNCLPredictor(Predictor):
                                                                     score=round(all_paper_aff[j].item(), 4))
                     csv_scores.append(csv_line)
                     self.preliminary_scores.append((test_id_list[j], reviewer_id, round(all_paper_aff[j].item(), 4)))
+        print(f"Computed preliminary scores for SciNCL.", flush=True)
 
         if scores_path:
+            print(f"Writing {len(csv_scores)} scincl rows to CSV...", flush=True)
             with open(scores_path, 'w') as f:
                 for csv_line in csv_scores:
                     f.write(csv_line + '\n')
 
+        print("Done computing scincl scores.", flush=True)
         return self.preliminary_scores
 
     def _remove_keys_from_cache(self, key):
