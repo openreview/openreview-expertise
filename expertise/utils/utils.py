@@ -505,6 +505,49 @@ def generate_sparse_scores(full_scores, sparse_value, scores_path=None):
 
     return sparse_scores
 
+def generate_sparse_scores_streaming(input_csv_path, sparse_value, output_csv_path):
+    # Streaming counterpart to generate_sparse_scores. Reads the full scores
+    # CSV once, keeping a per-note_id and per-profile_id min-heap of size
+    # sparse_value (heap key = score). Memory is bounded by
+    # (num_notes + num_profiles) * sparse_value instead of the full
+    # paper_num_test * num_reviewers cross product.
+    import heapq
+
+    note_heaps = {}
+    profile_heaps = {}
+
+    print('Scanning scores...')
+    with open(input_csv_path, 'r') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            note_id, profile_id, score_str = row[0], row[1], row[2]
+            score = float(score_str)
+            entry = (score, note_id, profile_id)
+
+            for key, heaps in ((note_id, note_heaps), (profile_id, profile_heaps)):
+                heap = heaps.get(key)
+                if heap is None:
+                    heaps[key] = [entry]
+                elif len(heap) < sparse_value:
+                    heapq.heappush(heap, entry)
+                elif score > heap[0][0]:
+                    heapq.heapreplace(heap, entry)
+
+    print('Combining sparse heaps...')
+    sparse_scores = set()
+    for heaps in (note_heaps, profile_heaps):
+        for heap in heaps.values():
+            for score, note_id, profile_id in heap:
+                sparse_scores.add((note_id, profile_id, score))
+
+    print('Final Sort...')
+    sparse_scores = sorted(sparse_scores, key=lambda x: (x[0], x[2]), reverse=True)
+    with open(output_csv_path, 'w') as f:
+        for note_id, profile_id, score in sparse_scores:
+            f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
+
+    return sparse_scores
+
 def aggregate_by_group(config):
     # Fetch scores
     scores = {}
