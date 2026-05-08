@@ -3,7 +3,7 @@ import openreview, os, json, csv
 from .create_dataset import OpenReviewExpertise
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
-from .utils.utils import aggregate_by_group, generate_sparse_scores, generate_sparse_scores_streaming
+from .utils.utils import aggregate_by_group, generate_sparse_scores
 
 # Move run.py functionality to a function that accepts a config dict
 def execute_expertise(config):
@@ -221,13 +221,14 @@ def execute_expertise(config):
         )
 
     if 'alternate_match_group' in config.keys():
-        aggregate_by_group(config)
+        preliminary_scores = aggregate_by_group(config)
+    else:
+        preliminary_scores = predictor.preliminary_scores
 
     if config['model_params'].get('sparse_value'):
         sparse_value = config['model_params']['sparse_value']
-        full_csv_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
-        sparse_csv_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
-        generate_sparse_scores_streaming(full_csv_path, sparse_value, sparse_csv_path)
+        scores_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
+        generate_sparse_scores(preliminary_scores, sparse_value, scores_path)
 
 def execute_create_dataset(client_v2, config=None):
 
