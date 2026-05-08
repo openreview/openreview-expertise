@@ -274,13 +274,12 @@ class Specter2Predictor(Predictor):
             paper_num_test = len(test_id_list)
 
         print('Computing all scores...')
-        p2p_aff = torch.empty((paper_num_test, paper_num_train), device=torch.device('cpu'))
-        for i in range(paper_num_test):
-            p2p_aff[i, :] = torch.sum(paper_emb_test[i, :].unsqueeze(dim=0) * paper_emb_train, dim=1)
+        p2p_aff = paper_emb_test @ paper_emb_train.T
 
         # Note: Venue-specific weights are now applied per-reviewer in the scoring loop below
 
         if self.dump_p2p:
+            print('Dumping paper-to-paper scores...', flush=True)
             p2p_dict = {}
             for i in range(paper_num_test):
                 p2p_dict[test_id_list[i]] = {}
@@ -289,22 +288,24 @@ class Specter2Predictor(Predictor):
             with open(p2p_path, 'w') as f:
                 json.dump(p2p_dict, f, indent=4)
         
-        # Normalize all scores
+        # Normalize all scores in-place to avoid allocating a second full
+        # paper_num_test x paper_num_train tensor (would double peak memory).
         if self.normalize_scores:
             print("Normalizing scores...")
             min_val = p2p_aff.min()
             max_val = p2p_aff.max()
             if max_val - min_val == 0:
-                p2p_aff_norm = torch.clamp(p2p_aff, 0.0, 1.0)
+                p2p_aff.clamp_(0.0, 1.0)
             else:
-                p2p_aff_norm = (p2p_aff - min_val) / (max_val - min_val)
+                p2p_aff.sub_(min_val).div_(max_val - min_val)
         else:
             print("Skipping normalization of scores...")
-            p2p_aff_norm = p2p_aff
+        p2p_aff_norm = p2p_aff
 
         csv_scores = []
         self.preliminary_scores = []
 
+        print("Computing specter per-reviewer scores...", flush=True)
         if self.compute_paper_paper:
             for i in range(paper_num_train):
                 for j in range(paper_num_test):
@@ -348,12 +349,15 @@ class Specter2Predictor(Predictor):
                                                                     score=round(all_paper_aff[j].item(), 4))
                     csv_scores.append(csv_line)
                     self.preliminary_scores.append((test_id_list[j], reviewer_id, round(all_paper_aff[j].item(), 4)))
+        print(f"Computed preliminary scores for SPECTER2.", flush=True)
 
         if scores_path:
+            print(f"Writing {len(csv_scores)} specter rows to CSV...", flush=True)
             with open(scores_path, 'w') as f:
                 for csv_line in csv_scores:
                     f.write(csv_line + '\n')
 
+        print("Done computing specter scores.", flush=True)
         return self.preliminary_scores
 
     def _remove_keys_from_cache(self, key):

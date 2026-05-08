@@ -239,9 +239,7 @@ class SpecterPredictor:
             paper_num_test = len(test_id_list)
 
         print('Computing all scores...')
-        p2p_aff = torch.empty((paper_num_test, paper_num_train), device=torch.device('cpu'))
-        for i in range(paper_num_test):
-            p2p_aff[i, :] = torch.sum(paper_emb_test[i, :].unsqueeze(dim=0) * paper_emb_train, dim=1)
+        p2p_aff = paper_emb_test @ paper_emb_train.T
 
         csv_scores = []
         self.preliminary_scores = []
