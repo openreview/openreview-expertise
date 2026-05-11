@@ -207,30 +207,21 @@ def run_pipeline(
         paper_paper_matching = validated_request.entityA.get('type', '') == 'Note' and \
             validated_request.entityB.get('type', '') == 'Note'
 
-        # Stream-convert the (sparse) score CSV to JSONL directly into the
-        # GCS upload stream. The full score table is no longer emitted as a
-        # CSV at all — it's saved as a torch tensor in the .pt file uploaded
-        # below — so the only CSV here is the sparse one.
-        print("Converting CSV scores to JSONL...", flush=True)
+        # Upload the score CSV(s) to GCS as-is (no transformation). The CSV
+        # rows are in the model's natural order: [test_id, reviewer_id, score]
+        # for mixed Group/Note matching; [test_id, train_id, score] for
+        # symmetric matching. The matching-type-aware entityA/entityB swap
+        # happens at read time in both the local and cloud reader paths,
+        # consistent with how ExpertiseService.get_expertise_results has
+        # always handled it.
+        print("Uploading score CSV(s)...", flush=True)
         for csv_file in [d for d in os.listdir(config.job_dir) if d.endswith('.csv')]:
-            dest_name = 'scores_sparse.jsonl' if '_sparse' in csv_file else 'scores.jsonl'
+            dest_name = 'scores_sparse.csv' if '_sparse' in csv_file else 'scores.csv'
             destination_blob = f"{blob_prefix}/{dest_name}"
             blob = bucket.blob(destination_blob)
             src = os.path.join(config.job_dir, csv_file)
-
-            with blob.open('w') as out, open(src, 'r') as f:
-                reader = csv.reader(f)
-                first = True
-                for row in reader:
-                    if group_group_matching or paper_paper_matching:
-                        obj = {'entityA': row[0], 'entityB': row[1], 'score': float(row[2])}
-                    else:
-                        obj = {'entityB': row[0], 'entityA': row[1], 'score': float(row[2])}
-                    if not first:
-                        out.write('\n')
-                    out.write(json.dumps(obj))
-                    first = False
-        print("Finished writing scores to JSONL", flush=True)
+            blob.upload_from_filename(src)
+        print("Finished uploading score CSV(s)", flush=True)
 
         # Upload the full scores matrix (.pt) directly. Same direct-streaming
         # pattern as the embedding files — source bytes go disk → resumable-

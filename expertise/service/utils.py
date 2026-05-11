@@ -6,6 +6,7 @@ import tarfile
 import tempfile
 import time
 import json
+import csv
 import re
 import datetime
 import redis, pickle
@@ -1452,7 +1453,7 @@ class GCPInterface(object):
 
     def get_job_results(self, user_id, job_id, delete_on_get=False):
 
-        def _get_scores_and_metadata_streaming(all_blobs, job_id):
+        def _get_scores_and_metadata_streaming(all_blobs, job_id, group_group_matching, paper_paper_matching):
             """
             Extracts the scores and metadata from the GCS bucket and returns a generator that yields
             chunks of results to enable streaming
@@ -1468,7 +1469,9 @@ class GCPInterface(object):
                 blob for blob in all_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name
             ]
             score_files = [
-                blob for blob in all_blobs if blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
+                blob for blob in all_blobs
+                if blob.name.endswith('scores.csv') or blob.name.endswith('scores_sparse.csv')
+                or blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
             ]
 
             if len(metadata_files) != 1:
@@ -1480,27 +1483,49 @@ class GCPInterface(object):
             metadata = json.loads(metadata_files[0].download_as_string())
             yield {'metadata': metadata, 'results': []}
 
-            # Helper function to stream scores from a blob file
+            # Helper function to stream scores from a blob file.
+            #
+            # - New CSV format: rows are in the model's natural order:
+            #   [test_id, reviewer_id, score] for mixed matching, or
+            #   [test_id, train_id, score] for symmetric matching. The
+            #   entityA/entityB swap mirrors the local service:
+            #     symmetric  -> {entityA: row[0], entityB: row[1]}
+            #     mixed      -> {entityB: row[0], entityA: row[1]}
+            #
+            # - Legacy JSONL format (in-flight jobs from before the CSV
+            #   migration): the entityA/entityB swap was already done at
+            #   upload time, so each line is consumed as-is.
             def stream_score_file(blob):
+                is_csv = blob.name.endswith('.csv')
                 downloader = blob.open('r')
-                chunk = downloader.readline()
                 results_chunk = []
-                chunk_size = 1000  # Adjust this number based on your data size
+                chunk_size = 1000
 
-                while chunk:
-                    if isinstance(chunk, bytes):
-                        chunk = chunk.decode('utf-8')
-                    if chunk.strip():
-                        results_chunk.append(json.loads(chunk.strip()))
-
-                    # Yield chunks of results
-                    if len(results_chunk) >= chunk_size:
-                        yield {'results': results_chunk, 'metadata': None}
-                        results_chunk = []
-
+                if is_csv:
+                    reader = csv.reader(downloader)
+                    for row in reader:
+                        if not row:
+                            continue
+                        if group_group_matching or paper_paper_matching:
+                            obj = {'entityA': row[0], 'entityB': row[1], 'score': float(row[2])}
+                        else:
+                            obj = {'entityB': row[0], 'entityA': row[1], 'score': float(row[2])}
+                        results_chunk.append(obj)
+                        if len(results_chunk) >= chunk_size:
+                            yield {'results': results_chunk, 'metadata': None}
+                            results_chunk = []
+                else:
                     chunk = downloader.readline()
+                    while chunk:
+                        if isinstance(chunk, bytes):
+                            chunk = chunk.decode('utf-8')
+                        if chunk.strip():
+                            results_chunk.append(json.loads(chunk.strip()))
+                        if len(results_chunk) >= chunk_size:
+                            yield {'results': results_chunk, 'metadata': None}
+                            results_chunk = []
+                        chunk = downloader.readline()
 
-                # Yield any remaining results
                 if results_chunk:
                     yield {'results': results_chunk, 'metadata': None}
 
@@ -1543,12 +1568,24 @@ class GCPInterface(object):
         # Validate score and metadata files exist before returning the streaming generator.
         # If validation is deferred into the generator, exceptions fire after the HTTP
         # response has already started — causing a broken chunked response on the client.
-        score_files = [blob for blob in job_blobs if blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')]
+        score_files = [
+            blob for blob in job_blobs
+            if blob.name.endswith('scores.csv') or blob.name.endswith('scores_sparse.csv')
+            or blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
+        ]
         metadata_files = [blob for blob in job_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name]
         if len(metadata_files) != 1:
             raise openreview.OpenReviewException(f'Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}')
         if len(score_files) < 1 or len(score_files) > 2:
             raise openreview.OpenReviewException(f'Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}')
 
-        return _get_scores_and_metadata_streaming(job_blobs, job_id)
+        # Matching type drives the entityA/entityB column mapping for new CSV
+        # blobs (legacy JSONL blobs already have it baked in).
+        api_request = authenticated_requests[0]
+        entityA_type = api_request.get('entityA', {}).get('type', '')
+        entityB_type = api_request.get('entityB', {}).get('type', '')
+        group_group_matching = entityA_type == 'Group' and entityB_type == 'Group'
+        paper_paper_matching = entityA_type == 'Note' and entityB_type == 'Note'
+
+        return _get_scores_and_metadata_streaming(job_blobs, job_id, group_group_matching, paper_paper_matching)
 
