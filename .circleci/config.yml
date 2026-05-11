@@ -199,6 +199,11 @@ jobs:
       - run:
           name: Build and test container locally
           command: |
+            # Authenticate Docker to Artifact Registry so the Dockerfile FROM
+            # can pull from us-docker.pkg.dev instead of Docker Hub. gcloud is
+            # already authenticated earlier via gcp-cli/setup (OIDC).
+            gcloud auth configure-docker us-docker.pkg.dev --quiet
+
             # Build image locally (no push)
             echo "Building Docker image locally..."
             docker build -t expertise-test:${CIRCLE_SHA1:0:12} .
