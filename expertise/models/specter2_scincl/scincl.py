@@ -301,41 +301,53 @@ class SciNCLPredictor(Predictor):
                     csv_scores.append(csv_line)
                     self.preliminary_scores.append((test_id_list[j], train_id_list[i], round(p2p_aff_norm[j, i].item(), 4)))
         else:
+            reviewer_ids = []
+            reviewer_paper_indices = []
             for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
                 if len(train_note_id_list) == 0:
                     continue
-                train_paper_idx = []
-                for paper_id in train_note_id_list:
-                    if paper_id not in train_bad_id_set:
-                        train_paper_idx.append(paper_id2train_idx[paper_id])
-                train_paper_aff_j = p2p_aff_norm[:, train_paper_idx]
+                valid = [paper_id2train_idx[pid] for pid in train_note_id_list if pid not in train_bad_id_set]
+                if not valid:
+                    continue
+                reviewer_ids.append(reviewer_id)
+                reviewer_paper_indices.append(valid)
 
-                # Apply venue-specific weights per reviewer
+            if reviewer_ids:
+                max_papers = max(len(papers) for papers in reviewer_paper_indices)
+                num_reviewers = len(reviewer_ids)
+                paper_idx = torch.zeros((num_reviewers, max_papers), dtype=torch.long)
+                mask = torch.zeros((num_reviewers, max_papers), dtype=torch.bool)
+                for r, papers in enumerate(reviewer_paper_indices):
+                    paper_idx[r, :len(papers)] = torch.tensor(papers, dtype=torch.long)
+                    mask[r, :len(papers)] = True
+
+                scores = p2p_aff_norm[:, paper_idx]  # (num_test, num_reviewers, max_papers)
+
                 if self.venue_specific_weights:
-                    train_weight_j = train_weight_tensor[train_paper_idx]
-                    # Logit-space transformation preserves bounds and probability mass
-                    epsilon = 1e-8 ## Numerical stability
-                    logits = torch.logit(train_paper_aff_j, eps=epsilon)
-                    weighted_logits = logits + torch.log(torch.clamp(train_weight_j, min=epsilon)).unsqueeze(0)
-                    train_paper_aff_j = torch.sigmoid(weighted_logits)
+                    weights = train_weight_tensor[paper_idx]
+                    epsilon = 1e-8
+                    logits = torch.logit(scores, eps=epsilon)
+                    log_w = torch.log(torch.clamp(weights, min=epsilon))
+                    scores = torch.sigmoid(logits + log_w.unsqueeze(0))
 
                 if self.percentile_select is not None:
-                    # Select score based on percentile
-                    # q=1.0 (percentile_select=100) -> max score
-                    # q=0.5 (percentile_select=50) -> median score
-                    # q=0.0 (percentile_select=0) -> min score
-                    q = self.percentile_select / 100.0
-                    q = max(0.0, min(1.0, q)) 
-                    all_paper_aff = torch.quantile(train_paper_aff_j, q, dim=1, interpolation='linear')
+                    q = max(0.0, min(1.0, self.percentile_select / 100.0))
+                    nan_scores = scores.masked_fill(~mask.unsqueeze(0), float('nan'))
+                    all_paper_aff = torch.nanquantile(nan_scores, q, dim=2, interpolation='linear')
                 elif self.average_score:
-                    all_paper_aff = train_paper_aff_j.mean(dim=1)
+                    zero_scores = scores.masked_fill(~mask.unsqueeze(0), 0.0)
+                    counts = mask.sum(dim=1).clamp(min=1).to(scores.dtype)
+                    all_paper_aff = zero_scores.sum(dim=2) / counts.unsqueeze(0)
                 elif self.max_score:
-                    all_paper_aff = train_paper_aff_j.max(dim=1)[0]
-                for j in range(paper_num_test):
-                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[j], reviewer=reviewer_id,
-                                                                    score=round(all_paper_aff[j].item(), 4))
-                    csv_scores.append(csv_line)
-                    self.preliminary_scores.append((test_id_list[j], reviewer_id, round(all_paper_aff[j].item(), 4)))
+                    neg_inf_scores = scores.masked_fill(~mask.unsqueeze(0), float('-inf'))
+                    all_paper_aff = neg_inf_scores.max(dim=2).values
+
+                rounded = all_paper_aff.round(decimals=4)
+                for r, reviewer_id in enumerate(reviewer_ids):
+                    for j in range(paper_num_test):
+                        score = rounded[j, r].item()
+                        csv_scores.append(f'{test_id_list[j]},{reviewer_id},{score}')
+                        self.preliminary_scores.append((test_id_list[j], reviewer_id, score))
         print(f"Computed preliminary scores for SciNCL.", flush=True)
 
         if scores_path:
