@@ -274,21 +274,16 @@ def run_pipeline(
                 contents = '\n'.join([json.dumps(r) for r in result])
                 blob.upload_from_string(contents)
 
-        # Always dump embeddings to bucket
+        # Always dump embeddings to bucket. Source jsonl already has exactly
+        # {'paper_id', 'embedding'} (see Predictor._build_embedding_jsonl), so
+        # there's nothing to transform — upload the file directly via a
+        # resumable upload to avoid loading 500k embeddings (~12GB of Python
+        # objects) into memory just to re-serialize them.
         print("Dumping embeddings", flush=True)
         for emb_file in [d for d in os.listdir(config.job_dir) if '.jsonl' in d]:
-            result = []
             destination_blob = f"{blob_prefix}/{emb_file}"
-            with open(os.path.join(config.job_dir, emb_file), 'r') as f:
-                for line in f:
-                    data = json.loads(line)
-                    result.append({
-                        'paper_id': data['paper_id'],
-                        'embedding': data['embedding']
-                    })
             blob = bucket.blob(destination_blob)
-            contents = '\n'.join([json.dumps(r) for r in result])
-            blob.upload_from_string(contents)
+            blob.upload_from_filename(os.path.join(config.job_dir, emb_file))
 
     except Exception as e:
         # Write error to single JSONL line in GCS if bucket is available
