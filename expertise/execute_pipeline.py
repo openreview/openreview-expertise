@@ -202,10 +202,6 @@ def run_pipeline(
 
         # Fetch and write to storage
         print('Fetching and writing to storage')
-        group_group_matching = validated_request.entityA.get('type', '') == 'Group' and \
-            validated_request.entityB.get('type', '') == 'Group'
-        paper_paper_matching = validated_request.entityA.get('type', '') == 'Note' and \
-            validated_request.entityB.get('type', '') == 'Note'
 
         # Upload the score CSV(s) to GCS as-is (no transformation). The CSV
         # rows are in the model's natural order: [test_id, reviewer_id, score]
