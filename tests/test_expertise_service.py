@@ -1282,11 +1282,10 @@ class TestExpertiseService():
 
 
     def test_request_expertise_with_model_errors(self, openreview_client, openreview_context):
-        # Submit a config with an error in the model field and return the job_id
-        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        # sparseValue must be a positive integer; the config layer validates
+        # this on submit (POST) and rejects with HTTP 400 before any job is
+        # queued, so the worker never sees a malformed value at runtime.
         test_client = openreview_context['test_client']
-        queue_before = openreview_client.get_jobs_status()
-        failed_before = queue_before['expertiseQueueMQStatus']['failed']
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -1295,15 +1294,15 @@ class TestExpertiseService():
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Note",
-                        'invitation': "ABC.cc/-/Submission" 
+                        'invitation': "ABC.cc/-/Submission"
                     },
                     "model": {
                             "name": "specter+mfr",
                             'sparseValue': 'notAnInt',
-                            'useTitle': None, 
-                            'useAbstract': None, 
+                            'useTitle': None,
+                            'useAbstract': None,
                             'skipSpecter': False,
                             'scoreComputation': 'avg'
                     }
@@ -1312,50 +1311,23 @@ class TestExpertiseService():
             content_type='application/json',
             headers=openreview_client.headers
         )
-        assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['jobId']
+        assert response.status_code == 400, f'{response.json}'
+        assert 'sparseValue' in response.json['message']
 
-        start_time = time.time()
-        try_time = time.time() - start_time
-        failed_after = failed_before
-        while failed_after <= failed_before and try_time <= MAX_TIMEOUT:
-            time.sleep(5)
-            queue_after = openreview_client.get_jobs_status()
-            failed_after = queue_after['expertiseQueueMQStatus']['failed']
-            try_time = time.time() - start_time
-
-        assert try_time <= MAX_TIMEOUT, 'Expertise queue error count did not increase in time'
-        assert failed_after > failed_before
-        openreview_context['job_id'] = job_id
-
-    def test_get_results_and_get_error(self, openreview_client, openreview_context):
-        MAX_TIMEOUT = 600 # Timeout after 10 minutes
-        assert openreview_context['job_id'] is not None
+    def test_get_results_for_unknown_job(self, openreview_client, openreview_context):
+        """/expertise/results returns 404 for a job_id that doesn't exist.
+        Previously this was tested via a bad-sparseValue job that errored at
+        runtime — now sparseValue is validated at submit time (HTTP 400, no
+        job created), so we test the unknown-job-id path directly with a
+        synthetic id.
+        """
         test_client = openreview_context['test_client']
-        # Query until job is err
-        time.sleep(5)
-        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
+        response = test_client.get(
+            '/expertise/results',
+            headers=openreview_client.headers,
+            query_string={'jobId': 'nonexistent_job_id'},
+        )
         assert response.status_code == 404
-
-        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
-        start_time = time.time()
-        try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
-            time.sleep(5)
-            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
-            try_time = time.time() - start_time
-
-        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
-        assert response['name'] == 'test_run'
-        assert response['status'].strip() == 'Error'
-        assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
-        assert response['cdate'] <= response['mdate']
-        ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
-
-        # Clean up error job by calling the delete endpoint
-        response = test_client.delete(f'/expertise/{openreview_context["job_id"]}', headers=openreview_client.headers)
-        assert response.status_code == 200
-        assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
     def test_request_expertise_with_no_submission_error(self, openreview_client, openreview_context):
         # Submit a config with no submissions
@@ -1487,7 +1459,10 @@ class TestExpertiseService():
                 break
         assert target_id is not None
 
-        error_queue_before = openreview_client.get_jobs_status()
+        # Submit with a malformed sparseValue. Config validation rejects with
+        # HTTP 400 at the API boundary — no job is created, the worker never
+        # sees the bad input, and the expertise queue's failure counter
+        # therefore does not increment.
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -1497,16 +1472,16 @@ class TestExpertiseService():
                         'memberOf': "ABC.cc/Reviewers",
                         'expertise': {  'invitation': 'EXCLUSION.cc/Reviewers/-/Expertise_Selection'  }
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Note",
-                        'invitation': "ABC.cc/-/Submission" 
+                        'invitation': "ABC.cc/-/Submission"
                     },
                     "model": {
                             "name": "specter2+scincl",
                             'sparseValue': 'notAnInt',
                             'useTitle': None,
                             'useAbstract': None,
-                            'skipSpecter': False,   
+                            'skipSpecter': False,
                             'scoreComputation': 'avg'
                     }
                 }
@@ -1514,35 +1489,8 @@ class TestExpertiseService():
             content_type='application/json',
             headers=openreview_client.headers
         )
-        assert response.status_code == 200, f'{response.json}'
-        error_job_id = response.json['jobId']
-
-        time.sleep(5)
-        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{error_job_id}"})
-        assert response.status_code == 404
-
-        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{error_job_id}"}).json
-        start_time = time.time()
-        try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
-            time.sleep(5)
-            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{error_job_id}"}).json
-            try_time = time.time() - start_time
-
-        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
-        assert response['name'] == 'test_run'
-        assert response['status'].strip() == 'Error'
-        assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
-        assert response['cdate'] <= response['mdate']
-        error_queue_after = helpers.await_queue_error(
-            openreview_client,
-            queue_names=['expertiseQueueMQStatus']
-        )
-        assert error_queue_after['expertiseQueueMQStatus']['failed'] > error_queue_before['expertiseQueueMQStatus']['failed']
-
-        response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
-        assert response.status_code == 200
-        assert not os.path.isdir(f"./tests/jobs/{error_job_id}")
+        assert response.status_code == 400, f'{response.json}'
+        assert 'sparseValue' in response.json['message']
     
     def test_delete_job_without_authorization(self, openreview_client, openreview_context):
         """Test that DELETE endpoint returns 403 when no authorization headers are provided"""
