@@ -674,3 +674,93 @@ def test_venue_specific_weights_with_weightless_cache(tmp_path):
 
     assert model.scores_matrix is not None and model.scores_matrix.numel() > 0, "Expected at least one score row"
     assert matrix_path.exists()
+
+
+def test_all_scores_skips_reviewer_with_only_bad_embeddings(tmp_path):
+    """Regression: when every publication for a reviewer has a zero-length
+    embedding (added to train_bad_id_set by load_emb_file), train_paper_idx
+    becomes empty. The previous code would slice p2p_aff_norm[:, []] and crash
+    on .max(dim=1)[0] / torch.quantile, or produce NaNs from .mean(dim=1).
+    Expected: the reviewer is skipped and the run completes successfully
+    with that reviewer omitted from scores_matrix's columns.
+
+    Setup: two reviewers — one with a good paper, one whose only paper has
+    a zero-length embedding. The bad-embedding reviewer must not appear in
+    the resulting reviewer_ids; the good-embedding reviewer must.
+    """
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "~GoodReviewer1.jsonl").write_text(
+        json.dumps({"id": "good_paper", "content": {"title": "Good Paper", "abstract": "Abstract."}}) + "\n"
+    )
+    (archive_dir / "~BadReviewer1.jsonl").write_text(
+        json.dumps({"id": "bad_paper", "content": {"title": "Bad Paper", "abstract": "Abstract."}}) + "\n"
+    )
+
+    submissions_dir = tmp_path / "submissions"
+    submissions_dir.mkdir()
+    (submissions_dir / "Sub1.jsonl").write_text(
+        json.dumps({"id": "Sub1", "content": {"title": "Submission", "abstract": "Submission abstract."}}) + "\n"
+    )
+
+    archives_dataset = ArchivesDataset(archives_path=archive_dir)
+    submissions_dataset = SubmissionsDataset(submissions_path=submissions_dir)
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    model = specter2_scincl.EnsembleModel(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(work_dir),
+        average_score=True,
+        max_score=False,
+        use_cuda=False,
+        use_redis=False,
+    )
+    model.set_archives_dataset(archives_dataset)
+    model.set_submissions_dataset(submissions_dataset)
+
+    pub_dir = tmp_path / "publications"
+    pub_dir.mkdir()
+    sub_dir = tmp_path / "sub_embeddings"
+    sub_dir.mkdir()
+    specter_pub_path = pub_dir / "pub2vec_specter.jsonl"
+    scincl_pub_path  = pub_dir / "pub2vec_scincl.jsonl"
+    specter_sub_path = sub_dir / "sub2vec_specter.jsonl"
+    scincl_sub_path  = sub_dir / "sub2vec_scincl.jsonl"
+
+    # Write hand-crafted embeddings. The "bad_paper" gets an empty embedding
+    # ([]), which load_emb_file detects (paper_emb_size == 0) and adds to
+    # train_bad_id_set. ~BadReviewer1's only paper is bad — so their
+    # train_paper_idx will be empty after filtering.
+    good_embedding = [0.1] * 768
+    pub_lines = (
+        json.dumps({"paper_id": "good_paper", "embedding": good_embedding}) + "\n"
+        + json.dumps({"paper_id": "bad_paper", "embedding": []}) + "\n"
+    )
+    specter_pub_path.write_text(pub_lines)
+    scincl_pub_path.write_text(pub_lines)
+
+    sub_emb = [0.2] * 768
+    sub_line = json.dumps({"paper_id": "Sub1", "embedding": sub_emb}) + "\n"
+    specter_sub_path.write_text(sub_line)
+    scincl_sub_path.write_text(sub_line)
+
+    scores_dir = tmp_path / "scores"
+    scores_dir.mkdir()
+    # Must not raise.
+    model.all_scores(
+        specter_publications_path=specter_pub_path,
+        scincl_publications_path=scincl_pub_path,
+        specter_submissions_path=specter_sub_path,
+        scincl_submissions_path=scincl_sub_path,
+        matrix_path=scores_dir / "scores.pt",
+    )
+
+    # The good reviewer is present; the bad-only reviewer is dropped.
+    assert "~GoodReviewer1" in model.reviewer_ids
+    assert "~BadReviewer1" not in model.reviewer_ids
+    # Matrix shape: [num_test=1, num_reviewers=1].
+    assert tuple(model.scores_matrix.shape) == (1, 1)
+    # Score is finite (no NaN from a degenerate reduction).
+    score = model.scores_matrix[0, 0].item()
+    assert score == score, "Score must not be NaN"

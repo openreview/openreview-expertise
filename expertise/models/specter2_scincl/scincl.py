@@ -310,6 +310,15 @@ class SciNCLPredictor(Predictor):
                 for paper_id in train_note_id_list:
                     if paper_id not in train_bad_id_set:
                         train_paper_idx.append(paper_id2train_idx[paper_id])
+                if not train_paper_idx:
+                    # Every publication for this reviewer had a bad embedding
+                    # (length 0, added to train_bad_id_set in load_emb_file).
+                    # Slicing with an empty column index gives a [num_test, 0]
+                    # tensor, which would crash .max(dim=1) / torch.quantile
+                    # and produce NaNs from .mean(dim=1). Skip the reviewer
+                    # consistently with the "no publications" case above —
+                    # they won't appear in self.reviewer_ids.
+                    continue
                 train_paper_aff_j = p2p_aff_norm[:, train_paper_idx]
 
                 # Apply venue-specific weights per reviewer
