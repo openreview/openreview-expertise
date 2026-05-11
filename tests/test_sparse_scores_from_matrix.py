@@ -180,3 +180,24 @@ def test_zero_sparse_value_produces_empty_file(tmp_path):
     generate_sparse_scores_from_matrix(matrix, ['t0'], ['r0', 'r1'], sparse_value=0, scores_path=out_path)
     assert out_path.exists()
     assert out_path.read_text() == ''
+
+
+def test_empty_reviewer_axis_produces_empty_file(tmp_path):
+    """When the model produces a [num_test, 0] matrix because no reviewers
+    were eligible (every train_note_id_list empty or all publications were
+    in the bad_id_set), the sparse generator must emit an empty file rather
+    than crash on torch.topk(k=0, dim=1)."""
+    matrix = torch.empty((3, 0))
+    out_path = tmp_path / 'sparse.csv'
+    generate_sparse_scores_from_matrix(matrix, ['t0', 't1', 't2'], [], sparse_value=10, scores_path=out_path)
+    assert out_path.exists()
+    assert out_path.read_text() == ''
+
+
+def test_empty_test_axis_produces_empty_file(tmp_path):
+    """Symmetric: 0 test rows, some reviewers. Empty file, no crash."""
+    matrix = torch.empty((0, 3))
+    out_path = tmp_path / 'sparse.csv'
+    generate_sparse_scores_from_matrix(matrix, [], ['r0', 'r1', 'r2'], sparse_value=10, scores_path=out_path)
+    assert out_path.exists()
+    assert out_path.read_text() == ''

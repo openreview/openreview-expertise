@@ -337,7 +337,15 @@ class SciNCLPredictor(Predictor):
                 score_vectors.append(all_paper_aff)
                 reviewer_ids.append(reviewer_id)
 
-            self.scores_matrix = torch.stack(score_vectors, dim=1)  # [num_test, num_reviewers]
+            if score_vectors:
+                self.scores_matrix = torch.stack(score_vectors, dim=1)  # [num_test, num_reviewers]
+            else:
+                # No eligible reviewers (every train_note_id_list empty or all
+                # publications dropped via bad_id_set). Match the pre-refactor
+                # behavior: produce a 0-column matrix and empty reviewer list
+                # so downstream sparse generation / merging / CSV emission
+                # all see a well-formed but empty result instead of crashing.
+                self.scores_matrix = torch.empty((paper_num_test, 0), dtype=p2p_aff_norm.dtype)
             self.test_id_list = test_id_list
             self.reviewer_ids = reviewer_ids
 
