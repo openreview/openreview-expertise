@@ -181,11 +181,10 @@ def test_aggregate_by_group_matrix_skips_authors_with_no_known_papers(tmp_path):
     assert actual == {('~Rev1', '~AuthorA1'): 0.90}
 
 
-def test_aggregate_by_group_matrix_drops_zero_average(tmp_path):
-    """The legacy code only stored per-archive averages when score_length > 0
-    AND skipped the entry when the average rounded to 0 isn't explicitly
-    filtered. The matrix path matches by skipping cells whose avg rounds to 0
-    (rounded-to-2-decimals). Verify a true-zero score is dropped.
+def test_aggregate_by_group_matrix_preserves_zero_scores(tmp_path):
+    """The legacy code emits per-(archive, profile) rows for every reviewer
+    that scored at least one of the profile's papers, regardless of the
+    rounded value. The matrix path matches this: zero scores aren't dropped.
     """
     publications_by_profile_id = {
         '~AuthorA1': [{'id': 'paperA1'}],
@@ -197,7 +196,7 @@ def test_aggregate_by_group_matrix_drops_zero_average(tmp_path):
         publications_by_profile_id=publications_by_profile_id,
     )
 
-    # Rev2 has score 0.001 which rounds to 0.00 at 2 decimals -> dropped.
+    # Rev2 score 0.001 rounds to 0.0 — kept; Rev1 score 0.9 -> 0.90.
     scores_matrix = torch.tensor([[0.9, 0.001]])
     torch.save(
         {'scores': scores_matrix, 'test_ids': ['paperA1'], 'reviewer_ids': ['~Rev1', '~Rev2']},
@@ -206,4 +205,59 @@ def test_aggregate_by_group_matrix_drops_zero_average(tmp_path):
 
     preliminary_scores = aggregate_by_group(config)
     actual = {(rev, sub): score for rev, sub, score in preliminary_scores}
-    assert actual == {('~Rev1', '~AuthorA1'): 0.90}
+    assert actual == {
+        ('~Rev1', '~AuthorA1'): 0.90,
+        ('~Rev2', '~AuthorA1'): 0.00,
+    }
+
+
+def test_aggregate_by_group_matrix_and_csv_paths_produce_same_output(tmp_path):
+    """Direct cross-check: run both code paths on equivalent input data and
+    assert they produce identical preliminary_scores. Catches any drift
+    between the legacy CSV-based aggregation and the new matrix-based one.
+    """
+    publications_by_profile_id = {
+        '~AuthorA1': [{'id': 'paperA1'}, {'id': 'paperA2'}],
+        '~AuthorB1': [{'id': 'paperB1'}],
+    }
+    archive_members = ['~Rev1', '~Rev2']
+
+    # Same matrix values, written to both .pt and .csv forms under separate dirs.
+    csv_rows = [
+        ('paperA1', '~Rev1', 0.8), ('paperA1', '~Rev2', 0.2),
+        ('paperA2', '~Rev1', 0.4), ('paperA2', '~Rev2', 0.6),
+        ('paperB1', '~Rev1', 0.5), ('paperB1', '~Rev2', 0.7),
+    ]
+    matrix = torch.tensor([
+        [0.8, 0.2],
+        [0.4, 0.6],
+        [0.5, 0.7],
+    ])
+
+    # Matrix path
+    _, matrix_scores_dir, matrix_config = _setup_job_dir(
+        tmp_path / 'matrix',
+        archive_members=archive_members,
+        publications_by_profile_id=publications_by_profile_id,
+    )
+    torch.save(
+        {'scores': matrix, 'test_ids': ['paperA1', 'paperA2', 'paperB1'], 'reviewer_ids': ['~Rev1', '~Rev2']},
+        matrix_scores_dir / 'test_run.pt',
+    )
+    matrix_result = aggregate_by_group(matrix_config)
+
+    # CSV path
+    _, csv_scores_dir, csv_config = _setup_job_dir(
+        tmp_path / 'csv',
+        archive_members=archive_members,
+        publications_by_profile_id=publications_by_profile_id,
+    )
+    with open(csv_scores_dir / 'test_run.csv', 'w') as f:
+        w = csv_mod.writer(f)
+        for r in csv_rows:
+            w.writerow(r)
+    csv_result = aggregate_by_group(csv_config)
+
+    matrix_dict = {(rev, sub): score for rev, sub, score in matrix_result}
+    csv_dict = {(rev, sub): score for rev, sub, score in csv_result}
+    assert matrix_dict == csv_dict

@@ -595,12 +595,14 @@ def aggregate_by_group(config):
             valid_idxs = [test_id_to_idx[pid] for pid in paper_ids if pid in test_id_to_idx]
             if not valid_idxs:
                 continue
-            # Mean across the profile's paper rows -> vector of size num_reviewers
+            # Mean across the profile's paper rows -> vector of size num_reviewers.
+            # Emit every (profile, reviewer) cell regardless of score value —
+            # the legacy CSV-based path stores the round result even when it
+            # rounds to 0.0, and we preserve that behavior.
             avg_row = scores_matrix[valid_idxs].mean(dim=0).tolist()
             average_score[profile_id] = {
                 reviewer_ids[j]: round(avg_row[j], 2)
                 for j in range(len(reviewer_ids))
-                if avg_row[j]
             }
     else:
         # Legacy tuple-based predictor that wrote {name}.csv directly.
