@@ -306,7 +306,25 @@ def _parse_sparse_csv(path):
 def test_sparse_top_k_per_submission_and_reviewer(tmp_path):
     """Both axes show up in the sparse output. Scores chosen so that the
     top-2-per-submission and top-2-per-reviewer selections partially
-    overlap — the union exercises both halves of the contract."""
+    overlap — the union exercises both halves of the contract.
+
+    Matrix:
+              R1     R2     R3     R4
+        subA  0.90   0.10   0.50   0.60
+        subB  0.20   0.80   0.30   0.40
+        subC  0.70   0.50   0.20   0.15
+
+    sparse_value=2:
+      top-2 reviewers per sub:
+        subA -> R1 (0.90), R4 (0.60)
+        subB -> R2 (0.80), R4 (0.40)
+        subC -> R1 (0.70), R2 (0.50)
+      top-2 subs per reviewer:
+        R1 -> subA (0.90), subC (0.70)
+        R2 -> subB (0.80), subC (0.50)
+        R3 -> subA (0.50), subB (0.30)
+        R4 -> subA (0.60), subB (0.40)
+    """
     matrix = [
         [0.90, 0.10, 0.50, 0.60],
         [0.20, 0.80, 0.30, 0.40],
@@ -316,11 +334,32 @@ def test_sparse_top_k_per_submission_and_reviewer(tmp_path):
     reviewer_ids = ["R1", "R2", "R3", "R4"]
     out = tmp_path / "sparse.csv"
     generate_sparse_scores(_flatten_matrix(matrix, test_ids, reviewer_ids), 2, out)
-    assert _parse_sparse_csv(out) == _expected_rounded(matrix, test_ids, reviewer_ids, 2)
+
+    expected = {
+        ("subA", "R1", 0.90),
+        ("subA", "R4", 0.60),
+        ("subB", "R2", 0.80),
+        ("subB", "R4", 0.40),
+        ("subC", "R1", 0.70),
+        ("subC", "R2", 0.50),
+        ("subA", "R3", 0.50),
+        ("subB", "R3", 0.30),
+    }
+    assert _parse_sparse_csv(out) == expected
 
 
 def test_sparse_value_one(tmp_path):
-    """sparse_value=1: only the per-axis argmax survives on each side."""
+    """sparse_value=1: only the per-axis argmax survives on each side.
+
+    Matrix:
+              R1    R2    R3
+        subA  0.9   0.1   0.5
+        subB  0.2   0.8   0.3
+
+    sparse_value=1:
+      top reviewer per sub:  subA->R1 (0.9), subB->R2 (0.8)
+      top sub per reviewer:  R1->subA (0.9), R2->subB (0.8), R3->subA (0.5)
+    """
     matrix = [
         [0.9, 0.1, 0.5],
         [0.2, 0.8, 0.3],
@@ -329,7 +368,13 @@ def test_sparse_value_one(tmp_path):
     reviewer_ids = ["R1", "R2", "R3"]
     out = tmp_path / "sparse.csv"
     generate_sparse_scores(_flatten_matrix(matrix, test_ids, reviewer_ids), 1, out)
-    assert _parse_sparse_csv(out) == _expected_rounded(matrix, test_ids, reviewer_ids, 1)
+
+    expected = {
+        ("subA", "R1", 0.9),
+        ("subB", "R2", 0.8),
+        ("subA", "R3", 0.5),
+    }
+    assert _parse_sparse_csv(out) == expected
 
 
 def test_sparse_value_larger_than_groups_keeps_everything(tmp_path):
