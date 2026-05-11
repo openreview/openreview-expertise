@@ -1,6 +1,7 @@
 from __future__ import print_function, absolute_import, unicode_literals
 import codecs
 import sys
+import time
 import itertools
 import string
 import nltk
@@ -504,6 +505,53 @@ def generate_sparse_scores(full_scores, sparse_value, scores_path=None):
                 f.write('{0},{1},{2}\n'.format(note_id, profile_id, score))
 
     return sparse_scores
+
+def generate_sparse_scores_from_matrix(scores_matrix, test_id_list, reviewer_ids, sparse_value, scores_path):
+    """Compute the sparse score CSV directly from a [num_test, num_reviewers]
+    matrix via torch.topk on both axes, union+dedupe the (row, col) pairs,
+    and emit the result as CSV. Avoids materializing a list of all
+    num_test*num_reviewers (test_id, reviewer_id, score) tuples (which on
+    a large job is 175M tuples / ~17GB) and the two Python sorts that the
+    tuple-based generate_sparse_scores performs.
+    """
+    print(f'generate_sparse_scores_from_matrix: shape={tuple(scores_matrix.shape)} sparse_value={sparse_value}', flush=True)
+    _t_total = time.perf_counter()
+
+    n_test, n_rev = scores_matrix.shape
+    k_cols = min(sparse_value, n_rev) if sparse_value else 0
+    k_rows = min(sparse_value, n_test) if sparse_value else 0
+    if k_cols <= 0 or k_rows <= 0:
+        if scores_path:
+            open(scores_path, 'w').close()
+        return
+
+    # Top-K reviewers per submission (along columns).
+    _, top_rev_per_test = torch.topk(scores_matrix, k=k_cols, dim=1)    # [n_test, k_cols]
+    # Top-K submissions per reviewer (along rows).
+    _, top_test_per_rev = torch.topk(scores_matrix, k=k_rows, dim=0)    # [k_rows, n_rev]
+
+    # Build (test_idx, rev_idx) pairs from both views, vectorized.
+    test_ar = torch.arange(n_test).unsqueeze(1).expand(-1, k_cols).flatten()
+    pairs_a = torch.stack([test_ar, top_rev_per_test.flatten()], dim=1)
+
+    rev_ar = torch.arange(n_rev).unsqueeze(0).expand(k_rows, -1).flatten()
+    pairs_b = torch.stack([top_test_per_rev.flatten(), rev_ar], dim=1)
+
+    all_pairs = torch.unique(torch.cat([pairs_a, pairs_b], dim=0), dim=0)
+
+    # Bulk score lookup + tolist for fast Python iteration during CSV write.
+    sel_scores = scores_matrix[all_pairs[:, 0], all_pairs[:, 1]].tolist()
+    pairs_list = all_pairs.tolist()
+    print(f'  built {len(pairs_list)} sparse pairs in {time.perf_counter() - _t_total:.1f}s', flush=True)
+
+    if scores_path:
+        _t0 = time.perf_counter()
+        with open(scores_path, 'w') as f:
+            for (i, j), score in zip(pairs_list, sel_scores):
+                f.write(f'{test_id_list[i]},{reviewer_ids[j]},{round(score, 4)}\n')
+        print(f'  wrote sparse CSV in {time.perf_counter() - _t0:.1f}s', flush=True)
+
+    print(f'generate_sparse_scores_from_matrix total {time.perf_counter() - _t_total:.1f}s', flush=True)
 
 def aggregate_by_group(config):
     # Fetch scores

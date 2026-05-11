@@ -207,12 +207,12 @@ def run_pipeline(
         paper_paper_matching = validated_request.entityA.get('type', '') == 'Note' and \
             validated_request.entityB.get('type', '') == 'Note'
 
-        # Stream-convert score CSVs to JSONL directly into the GCS upload
-        # stream. Avoids loading the full result set (potentially 100M+ rows)
-        # into a Python list before serializing — that path peaked at ~95 GB
-        # of host memory for large jobs and triggered OOM kills.
+        # Stream-convert the (sparse) score CSV to JSONL directly into the
+        # GCS upload stream. The full score table is no longer emitted as a
+        # CSV at all — it's saved as a torch tensor in the .pt file uploaded
+        # below — so the only CSV here is the sparse one.
         print("Converting CSV scores to JSONL...", flush=True)
-        for csv_file in [d for d in os.listdir(config.job_dir) if '.csv' in d]:
+        for csv_file in [d for d in os.listdir(config.job_dir) if d.endswith('.csv')]:
             dest_name = 'scores_sparse.jsonl' if '_sparse' in csv_file else 'scores.jsonl'
             destination_blob = f"{blob_prefix}/{dest_name}"
             blob = bucket.blob(destination_blob)
@@ -231,6 +231,15 @@ def run_pipeline(
                     out.write(json.dumps(obj))
                     first = False
         print("Finished writing scores to JSONL", flush=True)
+
+        # Upload the full scores matrix (.pt) directly. Same direct-streaming
+        # pattern as the embedding files — source bytes go disk → resumable-
+        # upload buffer → GCS without ever being parsed in Python.
+        print("Dumping scores matrix(es)", flush=True)
+        for pt_file in [d for d in os.listdir(config.job_dir) if d.endswith('.pt')]:
+            destination_blob = f"{blob_prefix}/{pt_file}"
+            blob = bucket.blob(destination_blob)
+            blob.upload_from_filename(os.path.join(config.job_dir, pt_file))
 
         # Dump config
         print("Dumping job config", flush=True)

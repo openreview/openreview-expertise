@@ -390,11 +390,19 @@ class BaseExpertiseService:
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
             config = JobConfig.from_json(json.load(f))
 
-        # Look for files
-        if os.path.isfile(os.path.join(search_dir, f"{config.name}.csv")):
-            file_dir = os.path.join(search_dir, f"{config.name}.csv")
-            if 'sparse_value' in config.model_params.keys() and os.path.isfile(os.path.join(search_dir, f"{config.name}_sparse.csv")):
-                file_dir = os.path.join(search_dir, f"{config.name}_sparse.csv")
+        # Look for files. Matrix-based models (specter2, scincl, specter2+scincl)
+        # produce {name}.pt + {name}_sparse.csv. Legacy tuple-based models (bm25,
+        # mfr, specter+mfr) still produce {name}.csv + {name}_sparse.csv.
+        # The API returns the sparse CSV in either case.
+        matrix_path = os.path.join(search_dir, f"{config.name}.pt")
+        full_csv_path = os.path.join(search_dir, f"{config.name}.csv")
+        sparse_csv_path = os.path.join(search_dir, f"{config.name}_sparse.csv")
+        if os.path.isfile(matrix_path) or os.path.isfile(full_csv_path):
+            if 'sparse_value' in config.model_params.keys() and os.path.isfile(sparse_csv_path):
+                file_dir = sparse_csv_path
+            elif os.path.isfile(full_csv_path):
+                # Legacy fallback: full CSV is acceptable if no sparse was requested.
+                file_dir = full_csv_path
             else:
                 raise OpenReviewException("Sparse score file not found for job {job_id}".format(job_id=config.job_id))
         else:

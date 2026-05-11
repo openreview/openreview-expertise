@@ -10,7 +10,30 @@ import torch
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import specter2_scincl
 import redisai
-from expertise.utils.utils import generate_sparse_scores
+from expertise.utils.utils import generate_sparse_scores_from_matrix
+
+
+def _matrix_to_rows_and_csv(model, csv_path=None):
+    """Test adapter: flatten the new matrix-based model output into the
+    legacy [(test_id, reviewer_id, score), ...] tuple list, and optionally
+    write the equivalent CSV file. Used by tests that previously consumed
+    the per-row CSV/preliminary_scores produced by all_scores().
+    Scores are rounded to 4 decimals at the row boundary — fp32 storage in
+    the matrix preserves at most ~7 significant digits, so the per-cell
+    Python round matches what the legacy code emitted in the CSV.
+    """
+    rows = []
+    if model.scores_matrix is None:
+        return rows
+    scores = model.scores_matrix.tolist()
+    for i, test_id in enumerate(model.test_id_list):
+        for j, reviewer_id in enumerate(model.reviewer_ids):
+            rows.append((test_id, reviewer_id, round(scores[i][j], 4)))
+    if csv_path is not None:
+        with open(csv_path, 'w') as f:
+            for test_id, reviewer_id, score in rows:
+                f.write(f'{test_id},{reviewer_id},{score}\n')
+    return rows
 
 
 def compute_score_statistics(scores, label=""):
@@ -124,15 +147,17 @@ def test_specncl_scores(tmp_path, create_specncl):
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()
-    all_scores = specnclModel.all_scores(
+    specnclModel.all_scores(
         specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
         scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl'),
         specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
         scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
-        scores_path=scores_path.joinpath(config['name'] + '.csv')
+        matrix_path=scores_path.joinpath(config['name'] + '.pt')
     )
 
-    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '.csv'))
+    csv_path = scores_path.joinpath(config['name'] + '.csv')
+    _matrix_to_rows_and_csv(specnclModel, csv_path=csv_path)
+    assert_scores_have_max_4_decimals(csv_path)
 
 
 def test_sparse_scores(tmp_path, create_specncl):
@@ -167,23 +192,40 @@ def test_sparse_scores(tmp_path, create_specncl):
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()
-    all_scores = specnclModel.all_scores(
+    specnclModel.all_scores(
         specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
         scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl'),
         specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
         scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
-        scores_path=scores_path.joinpath(config['name'] + '.csv')
+        matrix_path=scores_path.joinpath(config['name'] + '.pt')
     )
 
+    full_csv = scores_path.joinpath(config['name'] + '.csv')
+    _matrix_to_rows_and_csv(specnclModel, csv_path=full_csv)
+
+    sparse_csv = scores_path.joinpath(config['name'] + '_sparse.csv')
     if config['model_params'].get('sparse_value'):
-        all_scores = generate_sparse_scores(all_scores, config['model_params']['sparse_value'], scores_path.joinpath(config['name'] + '_sparse.csv'))
+        generate_sparse_scores_from_matrix(
+            specnclModel.scores_matrix,
+            specnclModel.test_id_list,
+            specnclModel.reviewer_ids,
+            config['model_params']['sparse_value'],
+            sparse_csv,
+        )
 
-    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '.csv'))
-    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '_sparse.csv'))
+    assert_scores_have_max_4_decimals(full_csv)
+    assert_scores_have_max_4_decimals(sparse_csv)
 
-    assert len(all_scores) == 8
-    for row in all_scores:
-        submission_id, profile_id, score = row[0], row[1], float(row[2])
+    # Read sparse CSV back into rows for assertions.
+    sparse_rows = []
+    with open(sparse_csv) as f:
+        for line in f:
+            parts = line.strip().split(',')
+            if len(parts) >= 3:
+                sparse_rows.append((parts[0], parts[1], float(parts[2])))
+
+    assert len(sparse_rows) == 8
+    for submission_id, profile_id, score in sparse_rows:
         assert len(submission_id) >= 1
         assert len(profile_id) >= 1
         assert profile_id.startswith('~')
@@ -224,13 +266,14 @@ def test_normalization(tmp_path, create_specncl):
 
     scores_path = unnorm_path / 'scores'
     scores_path.mkdir()
-    all_scores = specnclModel.all_scores(
+    specnclModel.all_scores(
         specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
         scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl'),
         specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
         scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
-        scores_path=scores_path.joinpath(config['name'] + '.csv')
+        matrix_path=scores_path.joinpath(config['name'] + '.pt')
     )
+    all_scores = _matrix_to_rows_and_csv(specnclModel)
 
     for row in all_scores:
         submission_id, profile_id, score = row[0], row[1], float(row[2])
@@ -238,7 +281,7 @@ def test_normalization(tmp_path, create_specncl):
         assert len(profile_id) >= 1
         assert profile_id.startswith('~')
         assert score >= 0 and score <= 1
-    
+
     # Compute statistics for unnormalized scores
     unnorm_stats = compute_score_statistics(all_scores, "(Unnormalized)")
     
@@ -275,20 +318,21 @@ def test_normalization(tmp_path, create_specncl):
 
     scores_path = norm_path / 'scores'
     scores_path.mkdir()
-    all_scores = specnclModel.all_scores(
+    specnclModel.all_scores(
         specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
         scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl'),
         specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
         scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
-        scores_path=scores_path.joinpath(config['name'] + '.csv')
+        matrix_path=scores_path.joinpath(config['name'] + '.pt')
     )
+    all_scores = _matrix_to_rows_and_csv(specnclModel)
 
     for row in all_scores:
         submission_id, profile_id, score = row[0], row[1], float(row[2])
         assert len(submission_id) >= 1
         assert len(profile_id) >= 1
         assert profile_id.startswith('~')
-        assert score >= 0 and score <= 1    
+        assert score >= 0 and score <= 1
     # Compute statistics for normalized scores
     norm_stats = compute_score_statistics(all_scores, "(Normalized)")
 
@@ -406,13 +450,14 @@ def test_self_similarity_score_within_bounds(tmp_path):
     scores_dir = tmp_path / "scores"
     scores_dir.mkdir()
 
-    all_scores = model.all_scores(
+    model.all_scores(
         specter_publications_path=specter_pub_path,
         scincl_publications_path=scincl_pub_path,
         specter_submissions_path=specter_sub_path,
         scincl_submissions_path=scincl_sub_path,
-        scores_path=scores_dir / "test_self_similarity.csv",
+        matrix_path=scores_dir / "test_self_similarity.pt",
     )
+    all_scores = _matrix_to_rows_and_csv(model)
 
     assert len(all_scores) > 0, "No scores were produced — check dataset setup."
 
@@ -618,14 +663,14 @@ def test_venue_specific_weights_with_weightless_cache(tmp_path):
     assert specter_pub_path.read_text() == specter_cache.read_text()
     assert scincl_pub_path.read_text() == scincl_cache.read_text()
 
-    scores_path = work_dir / "scores.csv"
-    scores = model.all_scores(
+    matrix_path = work_dir / "scores.pt"
+    model.all_scores(
         specter_publications_path=specter_pub_path,
         scincl_publications_path=scincl_pub_path,
         specter_submissions_path=specter_sub_path,
         scincl_submissions_path=scincl_sub_path,
-        scores_path=scores_path,
+        matrix_path=matrix_path,
     )
 
-    assert scores, "Expected at least one score row"
-    assert scores_path.exists()
+    assert model.scores_matrix is not None and model.scores_matrix.numel() > 0, "Expected at least one score row"
+    assert matrix_path.exists()
