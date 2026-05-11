@@ -820,7 +820,8 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
-        assert os.path.getsize(f"./tests/jobs/{job_id}/test_run.csv") == os.path.getsize(f"./tests/jobs/{job_id}/test_run_sparse.csv")
+        assert os.path.isfile(f"./tests/jobs/{job_id}/test_run.pt")
+        assert os.path.isfile(f"./tests/jobs/{job_id}/test_run_sparse.csv")
 
         # Check for API request
         req = response['request']
@@ -2400,7 +2401,8 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
-        assert os.path.getsize(f"./tests/jobs/{job_id}/test_run.csv") == os.path.getsize(f"./tests/jobs/{job_id}/test_run_sparse.csv")
+        assert os.path.isfile(f"./tests/jobs/{job_id}/test_run.pt")
+        assert os.path.isfile(f"./tests/jobs/{job_id}/test_run_sparse.csv")
 
         # Get normalized mean
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
@@ -2463,7 +2465,8 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
-        assert os.path.getsize(f"./tests/jobs/{unnorm_job_id}/test_run.csv") == os.path.getsize(f"./tests/jobs/{unnorm_job_id}/test_run_sparse.csv")
+        assert os.path.isfile(f"./tests/jobs/{unnorm_job_id}/test_run.pt")
+        assert os.path.isfile(f"./tests/jobs/{unnorm_job_id}/test_run_sparse.csv")
 
         # Check that normalized scores are different
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': unnorm_job_id})
