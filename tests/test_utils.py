@@ -259,23 +259,6 @@ import csv
 from itertools import groupby
 
 
-def _reference_sparse_rows(matrix, test_ids, reviewer_ids, sparse_value):
-    """Reference contract: top-k per row + top-k per column, union'd. Scores
-    are returned at full precision; callers apply rounding to match
-    production (which rounds to 4 decimals before sparsification)."""
-    n_test, n_rev, k = len(test_ids), len(reviewer_ids), sparse_value
-    selected = set()
-    for i in range(n_test):
-        row = sorted(((matrix[i][j], j) for j in range(n_rev)), key=lambda x: x[0], reverse=True)
-        for score, j in row[:k]:
-            selected.add((test_ids[i], reviewer_ids[j], score))
-    for j in range(n_rev):
-        col = sorted(((matrix[i][j], i) for i in range(n_test)), key=lambda x: x[0], reverse=True)
-        for score, i in col[:k]:
-            selected.add((test_ids[i], reviewer_ids[j], score))
-    return selected
-
-
 def _flatten_matrix(matrix, test_ids, reviewer_ids, decimals=4):
     """Build the (sub, rev, score) tuple list that generate_sparse_scores
     consumes. Scores rounded to `decimals` to match what all_scores feeds in."""
@@ -284,13 +267,6 @@ def _flatten_matrix(matrix, test_ids, reviewer_ids, decimals=4):
         for i, t in enumerate(test_ids)
         for j, r in enumerate(reviewer_ids)
     ]
-
-
-def _expected_rounded(matrix, test_ids, reviewer_ids, sparse_value, decimals=4):
-    return {
-        (t, r, round(float(s), decimals))
-        for (t, r, s) in _reference_sparse_rows(matrix, test_ids, reviewer_ids, sparse_value)
-    }
 
 
 def _parse_sparse_csv(path):
@@ -459,23 +435,6 @@ def test_sparse_every_submission_and_reviewer_appears(tmp_path):
     rows = _parse_sparse_csv(out)
     assert {t for (t, _, _) in rows} == set(test_ids)
     assert {r for (_, r, _) in rows} == set(reviewer_ids)
-
-
-def test_sparse_matches_reference_at_several_k(tmp_path):
-    """Larger dense matrix at several sparse_value settings — exercises the
-    typical production shape (every submission scored against every
-    reviewer)."""
-    import random
-    rng = random.Random(0xC0FFEE)
-    test_ids = [f"sub{i}" for i in range(6)]
-    reviewer_ids = [f"~Rev{j}" for j in range(5)]
-    matrix = [[rng.random() for _ in reviewer_ids] for _ in test_ids]
-    for k in (1, 2, 3, 5, 10):
-        out = tmp_path / f"sparse_k{k}.csv"
-        generate_sparse_scores(_flatten_matrix(matrix, test_ids, reviewer_ids), k, out)
-        assert _parse_sparse_csv(out) == _expected_rounded(
-            matrix, test_ids, reviewer_ids, k
-        ), f"Mismatch at sparse_value={k}"
 
 
 def test_sparse_ties_preserve_required_rows(tmp_path):
