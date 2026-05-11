@@ -397,11 +397,15 @@ class BaseExpertiseService:
         matrix_path = os.path.join(search_dir, f"{config.name}.pt")
         full_csv_path = os.path.join(search_dir, f"{config.name}.csv")
         sparse_csv_path = os.path.join(search_dir, f"{config.name}_sparse.csv")
+        # sparse_value is a required positive integer (validated at config
+        # creation), so a sparse CSV should always exist when the job
+        # completed successfully.
         if os.path.isfile(matrix_path) or os.path.isfile(full_csv_path):
-            if 'sparse_value' in config.model_params.keys() and os.path.isfile(sparse_csv_path):
+            if os.path.isfile(sparse_csv_path):
                 file_dir = sparse_csv_path
             elif os.path.isfile(full_csv_path):
-                # Legacy fallback: full CSV is acceptable if no sparse was requested.
+                # Legacy fallback: full CSV is acceptable if no sparse exists
+                # (older jobs that pre-date the sparse-required contract).
                 file_dir = full_csv_path
             else:
                 raise OpenReviewException("Sparse score file not found for job {job_id}".format(job_id=config.job_id))

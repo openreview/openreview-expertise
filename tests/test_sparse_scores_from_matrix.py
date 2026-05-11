@@ -173,15 +173,6 @@ def test_equivalent_to_legacy_on_random_matrix(tmp_path):
     )
 
 
-def test_zero_sparse_value_produces_empty_file(tmp_path):
-    """sparse_value=0 emits an empty file rather than crashing."""
-    matrix = torch.tensor([[0.5, 0.7]])
-    out_path = tmp_path / 'sparse.csv'
-    generate_sparse_scores_from_matrix(matrix, ['t0'], ['r0', 'r1'], sparse_value=0, scores_path=out_path)
-    assert out_path.exists()
-    assert out_path.read_text() == ''
-
-
 def test_empty_reviewer_axis_produces_empty_file(tmp_path):
     """When the model produces a [num_test, 0] matrix because no reviewers
     were eligible (every train_note_id_list empty or all publications were

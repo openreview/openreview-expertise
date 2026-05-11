@@ -729,7 +729,7 @@ class JobConfig(object):
         config.model_params['skip_specter'] = model_params.get('skip_specter', None)
         config.model_params['specter_batch_size'] = model_params.get('specter_batch_size', 16)
         config.model_params['mfr_batch_size'] = model_params.get('mfr_batch_size', 50)
-        config.model_params['sparse_value'] = model_params.get('sparse_value', 300)
+        config.model_params['sparse_value'] = model_params.get('sparse_value', 400)
         config.model_params['use_cuda'] = model_params.get('use_cuda', False)
         config.model_params['use_redis'] = model_params.get('use_redis', False)
         config.model_params['percentile_select'] = model_params.get('percentile_select', None)
@@ -760,7 +760,16 @@ class JobConfig(object):
 
                 snake_param = _camel_to_snake(param)
                 config.model_params[snake_param] = api_model[param]
-        
+
+        # sparse_value is a required field with a default; validate it's a
+        # positive integer so downstream code can rely on > 0 without
+        # defensive checks.
+        sparse_value = config.model_params.get('sparse_value')
+        if not isinstance(sparse_value, int) or sparse_value <= 0:
+            raise openreview.OpenReviewException(
+                f"Bad request: 'sparseValue' must be a positive integer, got {sparse_value!r}"
+            )
+
         # Set server-side path fields
         for field in path_fields:
             config.model_params[field] = root_dir

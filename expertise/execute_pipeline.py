@@ -16,7 +16,7 @@ DEFAULT_CONFIG = {
     "model": "specter+mfr",
     "model_params": {
         "use_title": True,
-        "sparse_value": 600,
+        "sparse_value": 400,
         "specter_batch_size": 16,
         "mfr_batch_size": 50,
         "use_abstract": True,
