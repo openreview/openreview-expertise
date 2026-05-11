@@ -563,51 +563,77 @@ def generate_sparse_scores_from_matrix(scores_matrix, test_id_list, reviewer_ids
     print(f'generate_sparse_scores_from_matrix total {time.perf_counter() - _t_total:.1f}s', flush=True)
 
 def aggregate_by_group(config):
-    # Fetch scores
-    scores = {}
-    original_score_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
-    with open(original_score_path, 'r') as f:
-        csv_reader = csv.reader(f)
-        for line in csv_reader:
-            paper_id = line[0]
-            ac_id = line[1]
-            score = line[2]
-            if paper_id not in scores:
-                scores[paper_id] = {}
-            scores[paper_id][ac_id] = score
+    matrix_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt')
+    csv_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
 
     dataset_root = Path(config.get('dataset', {}).get('directory', './'))
 
-    # Fetch archive members
+    # Fetch archive members (group_A side — listed in archives/<id>.jsonl)
     archive_members = []
     archive_files = os.listdir(dataset_root.joinpath('archives'))
     for author_file in archive_files:
         archive_members.append(author_file[:-6])
 
-    # Fetch submission members
+    # Fetch submission members (group_B side) and their papers
     with open(dataset_root.joinpath('publications_by_profile_id.json'), 'r') as f:
         publications_by_profile_id = json.load(f)
     submission_members = publications_by_profile_id.keys()
 
-    # Perform averaging
     average_score = {}
-    for profile_id in submission_members:
-        paper_ids = [p['id'] for p in publications_by_profile_id[profile_id]]
-        for archive_id in archive_members:
-            score_sum = 0
-            score_length = 0
-            for paper_id in paper_ids:
-                if archive_id in scores.get(paper_id, {}):
-                    score_sum += float(scores[paper_id][archive_id])
-                    score_length += 1
-            if profile_id not in average_score:
-                average_score[profile_id] = {}
-            if score_length:
-                average_score[profile_id][archive_id] = round(score_sum/score_length, 2)
-    
+    if matrix_path.is_file():
+        # Matrix-based predictor: aggregate directly on the tensor. Avoids
+        # materializing a full [num_test x num_reviewers] nested dict, which
+        # at production scale was ~17 GB of Python objects.
+        data = torch.load(matrix_path)
+        scores_matrix = data['scores']        # [num_test, num_reviewers]
+        test_ids = data['test_ids']           # row labels (paper ids on the group_B side)
+        reviewer_ids = data['reviewer_ids']   # column labels (archive ids on the group_A side)
+        test_id_to_idx = {tid: i for i, tid in enumerate(test_ids)}
+
+        for profile_id in submission_members:
+            paper_ids = [p['id'] for p in publications_by_profile_id[profile_id]]
+            valid_idxs = [test_id_to_idx[pid] for pid in paper_ids if pid in test_id_to_idx]
+            if not valid_idxs:
+                continue
+            # Mean across the profile's paper rows -> vector of size num_reviewers
+            avg_row = scores_matrix[valid_idxs].mean(dim=0).tolist()
+            average_score[profile_id] = {
+                reviewer_ids[j]: round(avg_row[j], 2)
+                for j in range(len(reviewer_ids))
+                if avg_row[j]
+            }
+    else:
+        # Legacy tuple-based predictor that wrote {name}.csv directly.
+        scores = {}
+        with open(csv_path, 'r') as f:
+            csv_reader = csv.reader(f)
+            for line in csv_reader:
+                paper_id = line[0]
+                ac_id = line[1]
+                score = line[2]
+                if paper_id not in scores:
+                    scores[paper_id] = {}
+                scores[paper_id][ac_id] = score
+
+        for profile_id in submission_members:
+            paper_ids = [p['id'] for p in publications_by_profile_id[profile_id]]
+            for archive_id in archive_members:
+                score_sum = 0
+                score_length = 0
+                for paper_id in paper_ids:
+                    if archive_id in scores.get(paper_id, {}):
+                        score_sum += float(scores[paper_id][archive_id])
+                        score_length += 1
+                if profile_id not in average_score:
+                    average_score[profile_id] = {}
+                if score_length:
+                    average_score[profile_id][archive_id] = round(score_sum/score_length, 2)
+
     preliminary_scores = []
-    # Overwrite out new scores
-    with open(original_score_path, 'w') as outfile:
+    # Write the aggregated scores to {name}.csv. For matrix-based models this
+    # creates the file (it didn't exist before — only {name}.pt did); for the
+    # legacy path it overwrites the prior contents.
+    with open(csv_path, 'w') as outfile:
         csvwriter = csv.writer(outfile, delimiter=',')
         for submission_member, archive_scores in average_score.items():
             for archive_member, score in archive_scores.items():
