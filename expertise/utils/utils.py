@@ -544,20 +544,17 @@ def generate_sparse_scores_from_matrix(scores_matrix, test_id_list, reviewer_ids
     pairs_list = all_pairs.tolist()
     print(f'  built {len(pairs_list)} sparse pairs in {time.perf_counter() - _t_total:.1f}s', flush=True)
 
-    # Sort rows by (test_id desc, score desc) to match the legacy
-    # generate_sparse_scores final sort: sorted(..., key=lambda x: (x[0], x[2]),
-    # reverse=True). Consumers (clients, downstream pipelines) may depend on
-    # this ordering — keep it identical.
+    # Stream CSV write — no intermediate Python list, no sort. Output order
+    # is whatever torch.unique gives back (sorted lexicographically by
+    # (test_idx, rev_idx) ascending, so deterministic across runs). The
+    # /expertise/results consumers don't depend on a specific row order, so
+    # we don't pay the memory/CPU cost of an O(N log N) Python sort over
+    # ~16M tuples at production scale.
     if scores_path:
         _t0 = time.perf_counter()
-        rows = [
-            (test_id_list[i], reviewer_ids[j], round(score, 4))
-            for (i, j), score in zip(pairs_list, sel_scores)
-        ]
-        rows.sort(key=lambda r: (r[0], r[2]), reverse=True)
         with open(scores_path, 'w') as f:
-            for test_id, reviewer_id, score in rows:
-                f.write(f'{test_id},{reviewer_id},{score}\n')
+            for (i, j), score in zip(pairs_list, sel_scores):
+                f.write(f'{test_id_list[i]},{reviewer_ids[j]},{round(score, 4)}\n')
         print(f'  wrote sparse CSV in {time.perf_counter() - _t0:.1f}s', flush=True)
 
     print(f'generate_sparse_scores_from_matrix total {time.perf_counter() - _t_total:.1f}s', flush=True)

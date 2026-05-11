@@ -73,34 +73,29 @@ def test_top_k_selection(tmp_path):
     assert pairs == expected
 
 
-def test_output_ordering_matches_legacy(tmp_path):
-    """Output is sorted (test_id desc, score desc) to match legacy output."""
+def test_output_is_deterministic(tmp_path):
+    """The function doesn't impose a particular row order on the output —
+    callers don't depend on it — but it must be deterministic across runs
+    (otherwise file-comparison or hashing of the CSV would be flaky).
+    Two invocations on the same matrix must produce byte-identical files.
+    """
     matrix = torch.tensor([
         [0.10, 0.20, 0.30],
         [0.40, 0.50, 0.60],
         [0.70, 0.80, 0.90],
     ])
-    test_ids = ['aaa', 'mmm', 'zzz']           # alphabetical
+    test_ids = ['aaa', 'mmm', 'zzz']
     reviewer_ids = ['r0', 'r1', 'r2']
 
-    out_path = tmp_path / 'sparse.csv'
-    # sparse_value=3 -> all 9 pairs included for this 3x3 matrix.
-    generate_sparse_scores_from_matrix(matrix, test_ids, reviewer_ids, sparse_value=3, scores_path=out_path)
-    rows = _read_csv_rows(out_path)
+    out_a = tmp_path / 'sparse_a.csv'
+    out_b = tmp_path / 'sparse_b.csv'
+    generate_sparse_scores_from_matrix(matrix, test_ids, reviewer_ids, sparse_value=3, scores_path=out_a)
+    generate_sparse_scores_from_matrix(matrix, test_ids, reviewer_ids, sparse_value=3, scores_path=out_b)
 
+    assert out_a.read_bytes() == out_b.read_bytes()
+    # And the contract is still: all 9 pairs present for this 3x3 matrix at k=3.
+    rows = _read_csv_rows(out_a)
     assert len(rows) == 9
-
-    # Legacy convention: sort by (test_id desc, score desc).
-    # → 'zzz' rows first (then 'mmm', then 'aaa'); within each test_id,
-    # scores descending.
-    test_id_order = [r[0] for r in rows]
-    assert test_id_order == ['zzz', 'zzz', 'zzz', 'mmm', 'mmm', 'mmm', 'aaa', 'aaa', 'aaa']
-
-    # Within each test_id, scores must be in descending order.
-    for tid in ['zzz', 'mmm', 'aaa']:
-        block = [s for t, _, s in rows if t == tid]
-        assert block == sorted(block, reverse=True), \
-            f"Scores within test_id={tid!r} not descending: {block}"
 
 
 def test_score_values_correct(tmp_path):
