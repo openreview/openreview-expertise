@@ -628,16 +628,14 @@ def aggregate_by_group(config):
                 if score_length:
                     average_score[profile_id][archive_id] = round(score_sum/score_length, 2)
 
+    # Build the in-memory list only — no CSV side-file. The aggregated CSV
+    # was previously written to {name}.csv and uploaded to GCS, but no
+    # downstream consumer reads it (the API always serves scores_sparse.csv,
+    # and execute_expertise consumes preliminary_scores in memory).
     preliminary_scores = []
-    # Write the aggregated scores to {name}.csv. For matrix-based models this
-    # creates the file (it didn't exist before — only {name}.pt did); for the
-    # legacy path it overwrites the prior contents.
-    with open(csv_path, 'w') as outfile:
-        csvwriter = csv.writer(outfile, delimiter=',')
-        for submission_member, archive_scores in average_score.items():
-            for archive_member, score in archive_scores.items():
-                preliminary_scores.append((archive_member, submission_member, score))
-                csvwriter.writerow([archive_member, submission_member, score])
+    for submission_member, archive_scores in average_score.items():
+        for archive_member, score in archive_scores.items():
+            preliminary_scores.append((archive_member, submission_member, score))
 
     return preliminary_scores
 

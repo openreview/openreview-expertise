@@ -103,12 +103,9 @@ def test_aggregate_by_group_matrix_path(tmp_path):
     actual = {(rev, sub): score for rev, sub, score in preliminary_scores}
     assert actual == expected
 
-    # aggregate_by_group also writes the result as {name}.csv.
+    # No side-file CSV is written — preliminary_scores is in-memory only.
     csv_path = scores_dir / 'test_run.csv'
-    assert csv_path.exists()
-    with open(csv_path) as f:
-        csv_rows = {(row[0], row[1]): float(row[2]) for row in csv_mod.reader(f) if row}
-    assert csv_rows == expected
+    assert not csv_path.exists()
 
 
 def test_aggregate_by_group_csv_path_unchanged(tmp_path):
