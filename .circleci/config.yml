@@ -53,7 +53,18 @@ jobs:
             sudo env $APT_OPTS TZ=Etc/UTC apt-get install -y tzdata
             # uv ships prebuilt CPython (python-build-standalone), so we get
             # ${PYTHON_VERSION} without depending on ppa:deadsnakes.
-            curl -LsSf https://astral.sh/uv/install.sh | sh
+            # Pinned + SHA-256 verified (no `curl | sh` from astral.sh).
+            # On version bump, also update UV_SHA256 to match the new tarball;
+            # the canonical checksum lives at:
+            # https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz.sha256
+            UV_VERSION="0.11.9"
+            UV_SHA256="5c43f82077ff0cd5aec588286cbabd89913e4d045bd4e8aa60b20b3ecffc36e3"
+            UV_TARBALL="uv-x86_64-unknown-linux-gnu.tar.gz"
+            curl -fsSL --proto '=https' --tlsv1.2 -o "/tmp/${UV_TARBALL}" \
+              "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_TARBALL}"
+            echo "${UV_SHA256}  /tmp/${UV_TARBALL}" | sha256sum -c -
+            mkdir -p "$HOME/.local/bin"
+            tar -xzf "/tmp/${UV_TARBALL}" -C "$HOME/.local/bin" --strip-components=1
             echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$BASH_ENV"
             export PATH="$HOME/.local/bin:$PATH"
             uv python install ${PYTHON_VERSION}
