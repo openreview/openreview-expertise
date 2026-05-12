@@ -3,7 +3,7 @@ import openreview, os, json, csv
 from .create_dataset import OpenReviewExpertise
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
-from .utils.utils import aggregate_by_group, generate_sparse_scores
+from .utils.utils import aggregate_by_group, generate_sparse_scores, generate_sparse_scores_from_matrix
 
 # Move run.py functionality to a function that accepts a config dict
 def execute_expertise(config):
@@ -97,7 +97,7 @@ def execute_expertise(config):
             scincl_publications_path=scincl_publication_path,
             specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
             scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl'),
-            scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+            matrix_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt')
         )
 
     if config['model'] == 'scincl':
@@ -127,7 +127,7 @@ def execute_expertise(config):
         predictor.all_scores(
             scincl_publication_path,
             Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
-            Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'),
+            Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'),
             p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
         )
 
@@ -158,7 +158,7 @@ def execute_expertise(config):
         predictor.all_scores(
             specter_publication_path,
             Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
-            Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'),
+            Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'),
             p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
         )
 
@@ -220,15 +220,30 @@ def execute_expertise(config):
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
         )
 
+    # Sparse-score dispatch. sparse_value is a required positive integer (the
+    # config layer validates and defaults it), so we can rely on it being
+    # set and > 0 here.
+    #  - alternate_match_group: aggregate_by_group emits a tuple list; use legacy
+    #    generate_sparse_scores (tuple-based sort) on it.
+    #  - Predictors that expose a score matrix (specter2 / scincl / specter2+scincl):
+    #    generate sparse directly from the matrix via torch.topk.
+    #  - Legacy predictors that only expose preliminary_scores (bm25, mfr,
+    #    specter+mfr): keep the tuple-based path.
+    sparse_value = config['model_params']['sparse_value']
+    sparse_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
     if 'alternate_match_group' in config.keys():
         preliminary_scores = aggregate_by_group(config)
+        generate_sparse_scores(preliminary_scores, sparse_value, sparse_path)
+    elif getattr(predictor, 'scores_matrix', None) is not None:
+        generate_sparse_scores_from_matrix(
+            predictor.scores_matrix,
+            predictor.test_id_list,
+            predictor.reviewer_ids,
+            sparse_value,
+            sparse_path,
+        )
     else:
-        preliminary_scores = predictor.preliminary_scores
-
-    if config['model_params'].get('sparse_value'):
-        sparse_value = config['model_params']['sparse_value']
-        scores_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
-        generate_sparse_scores(preliminary_scores, sparse_value, scores_path)
+        generate_sparse_scores(predictor.preliminary_scores, sparse_value, sparse_path)
 
 def execute_create_dataset(client_v2, config=None):
 

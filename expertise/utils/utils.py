@@ -1,6 +1,7 @@
 from __future__ import print_function, absolute_import, unicode_literals
 import codecs
 import sys
+import time
 import itertools
 import string
 import nltk
@@ -505,57 +506,143 @@ def generate_sparse_scores(full_scores, sparse_value, scores_path=None):
 
     return sparse_scores
 
+def generate_sparse_scores_from_matrix(scores_matrix, test_id_list, reviewer_ids, sparse_value, scores_path):
+    """Compute the sparse score CSV directly from a [num_test, num_reviewers]
+    matrix via torch.topk on both axes, union+dedupe the (row, col) pairs,
+    and emit the result as CSV. Avoids materializing a list of all
+    num_test*num_reviewers (test_id, reviewer_id, score) tuples (which on
+    a large job is 175M tuples / ~17GB) and the two Python sorts that the
+    tuple-based generate_sparse_scores performs.
+    """
+    print(f'generate_sparse_scores_from_matrix: shape={tuple(scores_matrix.shape)} sparse_value={sparse_value}', flush=True)
+    _t_total = time.perf_counter()
+
+    n_test, n_rev = scores_matrix.shape
+    k_cols = min(sparse_value, n_rev) if sparse_value else 0
+    k_rows = min(sparse_value, n_test) if sparse_value else 0
+    if k_cols <= 0 or k_rows <= 0:
+        if scores_path:
+            open(scores_path, 'w').close()
+        return
+
+    # Top-K reviewers per submission (along columns).
+    _, top_rev_per_test = torch.topk(scores_matrix, k=k_cols, dim=1)    # [n_test, k_cols]
+    # Top-K submissions per reviewer (along rows).
+    _, top_test_per_rev = torch.topk(scores_matrix, k=k_rows, dim=0)    # [k_rows, n_rev]
+
+    # Build (test_idx, rev_idx) pairs from both views, vectorized.
+    test_ar = torch.arange(n_test).unsqueeze(1).expand(-1, k_cols).flatten()
+    pairs_a = torch.stack([test_ar, top_rev_per_test.flatten()], dim=1)
+
+    rev_ar = torch.arange(n_rev).unsqueeze(0).expand(k_rows, -1).flatten()
+    pairs_b = torch.stack([top_test_per_rev.flatten(), rev_ar], dim=1)
+
+    all_pairs = torch.unique(torch.cat([pairs_a, pairs_b], dim=0), dim=0)
+
+    # Bulk score lookup; kept as a tensor (calling .tolist() on ~16M floats
+    # at production scale would materialize >1GB of boxed Python objects).
+    sel_scores = scores_matrix[all_pairs[:, 0], all_pairs[:, 1]].cpu()
+    all_pairs = all_pairs.cpu()
+    n_pairs = int(all_pairs.shape[0])
+    print(f'  built {n_pairs} sparse pairs in {time.perf_counter() - _t_total:.1f}s', flush=True)
+
+    # Stream CSV write in chunks. Output order is whatever torch.unique gives
+    # back (lexicographic on (test_idx, rev_idx) ascending, deterministic
+    # across runs); /expertise/results consumers don't depend on a specific
+    # row order, so we don't pay an O(N log N) Python sort. Converting one
+    # chunk at a time bounds peak Python-object memory even when N is in
+    # the tens of millions (e.g. ~16M pairs for 35k×5k at k=400).
+    if scores_path:
+        _t0 = time.perf_counter()
+        chunk_size = 1_000_000
+        with open(scores_path, 'w') as f:
+            for start in range(0, n_pairs, chunk_size):
+                end = min(start + chunk_size, n_pairs)
+                chunk_pairs = all_pairs[start:end].tolist()
+                chunk_scores = sel_scores[start:end].tolist()
+                for (i, j), score in zip(chunk_pairs, chunk_scores):
+                    f.write(f'{test_id_list[i]},{reviewer_ids[j]},{round(score, 4)}\n')
+        print(f'  wrote sparse CSV in {time.perf_counter() - _t0:.1f}s', flush=True)
+
+    print(f'generate_sparse_scores_from_matrix total {time.perf_counter() - _t_total:.1f}s', flush=True)
+
 def aggregate_by_group(config):
-    # Fetch scores
-    scores = {}
-    original_score_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
-    with open(original_score_path, 'r') as f:
-        csv_reader = csv.reader(f)
-        for line in csv_reader:
-            paper_id = line[0]
-            ac_id = line[1]
-            score = line[2]
-            if paper_id not in scores:
-                scores[paper_id] = {}
-            scores[paper_id][ac_id] = score
+    matrix_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt')
+    csv_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
 
     dataset_root = Path(config.get('dataset', {}).get('directory', './'))
 
-    # Fetch archive members
+    # Fetch archive members (group_A side — listed in archives/<id>.jsonl)
     archive_members = []
     archive_files = os.listdir(dataset_root.joinpath('archives'))
     for author_file in archive_files:
         archive_members.append(author_file[:-6])
 
-    # Fetch submission members
+    # Fetch submission members (group_B side) and their papers
     with open(dataset_root.joinpath('publications_by_profile_id.json'), 'r') as f:
         publications_by_profile_id = json.load(f)
     submission_members = publications_by_profile_id.keys()
 
-    # Perform averaging
     average_score = {}
-    for profile_id in submission_members:
-        paper_ids = [p['id'] for p in publications_by_profile_id[profile_id]]
-        for archive_id in archive_members:
-            score_sum = 0
-            score_length = 0
-            for paper_id in paper_ids:
-                if archive_id in scores.get(paper_id, {}):
-                    score_sum += float(scores[paper_id][archive_id])
-                    score_length += 1
-            if profile_id not in average_score:
-                average_score[profile_id] = {}
-            if score_length:
-                average_score[profile_id][archive_id] = round(score_sum/score_length, 2)
-    
+    if matrix_path.is_file():
+        # Matrix-based predictor: aggregate directly on the tensor. Avoids
+        # materializing a full [num_test x num_reviewers] nested dict, which
+        # at production scale was ~17 GB of Python objects.
+        data = torch.load(matrix_path)
+        scores_matrix = data['scores']        # [num_test, num_reviewers]
+        test_ids = data['test_ids']           # row labels (paper ids on the group_B side)
+        reviewer_ids = data['reviewer_ids']   # column labels (archive ids on the group_A side)
+        test_id_to_idx = {tid: i for i, tid in enumerate(test_ids)}
+
+        for profile_id in submission_members:
+            paper_ids = [p['id'] for p in publications_by_profile_id[profile_id]]
+            valid_idxs = [test_id_to_idx[pid] for pid in paper_ids if pid in test_id_to_idx]
+            if not valid_idxs:
+                continue
+            # Mean across the profile's paper rows -> vector of size num_reviewers.
+            # Emit every (profile, reviewer) cell regardless of score value —
+            # the legacy CSV-based path stores the round result even when it
+            # rounds to 0.0, and we preserve that behavior.
+            avg_row = scores_matrix[valid_idxs].mean(dim=0).tolist()
+            average_score[profile_id] = {
+                reviewer_ids[j]: round(avg_row[j], 2)
+                for j in range(len(reviewer_ids))
+            }
+    else:
+        # Legacy tuple-based predictor that wrote {name}.csv directly.
+        scores = {}
+        with open(csv_path, 'r') as f:
+            csv_reader = csv.reader(f)
+            for line in csv_reader:
+                paper_id = line[0]
+                ac_id = line[1]
+                score = line[2]
+                if paper_id not in scores:
+                    scores[paper_id] = {}
+                scores[paper_id][ac_id] = score
+
+        for profile_id in submission_members:
+            paper_ids = [p['id'] for p in publications_by_profile_id[profile_id]]
+            for archive_id in archive_members:
+                score_sum = 0
+                score_length = 0
+                for paper_id in paper_ids:
+                    if archive_id in scores.get(paper_id, {}):
+                        score_sum += float(scores[paper_id][archive_id])
+                        score_length += 1
+                if profile_id not in average_score:
+                    average_score[profile_id] = {}
+                if score_length:
+                    average_score[profile_id][archive_id] = round(score_sum/score_length, 2)
+
+    # Build the in-memory list only — no CSV side-file. The aggregated CSV
+    # was previously written to {name}.csv and uploaded to GCS, but no
+    # downstream consumer reads it (the API always serves scores_sparse.csv,
+    # and execute_expertise consumes preliminary_scores in memory).
     preliminary_scores = []
-    # Overwrite out new scores
-    with open(original_score_path, 'w') as outfile:
-        csvwriter = csv.writer(outfile, delimiter=',')
-        for submission_member, archive_scores in average_score.items():
-            for archive_member, score in archive_scores.items():
-                preliminary_scores.append((archive_member, submission_member, score))
-                csvwriter.writerow([archive_member, submission_member, score])
+    for submission_member, archive_scores in average_score.items():
+        for archive_member, score in archive_scores.items():
+            preliminary_scores.append((archive_member, submission_member, score))
 
     return preliminary_scores
 

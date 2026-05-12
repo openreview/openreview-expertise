@@ -10,7 +10,30 @@ import torch
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import specter2_scincl
 import redisai
-from expertise.utils.utils import generate_sparse_scores
+from expertise.utils.utils import generate_sparse_scores_from_matrix
+
+
+def _matrix_to_rows_and_csv(model, csv_path=None):
+    """Test adapter: flatten the new matrix-based model output into the
+    legacy [(test_id, reviewer_id, score), ...] tuple list, and optionally
+    write the equivalent CSV file. Used by tests that previously consumed
+    the per-row CSV/preliminary_scores produced by all_scores().
+    Scores are rounded to 4 decimals at the row boundary — fp32 storage in
+    the matrix preserves at most ~7 significant digits, so the per-cell
+    Python round matches what the legacy code emitted in the CSV.
+    """
+    rows = []
+    if model.scores_matrix is None:
+        return rows
+    scores = model.scores_matrix.tolist()
+    for i, test_id in enumerate(model.test_id_list):
+        for j, reviewer_id in enumerate(model.reviewer_ids):
+            rows.append((test_id, reviewer_id, round(scores[i][j], 4)))
+    if csv_path is not None:
+        with open(csv_path, 'w') as f:
+            for test_id, reviewer_id, score in rows:
+                f.write(f'{test_id},{reviewer_id},{score}\n')
+    return rows
 
 
 def compute_score_statistics(scores, label=""):
@@ -124,15 +147,17 @@ def test_specncl_scores(tmp_path, create_specncl):
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()
-    all_scores = specnclModel.all_scores(
+    specnclModel.all_scores(
         specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
         scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl'),
         specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
         scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
-        scores_path=scores_path.joinpath(config['name'] + '.csv')
+        matrix_path=scores_path.joinpath(config['name'] + '.pt')
     )
 
-    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '.csv'))
+    csv_path = scores_path.joinpath(config['name'] + '.csv')
+    _matrix_to_rows_and_csv(specnclModel, csv_path=csv_path)
+    assert_scores_have_max_4_decimals(csv_path)
 
 
 def test_sparse_scores(tmp_path, create_specncl):
@@ -167,25 +192,41 @@ def test_sparse_scores(tmp_path, create_specncl):
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()
-    all_scores = specnclModel.all_scores(
+    specnclModel.all_scores(
         specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
         scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl'),
         specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
         scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
-        scores_path=scores_path.joinpath(config['name'] + '.csv')
+        matrix_path=scores_path.joinpath(config['name'] + '.pt')
     )
 
-    full_scores_snapshot = list(all_scores)
+    full_csv = scores_path.joinpath(config['name'] + '.csv')
+    full_scores_snapshot = _matrix_to_rows_and_csv(specnclModel, csv_path=full_csv)
+
+    sparse_csv = scores_path.joinpath(config['name'] + '_sparse.csv')
 
     if config['model_params'].get('sparse_value'):
-        all_scores = generate_sparse_scores(all_scores, config['model_params']['sparse_value'], scores_path.joinpath(config['name'] + '_sparse.csv'))
+        generate_sparse_scores_from_matrix(
+            specnclModel.scores_matrix,
+            specnclModel.test_id_list,
+            specnclModel.reviewer_ids,
+            config['model_params']['sparse_value'],
+            sparse_csv,
+        )
 
-    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '.csv'))
-    assert_scores_have_max_4_decimals(scores_path.joinpath(config['name'] + '_sparse.csv'))
+    assert_scores_have_max_4_decimals(full_csv)
+    assert_scores_have_max_4_decimals(sparse_csv)
 
-    assert len(all_scores) == 8
-    for row in all_scores:
-        submission_id, profile_id, score = row[0], row[1], float(row[2])
+    # Read sparse CSV back into rows for assertions.
+    sparse_rows = []
+    with open(sparse_csv) as f:
+        for line in f:
+            parts = line.strip().split(',')
+            if len(parts) >= 3:
+                sparse_rows.append((parts[0], parts[1], float(parts[2])))
+
+    assert len(sparse_rows) == 8
+    for submission_id, profile_id, score in sparse_rows:
         assert len(submission_id) >= 1
         assert len(profile_id) >= 1
         assert profile_id.startswith('~')
@@ -275,13 +316,14 @@ def test_normalization(tmp_path, create_specncl):
 
     scores_path = unnorm_path / 'scores'
     scores_path.mkdir()
-    all_scores = specnclModel.all_scores(
+    specnclModel.all_scores(
         specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
         scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl'),
         specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
         scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
-        scores_path=scores_path.joinpath(config['name'] + '.csv')
+        matrix_path=scores_path.joinpath(config['name'] + '.pt')
     )
+    all_scores = _matrix_to_rows_and_csv(specnclModel)
 
     for row in all_scores:
         submission_id, profile_id, score = row[0], row[1], float(row[2])
@@ -289,7 +331,7 @@ def test_normalization(tmp_path, create_specncl):
         assert len(profile_id) >= 1
         assert profile_id.startswith('~')
         assert score >= 0 and score <= 1
-    
+
     # Compute statistics for unnormalized scores
     unnorm_stats = compute_score_statistics(all_scores, "(Unnormalized)")
     
@@ -326,20 +368,21 @@ def test_normalization(tmp_path, create_specncl):
 
     scores_path = norm_path / 'scores'
     scores_path.mkdir()
-    all_scores = specnclModel.all_scores(
+    specnclModel.all_scores(
         specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
         scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl'),
         specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
         scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
-        scores_path=scores_path.joinpath(config['name'] + '.csv')
+        matrix_path=scores_path.joinpath(config['name'] + '.pt')
     )
+    all_scores = _matrix_to_rows_and_csv(specnclModel)
 
     for row in all_scores:
         submission_id, profile_id, score = row[0], row[1], float(row[2])
         assert len(submission_id) >= 1
         assert len(profile_id) >= 1
         assert profile_id.startswith('~')
-        assert score >= 0 and score <= 1    
+        assert score >= 0 and score <= 1
     # Compute statistics for normalized scores
     norm_stats = compute_score_statistics(all_scores, "(Normalized)")
 
@@ -457,13 +500,14 @@ def test_self_similarity_score_within_bounds(tmp_path):
     scores_dir = tmp_path / "scores"
     scores_dir.mkdir()
 
-    all_scores = model.all_scores(
+    model.all_scores(
         specter_publications_path=specter_pub_path,
         scincl_publications_path=scincl_pub_path,
         specter_submissions_path=specter_sub_path,
         scincl_submissions_path=scincl_sub_path,
-        scores_path=scores_dir / "test_self_similarity.csv",
+        matrix_path=scores_dir / "test_self_similarity.pt",
     )
+    all_scores = _matrix_to_rows_and_csv(model)
 
     assert len(all_scores) > 0, "No scores were produced — check dataset setup."
 
@@ -669,14 +713,104 @@ def test_venue_specific_weights_with_weightless_cache(tmp_path):
     assert specter_pub_path.read_text() == specter_cache.read_text()
     assert scincl_pub_path.read_text() == scincl_cache.read_text()
 
-    scores_path = work_dir / "scores.csv"
-    scores = model.all_scores(
+    matrix_path = work_dir / "scores.pt"
+    model.all_scores(
         specter_publications_path=specter_pub_path,
         scincl_publications_path=scincl_pub_path,
         specter_submissions_path=specter_sub_path,
         scincl_submissions_path=scincl_sub_path,
-        scores_path=scores_path,
+        matrix_path=matrix_path,
     )
 
-    assert scores, "Expected at least one score row"
-    assert scores_path.exists()
+    assert model.scores_matrix is not None and model.scores_matrix.numel() > 0, "Expected at least one score row"
+    assert matrix_path.exists()
+
+
+def test_all_scores_skips_reviewer_with_only_bad_embeddings(tmp_path):
+    """Regression: when every publication for a reviewer has a zero-length
+    embedding (added to train_bad_id_set by load_emb_file), train_paper_idx
+    becomes empty. The previous code would slice p2p_aff_norm[:, []] and crash
+    on .max(dim=1)[0] / torch.quantile, or produce NaNs from .mean(dim=1).
+    Expected: the reviewer is skipped and the run completes successfully
+    with that reviewer omitted from scores_matrix's columns.
+
+    Setup: two reviewers — one with a good paper, one whose only paper has
+    a zero-length embedding. The bad-embedding reviewer must not appear in
+    the resulting reviewer_ids; the good-embedding reviewer must.
+    """
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "~GoodReviewer1.jsonl").write_text(
+        json.dumps({"id": "good_paper", "content": {"title": "Good Paper", "abstract": "Abstract."}}) + "\n"
+    )
+    (archive_dir / "~BadReviewer1.jsonl").write_text(
+        json.dumps({"id": "bad_paper", "content": {"title": "Bad Paper", "abstract": "Abstract."}}) + "\n"
+    )
+
+    submissions_dir = tmp_path / "submissions"
+    submissions_dir.mkdir()
+    (submissions_dir / "Sub1.jsonl").write_text(
+        json.dumps({"id": "Sub1", "content": {"title": "Submission", "abstract": "Submission abstract."}}) + "\n"
+    )
+
+    archives_dataset = ArchivesDataset(archives_path=archive_dir)
+    submissions_dataset = SubmissionsDataset(submissions_path=submissions_dir)
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    model = specter2_scincl.EnsembleModel(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(work_dir),
+        average_score=True,
+        max_score=False,
+        use_cuda=False,
+        use_redis=False,
+    )
+    model.set_archives_dataset(archives_dataset)
+    model.set_submissions_dataset(submissions_dataset)
+
+    pub_dir = tmp_path / "publications"
+    pub_dir.mkdir()
+    sub_dir = tmp_path / "sub_embeddings"
+    sub_dir.mkdir()
+    specter_pub_path = pub_dir / "pub2vec_specter.jsonl"
+    scincl_pub_path  = pub_dir / "pub2vec_scincl.jsonl"
+    specter_sub_path = sub_dir / "sub2vec_specter.jsonl"
+    scincl_sub_path  = sub_dir / "sub2vec_scincl.jsonl"
+
+    # Write hand-crafted embeddings. The "bad_paper" gets an empty embedding
+    # ([]), which load_emb_file detects (paper_emb_size == 0) and adds to
+    # train_bad_id_set. ~BadReviewer1's only paper is bad — so their
+    # train_paper_idx will be empty after filtering.
+    good_embedding = [0.1] * 768
+    pub_lines = (
+        json.dumps({"paper_id": "good_paper", "embedding": good_embedding}) + "\n"
+        + json.dumps({"paper_id": "bad_paper", "embedding": []}) + "\n"
+    )
+    specter_pub_path.write_text(pub_lines)
+    scincl_pub_path.write_text(pub_lines)
+
+    sub_emb = [0.2] * 768
+    sub_line = json.dumps({"paper_id": "Sub1", "embedding": sub_emb}) + "\n"
+    specter_sub_path.write_text(sub_line)
+    scincl_sub_path.write_text(sub_line)
+
+    scores_dir = tmp_path / "scores"
+    scores_dir.mkdir()
+    # Must not raise.
+    model.all_scores(
+        specter_publications_path=specter_pub_path,
+        scincl_publications_path=scincl_pub_path,
+        specter_submissions_path=specter_sub_path,
+        scincl_submissions_path=scincl_sub_path,
+        matrix_path=scores_dir / "scores.pt",
+    )
+
+    # The good reviewer is present; the bad-only reviewer is dropped.
+    assert "~GoodReviewer1" in model.reviewer_ids
+    assert "~BadReviewer1" not in model.reviewer_ids
+    # Matrix shape: [num_test=1, num_reviewers=1].
+    assert tuple(model.scores_matrix.shape) == (1, 1)
+    # Score is finite (no NaN from a degenerate reduction).
+    score = model.scores_matrix[0, 0].item()
+    assert score == score, "Score must not be NaN"

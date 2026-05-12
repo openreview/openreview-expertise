@@ -1,5 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
+import csv
+import io
 import json
 import os
 import shutil
@@ -131,13 +133,16 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix/"
 
-    # Check for scores.jsonl file
-    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    # Pipeline uploads scores.csv directly (no upload-time JSONL conversion).
+    # The entityA/entityB column-swap for mixed Group/Note matching happens at
+    # read time in the cloud reader, not here. So the GCS CSV rows match the
+    # source CSV byte-for-byte: cols [test_id, reviewer_id, score].
+    scores_blob = bucket.blob(f"{prefix}scores.csv")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
-    assert {"entityA": "test_user", "entityB": "note1", "score": 0.5} in scores_data
-    assert {"entityA": "test_user", "entityB": "note2", "score": 0.5} in scores_data
+    scores_rows = list(csv.reader(io.StringIO(scores_content)))
+    assert ['note1', 'test_user', '0.5'] in scores_rows
+    assert ['note2', 'test_user', '0.5'] in scores_rows
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -239,13 +244,16 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix_gcs_dir/"
 
-    # Check for scores.jsonl file
-    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    # Pipeline uploads scores.csv directly (no upload-time JSONL conversion).
+    # The entityA/entityB column-swap for mixed Group/Note matching happens at
+    # read time in the cloud reader, not here. So the GCS CSV rows match the
+    # source CSV byte-for-byte: cols [test_id, reviewer_id, score].
+    scores_blob = bucket.blob(f"{prefix}scores.csv")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
-    assert {"entityA": "test_user", "entityB": "note1", "score": 0.5} in scores_data
-    assert {"entityA": "test_user", "entityB": "note2", "score": 0.5} in scores_data
+    scores_rows = list(csv.reader(io.StringIO(scores_content)))
+    assert ['note1', 'test_user', '0.5'] in scores_rows
+    assert ['note2', 'test_user', '0.5'] in scores_rows
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -345,12 +353,13 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     # Ensure execute_create_dataset and execute_expertise were called
     mock_execute_expertise.assert_called_once()
 
-    # Check for scores.jsonl file
-    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    # Pipeline uploads scores.csv directly (group-group matching: cols are
+    # already [entityA, entityB, score] in canonical order).
+    scores_blob = bucket.blob(f"{prefix}scores.csv")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
-    assert {"entityA": "test_user", "entityB": "sub_user", "score": 0.5} in scores_data
+    scores_rows = list(csv.reader(io.StringIO(scores_content)))
+    assert ['test_user', 'sub_user', '0.5'] in scores_rows
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")
@@ -448,12 +457,13 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
     # Ensure execute_create_dataset and execute_expertise were called
     mock_execute_expertise.assert_called_once()
 
-    # Check for scores.jsonl file
-    scores_blob = bucket.blob(f"{prefix}scores.jsonl")
+    # Pipeline uploads scores.csv directly (paper-paper matching: cols are
+    # already [entityA, entityB, score] in canonical order).
+    scores_blob = bucket.blob(f"{prefix}scores.csv")
     assert scores_blob.exists()
     scores_content = scores_blob.download_as_text()
-    scores_data = [json.loads(line) for line in scores_content.strip().split('\n')]
-    assert {"entityA": "sub_one", "entityB": "sub_two", "score": 0.5} in scores_data
+    scores_rows = list(csv.reader(io.StringIO(scores_content)))
+    assert ['sub_one', 'sub_two', '0.5'] in scores_rows
 
     # Check for metadata.json file
     metadata_blob = bucket.blob(f"{prefix}metadata.json")

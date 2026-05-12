@@ -55,7 +55,9 @@ class SciNCLPredictor(Predictor):
             self.cuda_device = torch.device("cuda:0")
         else:
             self.cuda_device = torch.device("cpu")
-        self.preliminary_scores = None
+        self.scores_matrix = None
+        self.test_id_list = None
+        self.reviewer_ids = None
         self.sparse_value = sparse_value
         if not os.path.exists(self.work_dir) and not os.path.isdir(self.work_dir):
             os.makedirs(self.work_dir)
@@ -210,7 +212,7 @@ class SciNCLPredictor(Predictor):
         with open(publications_path, 'w') as f:
             f.writelines(pub_jsonl)
 
-    def all_scores(self, publications_path=None, submissions_path=None, scores_path=None, p2p_path=None):
+    def all_scores(self, publications_path=None, submissions_path=None, matrix_path=None, p2p_path=None):
         def load_emb_file(emb_file, paper_id_to_weight=None):
             paper_emb_size_default = 768
             id_list = []
@@ -289,18 +291,18 @@ class SciNCLPredictor(Predictor):
             print("Skipping normalization of scores...")
         p2p_aff_norm = p2p_aff
 
-        csv_scores = []
-        self.preliminary_scores = []
-
         print("Computing scincl per-reviewer scores...", flush=True)
         if self.compute_paper_paper:
-            for i in range(paper_num_train):
-                for j in range(paper_num_test):
-                    csv_line = '{match_id},{submission_id},{score}'.format(match_id=test_id_list[j], submission_id=train_id_list[i],
-                                                                    score=round(p2p_aff_norm[j, i].item(), 4))
-                    csv_scores.append(csv_line)
-                    self.preliminary_scores.append((test_id_list[j], train_id_list[i], round(p2p_aff_norm[j, i].item(), 4)))
+            # Paper-paper similarity: matrix IS the full p2p_aff_norm.
+            # Column ids are train paper ids (not reviewer ids).
+            # TODO: at very large scale (e.g. 35k x 500k = ~70GB) this tensor
+            # won't fit in memory for torch.save; needs chunked save.
+            self.scores_matrix = p2p_aff_norm
+            self.test_id_list = test_id_list
+            self.reviewer_ids = train_id_list
         else:
+            score_vectors = []
+            reviewer_ids = []
             for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
                 if len(train_note_id_list) == 0:
                     continue
@@ -308,6 +310,15 @@ class SciNCLPredictor(Predictor):
                 for paper_id in train_note_id_list:
                     if paper_id not in train_bad_id_set:
                         train_paper_idx.append(paper_id2train_idx[paper_id])
+                if not train_paper_idx:
+                    # Every publication for this reviewer had a bad embedding
+                    # (length 0, added to train_bad_id_set in load_emb_file).
+                    # Slicing with an empty column index gives a [num_test, 0]
+                    # tensor, which would crash .max(dim=1) / torch.quantile
+                    # and produce NaNs from .mean(dim=1). Skip the reviewer
+                    # consistently with the "no publications" case above —
+                    # they won't appear in self.reviewer_ids.
+                    continue
                 train_paper_aff_j = p2p_aff_norm[:, train_paper_idx]
 
                 # Apply venue-specific weights per reviewer
@@ -325,27 +336,42 @@ class SciNCLPredictor(Predictor):
                     # q=0.5 (percentile_select=50) -> median score
                     # q=0.0 (percentile_select=0) -> min score
                     q = self.percentile_select / 100.0
-                    q = max(0.0, min(1.0, q)) 
+                    q = max(0.0, min(1.0, q))
                     all_paper_aff = torch.quantile(train_paper_aff_j, q, dim=1, interpolation='linear')
                 elif self.average_score:
                     all_paper_aff = train_paper_aff_j.mean(dim=1)
                 elif self.max_score:
                     all_paper_aff = train_paper_aff_j.max(dim=1)[0]
-                for j in range(paper_num_test):
-                    csv_line = '{note_id},{reviewer},{score}'.format(note_id=test_id_list[j], reviewer=reviewer_id,
-                                                                    score=round(all_paper_aff[j].item(), 4))
-                    csv_scores.append(csv_line)
-                    self.preliminary_scores.append((test_id_list[j], reviewer_id, round(all_paper_aff[j].item(), 4)))
+
+                score_vectors.append(all_paper_aff)
+                reviewer_ids.append(reviewer_id)
+
+            if score_vectors:
+                self.scores_matrix = torch.stack(score_vectors, dim=1)  # [num_test, num_reviewers]
+            else:
+                # No eligible reviewers (every train_note_id_list empty or all
+                # publications dropped via bad_id_set). Match the pre-refactor
+                # behavior: produce a 0-column matrix and empty reviewer list
+                # so downstream sparse generation / merging / CSV emission
+                # all see a well-formed but empty result instead of crashing.
+                self.scores_matrix = torch.empty((paper_num_test, 0), dtype=p2p_aff_norm.dtype)
+            self.test_id_list = test_id_list
+            self.reviewer_ids = reviewer_ids
+
+        # Round once, vectorized — matches the previous per-row round(..., 4).
+        self.scores_matrix = (self.scores_matrix * 10000).round() / 10000
         print(f"Computed preliminary scores for SciNCL.", flush=True)
 
-        if scores_path:
-            print(f"Writing {len(csv_scores)} scincl rows to CSV...", flush=True)
-            with open(scores_path, 'w') as f:
-                for csv_line in csv_scores:
-                    f.write(csv_line + '\n')
+        if matrix_path:
+            print(f"Saving SciNCL scores matrix to {matrix_path}...", flush=True)
+            torch.save({
+                'scores': self.scores_matrix,
+                'test_ids': self.test_id_list,
+                'reviewer_ids': self.reviewer_ids,
+            }, matrix_path)
 
         print("Done computing scincl scores.", flush=True)
-        return self.preliminary_scores
+        return self.scores_matrix
 
     def _remove_keys_from_cache(self, key):
         if self.redis:
