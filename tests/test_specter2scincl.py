@@ -175,6 +175,8 @@ def test_sparse_scores(tmp_path, create_specncl):
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
 
+    full_scores_snapshot = list(all_scores)
+
     if config['model_params'].get('sparse_value'):
         all_scores = generate_sparse_scores(all_scores, config['model_params']['sparse_value'], scores_path.joinpath(config['name'] + '_sparse.csv'))
 
@@ -188,6 +190,55 @@ def test_sparse_scores(tmp_path, create_specncl):
         assert len(profile_id) >= 1
         assert profile_id.startswith('~')
         assert score >= 0 and score <= 1
+
+    # End-to-end ordering check on the sparse CSV: for each reviewer, the
+    # papers selected for that reviewer (sorted by score desc) must match
+    # the top-`sparse_value` papers for that reviewer from the full scores;
+    # for each submission, vice versa. Runs whichever sparsifier the
+    # pipeline calls (current generate_sparse_scores or a future
+    # matrix/topk-based replacement), so it catches regressions
+    # independently of the implementation.
+    from collections import defaultdict
+    sparse_value = config['model_params']['sparse_value']
+
+    full_papers_by_reviewer = defaultdict(list)
+    full_reviewers_by_paper = defaultdict(list)
+    for sub, rev, score in full_scores_snapshot:
+        full_papers_by_reviewer[rev].append((float(score), sub))
+        full_reviewers_by_paper[sub].append((float(score), rev))
+
+    sparse_papers_by_reviewer = defaultdict(list)
+    sparse_reviewers_by_paper = defaultdict(list)
+    with open(scores_path.joinpath(config['name'] + '_sparse.csv')) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            s, r, sc = line.split(',')
+            sparse_papers_by_reviewer[r].append((float(sc), s))
+            sparse_reviewers_by_paper[s].append((float(sc), r))
+
+    for rev, scored_subs in full_papers_by_reviewer.items():
+        expected_top = [sub for _, sub in sorted(scored_subs, reverse=True)[:sparse_value]]
+        actual_for_rev = sorted(sparse_papers_by_reviewer[rev], reverse=True)
+        actual_top = [sub for _, sub in actual_for_rev[:sparse_value]]
+        assert actual_top == expected_top, (
+            f"Reviewer {rev}: top-{sparse_value} papers in sparse CSV "
+            f"(by score desc) don't match top-{sparse_value} from full scores.\n"
+            f"  expected: {expected_top}\n"
+            f"  actual:   {actual_top}"
+        )
+
+    for sub, scored_revs in full_reviewers_by_paper.items():
+        expected_top = [rev for _, rev in sorted(scored_revs, reverse=True)[:sparse_value]]
+        actual_for_sub = sorted(sparse_reviewers_by_paper[sub], reverse=True)
+        actual_top = [rev for _, rev in actual_for_sub[:sparse_value]]
+        assert actual_top == expected_top, (
+            f"Submission {sub}: top-{sparse_value} reviewers in sparse CSV "
+            f"(by score desc) don't match top-{sparse_value} from full scores.\n"
+            f"  expected: {expected_top}\n"
+            f"  actual:   {actual_top}"
+        )
 
 def test_normalization(tmp_path, create_specncl):
     # Test unnormalized scores
