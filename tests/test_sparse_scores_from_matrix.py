@@ -5,11 +5,14 @@ using small synthetic score matrices:
 
 1. Top-K selection picks the (test, reviewer) pairs with the highest scores
    along each axis, unioned across both axes.
-2. Output rows are sorted (test_id desc, score desc) — same convention as the
-   legacy tuple-based generate_sparse_scores. Consumers may depend on this
-   ordering.
-3. The new matrix-based implementation agrees with the legacy tuple-based
-   generate_sparse_scores on a random matrix (with unique scores so no ties).
+2. Output rows are written in deterministic order across runs. The function
+   does not promise a specific sort key — it emits whatever order
+   torch.unique returns (lexicographic on (test_idx, rev_idx) ascending) —
+   but two invocations on the same matrix must produce byte-identical files
+   so the CSV is safe to hash/diff.
+3. The new matrix-based implementation agrees on the set of emitted pairs
+   with the legacy tuple-based generate_sparse_scores on a random matrix
+   (with unique scores so no ties). Ordering is not compared.
 """
 import csv
 import torch
@@ -143,8 +146,9 @@ def test_sparse_value_larger_than_axis(tmp_path):
 
 def test_equivalent_to_legacy_on_random_matrix(tmp_path):
     """On a random matrix with unique scores, the matrix-based and tuple-based
-    implementations must agree on the set of pairs they emit. (Ordering is
-    also asserted to match by sort key in test_output_ordering_matches_legacy.)
+    implementations must agree on the set of pairs they emit. Ordering is not
+    compared — the matrix-based impl emits torch.unique's lexicographic order,
+    not the legacy (test_id desc, score desc) sort.
     """
     torch.manual_seed(0)
     # Use a wide enough range and large enough size that ties are unlikely.

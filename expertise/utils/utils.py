@@ -539,22 +539,29 @@ def generate_sparse_scores_from_matrix(scores_matrix, test_id_list, reviewer_ids
 
     all_pairs = torch.unique(torch.cat([pairs_a, pairs_b], dim=0), dim=0)
 
-    # Bulk score lookup + tolist for fast Python iteration during CSV write.
-    sel_scores = scores_matrix[all_pairs[:, 0], all_pairs[:, 1]].tolist()
-    pairs_list = all_pairs.tolist()
-    print(f'  built {len(pairs_list)} sparse pairs in {time.perf_counter() - _t_total:.1f}s', flush=True)
+    # Bulk score lookup; kept as a tensor (calling .tolist() on ~16M floats
+    # at production scale would materialize >1GB of boxed Python objects).
+    sel_scores = scores_matrix[all_pairs[:, 0], all_pairs[:, 1]].cpu()
+    all_pairs = all_pairs.cpu()
+    n_pairs = int(all_pairs.shape[0])
+    print(f'  built {n_pairs} sparse pairs in {time.perf_counter() - _t_total:.1f}s', flush=True)
 
-    # Stream CSV write — no intermediate Python list, no sort. Output order
-    # is whatever torch.unique gives back (sorted lexicographically by
-    # (test_idx, rev_idx) ascending, so deterministic across runs). The
-    # /expertise/results consumers don't depend on a specific row order, so
-    # we don't pay the memory/CPU cost of an O(N log N) Python sort over
-    # ~16M tuples at production scale.
+    # Stream CSV write in chunks. Output order is whatever torch.unique gives
+    # back (lexicographic on (test_idx, rev_idx) ascending, deterministic
+    # across runs); /expertise/results consumers don't depend on a specific
+    # row order, so we don't pay an O(N log N) Python sort. Converting one
+    # chunk at a time bounds peak Python-object memory even when N is in
+    # the tens of millions (e.g. ~16M pairs for 35k×5k at k=400).
     if scores_path:
         _t0 = time.perf_counter()
+        chunk_size = 1_000_000
         with open(scores_path, 'w') as f:
-            for (i, j), score in zip(pairs_list, sel_scores):
-                f.write(f'{test_id_list[i]},{reviewer_ids[j]},{round(score, 4)}\n')
+            for start in range(0, n_pairs, chunk_size):
+                end = min(start + chunk_size, n_pairs)
+                chunk_pairs = all_pairs[start:end].tolist()
+                chunk_scores = sel_scores[start:end].tolist()
+                for (i, j), score in zip(chunk_pairs, chunk_scores):
+                    f.write(f'{test_id_list[i]},{reviewer_ids[j]},{round(score, 4)}\n')
         print(f'  wrote sparse CSV in {time.perf_counter() - _t0:.1f}s', flush=True)
 
     print(f'generate_sparse_scores_from_matrix total {time.perf_counter() - _t_total:.1f}s', flush=True)
