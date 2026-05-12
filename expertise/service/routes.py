@@ -317,6 +317,7 @@ def results():
                         yield buf.getvalue()
                 except Exception as e:
                     flask.current_app.logger.error(f"Error in CSV streaming: {str(e)}", exc_info=True)
+                    raise
 
             return flask.Response(generate_csv(), mimetype='text/csv')
 
