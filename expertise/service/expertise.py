@@ -385,20 +385,20 @@ class BaseExpertiseService:
         :returns file_dir: The directory of the score file, if it exists, starting from the given directory
         :returns metadata_dir: The directory of the metadata file, if it exists, starting from the given directory
         """
-        # Search for scores files (if sparse scores exist, retrieve by default)
+        # Get results always returns sparse scores. The dispatch in
+        # execute_expertise unconditionally produces {name}_sparse.csv (
+        # sparse_value is a required positive integer, validated at config
+        # creation), so if the file isn't on disk something went wrong with
+        # the job and we surface that as an error rather than silently
+        # serving the wrong artifact.
         file_dir, metadata_dir = None, None
         with open(os.path.join(search_dir, 'config.json'), 'r') as f:
             config = JobConfig.from_json(json.load(f))
 
-        # Look for files
-        if os.path.isfile(os.path.join(search_dir, f"{config.name}.csv")):
-            file_dir = os.path.join(search_dir, f"{config.name}.csv")
-            if 'sparse_value' in config.model_params.keys() and os.path.isfile(os.path.join(search_dir, f"{config.name}_sparse.csv")):
-                file_dir = os.path.join(search_dir, f"{config.name}_sparse.csv")
-            else:
-                raise OpenReviewException("Sparse score file not found for job {job_id}".format(job_id=config.job_id))
-        else:
-            raise OpenReviewException("Score file not found for job {job_id}".format(job_id=config.job_id))
+        sparse_csv_path = os.path.join(search_dir, f"{config.name}_sparse.csv")
+        if not os.path.isfile(sparse_csv_path):
+            raise OpenReviewException("Sparse score file not found for job {job_id}".format(job_id=config.job_id))
+        file_dir = sparse_csv_path
 
         if os.path.isfile(os.path.join(search_dir, 'metadata.json')):
             metadata_dir = os.path.join(search_dir, 'metadata.json')

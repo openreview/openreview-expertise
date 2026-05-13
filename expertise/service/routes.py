@@ -5,6 +5,8 @@ from expertise.service.expertise import ExpertiseService, ExpertiseCloudService
 from expertise.service import model_ready, artifact_loading_started
 from expertise.service.utils import GCPInterface
 import openreview
+import csv
+import io
 import json
 from .utils import get_user_id
 import flask
@@ -275,50 +277,78 @@ def results():
         if job_id is None or len(job_id) == 0:
             raise openreview.OpenReviewException('Bad request: jobId is required')
         delete_on_get = flask.request.args.get('deleteOnGet', 'False').lower() == 'true'
+        # Optional response format: 'json' (default, backwards-compatible) or 'csv'.
+        # CSV is rows-only with an entityA,entityB,score header — useful for
+        # very large jobs where clients want to skip JSON parsing overhead.
+        response_format = flask.request.args.get('format', 'json').lower()
 
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
         result = expertise_service.get_expertise_results(user_id, job_id, delete_on_get)
-        
-        # Check if result is a generator (for streaming) or a regular dict
+
+        # Normalize both service shapes (cloud=generator-of-chunks, local=dict)
+        # into a single iterable of result_item dicts. The CSV and JSON
+        # streaming generators below consume this uniformly.
+        def iter_result_items(res):
+            if hasattr(res, '__iter__') and not isinstance(res, (dict, list)):
+                for chunk in res:
+                    for item in chunk.get('results') or []:
+                        yield item
+            else:
+                for item in res.get('results') or []:
+                    yield item
+
+        if response_format == 'csv':
+            flask.current_app.logger.debug('Streaming CSV response')
+
+            def generate_csv():
+                try:
+                    buf = io.StringIO()
+                    writer = csv.writer(buf)
+                    writer.writerow(['entityA', 'entityB', 'score'])
+                    for item in iter_result_items(result):
+                        writer.writerow([item['entityA'], item['entityB'], item['score']])
+                        # Flush in ~8KB chunks to keep buffer small while still
+                        # amortizing yield overhead across many rows.
+                        if buf.tell() > 8192:
+                            yield buf.getvalue()
+                            buf.seek(0)
+                            buf.truncate()
+                    if buf.tell() > 0:
+                        yield buf.getvalue()
+                except Exception as e:
+                    flask.current_app.logger.error(f"Error in CSV streaming: {str(e)}", exc_info=True)
+                    raise
+
+            return flask.Response(generate_csv(), mimetype='text/csv')
+
+        # Default: JSON. Streaming for generator (cloud), single-shot jsonify for dict (local).
         if hasattr(result, '__iter__') and not isinstance(result, (dict, list)):
-            # It's a generator - use streaming response
             flask.current_app.logger.debug('Using streaming response')
-            
+
             def generate():
                 try:
-                    # Start with an opening bracket for a JSON array
                     yield '{"results":['
-                    
                     first_chunk = True
                     metadata = None
-                    
                     for chunk in result:
-                        # Save metadata for later
                         if chunk.get('metadata') is not None:
                             metadata = chunk['metadata']
-                        
-                        # Stream results
                         if chunk.get('results'):
                             for result_item in chunk['results']:
                                 if not first_chunk:
                                     yield ','
                                 yield json.dumps(result_item)
                                 first_chunk = False
-                    
-                    # Close the results array and add metadata
                     yield '],'
                     yield f'"metadata":{json.dumps(metadata or {})}'
                     yield '}'
-                    
                 except Exception as e:
                     flask.current_app.logger.error(f"Error in streaming: {str(e)}", exc_info=True)
-                    # If an error occurs during streaming, we need to yield a valid JSON
                     yield '[],"error":"Error during streaming"}'
 
             flask.current_app.logger.debug('Streaming response started')
             return flask.Response(generate(), mimetype='application/json')
         else:
-            # It's a regular dictionary - use standard JSON response
             flask.current_app.logger.debug('Using standard JSON response')
             return flask.jsonify(result), 200
 
