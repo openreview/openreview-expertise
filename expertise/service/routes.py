@@ -372,6 +372,52 @@ def results():
         flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
+@BLUEPRINT.route('/expertise/metadata', methods=['GET'])
+@require_auth
+def metadata():
+    """
+    Get the dataset metadata of a single submitted job. Intended for venue
+    organizers who want to surface missing profiles and publications without
+    pulling the full score file (which can now be retrieved as CSV via
+    /expertise/results?format=csv).
+
+    :param token: Authorization from a logged in user, which defines the set of accessible data
+    :type token: str
+
+    :param jobId: The ID of a submitted job
+    :type jobId: str
+    """
+    try:
+        user_id = g.user_id
+        flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
+        job_id = flask.request.args.get('jobId', None)
+        if job_id is None or len(job_id) == 0:
+            raise openreview.OpenReviewException('Bad request: jobId is required')
+
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        result = expertise_service.get_expertise_metadata(user_id, job_id)
+        return flask.jsonify(result), 200
+
+    except openreview.OpenReviewException as error_handle:
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
+
+        error_type = str(error_handle)
+        status = 500
+
+        if 'not found' in error_type.lower():
+            status = 404
+        elif 'forbidden' in error_type.lower():
+            status = 403
+        elif 'bad request' in error_type.lower():
+            status = 400
+
+        return flask.jsonify(format_error(status, error_type)), status
+
+    # pylint:disable=broad-except
+    except Exception as error_handle:
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
+        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
+
 @BLUEPRINT.route('/startup')
 def startup():
     """An endpoint for checking availability for predictions"""
