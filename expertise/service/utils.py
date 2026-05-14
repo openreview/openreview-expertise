@@ -1589,3 +1589,35 @@ class GCPInterface(object):
 
         return _get_scores_and_metadata_streaming(job_blobs, job_id, group_group_matching, paper_paper_matching)
 
+    def get_job_metadata(self, user_id, job_id):
+        """
+        Returns the dataset metadata dict for a job (submission/archive counts,
+        missing profiles and publications). Excludes the metadata.json packed
+        inside dataset/ — that one is part of the input artifact, not the
+        post-pipeline output.
+        """
+        job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
+        self.logger.info(f"Searching for job {job_id} metadata | prefix={self.jobs_folder}/{job_id}/")
+        all_requests = [
+            json.loads(blob.download_as_string()) for blob in job_blobs if self.request_fname in blob.name
+        ]
+        authenticated_requests = [
+            req for req in all_requests if user_id == req['user_id'] or user_id in SUPERUSER_IDS
+        ]
+        if len(all_requests) == 0:
+            raise openreview.OpenReviewException('Job not found')
+        if len(authenticated_requests) == 0:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
+        if len(authenticated_requests) > 1:
+            raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
+
+        metadata_files = [
+            blob for blob in job_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name
+        ]
+        if len(metadata_files) != 1:
+            raise openreview.OpenReviewException(
+                f'Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}'
+            )
+
+        return json.loads(metadata_files[0].download_as_string())
+

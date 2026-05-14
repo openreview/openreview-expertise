@@ -968,6 +968,39 @@ class TestExpertiseService():
         assert "~C.V._Lastname1" in all_users
 
 
+    def test_get_metadata_by_job_id(self, openreview_client, openreview_context):
+        test_client = openreview_context['test_client']
+        response = test_client.get(
+            '/expertise/metadata',
+            headers=openreview_client.headers,
+            query_string={'jobId': f"{openreview_context['job_id']}"},
+        )
+        assert response.status_code == 200
+        metadata = response.json
+        assert metadata['submission_count'] == 2
+        assert metadata['archives_count'] == 10
+        # Lists of missing profiles / publications must be present even when empty
+        # so venue-organizer UIs can render the section without null checks.
+        assert isinstance(metadata.get('no_profile', []), list)
+        assert isinstance(metadata.get('no_publications', []), list)
+
+    def test_get_metadata_for_unknown_job(self, openreview_client, openreview_context):
+        test_client = openreview_context['test_client']
+        response = test_client.get(
+            '/expertise/metadata',
+            headers=openreview_client.headers,
+            query_string={'jobId': 'nonexistent_job_id'},
+        )
+        assert response.status_code == 404
+
+    def test_get_metadata_without_job_id(self, openreview_client, openreview_context):
+        test_client = openreview_context['test_client']
+        response = test_client.get(
+            '/expertise/metadata',
+            headers=openreview_client.headers,
+        )
+        assert response.status_code == 400
+
     def test_compare_results_for_identical_jobs(self, openreview_client, openreview_context):
         test_client = openreview_context['test_client']
         # Searches for results from the given job_id assuming the job has completed
