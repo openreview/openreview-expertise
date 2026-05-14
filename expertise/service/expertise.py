@@ -770,6 +770,28 @@ class ExpertiseService(BaseExpertiseService):
 
         return result
 
+    def get_expertise_metadata(self, user_id, job_id):
+        """
+        Gets the dataset metadata for a given job (submission/archive counts,
+        missing profiles and publications). Lighter than get_expertise_results
+        since it doesn't read the score file.
+        """
+        config = self.redis.load_job(job_id, user_id)
+
+        if config.status != JobStatus.COMPLETED:
+            raise openreview.OpenReviewException(
+                f"Metadata not available - status: {config.status} | description: {config.description}"
+            )
+
+        metadata_path = os.path.join(config.job_dir, 'metadata.json')
+        if not os.path.isfile(metadata_path):
+            raise openreview.OpenReviewException(
+                f"Metadata file not found for job {job_id}"
+            )
+
+        with open(metadata_path, 'r') as f:
+            return json.load(f)
+
 class ExpertiseCloudService(BaseExpertiseService):
 
     def __init__(self, config, logger, containerized = False):
@@ -1100,3 +1122,15 @@ class ExpertiseCloudService(BaseExpertiseService):
         """
         redis_job = self.redis.load_job(job_id, user_id)
         return self.cloud.get_job_results(user_id, redis_job.cloud_id, delete_on_get)
+
+    def get_expertise_metadata(self, user_id, job_id):
+        """
+        Gets the dataset metadata for a given job (submission/archive counts,
+        missing profiles and publications) by reading metadata.json from GCS.
+        """
+        redis_job = self.redis.load_job(job_id, user_id)
+        if redis_job.status != JobStatus.COMPLETED:
+            raise openreview.OpenReviewException(
+                f"Metadata not available - status: {redis_job.status} | description: {redis_job.description}"
+            )
+        return self.cloud.get_job_metadata(user_id, redis_job.cloud_id)
