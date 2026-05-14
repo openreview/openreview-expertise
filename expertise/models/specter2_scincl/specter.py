@@ -314,59 +314,54 @@ class Specter2Predictor(Predictor):
             self.test_id_list = test_id_list
             self.reviewer_ids = train_id_list
         else:
-            score_vectors = []
             reviewer_ids = []
+            reviewer_paper_indices = []
             for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
                 if len(train_note_id_list) == 0:
                     continue
-                train_paper_idx = []
-                for paper_id in train_note_id_list:
-                    if paper_id not in train_bad_id_set:
-                        train_paper_idx.append(paper_id2train_idx[paper_id])
-                if not train_paper_idx:
+                valid = [paper_id2train_idx[pid] for pid in train_note_id_list if pid not in train_bad_id_set]
+                if not valid:
                     # Every publication for this reviewer had a bad embedding
                     # (length 0, added to train_bad_id_set in load_emb_file).
-                    # Slicing with an empty column index gives a [num_test, 0]
-                    # tensor, which would crash .max(dim=1) / torch.quantile
-                    # and produce NaNs from .mean(dim=1). Skip the reviewer
-                    # consistently with the "no publications" case above —
-                    # they won't appear in self.reviewer_ids.
+                    # Skip consistently with the "no publications" case.
                     continue
-                train_paper_aff_j = p2p_aff_norm[:, train_paper_idx]
+                reviewer_ids.append(reviewer_id)
+                reviewer_paper_indices.append(valid)
 
-                # Apply venue-specific weights per reviewer
+            if reviewer_ids:
+                max_papers = max(len(papers) for papers in reviewer_paper_indices)
+                num_reviewers = len(reviewer_ids)
+                paper_idx = torch.zeros((num_reviewers, max_papers), dtype=torch.long)
+                mask = torch.zeros((num_reviewers, max_papers), dtype=torch.bool)
+                for r, papers in enumerate(reviewer_paper_indices):
+                    paper_idx[r, :len(papers)] = torch.tensor(papers, dtype=torch.long)
+                    mask[r, :len(papers)] = True
+
+                scores = p2p_aff_norm[:, paper_idx]  # (num_test, num_reviewers, max_papers)
+
                 if self.venue_specific_weights:
-                    train_weight_j = train_weight_tensor[train_paper_idx]
-                    # Logit-space transformation preserves bounds and probability mass
-                    epsilon = 1e-8 ## Numerical stability
-                    logits = torch.logit(train_paper_aff_j, eps=epsilon)
-                    weighted_logits = logits + torch.log(torch.clamp(train_weight_j, min=epsilon)).unsqueeze(0)
-                    train_paper_aff_j = torch.sigmoid(weighted_logits)
+                    weights = train_weight_tensor[paper_idx]
+                    epsilon = 1e-8
+                    logits = torch.logit(scores, eps=epsilon)
+                    log_w = torch.log(torch.clamp(weights, min=epsilon))
+                    scores = torch.sigmoid(logits + log_w.unsqueeze(0))
 
                 if self.percentile_select is not None:
-                    # Select score based on percentile
-                    # q=1.0 (percentile_select=100) -> max score
-                    # q=0.5 (percentile_select=50) -> median score
-                    # q=0.0 (percentile_select=0) -> min score
-                    q = self.percentile_select / 100.0
-                    q = max(0.0, min(1.0, q))
-                    all_paper_aff = torch.quantile(train_paper_aff_j, q, dim=1, interpolation='linear')
+                    q = max(0.0, min(1.0, self.percentile_select / 100.0))
+                    nan_scores = scores.masked_fill(~mask.unsqueeze(0), float('nan'))
+                    self.scores_matrix = torch.nanquantile(nan_scores, q, dim=2, interpolation='linear')
                 elif self.average_score:
-                    all_paper_aff = train_paper_aff_j.mean(dim=1)
+                    zero_scores = scores.masked_fill(~mask.unsqueeze(0), 0.0)
+                    counts = mask.sum(dim=1).clamp(min=1).to(scores.dtype)
+                    self.scores_matrix = zero_scores.sum(dim=2) / counts.unsqueeze(0)
                 elif self.max_score:
-                    all_paper_aff = train_paper_aff_j.max(dim=1)[0]
-
-                score_vectors.append(all_paper_aff)
-                reviewer_ids.append(reviewer_id)
-
-            if score_vectors:
-                self.scores_matrix = torch.stack(score_vectors, dim=1)  # [num_test, num_reviewers]
+                    neg_inf_scores = scores.masked_fill(~mask.unsqueeze(0), float('-inf'))
+                    self.scores_matrix = neg_inf_scores.max(dim=2).values
             else:
                 # No eligible reviewers (every train_note_id_list empty or all
-                # publications dropped via bad_id_set). Match the pre-refactor
-                # behavior: produce a 0-column matrix and empty reviewer list
-                # so downstream sparse generation / merging / CSV emission
-                # all see a well-formed but empty result instead of crashing.
+                # publications dropped via bad_id_set). Produce a 0-column
+                # matrix so downstream sparse generation / merging / CSV
+                # emission all see a well-formed but empty result.
                 self.scores_matrix = torch.empty((paper_num_test, 0), dtype=p2p_aff_norm.dtype)
             self.test_id_list = test_id_list
             self.reviewer_ids = reviewer_ids
