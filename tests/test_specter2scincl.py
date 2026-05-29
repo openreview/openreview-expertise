@@ -814,3 +814,44 @@ def test_all_scores_skips_reviewer_with_only_bad_embeddings(tmp_path):
     # Score is finite (no NaN from a degenerate reduction).
     score = model.scores_matrix[0, 0].item()
     assert score == score, "Score must not be NaN"
+
+
+def test_set_archives_dataset_with_integer_ids(tmp_path):
+    """Paper IDs from match_submissions.jsonl can be integers (e.g. 0, 1, 2).
+    set_archives_dataset must cast them to str before string concatenation
+    (e.g. paper_id + "_" + str(mdate)) and dict key usage.
+    """
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+
+    # Integer paper IDs — mimics match_submissions.jsonl format
+    int_id_papers = [
+        {"id": 0, "mdate": 1234567890, "content": {"title": "Paper 0", "abstract": "Abstract 0"}},
+        {"id": 1, "mdate": 1234567890, "content": {"title": "Paper 1", "abstract": "Abstract 1"}},
+    ]
+    (archive_dir / "~Reviewer1.jsonl").write_text(
+        "\n".join(json.dumps(p) for p in int_id_papers) + "\n"
+    )
+
+    archives_dataset = ArchivesDataset(archives_path=archive_dir)
+
+    specter_model = specter2_scincl.Specter2Predictor(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(tmp_path / "specter"),
+        use_cuda=False,
+    )
+    scincl_model = specter2_scincl.SciNCLPredictor(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(tmp_path / "scincl"),
+        use_cuda=False,
+    )
+
+    # Must not raise TypeError for int + str
+    specter_model.set_archives_dataset(archives_dataset)
+    scincl_model.set_archives_dataset(archives_dataset)
+
+    # Verify keys were stored as strings
+    assert "0" in specter_model.pub_note_id_to_title
+    assert "1" in specter_model.pub_note_id_to_title
+    assert "0" in scincl_model.pub_note_id_to_title
+    assert "1" in scincl_model.pub_note_id_to_title
