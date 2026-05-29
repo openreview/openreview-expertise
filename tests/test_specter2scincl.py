@@ -816,6 +816,11 @@ def test_all_scores_skips_reviewer_with_only_bad_embeddings(tmp_path):
     assert score == score, "Score must not be NaN"
 
 
+def _pad_to_768(emb):
+    """Pad a short embedding list to 768 dimensions with zeros."""
+    return emb + [0.0] * (768 - len(emb))
+
+
 def test_reviewer_aggregation_max_matches_manual_loop(tmp_path):
     """The vectorized max-score aggregation must match a plain Python loop.
 
@@ -853,11 +858,10 @@ def test_reviewer_aggregation_max_matches_manual_loop(tmp_path):
     predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
 
     # Embeddings are chosen so that Sub1·A=0.3, Sub1·B=0.7, Sub1·C=0.2
-    # We use 3-dim vectors for clarity (the predictor pads to 768 internally).
-    emb_a = [0.3, 0.0, 0.0]          # A
-    emb_b = [0.0, 0.7, 0.0]          # B
-    emb_c = [0.0, 0.0, 0.2]          # C
-    emb_s = [1.0, 1.0, 1.0]          # Sub1  -> dot(A)=0.3, dot(B)=0.7, dot(C)=0.2
+    emb_a = _pad_to_768([0.3, 0.0, 0.0])          # A
+    emb_b = _pad_to_768([0.0, 0.7, 0.0])          # B
+    emb_c = _pad_to_768([0.0, 0.0, 0.2])          # C
+    emb_s = _pad_to_768([1.0, 1.0, 1.0])          # Sub1  -> dot(A)=0.3, dot(B)=0.7, dot(C)=0.2
 
     pub_lines = (
         json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
@@ -914,11 +918,11 @@ def test_reviewer_aggregation_average_matches_manual_loop(tmp_path):
     predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
 
     # Sub1·A=0.3, Sub1·B=0.7, Sub1·C=0.2, Sub1·D=0.4
-    emb_a = [0.3, 0.0, 0.0, 0.0]
-    emb_b = [0.0, 0.7, 0.0, 0.0]
-    emb_c = [0.0, 0.0, 0.2, 0.0]
-    emb_d = [0.0, 0.0, 0.0, 0.4]
-    emb_s = [1.0, 1.0, 1.0, 1.0]
+    emb_a = _pad_to_768([0.3, 0.0, 0.0, 0.0])
+    emb_b = _pad_to_768([0.0, 0.7, 0.0, 0.0])
+    emb_c = _pad_to_768([0.0, 0.0, 0.2, 0.0])
+    emb_d = _pad_to_768([0.0, 0.0, 0.0, 0.4])
+    emb_s = _pad_to_768([1.0, 1.0, 1.0, 1.0])
 
     pub_lines = (
         json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
@@ -976,12 +980,12 @@ def test_reviewer_aggregation_percentile_matches_manual_loop(tmp_path):
     predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
 
     # Scores: A=0.1, B=0.9, C=0.2, D=0.6, E=0.4
-    emb_a = [0.1, 0.0, 0.0, 0.0, 0.0]
-    emb_b = [0.0, 0.9, 0.0, 0.0, 0.0]
-    emb_c = [0.0, 0.0, 0.2, 0.0, 0.0]
-    emb_d = [0.0, 0.0, 0.0, 0.6, 0.0]
-    emb_e = [0.0, 0.0, 0.0, 0.0, 0.4]
-    emb_s = [1.0, 1.0, 1.0, 1.0, 1.0]
+    emb_a = _pad_to_768([0.1, 0.0, 0.0, 0.0, 0.0])
+    emb_b = _pad_to_768([0.0, 0.9, 0.0, 0.0, 0.0])
+    emb_c = _pad_to_768([0.0, 0.0, 0.2, 0.0, 0.0])
+    emb_d = _pad_to_768([0.0, 0.0, 0.0, 0.6, 0.0])
+    emb_e = _pad_to_768([0.0, 0.0, 0.0, 0.0, 0.4])
+    emb_s = _pad_to_768([1.0, 1.0, 1.0, 1.0, 1.0])
 
     pub_lines = (
         json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
@@ -1040,9 +1044,9 @@ def test_reviewer_aggregation_with_weights_matches_manual_loop(tmp_path):
     predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
 
     # Sub1·A=0.5, Sub1·B=0.5 (same score, different weights)
-    emb_a = [0.5, 0.0]
-    emb_b = [0.0, 0.5]
-    emb_s = [1.0, 1.0]
+    emb_a = _pad_to_768([0.5, 0.0])
+    emb_b = _pad_to_768([0.0, 0.5])
+    emb_s = _pad_to_768([1.0, 1.0])
 
     pub_lines = (
         json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
