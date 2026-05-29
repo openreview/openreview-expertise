@@ -816,42 +816,83 @@ def test_all_scores_skips_reviewer_with_only_bad_embeddings(tmp_path):
     assert score == score, "Score must not be NaN"
 
 
-def test_set_archives_dataset_with_integer_ids(tmp_path):
-    """Paper IDs from match_submissions.jsonl can be integers (e.g. 0, 1, 2).
-    set_archives_dataset must cast them to str before string concatenation
-    (e.g. paper_id + "_" + str(mdate)) and dict key usage.
+def test_paper_paper_with_integer_ids(tmp_path):
+    """Reproduces rhb3nk6s5e: paper-paper similarity where match_submissions.jsonl
+    contains integer paper IDs (0, 1, 2...).  The full predictor pipeline must
+    handle these without TypeError in string concatenation or jsonl emission.
     """
     archive_dir = tmp_path / "archives"
     archive_dir.mkdir()
 
-    # Integer paper IDs — mimics match_submissions.jsonl format
-    int_id_papers = [
+    # Integer IDs — exactly the format from match_submissions.jsonl
+    papers = [
         {"id": 0, "mdate": 1234567890, "content": {"title": "Paper 0", "abstract": "Abstract 0"}},
         {"id": 1, "mdate": 1234567890, "content": {"title": "Paper 1", "abstract": "Abstract 1"}},
     ]
     (archive_dir / "~Reviewer1.jsonl").write_text(
-        "\n".join(json.dumps(p) for p in int_id_papers) + "\n"
+        "\n".join(json.dumps(p) for p in papers) + "\n"
+    )
+
+    submissions_dir = tmp_path / "submissions"
+    submissions_dir.mkdir()
+    (submissions_dir / "0.jsonl").write_text(
+        json.dumps({"id": 0, "content": {"title": "Paper 0", "abstract": "Abstract 0"}}) + "\n"
+    )
+    (submissions_dir / "1.jsonl").write_text(
+        json.dumps({"id": 1, "content": {"title": "Paper 1", "abstract": "Abstract 1"}}) + "\n"
     )
 
     archives_dataset = ArchivesDataset(archives_path=archive_dir)
+    submissions_dataset = SubmissionsDataset(submissions_path=submissions_dir)
 
-    specter_model = specter2_scincl.Specter2Predictor(
+    model = specter2_scincl.EnsembleModel(
         specter_dir="../expertise-utils/specter/",
-        work_dir=str(tmp_path / "specter"),
+        work_dir=str(tmp_path),
         use_cuda=False,
+        compute_paper_paper=True,
     )
-    scincl_model = specter2_scincl.SciNCLPredictor(
-        specter_dir="../expertise-utils/specter/",
-        work_dir=str(tmp_path / "scincl"),
-        use_cuda=False,
-    )
+    model.set_archives_dataset(archives_dataset)
+    model.set_submissions_dataset(submissions_dataset)
+
+    pub_dir = tmp_path / "publications"
+    pub_dir.mkdir()
+    sub_dir = tmp_path / "sub_embeddings"
+    sub_dir.mkdir()
+
+    specter_pub_path = pub_dir / "pub2vec_specter.jsonl"
+    scincl_pub_path  = pub_dir / "pub2vec_scincl.jsonl"
+    specter_sub_path = sub_dir / "sub2vec_specter.jsonl"
+    scincl_sub_path  = sub_dir / "sub2vec_scincl.jsonl"
+
+    # Simple deterministic embeddings: paper 0 = [1,0,0,...], paper 1 = [0,1,0,...]
+    emb_size = 768
+    emb_0 = [1.0] + [0.0] * (emb_size - 1)
+    emb_1 = [0.0, 1.0] + [0.0] * (emb_size - 2)
+
+    for path in (specter_pub_path, scincl_pub_path):
+        path.write_text(
+            json.dumps({"paper_id": 0, "embedding": emb_0}) + "\n" +
+            json.dumps({"paper_id": 1, "embedding": emb_1}) + "\n"
+        )
+    for path in (specter_sub_path, scincl_sub_path):
+        path.write_text(
+            json.dumps({"paper_id": 0, "embedding": emb_0}) + "\n" +
+            json.dumps({"paper_id": 1, "embedding": emb_1}) + "\n"
+        )
+
+    scores_dir = tmp_path / "scores"
+    scores_dir.mkdir()
 
     # Must not raise TypeError for int + str
-    specter_model.set_archives_dataset(archives_dataset)
-    scincl_model.set_archives_dataset(archives_dataset)
+    model.all_scores(
+        specter_publications_path=specter_pub_path,
+        scincl_publications_path=scincl_pub_path,
+        specter_submissions_path=specter_sub_path,
+        scincl_submissions_path=scincl_sub_path,
+        matrix_path=scores_dir / "scores.pt",
+    )
 
-    # Verify keys were stored as strings
-    assert "0" in specter_model.pub_note_id_to_title
-    assert "1" in specter_model.pub_note_id_to_title
-    assert "0" in scincl_model.pub_note_id_to_title
-    assert "1" in scincl_model.pub_note_id_to_title
+    # Paper-paper mode: scores_matrix is the full p2p_aff, reviewer_ids are train paper ids
+    assert model.scores_matrix.shape == (2, 2)
+    assert set(model.test_id_list) == {0, 1} or set(model.test_id_list) == {"0", "1"}
+    assert set(model.reviewer_ids) == {0, 1} or set(model.reviewer_ids) == {"0", "1"}
