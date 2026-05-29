@@ -133,31 +133,32 @@ class Specter2Predictor(Predictor):
         paper_ids_list = []
         for profile_id, publications in archives_dataset.items():
             for publication in publications:
+                paper_id = str(publication['id'])
                 if publication['content'].get('title').strip() or publication['content'].get('abstract').strip():
-                    self.pub_note_id_to_author_ids[publication['id']].append(profile_id)
-                    self.pub_author_ids_to_note_id[profile_id].append(publication['id'])
-                    self.pub_note_id_to_title[publication['id']] = publication['content'].get('title').strip() if publication['content'].get('title').strip() else "."
-                    self.pub_note_id_to_abstract[publication['id']] = publication['content'].get('abstract').strip() if publication['content'].get('abstract').strip() else "."
+                    self.pub_note_id_to_author_ids[paper_id].append(profile_id)
+                    self.pub_author_ids_to_note_id[profile_id].append(paper_id)
+                    self.pub_note_id_to_title[paper_id] = publication['content'].get('title').strip() if publication['content'].get('title').strip() else "."
+                    self.pub_note_id_to_abstract[paper_id] = publication['content'].get('abstract').strip() if publication['content'].get('abstract').strip() else "."
                     pub_mdate = publication.get('mdate', int(time.time()))
-                    pub_cache_key = publication['id'] + "_" + str(pub_mdate)
-                    self.pub_note_id_to_cache_key[publication['id']] = pub_cache_key
+                    pub_cache_key = paper_id + "_" + str(pub_mdate)
+                    self.pub_note_id_to_cache_key[paper_id] = pub_cache_key
                     if self.redis is None or not self.redis.exists(pub_cache_key):
-                        if publication['id'] in output_dict:
-                            output_dict[publication['id']]["authors"].append(profile_id)
+                        if paper_id in output_dict:
+                            output_dict[paper_id]["authors"].append(profile_id)
                         else:
-                            paper_ids_list.append(publication['id'])
-                            output_dict[publication['id']] = {
-                                "title": self.pub_note_id_to_title[publication['id']],
-                                "abstract": self.pub_note_id_to_abstract[publication['id']],
-                                "paper_id": publication["id"],
+                            paper_ids_list.append(paper_id)
+                            output_dict[paper_id] = {
+                                "title": self.pub_note_id_to_title[paper_id],
+                                "abstract": self.pub_note_id_to_abstract[paper_id],
+                                "paper_id": paper_id,
                                 "authors": [profile_id],
                                 "mdate": pub_mdate
                             }
                         if self.venue_specific_weights:
-                            output_dict[publication['id']]['weight'] = publication.get('content', {}).get('weight', 1)
-                        self._remove_keys_from_cache(publication["id"])
+                            output_dict[paper_id]['weight'] = publication.get('content', {}).get('weight', 1)
+                        self._remove_keys_from_cache(paper_id)
                 else:
-                    print(f"Skipping publication {publication['id']}. Either title or abstract must be provided ")
+                    print(f"Skipping publication {paper_id}. Either title or abstract must be provided ")
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_data.json"), 'w') as f_out:
             json.dump(output_dict, f_out, indent=1)
         with open(os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt"), 'w') as f_out:
