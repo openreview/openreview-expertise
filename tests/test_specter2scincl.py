@@ -878,12 +878,14 @@ def test_reviewer_aggregation_max_matches_manual_loop(tmp_path):
     predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
 
     assert predictor.test_id_list == ["Sub1"]
-    assert predictor.reviewer_ids == ["~Rev1", "~Rev2"]
+    assert set(predictor.reviewer_ids) == {"~Rev1", "~Rev2"}
     assert predictor.scores_matrix.shape == (1, 2)
 
-    # Manual reference: max over each reviewer's papers
-    assert round(predictor.scores_matrix[0, 0].item(), 4) == 0.7000  # Rev1: max(0.3, 0.7)
-    assert round(predictor.scores_matrix[0, 1].item(), 4) == 0.5000  # Rev2: max(0.7, 0.2)
+    # Look up scores by reviewer id (order is non-deterministic)
+    rev1_idx = predictor.reviewer_ids.index("~Rev1")
+    rev2_idx = predictor.reviewer_ids.index("~Rev2")
+    assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == 0.7000  # Rev1: max(0.3, 0.7)
+    assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == 0.5000  # Rev2: max(0.7, 0.2)
 
 
 def test_reviewer_aggregation_average_matches_manual_loop(tmp_path):
@@ -940,11 +942,13 @@ def test_reviewer_aggregation_average_matches_manual_loop(tmp_path):
     predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
 
     assert predictor.test_id_list == ["Sub1"]
-    assert predictor.reviewer_ids == ["~Rev1", "~Rev2"]
+    assert set(predictor.reviewer_ids) == {"~Rev1", "~Rev2"}
     assert predictor.scores_matrix.shape == (1, 2)
 
-    assert round(predictor.scores_matrix[0, 0].item(), 4) == round((0.3 + 0.7) / 2, 4)
-    assert round(predictor.scores_matrix[0, 1].item(), 4) == round((0.7 + 0.2 + 0.4) / 3, 4)
+    rev1_idx = predictor.reviewer_ids.index("~Rev1")
+    rev2_idx = predictor.reviewer_ids.index("~Rev2")
+    assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == round((0.3 + 0.7) / 2, 4)
+    assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == round((0.7 + 0.2 + 0.4) / 3, 4)
 
 
 def test_reviewer_aggregation_percentile_matches_manual_loop(tmp_path):
@@ -1004,13 +1008,15 @@ def test_reviewer_aggregation_percentile_matches_manual_loop(tmp_path):
     predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
 
     assert predictor.test_id_list == ["Sub1"]
-    assert predictor.reviewer_ids == ["~Rev1", "~Rev2"]
+    assert set(predictor.reviewer_ids) == {"~Rev1", "~Rev2"}
     assert predictor.scores_matrix.shape == (1, 2)
 
+    rev1_idx = predictor.reviewer_ids.index("~Rev1")
+    rev2_idx = predictor.reviewer_ids.index("~Rev2")
     # Rev1 papers [A=0.1, B=0.9] -> median = 0.5
-    assert round(predictor.scores_matrix[0, 0].item(), 4) == 0.5000
+    assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == 0.5000
     # Rev2 papers [C=0.2, D=0.6, E=0.4] -> median = 0.4
-    assert round(predictor.scores_matrix[0, 1].item(), 4) == 0.4000
+    assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == 0.4000
 
 
 def test_reviewer_aggregation_with_weights_matches_manual_loop(tmp_path):
@@ -1076,7 +1082,8 @@ def test_reviewer_aggregation_with_weights_matches_manual_loop(tmp_path):
     w_b = apply_weight(0.5, 0.5)
     expected = round((w_a + w_b) / 2, 4)
 
-    assert round(predictor.scores_matrix[0, 0].item(), 4) == expected
+    rev1_idx = predictor.reviewer_ids.index("~Rev1")
+    assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == expected
 
 
 def test_reviewer_aggregation_skips_bad_embeddings(tmp_path):
