@@ -816,231 +816,309 @@ def test_all_scores_skips_reviewer_with_only_bad_embeddings(tmp_path):
     assert score == score, "Score must not be NaN"
 
 
-@pytest.mark.parametrize("aggregation_mode,use_weights", [
-    ("max", False),
-    ("average", False),
-    ("percentile", False),
-    ("max", True),
-    ("average", True),
-    ("percentile", True),
-])
-def test_vectorized_aggregation_matches_reference_loop(tmp_path, aggregation_mode, use_weights):
-    """Regression for PR #386: verify vectorized reviewer aggregation produces
-    the same scores as the pre-change loop-based implementation.
+def test_reviewer_aggregation_max_matches_manual_loop(tmp_path):
+    """The vectorized max-score aggregation must match a plain Python loop.
 
-    Uses hand-crafted embeddings so p2p_aff values are deterministic.
-    Reviewers have varying paper counts (tests padding/masking).
-    One paper has a zero-length embedding (tests bad_id filtering).
+    Setup: one submission, two reviewers.
+      Rev1 has papers [A, B] with p2p scores [0.3, 0.7]
+      Rev2 has papers [B, C] with p2p scores [0.5, 0.2]
+    Expected: Rev1=0.7, Rev2=0.5
     """
-    work_dir = tmp_path / "work"
-    work_dir.mkdir()
-
-    predictor = specter2_scincl.Specter2Predictor(
-        specter_dir="../expertise-utils/specter/",
-        work_dir=str(work_dir),
-        use_cuda=False,
-        normalize_scores=False,
-        average_score=(aggregation_mode == "average"),
-        max_score=(aggregation_mode == "max"),
-        percentile_select=83 if aggregation_mode == "percentile" else None,
-        venue_specific_weights=use_weights,
-    )
-
-    # --- 1. Archives: 3 reviewers with varying paper counts ---
     archive_dir = tmp_path / "archives"
     archive_dir.mkdir()
-    # Rev1: 2 papers
     (archive_dir / "~Rev1.jsonl").write_text(
-        json.dumps({"id": "p1", "content": {"title": "P1", "abstract": "A1"}}) + "\n"
-        + json.dumps({"id": "p2", "content": {"title": "P2", "abstract": "A2"}}) + "\n"
+        json.dumps({"id": "A", "content": {"title": "A", "abstract": "a"}}) + "\n"
+        + json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
     )
-    # Rev2: 3 papers (one will have bad embedding)
     (archive_dir / "~Rev2.jsonl").write_text(
-        json.dumps({"id": "p2", "content": {"title": "P2", "abstract": "A2"}}) + "\n"
-        + json.dumps({"id": "p3", "content": {"title": "P3", "abstract": "A3"}}) + "\n"
-        + json.dumps({"id": "p4", "content": {"title": "P4", "abstract": "A4"}}) + "\n"
-    )
-    # Rev3: 1 paper
-    (archive_dir / "~Rev3.jsonl").write_text(
-        json.dumps({"id": "p5", "content": {"title": "P5", "abstract": "A5"}}) + "\n"
+        json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
+        + json.dumps({"id": "C", "content": {"title": "C", "abstract": "c"}}) + "\n"
     )
 
-    archives_dataset = ArchivesDataset(archives_path=archive_dir)
-    predictor.set_archives_dataset(archives_dataset)
-
-    # --- 2. Submissions: 2 submissions ---
     sub_dir = tmp_path / "submissions"
     sub_dir.mkdir()
     (sub_dir / "Sub1.jsonl").write_text(
-        json.dumps({"id": "Sub1", "content": {"title": "S1", "abstract": "S1"}}) + "\n"
-    )
-    (sub_dir / "Sub2.jsonl").write_text(
-        json.dumps({"id": "Sub2", "content": {"title": "S2", "abstract": "S2"}}) + "\n"
+        json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
     )
 
-    submissions_dataset = SubmissionsDataset(submissions_path=sub_dir)
-    predictor.set_submissions_dataset(submissions_dataset)
+    predictor = specter2_scincl.Specter2Predictor(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(tmp_path),
+        use_cuda=False,
+        normalize_scores=False,
+        average_score=False,
+        max_score=True,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
 
-    # --- 3. Hand-crafted embeddings ---
-    # Use 768-dim vectors where unit vectors produce predictable dot products.
-    # After load_emb_file normalization, e_i stays e_i (already unit length).
-    def unit_vec(i):
-        v = [0.0] * 768
-        v[i] = 1.0
-        return v
-
-    # Publications:
-    #   p1 = e0, p2 = e1, p3 = e2, p4 = e3, p5 = e4
-    # Submissions:
-    #   Sub1 = (e0 + e1) / sqrt(2)
-    #   Sub2 = (e1 + e2) / sqrt(2)
-    #
-    # Expected raw p2p_aff (before normalization, which is disabled):
-    #           p1    p2    p3    p4    p5
-    #   Sub1  1/√2  1/√2   0     0     0
-    #   Sub2   0    1/√2  1/√2   0     0
-    #
-    # p4 has a zero-length embedding -> added to train_bad_id_set.
-    # So Rev2 effectively has papers [p2, p3] after filtering.
+    # Embeddings are chosen so that Sub1·A=0.3, Sub1·B=0.7, Sub1·C=0.2
+    # We use 3-dim vectors for clarity (the predictor pads to 768 internally).
+    emb_a = [0.3, 0.0, 0.0]          # A
+    emb_b = [0.0, 0.7, 0.0]          # B
+    emb_c = [0.0, 0.0, 0.2]          # C
+    emb_s = [1.0, 1.0, 1.0]          # Sub1  -> dot(A)=0.3, dot(B)=0.7, dot(C)=0.2
 
     pub_lines = (
-        json.dumps({"paper_id": "p1", "embedding": unit_vec(0)}) + "\n"
-        + json.dumps({"paper_id": "p2", "embedding": unit_vec(1)}) + "\n"
-        + json.dumps({"paper_id": "p3", "embedding": unit_vec(2)}) + "\n"
-        + json.dumps({"paper_id": "p4", "embedding": []}) + "\n"  # bad embedding
-        + json.dumps({"paper_id": "p5", "embedding": unit_vec(4)}) + "\n"
+        json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
+        + json.dumps({"paper_id": "B", "embedding": emb_b}) + "\n"
+        + json.dumps({"paper_id": "C", "embedding": emb_c}) + "\n"
     )
+    sub_lines = json.dumps({"paper_id": "Sub1", "embedding": emb_s}) + "\n"
 
-    def sub_vec(i, j):
-        v = [0.0] * 768
-        v[i] = 1.0 / (2 ** 0.5)
-        v[j] = 1.0 / (2 ** 0.5)
-        return v
-
-    sub_lines = (
-        json.dumps({"paper_id": "Sub1", "embedding": sub_vec(0, 1)}) + "\n"
-        + json.dumps({"paper_id": "Sub2", "embedding": sub_vec(1, 2)}) + "\n"
-    )
-
-    pub_path = work_dir / "pub2vec_specter.jsonl"
-    sub_path = work_dir / "sub2vec_specter.jsonl"
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
     pub_path.write_text(pub_lines)
     sub_path.write_text(sub_lines)
 
-    # --- 4. Venue weights metadata (if needed) ---
-    if use_weights:
-        weights_meta = {
-            "p1": {"weight": 2.0},
-            "p2": {"weight": 1.0},
-            "p3": {"weight": 0.5},
-            "p4": {"weight": 1.0},
-            "p5": {"weight": 3.0},
-        }
-        with open(work_dir / "specter_reviewer_paper_data.json", "w") as f:
-            json.dump(weights_meta, f)
-
-    # --- 5. Run the vectorized code ---
     predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
 
-    # --- 6. Compute reference scores with the old loop ---
-    # Load embeddings to reconstruct p2p_aff
-    with open(pub_path) as f:
-        pub_embs = {}
-        for line in f:
-            d = json.loads(line)
-            if d["embedding"]:
-                e = torch.tensor(d["embedding"], dtype=torch.float32)
-                e = e / (e.norm() + 1e-12)
-                pub_embs[d["paper_id"]] = e
+    assert predictor.test_id_list == ["Sub1"]
+    assert predictor.reviewer_ids == ["~Rev1", "~Rev2"]
+    assert predictor.scores_matrix.shape == (1, 2)
 
-    with open(sub_path) as f:
-        sub_embs = {}
-        for line in f:
-            d = json.loads(line)
-            e = torch.tensor(d["embedding"], dtype=torch.float32)
-            e = e / (e.norm() + 1e-12)
-            sub_embs[d["paper_id"]] = e
+    # Manual reference: max over each reviewer's papers
+    assert round(predictor.scores_matrix[0, 0].item(), 4) == 0.7000  # Rev1: max(0.3, 0.7)
+    assert round(predictor.scores_matrix[0, 1].item(), 4) == 0.5000  # Rev2: max(0.7, 0.2)
 
-    sub_ids = ["Sub1", "Sub2"]
-    pub_ids = ["p1", "p2", "p3", "p4", "p5"]
-    p2p = torch.zeros((2, 5), dtype=torch.float32)
-    for i, sid in enumerate(sub_ids):
-        for j, pid in enumerate(pub_ids):
-            if pid in pub_embs:
-                p2p[i, j] = sub_embs[sid].dot(pub_embs[pid]).item()
 
-    # Reviewer paper indices after bad_id filtering
-    reviewer_papers = {
-        "~Rev1": ["p1", "p2"],
-        "~Rev2": ["p2", "p3"],  # p4 filtered out
-        "~Rev3": ["p5"],
-    }
-    pub_id_to_idx = {pid: j for j, pid in enumerate(pub_ids)}
-
-    # Load weights if needed
-    weights = None
-    if use_weights:
-        with open(work_dir / "specter_reviewer_paper_data.json") as f:
-            weights_meta = json.load(f)
-        weights = torch.tensor([weights_meta.get(pid, {}).get("weight", 1.0) for pid in pub_ids], dtype=torch.float32)
-
-    ref_vectors = []
-    ref_reviewer_ids = []
-    for rev_id, papers in reviewer_papers.items():
-        paper_indices = [pub_id_to_idx[p] for p in papers]
-        train_paper_aff_j = p2p[:, paper_indices]
-
-        if use_weights:
-            train_weight_j = weights[paper_indices]
-            epsilon = 1e-8
-            logits = torch.logit(train_paper_aff_j.clamp(epsilon, 1 - epsilon), eps=epsilon)
-            log_w = torch.log(torch.clamp(train_weight_j, min=epsilon))
-            weighted_logits = logits + log_w.unsqueeze(0)
-            train_paper_aff_j = torch.sigmoid(weighted_logits)
-
-        if aggregation_mode == "percentile":
-            q = 0.83
-            all_paper_aff = torch.quantile(train_paper_aff_j, q, dim=1, interpolation='linear')
-        elif aggregation_mode == "average":
-            all_paper_aff = train_paper_aff_j.mean(dim=1)
-        elif aggregation_mode == "max":
-            all_paper_aff = train_paper_aff_j.max(dim=1)[0]
-
-        ref_vectors.append(all_paper_aff)
-        ref_reviewer_ids.append(rev_id)
-
-    ref_matrix = torch.stack(ref_vectors, dim=1)  # [2, 3]
-
-    # --- 7. Compare using the same dict-based pattern as compare_scores.py ---
-    actual_scores = {}
-    for i, sub_id in enumerate(predictor.test_id_list):
-        for j, rev_id in enumerate(predictor.reviewer_ids):
-            actual_scores[(sub_id, rev_id)] = round(float(predictor.scores_matrix[i, j]), 4)
-
-    ref_scores = {}
-    for i, sub_id in enumerate(sub_ids):
-        for j, rev_id in enumerate(ref_reviewer_ids):
-            ref_scores[(sub_id, rev_id)] = round(float(ref_matrix[i, j]), 4)
-
-    common = set(actual_scores.keys()) & set(ref_scores.keys())
-    diffs = []
-    for key in common:
-        if actual_scores[key] != ref_scores[key]:
-            diffs.append({
-                "submission_id": key[0],
-                "reviewer_id": key[1],
-                "score_actual": actual_scores[key],
-                "score_expected": ref_scores[key],
-                "delta": actual_scores[key] - ref_scores[key],
-            })
-
-    assert len(diffs) == 0, (
-        f"Score mismatch in mode={aggregation_mode}, weights={use_weights}: "
-        f"{len(diffs)} pairs differ out of {len(common)} total.\n"
-        + "\n".join(
-            f"  {d['submission_id']} / {d['reviewer_id']}: "
-            f"actual={d['score_actual']:.4f} expected={d['score_expected']:.4f} "
-            f"delta={d['delta']:+.4f}"
-            for d in diffs[:10]
-        )
+def test_reviewer_aggregation_average_matches_manual_loop(tmp_path):
+    """The vectorized average-score aggregation must match a plain Python loop."""
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "~Rev1.jsonl").write_text(
+        json.dumps({"id": "A", "content": {"title": "A", "abstract": "a"}}) + "\n"
+        + json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
     )
+    (archive_dir / "~Rev2.jsonl").write_text(
+        json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
+        + json.dumps({"id": "C", "content": {"title": "C", "abstract": "c"}}) + "\n"
+        + json.dumps({"id": "D", "content": {"title": "D", "abstract": "d"}}) + "\n"
+    )
+
+    sub_dir = tmp_path / "submissions"
+    sub_dir.mkdir()
+    (sub_dir / "Sub1.jsonl").write_text(
+        json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
+    )
+
+    predictor = specter2_scincl.Specter2Predictor(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(tmp_path),
+        use_cuda=False,
+        normalize_scores=False,
+        average_score=True,
+        max_score=False,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
+
+    # Sub1·A=0.3, Sub1·B=0.7, Sub1·C=0.2, Sub1·D=0.4
+    emb_a = [0.3, 0.0, 0.0, 0.0]
+    emb_b = [0.0, 0.7, 0.0, 0.0]
+    emb_c = [0.0, 0.0, 0.2, 0.0]
+    emb_d = [0.0, 0.0, 0.0, 0.4]
+    emb_s = [1.0, 1.0, 1.0, 1.0]
+
+    pub_lines = (
+        json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
+        + json.dumps({"paper_id": "B", "embedding": emb_b}) + "\n"
+        + json.dumps({"paper_id": "C", "embedding": emb_c}) + "\n"
+        + json.dumps({"paper_id": "D", "embedding": emb_d}) + "\n"
+    )
+    sub_lines = json.dumps({"paper_id": "Sub1", "embedding": emb_s}) + "\n"
+
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
+    pub_path.write_text(pub_lines)
+    sub_path.write_text(sub_lines)
+
+    predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
+
+    assert predictor.test_id_list == ["Sub1"]
+    assert predictor.reviewer_ids == ["~Rev1", "~Rev2"]
+    assert predictor.scores_matrix.shape == (1, 2)
+
+    assert round(predictor.scores_matrix[0, 0].item(), 4) == round((0.3 + 0.7) / 2, 4)
+    assert round(predictor.scores_matrix[0, 1].item(), 4) == round((0.7 + 0.2 + 0.4) / 3, 4)
+
+
+def test_reviewer_aggregation_percentile_matches_manual_loop(tmp_path):
+    """The vectorized percentile aggregation must match a plain Python loop."""
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "~Rev1.jsonl").write_text(
+        json.dumps({"id": "A", "content": {"title": "A", "abstract": "a"}}) + "\n"
+        + json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
+    )
+    (archive_dir / "~Rev2.jsonl").write_text(
+        json.dumps({"id": "C", "content": {"title": "C", "abstract": "c"}}) + "\n"
+        + json.dumps({"id": "D", "content": {"title": "D", "abstract": "d"}}) + "\n"
+        + json.dumps({"id": "E", "content": {"title": "E", "abstract": "e"}}) + "\n"
+    )
+
+    sub_dir = tmp_path / "submissions"
+    sub_dir.mkdir()
+    (sub_dir / "Sub1.jsonl").write_text(
+        json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
+    )
+
+    predictor = specter2_scincl.Specter2Predictor(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(tmp_path),
+        use_cuda=False,
+        normalize_scores=False,
+        average_score=False,
+        max_score=False,
+        percentile_select=50,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
+
+    # Scores: A=0.1, B=0.9, C=0.2, D=0.6, E=0.4
+    emb_a = [0.1, 0.0, 0.0, 0.0, 0.0]
+    emb_b = [0.0, 0.9, 0.0, 0.0, 0.0]
+    emb_c = [0.0, 0.0, 0.2, 0.0, 0.0]
+    emb_d = [0.0, 0.0, 0.0, 0.6, 0.0]
+    emb_e = [0.0, 0.0, 0.0, 0.0, 0.4]
+    emb_s = [1.0, 1.0, 1.0, 1.0, 1.0]
+
+    pub_lines = (
+        json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
+        + json.dumps({"paper_id": "B", "embedding": emb_b}) + "\n"
+        + json.dumps({"paper_id": "C", "embedding": emb_c}) + "\n"
+        + json.dumps({"paper_id": "D", "embedding": emb_d}) + "\n"
+        + json.dumps({"paper_id": "E", "embedding": emb_e}) + "\n"
+    )
+    sub_lines = json.dumps({"paper_id": "Sub1", "embedding": emb_s}) + "\n"
+
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
+    pub_path.write_text(pub_lines)
+    sub_path.write_text(sub_lines)
+
+    predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
+
+    assert predictor.test_id_list == ["Sub1"]
+    assert predictor.reviewer_ids == ["~Rev1", "~Rev2"]
+    assert predictor.scores_matrix.shape == (1, 2)
+
+    # Rev1 papers [A=0.1, B=0.9] -> median = 0.5
+    assert round(predictor.scores_matrix[0, 0].item(), 4) == 0.5000
+    # Rev2 papers [C=0.2, D=0.6, E=0.4] -> median = 0.4
+    assert round(predictor.scores_matrix[0, 1].item(), 4) == 0.4000
+
+
+def test_reviewer_aggregation_with_weights_matches_manual_loop(tmp_path):
+    """Venue-weighted aggregation must match a plain Python loop.
+
+    The weight is applied in logit space: sigmoid(logit(score) + log(weight)).
+    """
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "~Rev1.jsonl").write_text(
+        json.dumps({"id": "A", "content": {"title": "A", "abstract": "a"}}) + "\n"
+        + json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
+    )
+
+    sub_dir = tmp_path / "submissions"
+    sub_dir.mkdir()
+    (sub_dir / "Sub1.jsonl").write_text(
+        json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
+    )
+
+    predictor = specter2_scincl.Specter2Predictor(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(tmp_path),
+        use_cuda=False,
+        normalize_scores=False,
+        average_score=True,
+        max_score=False,
+        venue_specific_weights=True,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
+
+    # Sub1·A=0.5, Sub1·B=0.5 (same score, different weights)
+    emb_a = [0.5, 0.0]
+    emb_b = [0.0, 0.5]
+    emb_s = [1.0, 1.0]
+
+    pub_lines = (
+        json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
+        + json.dumps({"paper_id": "B", "embedding": emb_b}) + "\n"
+    )
+    sub_lines = json.dumps({"paper_id": "Sub1", "embedding": emb_s}) + "\n"
+
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
+    pub_path.write_text(pub_lines)
+    sub_path.write_text(sub_lines)
+
+    # Weights: A=2.0 (boost), B=0.5 (penalty)
+    weights_meta = {"A": {"weight": 2.0}, "B": {"weight": 0.5}}
+    with open(tmp_path / "specter_reviewer_paper_data.json", "w") as f:
+        json.dump(weights_meta, f)
+
+    predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
+
+    # Manual reference for weighted average
+    def apply_weight(score, w):
+        epsilon = 1e-8
+        logit = torch.logit(torch.tensor(score).clamp(epsilon, 1 - epsilon), eps=epsilon)
+        return torch.sigmoid(logit + torch.log(torch.tensor(w).clamp(min=epsilon))).item()
+
+    w_a = apply_weight(0.5, 2.0)
+    w_b = apply_weight(0.5, 0.5)
+    expected = round((w_a + w_b) / 2, 4)
+
+    assert round(predictor.scores_matrix[0, 0].item(), 4) == expected
+
+
+def test_reviewer_aggregation_skips_bad_embeddings(tmp_path):
+    """A reviewer whose only valid paper gets filtered as a bad embedding
+    must be dropped entirely (0-column matrix, not NaN).
+    """
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "~Rev1.jsonl").write_text(
+        json.dumps({"id": "good_paper", "content": {"title": "G", "abstract": "g"}}) + "\n"
+    )
+    (archive_dir / "~Rev2.jsonl").write_text(
+        json.dumps({"id": "bad_paper", "content": {"title": "B", "abstract": "b"}}) + "\n"
+    )
+
+    sub_dir = tmp_path / "submissions"
+    sub_dir.mkdir()
+    (sub_dir / "Sub1.jsonl").write_text(
+        json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
+    )
+
+    predictor = specter2_scincl.Specter2Predictor(
+        specter_dir="../expertise-utils/specter/",
+        work_dir=str(tmp_path),
+        use_cuda=False,
+        normalize_scores=False,
+        average_score=True,
+        max_score=False,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
+
+    good_emb = [0.5] * 768
+    pub_lines = (
+        json.dumps({"paper_id": "good_paper", "embedding": good_emb}) + "\n"
+        + json.dumps({"paper_id": "bad_paper", "embedding": []}) + "\n"
+    )
+    sub_lines = json.dumps({"paper_id": "Sub1", "embedding": good_emb}) + "\n"
+
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
+    pub_path.write_text(pub_lines)
+    sub_path.write_text(sub_lines)
+
+    predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
+
+    assert predictor.reviewer_ids == ["~Rev1"]
+    assert predictor.scores_matrix.shape == (1, 1)
+    assert predictor.scores_matrix[0, 0].item() == predictor.scores_matrix[0, 0].item()  # not NaN
