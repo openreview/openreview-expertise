@@ -985,7 +985,7 @@ def test_reviewer_aggregation_percentile_matches_manual_loop(tmp_path):
         use_cuda=False,
         normalize_scores=False,
         average_score=False,
-        max_score=False,
+        max_score=True,
         percentile_select=50,
     )
     predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
