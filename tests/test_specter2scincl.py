@@ -891,6 +891,8 @@ def test_reviewer_aggregation_max_matches_manual_loop(tmp_path):
     rev2_idx = predictor.reviewer_ids.index("~Rev2")
     assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == 0.7000  # Rev1: max(0.3, 0.7)
     assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == 0.5000  # Rev2: max(0.5, 0.2)
+    # Ordering: Rev1 scored higher than Rev2 for Sub1
+    assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
 
 
 def test_reviewer_aggregation_average_matches_manual_loop(tmp_path):
@@ -957,6 +959,8 @@ def test_reviewer_aggregation_average_matches_manual_loop(tmp_path):
     rev2_idx = predictor.reviewer_ids.index("~Rev2")
     assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == round((0.2 + 0.6) / 2, 4)
     assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == round((0.4 + 0.1 + 0.3) / 3, 4)
+    # Ordering: Rev1 scored higher than Rev2 for Sub1
+    assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
 
 
 def test_reviewer_aggregation_percentile_matches_manual_loop(tmp_path):
@@ -1026,18 +1030,24 @@ def test_reviewer_aggregation_percentile_matches_manual_loop(tmp_path):
     assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == 0.4000
     # Rev2 papers [C=0.3, D=0.5, E=0.1] -> median = 0.3
     assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == 0.3000
+    # Ordering: Rev1 scored higher than Rev2 for Sub1
+    assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
 
 
-def test_reviewer_aggregation_with_weights_matches_manual_loop(tmp_path):
-    """Venue-weighted aggregation must match a plain Python loop.
+def test_reviewer_aggregation_with_weights_preserves_and_flips_ordering(tmp_path):
+    """Venue weights must flip reviewer ordering when raw scores differ.
 
-    The weight is applied in logit space: sigmoid(logit(score) + log(weight)).
+    Setup: Rev1 raw score 0.3, Rev2 raw score 0.8  (Rev2 > Rev1 without weights).
+    Weights: Rev1 paper gets 5.0 (boost), Rev2 paper gets 0.1 (penalty).
+    Expected: with weights Rev1 > Rev2 (ordering flips).
     """
     archive_dir = tmp_path / "archives"
     archive_dir.mkdir()
     (archive_dir / "~Rev1.jsonl").write_text(
         json.dumps({"id": "A", "content": {"title": "A", "abstract": "a"}}) + "\n"
-        + json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
+    )
+    (archive_dir / "~Rev2.jsonl").write_text(
+        json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
     )
 
     sub_dir = tmp_path / "submissions"
@@ -1060,8 +1070,8 @@ def test_reviewer_aggregation_with_weights_matches_manual_loop(tmp_path):
 
     emb_a = _pad_to_768([1.0])                         # e0
     emb_b = _pad_to_768([0.0, 1.0])                    # e1
-    # Sub1 = [0.7, 0.5, sqrt(0.26), 0, ...]  (unit length)
-    sub_comps = [0.7, 0.5, math.sqrt(0.26)]
+    # Sub1 = [0.3, 0.8, sqrt(0.27), 0, ...]  (unit length)
+    sub_comps = [0.3, 0.8, math.sqrt(0.27)]
     emb_s = _pad_to_768(sub_comps)
 
     pub_lines = (
@@ -1075,8 +1085,8 @@ def test_reviewer_aggregation_with_weights_matches_manual_loop(tmp_path):
     pub_path.write_text(pub_lines)
     sub_path.write_text(sub_lines)
 
-    # Weights: A=2.0 (boost), B=0.5 (penalty)
-    weights_meta = {"A": {"weight": 2.0}, "B": {"weight": 0.5}}
+    # Weights: A=5.0 (boost), B=0.1 (penalty)
+    weights_meta = {"A": {"weight": 5.0}, "B": {"weight": 0.1}}
     with open(tmp_path / "specter_reviewer_paper_data.json", "w") as f:
         json.dump(weights_meta, f)
 
@@ -1088,12 +1098,17 @@ def test_reviewer_aggregation_with_weights_matches_manual_loop(tmp_path):
         logit = torch.logit(torch.tensor(score).clamp(epsilon, 1 - epsilon), eps=epsilon)
         return torch.sigmoid(logit + torch.log(torch.tensor(w).clamp(min=epsilon))).item()
 
-    w_a = apply_weight(0.7, 2.0)
-    w_b = apply_weight(0.5, 0.5)
-    expected = round((w_a + w_b) / 2, 4)
+    w_a = apply_weight(0.3, 5.0)
+    w_b = apply_weight(0.8, 0.1)
 
     rev1_idx = predictor.reviewer_ids.index("~Rev1")
-    assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == expected
+    rev2_idx = predictor.reviewer_ids.index("~Rev2")
+
+    # Exact values match
+    assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == round(w_a, 4)
+    assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == round(w_b, 4)
+    # Ordering flips: raw scores had Rev2 > Rev1; weights make Rev1 > Rev2
+    assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
 
 
 def test_reviewer_aggregation_skips_bad_embeddings(tmp_path):
