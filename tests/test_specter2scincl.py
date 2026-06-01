@@ -1166,3 +1166,140 @@ def test_reviewer_aggregation_skips_bad_embeddings(tmp_path):
     assert predictor.reviewer_ids == ["~Rev1"]
     assert predictor.scores_matrix.shape == (1, 1)
     assert predictor.scores_matrix[0, 0].item() == predictor.scores_matrix[0, 0].item()  # not NaN
+
+
+def _reference_loop(pub_path, sub_path, reviewer_papers, mode="max", percentile=None, weights=None):
+    """Compute reviewer scores with a plain Python loop over the p2p matrix.
+
+    Replicates load_emb_file's L2-normalization and all_scores' reduction
+    exactly, using Python lists instead of vectorized ops.
+    """
+    def _load_norm(path):
+        ids, embs = [], []
+        with open(path) as f:
+            for line in f:
+                d = json.loads(line)
+                emb = d['embedding']
+                if len(emb) == 0:
+                    emb = [0.0] * 768
+                t = torch.tensor(emb, dtype=torch.float32)
+                t = t / (t.norm() + 1e-12)
+                ids.append(d['paper_id'])
+                embs.append(t)
+        return ids, torch.stack(embs)
+
+    train_ids, train_embs = _load_norm(pub_path)
+    test_ids, test_embs = _load_norm(sub_path)
+    p2p = test_embs @ train_embs.T
+
+    train_id_to_idx = {pid: i for i, pid in enumerate(train_ids)}
+    results = {}
+    for rev_id, paper_ids in reviewer_papers.items():
+        idxs = [train_id_to_idx[pid] for pid in paper_ids]
+        scores = p2p[:, idxs]
+        if weights is not None:
+            epsilon = 1e-8
+            w = torch.tensor([weights.get(pid, 1.0) for pid in paper_ids], dtype=torch.float32)
+            logits = torch.logit(scores.clamp(epsilon, 1 - epsilon), eps=epsilon)
+            log_w = torch.log(w.clamp(min=epsilon))
+            scores = torch.sigmoid(logits + log_w.unsqueeze(0))
+        if percentile is not None:
+            q = max(0.0, min(1.0, percentile / 100.0))
+            results[rev_id] = torch.quantile(scores, q, dim=1, interpolation='linear')
+        elif mode == "average":
+            results[rev_id] = scores.mean(dim=1)
+        elif mode == "max":
+            results[rev_id] = scores.max(dim=1)[0]
+    return test_ids, results
+
+
+@pytest.mark.parametrize("mode,avg,max_score,percentile", [
+    ("max", False, True, None),
+    ("average", True, False, None),
+    ("percentile", False, True, 50),
+])
+def test_scale_matches_reference_loop(tmp_path, mode, avg, max_score, percentile):
+    """Scale test: 30 submissions, 20 reviewers, 1-15 papers each.
+
+    Uses a shared pool of 100 papers. Each reviewer draws 1-15 random papers.
+    Submissions are random unit vectors. Asserts vectorized output matches
+    the reference loop exactly in all 3 reduction modes.
+    """
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+
+    rng = np.random.default_rng(seed=42)
+    num_papers = 100
+    num_reviewers = 20
+    num_submissions = 30
+
+    paper_ids = [f"P{i}" for i in range(1, num_papers + 1)]
+    reviewer_ids = [f"~Rev{i}" for i in range(1, num_reviewers + 1)]
+    submission_ids = [f"Sub{i}" for i in range(1, num_submissions + 1)]
+
+    reviewer_papers = {}
+    for rev_id in reviewer_ids:
+        n_papers = rng.integers(1, 16)
+        papers = rng.choice(paper_ids, size=n_papers, replace=False).tolist()
+        reviewer_papers[rev_id] = papers
+        lines = "\n".join(
+            json.dumps({"id": pid, "content": {"title": pid, "abstract": pid}})
+            for pid in papers
+        ) + "\n"
+        (archive_dir / f"{rev_id}.jsonl").write_text(lines)
+
+    sub_dir = tmp_path / "submissions"
+    sub_dir.mkdir()
+    for sid in submission_ids:
+        (sub_dir / f"{sid}.jsonl").write_text(
+            json.dumps({"id": sid, "content": {"title": sid, "abstract": sid}}) + "\n"
+        )
+
+    predictor = _make_predictor(
+        tmp_path,
+        average_score=avg,
+        max_score=max_score,
+        percentile_select=percentile,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
+
+    pub_embs = {}
+    for i, pid in enumerate(paper_ids):
+        vec = [0.0] * num_papers
+        vec[i] = 1.0
+        pub_embs[pid] = _pad_to_768(vec)
+
+    sub_embs = {}
+    for sid in submission_ids:
+        vec = rng.random(num_papers)
+        t = torch.tensor(vec, dtype=torch.float32)
+        t = t / t.norm()
+        sub_embs[sid] = _pad_to_768(t.tolist())
+
+    pub_lines = "\n".join(
+        json.dumps({"paper_id": pid, "embedding": emb}) for pid, emb in pub_embs.items()
+    ) + "\n"
+    sub_lines = "\n".join(
+        json.dumps({"paper_id": sid, "embedding": emb}) for sid, emb in sub_embs.items()
+    ) + "\n"
+
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
+    pub_path.write_text(pub_lines)
+    sub_path.write_text(sub_lines)
+
+    predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
+
+    test_ids, reference = _reference_loop(
+        pub_path, sub_path, reviewer_papers, mode=mode, percentile=percentile
+    )
+
+    assert predictor.test_id_list == test_ids
+    assert set(predictor.reviewer_ids) == set(reviewer_papers.keys())
+    assert predictor.scores_matrix.shape == (num_submissions, num_reviewers)
+
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        for row in range(num_submissions):
+            assert round(predictor.scores_matrix[row, col].item(), 4) == round(expected[row].item(), 4)
