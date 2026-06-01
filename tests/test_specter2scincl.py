@@ -914,6 +914,13 @@ def test_reviewer_aggregation_max_matches_manual_loop(tmp_path):
     # Ordering: Rev1 scored higher than Rev2 for Sub1
     assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
 
+    # Also verify against a reference loop over the same p2p matrix
+    reviewer_papers = {"~Rev1": ["A", "B"], "~Rev2": ["C", "D"]}
+    _, reference = _reference_loop(pub_path, sub_path, reviewer_papers, mode="max")
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        assert round(predictor.scores_matrix[0, col].item(), 4) == round(expected[0].item(), 4)
+
 
 def test_reviewer_aggregation_average_matches_manual_loop(tmp_path):
     """The vectorized average-score aggregation must match a plain Python loop."""
@@ -978,6 +985,12 @@ def test_reviewer_aggregation_average_matches_manual_loop(tmp_path):
     assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == round((0.4 + 0.1 + 0.3) / 3, 4)
     # Ordering: Rev1 scored higher than Rev2 for Sub1
     assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
+
+    reviewer_papers = {"~Rev1": ["A", "B"], "~Rev2": ["C", "D", "E"]}
+    _, reference = _reference_loop(pub_path, sub_path, reviewer_papers, mode="average")
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        assert round(predictor.scores_matrix[0, col].item(), 4) == round(expected[0].item(), 4)
 
 
 def test_reviewer_aggregation_percentile_matches_manual_loop(tmp_path):
@@ -1046,6 +1059,12 @@ def test_reviewer_aggregation_percentile_matches_manual_loop(tmp_path):
     assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == 0.3000
     # Ordering: Rev1 scored higher than Rev2 for Sub1
     assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
+
+    reviewer_papers = {"~Rev1": ["A", "B"], "~Rev2": ["C", "D", "E"]}
+    _, reference = _reference_loop(pub_path, sub_path, reviewer_papers, mode="percentile", percentile=50)
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        assert round(predictor.scores_matrix[0, col].item(), 4) == round(expected[0].item(), 4)
 
 
 def test_reviewer_aggregation_with_weights_preserves_and_flips_ordering(tmp_path):
@@ -1121,6 +1140,12 @@ def test_reviewer_aggregation_with_weights_preserves_and_flips_ordering(tmp_path
     # Ordering flips: raw scores had Rev2 > Rev1; weights make Rev1 > Rev2
     assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
 
+    reviewer_papers = {"~Rev1": ["A"], "~Rev2": ["B"]}
+    _, reference = _reference_loop(pub_path, sub_path, reviewer_papers, mode="average", weights={"A": 5.0, "B": 0.1})
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        assert round(predictor.scores_matrix[0, col].item(), 4) == round(expected[0].item(), 4)
+
 
 def test_reviewer_aggregation_skips_bad_embeddings(tmp_path):
     """Reviewers whose only paper has a bad (empty) embedding are dropped.
@@ -1166,6 +1191,12 @@ def test_reviewer_aggregation_skips_bad_embeddings(tmp_path):
     assert predictor.reviewer_ids == ["~Rev1"]
     assert predictor.scores_matrix.shape == (1, 1)
     assert predictor.scores_matrix[0, 0].item() == predictor.scores_matrix[0, 0].item()  # not NaN
+
+    reviewer_papers = {"~Rev1": ["good_paper"]}
+    _, reference = _reference_loop(pub_path, sub_path, reviewer_papers, mode="average")
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        assert round(predictor.scores_matrix[0, col].item(), 4) == round(expected[0].item(), 4)
 
 
 def _reference_loop(pub_path, sub_path, reviewer_papers, mode="max", percentile=None, weights=None):
