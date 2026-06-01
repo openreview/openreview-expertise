@@ -822,6 +822,29 @@ def _pad_to_768(emb):
     return emb + [0.0] * (768 - len(emb))
 
 
+def _make_predictor(tmp_path, **kwargs):
+    """Construct a Specter2Predictor with HF model loading mocked out.
+
+    These aggregation tests only exercise all_scores() with precomputed
+    embeddings, so the tokenizer/model load is unnecessary and would slow
+    down or flake CI.
+    """
+    with patch("expertise.models.specter2_scincl.specter.AutoTokenizer.from_pretrained") as mock_tok, \
+         patch("expertise.models.specter2_scincl.specter.AutoAdapterModel.from_pretrained") as mock_model:
+        mock_tok.return_value = MagicMock()
+        mock_model.return_value = MagicMock()
+        mock_model.return_value.load_adapter = MagicMock()
+        mock_model.return_value.to = MagicMock(return_value=mock_model.return_value)
+        mock_model.return_value.eval = MagicMock(return_value=mock_model.return_value)
+        return specter2_scincl.Specter2Predictor(
+            specter_dir="../expertise-utils/specter/",
+            work_dir=str(tmp_path),
+            use_cuda=False,
+            normalize_scores=False,
+            **kwargs
+        )
+
+
 def test_reviewer_aggregation_max_matches_manual_loop(tmp_path):
     """The vectorized max-score aggregation must match a plain Python loop.
 
@@ -847,11 +870,8 @@ def test_reviewer_aggregation_max_matches_manual_loop(tmp_path):
         json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
     )
 
-    predictor = specter2_scincl.Specter2Predictor(
-        specter_dir="../expertise-utils/specter/",
-        work_dir=str(tmp_path),
-        use_cuda=False,
-        normalize_scores=False,
+    predictor = _make_predictor(
+        tmp_path,
         average_score=False,
         max_score=True,
     )
@@ -915,11 +935,8 @@ def test_reviewer_aggregation_average_matches_manual_loop(tmp_path):
         json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
     )
 
-    predictor = specter2_scincl.Specter2Predictor(
-        specter_dir="../expertise-utils/specter/",
-        work_dir=str(tmp_path),
-        use_cuda=False,
-        normalize_scores=False,
+    predictor = _make_predictor(
+        tmp_path,
         average_score=True,
         max_score=False,
     )
@@ -983,13 +1000,10 @@ def test_reviewer_aggregation_percentile_matches_manual_loop(tmp_path):
         json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
     )
 
-    predictor = specter2_scincl.Specter2Predictor(
-        specter_dir="../expertise-utils/specter/",
-        work_dir=str(tmp_path),
-        use_cuda=False,
-        normalize_scores=False,
+    predictor = _make_predictor(
+        tmp_path,
         average_score=False,
-        max_score=True,
+        max_score=True,  # required by constructor xor assertion; percentile_select wins in all_scores
         percentile_select=50,
     )
     predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
@@ -1056,11 +1070,8 @@ def test_reviewer_aggregation_with_weights_preserves_and_flips_ordering(tmp_path
         json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
     )
 
-    predictor = specter2_scincl.Specter2Predictor(
-        specter_dir="../expertise-utils/specter/",
-        work_dir=str(tmp_path),
-        use_cuda=False,
-        normalize_scores=False,
+    predictor = _make_predictor(
+        tmp_path,
         average_score=True,
         max_score=False,
         venue_specific_weights=True,
@@ -1112,8 +1123,8 @@ def test_reviewer_aggregation_with_weights_preserves_and_flips_ordering(tmp_path
 
 
 def test_reviewer_aggregation_skips_bad_embeddings(tmp_path):
-    """A reviewer whose only valid paper gets filtered as a bad embedding
-    must be dropped entirely (0-column matrix, not NaN).
+    """Reviewers whose only paper has a bad (empty) embedding are dropped.
+    The remaining reviewer produces a [1, 1] matrix with a finite score.
     """
     archive_dir = tmp_path / "archives"
     archive_dir.mkdir()
@@ -1130,11 +1141,8 @@ def test_reviewer_aggregation_skips_bad_embeddings(tmp_path):
         json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
     )
 
-    predictor = specter2_scincl.Specter2Predictor(
-        specter_dir="../expertise-utils/specter/",
-        work_dir=str(tmp_path),
-        use_cuda=False,
-        normalize_scores=False,
+    predictor = _make_predictor(
+        tmp_path,
         average_score=True,
         max_score=False,
     )
