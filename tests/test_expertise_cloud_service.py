@@ -461,6 +461,17 @@ class TestExpertiseCloudService():
             {"entityB": "abcde","entityA": "user_user2","score": 0.987}
         ]
 
+        # /expertise/metadata returns the same metadata document directly
+        # (no score file read), so venue organizers can list missing
+        # profiles/publications without pulling the full result set.
+        metadata_response = test_client.get(
+            '/expertise/metadata',
+            headers=tmlr_client.headers,
+            query_string={'jobId': job_id},
+        )
+        assert metadata_response.status_code == 200
+        assert metadata_response.json == {"meta": "data"}
+
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_group_group_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():

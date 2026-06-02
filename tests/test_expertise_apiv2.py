@@ -2,6 +2,8 @@ from expertise.create_dataset import OpenReviewExpertise
 from unittest.mock import patch, MagicMock
 from collections import defaultdict
 import openreview
+import csv
+import io
 import json
 import random
 from pathlib import Path
@@ -1003,11 +1005,49 @@ class TestExpertiseV2():
 
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f'{job_id}'})
         metadata = response.json['metadata']
-        response = response.json['results']
-        for item in response:
+        json_rows = response.json['results']
+        for item in json_rows:
             print(item)
             submission_id, profile_id, score = item['entityB'], item['entityA'], float(item['score'])
             assert len(submission_id) >= 1
             assert len(profile_id) >= 1
             assert profile_id.startswith('~')
             assert score >= 0 and score <= 1
+
+        # Now query the same job with format=csv and verify the values match
+        # the JSON response. This pins down the contract that format=csv is a
+        # representation switch only — same data, different envelope.
+        csv_response = test_client.get(
+            '/expertise/results',
+            headers=openreview_client.headers,
+            query_string={'jobId': f'{job_id}', 'format': 'csv'},
+        )
+        assert csv_response.status_code == 200
+        assert csv_response.mimetype == 'text/csv'
+
+        csv_text = csv_response.get_data(as_text=True)
+        csv_reader = csv.reader(io.StringIO(csv_text))
+        header = next(csv_reader)
+        assert header == ['entityA', 'entityB', 'score']
+        csv_rows = [
+            {'entityA': row[0], 'entityB': row[1], 'score': float(row[2])}
+            for row in csv_reader
+            if row
+        ]
+
+        # Same number of rows in both formats.
+        assert len(csv_rows) == len(json_rows)
+
+        # Build (entityA, entityB) -> score lookups so we can compare values
+        # by pair (order shouldn't matter for the contract).
+        csv_by_pair = {(r['entityA'], r['entityB']): r['score'] for r in csv_rows}
+        json_by_pair = {(r['entityA'], r['entityB']): r['score'] for r in json_rows}
+        assert csv_by_pair.keys() == json_by_pair.keys(), (
+            f"CSV and JSON disagree on which (entityA, entityB) pairs were emitted.\n"
+            f"  only-in-csv: {csv_by_pair.keys() - json_by_pair.keys()}\n"
+            f"  only-in-json: {json_by_pair.keys() - csv_by_pair.keys()}"
+        )
+        for pair, csv_score in csv_by_pair.items():
+            assert abs(csv_score - json_by_pair[pair]) < 1e-9, (
+                f"Score mismatch for {pair}: csv={csv_score} json={json_by_pair[pair]}"
+            )

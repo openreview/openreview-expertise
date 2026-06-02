@@ -1,9 +1,10 @@
 import os
 import pytest
 import re
+import json
 import time
 from collections import Counter
-from expertise.utils.utils import generate_job_id, JOB_ID_ALPHABET
+from expertise.utils.utils import generate_job_id, JOB_ID_ALPHABET, generate_sparse_scores
 import expertise.service
 from expertise.service import artifacts_for_model
 
@@ -139,3 +140,320 @@ def test_artifacts_for_model_unknown_model_falls_back_to_all():
     model added to the API doesn't break the pipeline before the map is updated."""
     assert artifacts_for_model('some-unreleased-model') is None
     assert artifacts_for_model(None) is None
+
+
+# ---------------------------------------------------------------------------
+# extract_venue_key / parse_cloud_id_timestamp — venue-scoped embedding cache.
+# These are pure-logic helpers used to discover prior-job artifacts on GCS.
+# ---------------------------------------------------------------------------
+from expertise.service.utils import extract_venue_key, parse_cloud_id_timestamp
+
+
+@pytest.mark.parametrize("request_dict, expected", [
+    # entityA Group / memberOf — strip role suffix
+    ({'entityA': {'type': 'Group', 'memberOf': 'ICLR.cc/2026/Conference/Reviewers'},
+      'entityB': {'type': 'Note', 'invitation': 'ICLR.cc/2026/Conference/-/Submission'}},
+     'ICLR.cc/2026/Conference'),
+    # entityA Note / invitation — split on /-/
+    ({'entityA': {'type': 'Note', 'invitation': 'TMLR/-/Submission'},
+      'entityB': {'type': 'Note', 'invitation': 'TMLR/-/Submission'}},
+     'TMLR'),
+    # entityA has neither memberOf nor invitation; entityB has memberOf
+    ({'entityA': {'type': 'Note', 'id': 'abc'},
+      'entityB': {'type': 'Group', 'memberOf': 'NeurIPS.cc/2025/Workshop/Reviewers'}},
+     'NeurIPS.cc/2025/Workshop'),
+    # memberOf without slashes — return as-is
+    ({'entityA': {'type': 'Group', 'memberOf': 'JustAGroup'}, 'entityB': {}},
+     'JustAGroup'),
+    # nothing matchable
+    ({'entityA': {}, 'entityB': {}}, None),
+    # invitation without /-/ falls through to None
+    ({'entityA': {'invitation': 'no-divider'}, 'entityB': {}}, None),
+    # entityB Note / withVenueid — split jobs use this when invitation is absent.
+    # Under-review submissions carry a '/Submission' suffix; strip it so the
+    # key matches what memberOf-style requests produce.
+    ({'entityA': {'type': 'Group', 'reviewerIds': ['~A1', '~B1']},
+      'entityB': {'type': 'Note', 'withVenueid': 'ICLR.cc/2026/Conference/Submission'}},
+     'ICLR.cc/2026/Conference'),
+    # withVenueid alongside invitation — invitation wins (checked first)
+    ({'entityA': {'type': 'Note', 'invitation': 'TMLR/-/Submission', 'withVenueid': 'OTHER'},
+      'entityB': {}},
+     'TMLR'),
+    # non-dict input
+    (None, None),
+    ('not-a-dict', None),
+])
+def test_extract_venue_key(request_dict, expected):
+    assert extract_venue_key(request_dict) == expected
+
+
+@pytest.mark.parametrize("cloud_id, expected", [
+    ('abc12345-1719500000000', 1719500000000),
+    ('multi-dash-job-id-99', 99),
+    ('no-suffix-letters', None),
+    ('', None),
+    (None, None),
+])
+def test_parse_cloud_id_timestamp(cloud_id, expected):
+    assert parse_cloud_id_timestamp(cloud_id) == expected
+
+
+# ---------------------------------------------------------------------------
+# Predictor base-class helpers: cached publication embeddings
+# ---------------------------------------------------------------------------
+# Bypass the package __init__ which imports transformers (version conflict
+# in this env prevents loading specter.py/scincl.py).
+import importlib.util
+_predictor_spec = importlib.util.spec_from_file_location(
+    "predictor",
+    os.path.join(os.path.dirname(expertise.service.__file__), "../models/specter2_scincl/predictor.py")
+)
+_predictor_mod = importlib.util.module_from_spec(_predictor_spec)
+_predictor_spec.loader.exec_module(_predictor_mod)
+Predictor = _predictor_mod.Predictor
+
+
+def test_load_cached_publication_embeddings(tmp_path):
+    """Predictor loads cached embeddings from adjacent cached_<basename>.jsonl."""
+    base_path = tmp_path / "pub2vec_specter.jsonl"
+    cache_path = tmp_path / "cached_pub2vec_specter.jsonl"
+
+    predictor = Predictor()
+
+    # No cache file -> empty dicts
+    assert predictor._load_cached_publication_embeddings(str(base_path)) == ({}, {})
+
+    # Write cache with two valid papers and one bad json line
+    cache_path.write_text(
+        '{"paper_id": "p1", "embedding": [0.1, 0.2]}\n'
+        'bad json line\n'
+        '{"paper_id": "p2", "embedding": [0.3, 0.4]}\n'
+    )
+    lookup, jsonl_lines = predictor._load_cached_publication_embeddings(str(base_path))
+    assert lookup == {
+        "p1": [0.1, 0.2],
+        "p2": [0.3, 0.4],
+    }
+    # jsonl_lines contains the original lines for direct writing
+    assert jsonl_lines == {
+        "p1": '{"paper_id": "p1", "embedding": [0.1, 0.2]}\n',
+        "p2": '{"paper_id": "p2", "embedding": [0.3, 0.4]}\n',
+    }
+
+
+# ---------------------------------------------------------------------------
+# generate_sparse_scores — output contract
+#
+# Master computes the sparse CSV from a list of (sub, rev, score) tuples via
+# two sorts and a per-id counter. feature/improve-sorting computes it via
+# torch.topk on the score matrix. Both must produce the same set of rows:
+#
+#   For every submission_id: top-`sparse_value` reviewers by score.
+#   For every reviewer_id:   top-`sparse_value` submissions by score.
+#   Output = union of those selections (deduplicated).
+#
+# Tests below pin that contract against the current implementation; the same
+# expected sets should hold for any replacement.
+# ---------------------------------------------------------------------------
+import csv
+from itertools import groupby
+
+
+def _flatten_matrix(matrix, test_ids, reviewer_ids, decimals=4):
+    """Build the (sub, rev, score) tuple list that generate_sparse_scores
+    consumes. Scores rounded to `decimals` to match what all_scores feeds in."""
+    return [
+        (t, r, round(float(matrix[i][j]), decimals))
+        for i, t in enumerate(test_ids)
+        for j, r in enumerate(reviewer_ids)
+    ]
+
+
+def _parse_sparse_csv(path):
+    rows = set()
+    with open(path) as f:
+        for line in csv.reader(f):
+            if not line:
+                continue
+            rows.add((line[0], line[1], float(line[2])))
+    return rows
+
+
+def test_sparse_top_k_per_submission_and_reviewer(tmp_path):
+    """Both axes show up in the sparse output. Scores chosen so that the
+    top-2-per-submission and top-2-per-reviewer selections partially
+    overlap — the union exercises both halves of the contract.
+
+    Matrix:
+              R1     R2     R3     R4
+        subA  0.90   0.10   0.50   0.60
+        subB  0.20   0.80   0.30   0.40
+        subC  0.70   0.50   0.20   0.15
+
+    sparse_value=2:
+      top-2 reviewers per sub:
+        subA -> R1 (0.90), R4 (0.60)
+        subB -> R2 (0.80), R4 (0.40)
+        subC -> R1 (0.70), R2 (0.50)
+      top-2 subs per reviewer:
+        R1 -> subA (0.90), subC (0.70)
+        R2 -> subB (0.80), subC (0.50)
+        R3 -> subA (0.50), subB (0.30)
+        R4 -> subA (0.60), subB (0.40)
+    """
+    matrix = [
+        [0.90, 0.10, 0.50, 0.60],
+        [0.20, 0.80, 0.30, 0.40],
+        [0.70, 0.50, 0.20, 0.15],
+    ]
+    test_ids = ["subA", "subB", "subC"]
+    reviewer_ids = ["R1", "R2", "R3", "R4"]
+    out = tmp_path / "sparse.csv"
+    generate_sparse_scores(_flatten_matrix(matrix, test_ids, reviewer_ids), 2, out)
+
+    expected = {
+        ("subA", "R1", 0.90),
+        ("subA", "R4", 0.60),
+        ("subB", "R2", 0.80),
+        ("subB", "R4", 0.40),
+        ("subC", "R1", 0.70),
+        ("subC", "R2", 0.50),
+        ("subA", "R3", 0.50),
+        ("subB", "R3", 0.30),
+    }
+    assert _parse_sparse_csv(out) == expected
+
+
+def test_sparse_value_one(tmp_path):
+    """sparse_value=1: only the per-axis argmax survives on each side.
+
+    Matrix:
+              R1    R2    R3
+        subA  0.9   0.1   0.5
+        subB  0.2   0.8   0.3
+
+    sparse_value=1:
+      top reviewer per sub:  subA->R1 (0.9), subB->R2 (0.8)
+      top sub per reviewer:  R1->subA (0.9), R2->subB (0.8), R3->subA (0.5)
+    """
+    matrix = [
+        [0.9, 0.1, 0.5],
+        [0.2, 0.8, 0.3],
+    ]
+    test_ids = ["subA", "subB"]
+    reviewer_ids = ["R1", "R2", "R3"]
+    out = tmp_path / "sparse.csv"
+    generate_sparse_scores(_flatten_matrix(matrix, test_ids, reviewer_ids), 1, out)
+
+    expected = {
+        ("subA", "R1", 0.9),
+        ("subB", "R2", 0.8),
+        ("subA", "R3", 0.5),
+    }
+    assert _parse_sparse_csv(out) == expected
+
+
+def test_sparse_value_larger_than_groups_keeps_everything(tmp_path):
+    """When sparse_value >= num_submissions and >= num_reviewers, the result
+    is the full score set — no-op sparsification."""
+    matrix = [
+        [0.9, 0.5],
+        [0.2, 0.8],
+        [0.4, 0.6],
+    ]
+    test_ids = ["subA", "subB", "subC"]
+    reviewer_ids = ["R1", "R2"]
+    out = tmp_path / "sparse.csv"
+    generate_sparse_scores(_flatten_matrix(matrix, test_ids, reviewer_ids), 100, out)
+    expected_full = {
+        (t, r, round(float(matrix[i][j]), 4))
+        for i, t in enumerate(test_ids)
+        for j, r in enumerate(reviewer_ids)
+    }
+    assert _parse_sparse_csv(out) == expected_full
+
+
+def test_sparse_single_pair(tmp_path):
+    out = tmp_path / "sparse.csv"
+    generate_sparse_scores([("subA", "R1", 0.42)], 1, out)
+    assert _parse_sparse_csv(out) == {("subA", "R1", 0.42)}
+
+
+def test_sparse_output_grouped_by_submission_with_scores_descending(tmp_path):
+    """Downstream JSONL streaming relies on the CSV being grouped by
+    submission_id with scores descending within each group (the final sort
+    in generate_sparse_scores is on (sub_id, score) reverse=True)."""
+    matrix = [
+        [0.90, 0.50, 0.70],
+        [0.20, 0.80, 0.30],
+    ]
+    test_ids = ["subA", "subB"]
+    reviewer_ids = ["R1", "R2", "R3"]
+    out = tmp_path / "sparse.csv"
+    generate_sparse_scores(_flatten_matrix(matrix, test_ids, reviewer_ids), 3, out)
+    with open(out) as f:
+        rows = [line.strip().split(",") for line in f if line.strip()]
+    seen_groups = [sid for sid, _ in groupby(rows, key=lambda r: r[0])]
+    assert seen_groups == sorted(seen_groups, reverse=True), (
+        f"Submission groups not contiguous/descending: {seen_groups}"
+    )
+    for sid, group in groupby(rows, key=lambda r: r[0]):
+        scores = [float(r[2]) for r in group]
+        assert scores == sorted(scores, reverse=True), (
+            f"Scores within group {sid} not descending: {scores}"
+        )
+
+
+def test_sparse_return_value_matches_csv(tmp_path):
+    """The function's return value must contain the same rows it writes to
+    disk — callers use the return in-memory and the CSV for upload."""
+    matrix = [
+        [0.9, 0.4, 0.6],
+        [0.1, 0.8, 0.3],
+        [0.7, 0.2, 0.5],
+    ]
+    test_ids = ["subA", "subB", "subC"]
+    reviewer_ids = ["R1", "R2", "R3"]
+    out = tmp_path / "sparse.csv"
+    returned = generate_sparse_scores(_flatten_matrix(matrix, test_ids, reviewer_ids), 2, out)
+    assert {(t, r, float(s)) for (t, r, s) in returned} == _parse_sparse_csv(out)
+
+
+def test_sparse_every_submission_and_reviewer_appears(tmp_path):
+    """Sparsification trims rows, never entire ids — every submission_id and
+    reviewer_id from the input must appear at least once. test_spectermfr
+    already asserts this end-to-end; this covers arbitrary synthetic input."""
+    matrix = [
+        [0.9, 0.1, 0.5, 0.3],
+        [0.2, 0.8, 0.4, 0.7],
+        [0.6, 0.3, 0.2, 0.5],
+    ]
+    test_ids = ["subA", "subB", "subC"]
+    reviewer_ids = ["R1", "R2", "R3", "R4"]
+    out = tmp_path / "sparse.csv"
+    generate_sparse_scores(_flatten_matrix(matrix, test_ids, reviewer_ids), 1, out)
+    rows = _parse_sparse_csv(out)
+    assert {t for (t, _, _) in rows} == set(test_ids)
+    assert {r for (_, r, _) in rows} == set(reviewer_ids)
+
+
+def test_sparse_ties_preserve_required_rows(tmp_path):
+    """When several scores tie at the cutoff, any tie break is valid — but
+    the contract still requires `sparse_value` rows from a fully-tied
+    submission, and deterministic top-N rows from a non-tied submission."""
+    matrix = [
+        [0.5, 0.5, 0.5, 0.5],  # subA: all reviewers tied
+        [0.9, 0.1, 0.2, 0.3],  # subB: clear ordering
+    ]
+    test_ids = ["subA", "subB"]
+    reviewer_ids = ["R1", "R2", "R3", "R4"]
+    out = tmp_path / "sparse.csv"
+    generate_sparse_scores(_flatten_matrix(matrix, test_ids, reviewer_ids), 2, out)
+    rows = _parse_sparse_csv(out)
+    sub_a_rows = [r for (t, r, _) in rows if t == "subA"]
+    assert len(sub_a_rows) >= 2
+    sub_b_set = {(r, s) for (t, r, s) in rows if t == "subB"}
+    assert ("R1", 0.9) in sub_b_set
+    # R4's top submission is subB (0.3 > 0.0 vs subA's tied 0.5 — but axis 1
+    # selects R4's top-2 submissions by score; subA(0.5) and subB(0.3) survive).
+    assert ("R4", 0.3) in sub_b_set

@@ -6,10 +6,12 @@ import tarfile
 import tempfile
 import time
 import json
+import csv
 import re
 import datetime
 import redis, pickle
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from unittest.mock import MagicMock
 from enum import Enum
 import google.cloud.aiplatform as aip
@@ -40,6 +42,43 @@ def _get_required_field(req, superkey, key):
     except KeyError:
         raise openreview.OpenReviewException(f"Bad request: required field missing in {superkey}: {key}")
     return field
+
+def extract_venue_key(api_request):
+    """Return a venue prefix derived from a request payload, or None.
+
+    Group entities use memberOf with a role suffix (e.g. ".../Reviewers");
+    Note entities use either an invitation that contains "/-/" or a
+    withVenueid that is the venue id itself. Stripping the role/invitation
+    suffix yields a prefix shared across requests for the same venue.
+    """
+    if not isinstance(api_request, dict):
+        return None
+    for entity_key in ('entityA', 'entityB'):
+        entity = api_request.get(entity_key) or {}
+        member = entity.get('memberOf')
+        if member:
+            return member.rsplit('/', 1)[0] if '/' in member else member
+        invitation = entity.get('invitation')
+        if invitation and '/-/' in invitation:
+            return invitation.split('/-/')[0]
+        venueid = entity.get('withVenueid')
+        if venueid:
+            # Submissions under review carry venueids like
+            # 'NeurIPS.cc/2026/Conference/Submission'; strip the trailing
+            # segment so the prefix matches the memberOf-derived key
+            # ('NeurIPS.cc/2026/Conference'). Heuristic — works for the
+            # current ".../Submission" convention.
+            return venueid.rsplit('/', 1)[0] if '/' in venueid else venueid
+    return None
+
+def parse_cloud_id_timestamp(cloud_id):
+    """Cloud IDs are formatted '{job_id}-{ms_timestamp}'; return the int suffix or None."""
+    if not cloud_id:
+        return None
+    suffix = cloud_id.rsplit('-', 1)[-1]
+    if suffix.isdigit():
+        return int(suffix)
+    return None
 
 class ExpectedDataError(Exception):
     """
@@ -691,7 +730,7 @@ class JobConfig(object):
         config.model_params['skip_specter'] = model_params.get('skip_specter', None)
         config.model_params['specter_batch_size'] = model_params.get('specter_batch_size', 16)
         config.model_params['mfr_batch_size'] = model_params.get('mfr_batch_size', 50)
-        config.model_params['sparse_value'] = model_params.get('sparse_value', 300)
+        config.model_params['sparse_value'] = model_params.get('sparse_value', 400)
         config.model_params['use_cuda'] = model_params.get('use_cuda', False)
         config.model_params['use_redis'] = model_params.get('use_redis', False)
         config.model_params['percentile_select'] = model_params.get('percentile_select', None)
@@ -722,7 +761,16 @@ class JobConfig(object):
 
                 snake_param = _camel_to_snake(param)
                 config.model_params[snake_param] = api_model[param]
-        
+
+        # sparse_value is a required field with a default; validate it's a
+        # positive integer so downstream code can rely on > 0 without
+        # defensive checks.
+        sparse_value = config.model_params.get('sparse_value')
+        if not isinstance(sparse_value, int) or sparse_value <= 0:
+            raise openreview.OpenReviewException(
+                f"Bad request: 'sparseValue' must be a positive integer, got {sparse_value!r}"
+            )
+
         # Set server-side path fields
         for field in path_fields:
             config.model_params[field] = root_dir
@@ -951,17 +999,30 @@ class GCPInterface(object):
     def upload_dataset(self, config, vertex_id=None):
         """Package dataset files from config.job_dir into a single tarball and upload to GCS.
 
-        Returns the full GCS path to the uploaded tarball, or to its intended location
-        if there were no dataset items to package (no upload performed).
+        Cached publication embeddings (cached_pub2vec_*.jsonl) are uploaded directly
+        to the job's GCS root, not packed into the tarball. They're large and gzip
+        poorly (embeddings are near-random floats), so single-threaded gzip becomes
+        the bottleneck; uncompressed upload over the same network is faster.
+
+        Returns the full GCS path to the uploaded tarball.
         """
         job_dir = config.job_dir
         folder_name = vertex_id if vertex_id else config.job_id
-        folder_path = f"{self.jobs_folder}/{folder_name}/dataset"
+        job_root_path = f"{self.jobs_folder}/{folder_name}"
+        folder_path = f"{job_root_path}/dataset"
         blob_name = f"{folder_path}/dataset.tar.gz"
         dataset_gcs_path = f"gs://{self.bucket_name}/{blob_name}"
 
-        dataset_items = ['archives', 'submissions', 'submissions.json', 'metadata.json']
-        items_to_pack = [item for item in dataset_items if os.path.exists(os.path.join(job_dir, item))]
+        dataset_items = ['archives', 'submissions', 'submissions.json', 'metadata.json', 'publications_by_profile_id.json']
+        cached_jsonls = sorted(
+            f for f in os.listdir(job_dir)
+            if f.startswith('cached_pub2vec_') and f.endswith('.jsonl')
+            and os.path.isfile(os.path.join(job_dir, f))
+        ) if os.path.isdir(job_dir) else []
+        items_to_pack = [
+            item for item in dataset_items
+            if os.path.exists(os.path.join(job_dir, item))
+        ]
 
         if not items_to_pack:
             raise ExpectedDataError(f"No dataset items found in {job_dir}")
@@ -974,7 +1035,17 @@ class GCPInterface(object):
                     tar.add(os.path.join(job_dir, item), arcname=item)
             self.bucket.blob(blob_name).upload_from_filename(tarball_path)
             self.logger.info(f"Uploaded dataset tarball to {dataset_gcs_path}")
-            for item in items_to_pack:
+
+            for cached_name in cached_jsonls:
+                cached_blob_name = f"{job_root_path}/{cached_name}"
+                self.bucket.blob(cached_blob_name).upload_from_filename(
+                    os.path.join(job_dir, cached_name)
+                )
+                self.logger.info(
+                    f"Uploaded cached embeddings to gs://{self.bucket_name}/{cached_blob_name}"
+                )
+
+            for item in items_to_pack + cached_jsonls:
                 path = os.path.join(job_dir, item)
                 if os.path.isdir(path):
                     shutil.rmtree(path)
@@ -985,6 +1056,102 @@ class GCPInterface(object):
                 os.remove(tarball_path)
 
         return dataset_gcs_path
+
+    def find_recent_venue_jobs(self, venue_key, since_ms, limit, exclude_cloud_id=None):
+        """Return cloud_ids for past completed jobs that match venue_key, newest first.
+
+        Discovery uses two filters:
+          1. cheap: parse the trailing ms-timestamp off each cloud_id and drop
+             anything older than since_ms.
+          2. authoritative: read each surviving cloud_id's request.json and
+             match the extracted venue prefix against venue_key.
+        """
+        if not venue_key or limit <= 0:
+            return []
+
+        prefix = f"{self.jobs_folder}/"
+        iterator = self.bucket.list_blobs(prefix=prefix, delimiter='/')
+        # Consume the iterator to populate .prefixes; google-cloud-storage
+        # populates this attribute as a side effect of iteration.
+        for _ in iterator:
+            pass
+        candidates = []
+        for sub_prefix in (iterator.prefixes or []):
+            cloud_id = sub_prefix[len(prefix):].rstrip('/')
+            if not cloud_id or cloud_id == exclude_cloud_id:
+                continue
+            ts = parse_cloud_id_timestamp(cloud_id)
+            if ts is None or ts < since_ms:
+                continue
+            candidates.append((ts, cloud_id))
+
+        if not candidates:
+            return []
+
+        # Read newest candidates first; stop once we have `limit` venue matches.
+        candidates.sort(key=lambda item: item[0], reverse=True)
+
+        def _read_request(cloud_id):
+            blob = self.bucket.blob(f"{prefix}{cloud_id}/{self.request_fname}")
+            try:
+                return cloud_id, json.loads(blob.download_as_string())
+            except Exception:
+                return cloud_id, None
+
+        matches = []
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            futures = {pool.submit(_read_request, cid): (ts, cid) for ts, cid in candidates}
+            for future in as_completed(futures):
+                ts, cid = futures[future]
+                _, req = future.result()
+                if not req:
+                    continue
+                if extract_venue_key(req) == venue_key:
+                    matches.append((ts, cid))
+        matches.sort(key=lambda item: item[0], reverse=True)
+        return [cid for _, cid in matches[:limit]]
+
+    def merge_cached_publication_embeddings(self, cloud_ids, model_name, dest_path):
+        """Download pub2vec_{model_name}.jsonl from each cloud_id and merge into dest_path.
+
+        Returns the number of unique paper_ids written. Most-recent-wins on
+        duplicate paper_ids (cloud_ids should be passed newest-first).
+        Falls back to legacy 'pub2vec.jsonl' when the per-model name is absent.
+        """
+        if not cloud_ids:
+            return 0
+
+        prefix = f"{self.jobs_folder}/"
+        # Walk newest -> oldest; first occurrence wins so newer embeddings stick.
+        merged = {}
+        candidate_names = [f"pub2vec_{model_name}.jsonl", "pub2vec.jsonl"]
+        for cloud_id in cloud_ids:
+            for blob_name in candidate_names:
+                blob = self.bucket.blob(f"{prefix}{cloud_id}/{blob_name}")
+                try:
+                    raw = blob.download_as_text()
+                except Exception:
+                    continue
+                for line in raw.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    pid = entry.get('paper_id')
+                    if pid and pid not in merged:
+                        merged[pid] = {'paper_id': pid, 'embedding': entry['embedding']}
+                break
+
+        if not merged:
+            return 0
+
+        with open(dest_path, 'w') as f:
+            for entry in merged.values():
+                f.write(json.dumps(entry) + '\n')
+        return len(merged)
 
     def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
         def create_folder(bucket_name, folder_path):
@@ -1286,7 +1453,7 @@ class GCPInterface(object):
 
     def get_job_results(self, user_id, job_id, delete_on_get=False):
 
-        def _get_scores_and_metadata_streaming(all_blobs, job_id):
+        def _get_scores_and_metadata_streaming(all_blobs, job_id, group_group_matching, paper_paper_matching):
             """
             Extracts the scores and metadata from the GCS bucket and returns a generator that yields
             chunks of results to enable streaming
@@ -1302,7 +1469,9 @@ class GCPInterface(object):
                 blob for blob in all_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name
             ]
             score_files = [
-                blob for blob in all_blobs if blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
+                blob for blob in all_blobs
+                if blob.name.endswith('scores.csv') or blob.name.endswith('scores_sparse.csv')
+                or blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
             ]
 
             if len(metadata_files) != 1:
@@ -1314,27 +1483,49 @@ class GCPInterface(object):
             metadata = json.loads(metadata_files[0].download_as_string())
             yield {'metadata': metadata, 'results': []}
 
-            # Helper function to stream scores from a blob file
+            # Helper function to stream scores from a blob file.
+            #
+            # - New CSV format: rows are in the model's natural order:
+            #   [test_id, reviewer_id, score] for mixed matching, or
+            #   [test_id, train_id, score] for symmetric matching. The
+            #   entityA/entityB swap mirrors the local service:
+            #     symmetric  -> {entityA: row[0], entityB: row[1]}
+            #     mixed      -> {entityB: row[0], entityA: row[1]}
+            #
+            # - Legacy JSONL format (in-flight jobs from before the CSV
+            #   migration): the entityA/entityB swap was already done at
+            #   upload time, so each line is consumed as-is.
             def stream_score_file(blob):
+                is_csv = blob.name.endswith('.csv')
                 downloader = blob.open('r')
-                chunk = downloader.readline()
                 results_chunk = []
-                chunk_size = 1000  # Adjust this number based on your data size
+                chunk_size = 1000
 
-                while chunk:
-                    if isinstance(chunk, bytes):
-                        chunk = chunk.decode('utf-8')
-                    if chunk.strip():
-                        results_chunk.append(json.loads(chunk.strip()))
-
-                    # Yield chunks of results
-                    if len(results_chunk) >= chunk_size:
-                        yield {'results': results_chunk, 'metadata': None}
-                        results_chunk = []
-
+                if is_csv:
+                    reader = csv.reader(downloader)
+                    for row in reader:
+                        if not row:
+                            continue
+                        if group_group_matching or paper_paper_matching:
+                            obj = {'entityA': row[0], 'entityB': row[1], 'score': float(row[2])}
+                        else:
+                            obj = {'entityB': row[0], 'entityA': row[1], 'score': float(row[2])}
+                        results_chunk.append(obj)
+                        if len(results_chunk) >= chunk_size:
+                            yield {'results': results_chunk, 'metadata': None}
+                            results_chunk = []
+                else:
                     chunk = downloader.readline()
+                    while chunk:
+                        if isinstance(chunk, bytes):
+                            chunk = chunk.decode('utf-8')
+                        if chunk.strip():
+                            results_chunk.append(json.loads(chunk.strip()))
+                        if len(results_chunk) >= chunk_size:
+                            yield {'results': results_chunk, 'metadata': None}
+                            results_chunk = []
+                        chunk = downloader.readline()
 
-                # Yield any remaining results
                 if results_chunk:
                     yield {'results': results_chunk, 'metadata': None}
 
@@ -1377,12 +1568,56 @@ class GCPInterface(object):
         # Validate score and metadata files exist before returning the streaming generator.
         # If validation is deferred into the generator, exceptions fire after the HTTP
         # response has already started — causing a broken chunked response on the client.
-        score_files = [blob for blob in job_blobs if blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')]
+        score_files = [
+            blob for blob in job_blobs
+            if blob.name.endswith('scores.csv') or blob.name.endswith('scores_sparse.csv')
+            or blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
+        ]
         metadata_files = [blob for blob in job_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name]
         if len(metadata_files) != 1:
             raise openreview.OpenReviewException(f'Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}')
         if len(score_files) < 1 or len(score_files) > 2:
             raise openreview.OpenReviewException(f'Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}')
 
-        return _get_scores_and_metadata_streaming(job_blobs, job_id)
+        # Matching type drives the entityA/entityB column mapping for new CSV
+        # blobs (legacy JSONL blobs already have it baked in).
+        api_request = authenticated_requests[0]
+        entityA_type = api_request.get('entityA', {}).get('type', '')
+        entityB_type = api_request.get('entityB', {}).get('type', '')
+        group_group_matching = entityA_type == 'Group' and entityB_type == 'Group'
+        paper_paper_matching = entityA_type == 'Note' and entityB_type == 'Note'
+
+        return _get_scores_and_metadata_streaming(job_blobs, job_id, group_group_matching, paper_paper_matching)
+
+    def get_job_metadata(self, user_id, job_id):
+        """
+        Returns the dataset metadata dict for a job (submission/archive counts,
+        missing profiles and publications). Excludes the metadata.json packed
+        inside dataset/ — that one is part of the input artifact, not the
+        post-pipeline output.
+        """
+        job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
+        self.logger.info(f"Searching for job {job_id} metadata | prefix={self.jobs_folder}/{job_id}/")
+        all_requests = [
+            json.loads(blob.download_as_string()) for blob in job_blobs if self.request_fname in blob.name
+        ]
+        authenticated_requests = [
+            req for req in all_requests if user_id == req['user_id'] or user_id in SUPERUSER_IDS
+        ]
+        if len(all_requests) == 0:
+            raise openreview.OpenReviewException('Job not found')
+        if len(authenticated_requests) == 0:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
+        if len(authenticated_requests) > 1:
+            raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
+
+        metadata_files = [
+            blob for blob in job_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name
+        ]
+        if len(metadata_files) != 1:
+            raise openreview.OpenReviewException(
+                f'Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}'
+            )
+
+        return json.loads(metadata_files[0].download_as_string())
 

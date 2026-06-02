@@ -1,4 +1,5 @@
 import os
+import torch
 
 from .specter import Specter2Predictor
 from .scincl import SciNCLPredictor
@@ -45,7 +46,9 @@ class EnsembleModel:
         self.merge_alpha = merge_alpha
         self.sparse_value = sparse_value
         self.normalize_scores = normalize_scores
-        self.preliminary_scores = None
+        self.scores_matrix = None
+        self.test_id_list = None
+        self.reviewer_ids = None
 
     def set_archives_dataset(self, archives_dataset):
         print("Setting SPECTER archives")
@@ -75,36 +78,48 @@ class EnsembleModel:
 
     def all_scores(self, specter_publications_path=None, scincl_publications_path=None,
                    specter_submissions_path=None, scincl_submissions_path=None,
-                   scores_path=None):
-        print("SPECTER:")
-        specter_scores_path = os.path.join(self.specter_predictor.work_dir, "specter_affinity.csv")
-        self.specter_predictor.all_scores(specter_publications_path, specter_submissions_path, specter_scores_path)
-        print("SciNCL:")
-        scincl_scores_path = os.path.join(self.scincl_predictor.work_dir, "scincl_affinity.csv")
-        self.scincl_predictor.all_scores(scincl_publications_path, scincl_submissions_path, scincl_scores_path)
+                   matrix_path=None):
+        print("SPECTER:", flush=True)
+        # Components compute their score matrix in memory; we don't persist
+        # per-component matrices to disk (matrix_path=None) because the
+        # ensemble only needs the merged result for downstream consumers.
+        self.specter_predictor.all_scores(
+            publications_path=specter_publications_path,
+            submissions_path=specter_submissions_path,
+            matrix_path=None,
+        )
+        print("SciNCL:", flush=True)
+        self.scincl_predictor.all_scores(
+            publications_path=scincl_publications_path,
+            submissions_path=scincl_submissions_path,
+            matrix_path=None,
+        )
 
-        # Convert preliminary scores of SPECTER to a dictionary
-        csv_scores = []
-        self.preliminary_scores = []
-        specter_preliminary_scores_map = {}
-        for entry in self.specter_predictor.preliminary_scores:
-            specter_preliminary_scores_map[(entry[0], entry[1])] = entry[2]
+        # Matrix-level merge replaces the per-tuple merge that previously
+        # iterated ~175M (test, reviewer) pairs in Python. The two component
+        # matrices share row/col ordering because both predictors were fed
+        # the same archives/submissions datasets.
+        print("EnsembleModel: matrix-level merge...", flush=True)
+        specter_m = self.specter_predictor.scores_matrix
+        scincl_m = self.scincl_predictor.scores_matrix
+        merged = specter_m * self.merge_alpha + scincl_m * (1 - self.merge_alpha)
+        if self.normalize_scores:
+            merged = torch.clamp(merged, 0.0, 1.0)
+        else:
+            merged = torch.clamp(merged, -1.0, 1.0)
+        # Round once, vectorized — matches the previous per-row round(..., 4).
+        merged = (merged * 10000).round() / 10000
 
-        for entry in self.scincl_predictor.preliminary_scores:
-            new_score = specter_preliminary_scores_map[(entry[0], entry[1])] * self.merge_alpha + \
-                        entry[2] * (1 - self.merge_alpha)
-            if self.normalize_scores:
-                new_score = round(min(1.0, max(0.0, new_score)), 4)
-            else:
-                new_score = round(min(1.0, max(-1.0, new_score)), 4)
-            csv_line = '{note_id},{reviewer},{score}'.format(note_id=entry[0], reviewer=entry[1],
-                                                             score=new_score)
-            csv_scores.append(csv_line)
-            self.preliminary_scores.append((entry[0], entry[1], new_score))
+        self.scores_matrix = merged
+        self.test_id_list = self.specter_predictor.test_id_list
+        self.reviewer_ids = self.specter_predictor.reviewer_ids
 
-        if scores_path:
-            with open(scores_path, 'w') as f:
-                for csv_line in csv_scores:
-                    f.write(csv_line + '\n')
+        if matrix_path:
+            print(f"Saving ensemble scores matrix to {matrix_path}...", flush=True)
+            torch.save({
+                'scores': self.scores_matrix,
+                'test_ids': self.test_id_list,
+                'reviewer_ids': self.reviewer_ids,
+            }, matrix_path)
 
-        return self.preliminary_scores
+        return self.scores_matrix

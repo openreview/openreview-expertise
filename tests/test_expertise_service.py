@@ -640,26 +640,23 @@ class TestExpertiseService():
             if profile_id == '~Royal_Toy1':
                 zeroed_royal_scores[submission_id] = score
 
-        # Check weights applied in both embedding files:
-        specter_file = f"./tests/jobs/{job_id}/pub2vec_specter.jsonl"
-        scincl_file = f"./tests/jobs/{job_id}/pub2vec_scincl.jsonl"
+        # Check weights applied in both metadata files (weights live alongside
+        # title/abstract metadata, not in the embedding files):
+        specter_meta_file = f"./tests/jobs/{job_id}/specter/specter_reviewer_paper_data.json"
+        scincl_meta_file = f"./tests/jobs/{job_id}/scincl/scincl_reviewer_paper_data.json"
+
+        with open(specter_meta_file) as f:
+            specter_meta = json.load(f)
+        with open(scincl_meta_file) as f:
+            scincl_meta = json.load(f)
 
         all_publication_ids = set()
-        with open(specter_file, 'r') as f, open(scincl_file, 'r') as g:
-            for specter_line, scincl_line in zip(f, g):
-                # Parse both lines
-                specter_pub = json.loads(specter_line.strip())
-                scincl_pub = json.loads(scincl_line.strip())
-
-                # Validate both publications have weight field
-                assert 'weight' in specter_pub, f"Missing weight in specter publication {specter_pub.get('paper_id')}"
-                assert 'weight' in scincl_pub, f"Missing weight in scincl publication {scincl_pub.get('paper_id')}"
-
-                # Check weights for both publications
-                for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
-                    all_publication_ids.add(pub['paper_id'])
-                    expected_weight = 10 if pub['paper_id'] == upweighted_note_id else 1
-                    assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
+        for meta, model_name in [(specter_meta, 'specter'), (scincl_meta, 'scincl')]:
+            for paper_id, pub in meta.items():
+                all_publication_ids.add(paper_id)
+                assert 'weight' in pub, f"Missing weight in {model_name} publication {paper_id}"
+                expected_weight = 10 if paper_id == upweighted_note_id else 1
+                assert pub['weight'] == expected_weight, f"{model_name} publication {paper_id} has weight {pub['weight']}, expected {expected_weight}"
 
         assert upweighted_note_id not in all_publication_ids
 
@@ -739,24 +736,20 @@ class TestExpertiseService():
             if profile_id == '~Royal_Toy1':
                 openreview_royal_scores[submission_id] = score
 
-        # Check weights applied in both embedding files (now it should be weight 5):
-        specter_file = f"./tests/jobs/{job_id}/pub2vec_specter.jsonl"
-        scincl_file = f"./tests/jobs/{job_id}/pub2vec_scincl.jsonl"
+        # Check weights applied in both metadata files:
+        specter_meta_file = f"./tests/jobs/{job_id}/specter/specter_reviewer_paper_data.json"
+        scincl_meta_file = f"./tests/jobs/{job_id}/scincl/scincl_reviewer_paper_data.json"
 
-        with open(specter_file, 'r') as f, open(scincl_file, 'r') as g:
-            for specter_line, scincl_line in zip(f, g):
-                # Parse both lines
-                specter_pub = json.loads(specter_line.strip())
-                scincl_pub = json.loads(scincl_line.strip())
+        with open(specter_meta_file) as f:
+            specter_meta = json.load(f)
+        with open(scincl_meta_file) as f:
+            scincl_meta = json.load(f)
 
-                # Validate both publications have weight field
-                assert 'weight' in specter_pub, f"Missing weight in specter publication {specter_pub.get('paper_id')}"
-                assert 'weight' in scincl_pub, f"Missing weight in scincl publication {scincl_pub.get('paper_id')}"
-
-                # Check weights for both publications
-                for pub, model_name in [(specter_pub, 'specter'), (scincl_pub, 'scincl')]:
-                    expected_weight = 10 if pub['paper_id'] == upweighted_note_id else 1
-                    assert pub['weight'] == expected_weight, f"{model_name} publication {pub['paper_id']} has weight {pub['weight']}, expected {expected_weight}"
+        for meta, model_name in [(specter_meta, 'specter'), (scincl_meta, 'scincl')]:
+            for paper_id, pub in meta.items():
+                assert 'weight' in pub, f"Missing weight in {model_name} publication {paper_id}"
+                expected_weight = 10 if paper_id == upweighted_note_id else 1
+                assert pub['weight'] == expected_weight, f"{model_name} publication {paper_id} has weight {pub['weight']}, expected {expected_weight}"
 
         # Make a request
         response = test_client.post(
@@ -827,7 +820,8 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
-        assert os.path.getsize(f"./tests/jobs/{job_id}/test_run.csv") == os.path.getsize(f"./tests/jobs/{job_id}/test_run_sparse.csv")
+        assert os.path.isfile(f"./tests/jobs/{job_id}/test_run.pt")
+        assert os.path.isfile(f"./tests/jobs/{job_id}/test_run_sparse.csv")
 
         # Check for API request
         req = response['request']
@@ -973,6 +967,39 @@ class TestExpertiseService():
         assert "~Royal_Toy1" in all_users
         assert "~C.V._Lastname1" in all_users
 
+
+    def test_get_metadata_by_job_id(self, openreview_client, openreview_context):
+        test_client = openreview_context['test_client']
+        response = test_client.get(
+            '/expertise/metadata',
+            headers=openreview_client.headers,
+            query_string={'jobId': f"{openreview_context['job_id']}"},
+        )
+        assert response.status_code == 200
+        metadata = response.json
+        assert metadata['submission_count'] == 2
+        assert metadata['archives_count'] == 10
+        # Lists of missing profiles / publications must be present even when empty
+        # so venue-organizer UIs can render the section without null checks.
+        assert isinstance(metadata.get('no_profile', []), list)
+        assert isinstance(metadata.get('no_publications', []), list)
+
+    def test_get_metadata_for_unknown_job(self, openreview_client, openreview_context):
+        test_client = openreview_context['test_client']
+        response = test_client.get(
+            '/expertise/metadata',
+            headers=openreview_client.headers,
+            query_string={'jobId': 'nonexistent_job_id'},
+        )
+        assert response.status_code == 404
+
+    def test_get_metadata_without_job_id(self, openreview_client, openreview_context):
+        test_client = openreview_context['test_client']
+        response = test_client.get(
+            '/expertise/metadata',
+            headers=openreview_client.headers,
+        )
+        assert response.status_code == 400
 
     def test_compare_results_for_identical_jobs(self, openreview_client, openreview_context):
         test_client = openreview_context['test_client']
@@ -1288,11 +1315,10 @@ class TestExpertiseService():
 
 
     def test_request_expertise_with_model_errors(self, openreview_client, openreview_context):
-        # Submit a config with an error in the model field and return the job_id
-        MAX_TIMEOUT = 600 # Timeout after 10 minutes
+        # sparseValue must be a positive integer; the config layer validates
+        # this on submit (POST) and rejects with HTTP 400 before any job is
+        # queued, so the worker never sees a malformed value at runtime.
         test_client = openreview_context['test_client']
-        queue_before = openreview_client.get_jobs_status()
-        failed_before = queue_before['expertiseQueueMQStatus']['failed']
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -1301,15 +1327,15 @@ class TestExpertiseService():
                         'type': "Group",
                         'memberOf': "ABC.cc/Reviewers",
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Note",
-                        'invitation': "ABC.cc/-/Submission" 
+                        'invitation': "ABC.cc/-/Submission"
                     },
                     "model": {
                             "name": "specter+mfr",
                             'sparseValue': 'notAnInt',
-                            'useTitle': None, 
-                            'useAbstract': None, 
+                            'useTitle': None,
+                            'useAbstract': None,
                             'skipSpecter': False,
                             'scoreComputation': 'avg'
                     }
@@ -1318,50 +1344,23 @@ class TestExpertiseService():
             content_type='application/json',
             headers=openreview_client.headers
         )
-        assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['jobId']
+        assert response.status_code == 400, f'{response.json}'
+        assert 'sparseValue' in response.json['message']
 
-        start_time = time.time()
-        try_time = time.time() - start_time
-        failed_after = failed_before
-        while failed_after <= failed_before and try_time <= MAX_TIMEOUT:
-            time.sleep(5)
-            queue_after = openreview_client.get_jobs_status()
-            failed_after = queue_after['expertiseQueueMQStatus']['failed']
-            try_time = time.time() - start_time
-
-        assert try_time <= MAX_TIMEOUT, 'Expertise queue error count did not increase in time'
-        assert failed_after > failed_before
-        openreview_context['job_id'] = job_id
-
-    def test_get_results_and_get_error(self, openreview_client, openreview_context):
-        MAX_TIMEOUT = 600 # Timeout after 10 minutes
-        assert openreview_context['job_id'] is not None
+    def test_get_results_for_unknown_job(self, openreview_client, openreview_context):
+        """/expertise/results returns 404 for a job_id that doesn't exist.
+        Previously this was tested via a bad-sparseValue job that errored at
+        runtime — now sparseValue is validated at submit time (HTTP 400, no
+        job created), so we test the unknown-job-id path directly with a
+        synthetic id.
+        """
         test_client = openreview_context['test_client']
-        # Query until job is err
-        time.sleep(5)
-        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"})
+        response = test_client.get(
+            '/expertise/results',
+            headers=openreview_client.headers,
+            query_string={'jobId': 'nonexistent_job_id'},
+        )
         assert response.status_code == 404
-
-        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
-        start_time = time.time()
-        try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
-            time.sleep(5)
-            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{openreview_context['job_id']}"}).json
-            try_time = time.time() - start_time
-
-        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
-        assert response['name'] == 'test_run'
-        assert response['status'].strip() == 'Error'
-        assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
-        assert response['cdate'] <= response['mdate']
-        ###assert os.path.isfile(f"{server_config['WORKING_DIR']}/{job_id}/err.log")
-
-        # Clean up error job by calling the delete endpoint
-        response = test_client.delete(f'/expertise/{openreview_context["job_id"]}', headers=openreview_client.headers)
-        assert response.status_code == 200
-        assert not os.path.isdir(f"./tests/jobs/{openreview_context['job_id']}")
 
     def test_request_expertise_with_no_submission_error(self, openreview_client, openreview_context):
         # Submit a config with no submissions
@@ -1493,7 +1492,10 @@ class TestExpertiseService():
                 break
         assert target_id is not None
 
-        error_queue_before = openreview_client.get_jobs_status()
+        # Submit with a malformed sparseValue. Config validation rejects with
+        # HTTP 400 at the API boundary — no job is created, the worker never
+        # sees the bad input, and the expertise queue's failure counter
+        # therefore does not increment.
         response = test_client.post(
             '/expertise',
             data = json.dumps({
@@ -1503,16 +1505,16 @@ class TestExpertiseService():
                         'memberOf': "ABC.cc/Reviewers",
                         'expertise': {  'invitation': 'EXCLUSION.cc/Reviewers/-/Expertise_Selection'  }
                     },
-                    "entityB": { 
+                    "entityB": {
                         'type': "Note",
-                        'invitation': "ABC.cc/-/Submission" 
+                        'invitation': "ABC.cc/-/Submission"
                     },
                     "model": {
                             "name": "specter2+scincl",
                             'sparseValue': 'notAnInt',
                             'useTitle': None,
                             'useAbstract': None,
-                            'skipSpecter': False,   
+                            'skipSpecter': False,
                             'scoreComputation': 'avg'
                     }
                 }
@@ -1520,35 +1522,8 @@ class TestExpertiseService():
             content_type='application/json',
             headers=openreview_client.headers
         )
-        assert response.status_code == 200, f'{response.json}'
-        error_job_id = response.json['jobId']
-
-        time.sleep(5)
-        response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': f"{error_job_id}"})
-        assert response.status_code == 404
-
-        response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{error_job_id}"}).json
-        start_time = time.time()
-        try_time = time.time() - start_time
-        while response['status'] != 'Error' and try_time <= MAX_TIMEOUT:
-            time.sleep(5)
-            response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'jobId': f"{error_job_id}"}).json
-            try_time = time.time() - start_time
-
-        assert try_time <= MAX_TIMEOUT, 'Job has not completed in time'
-        assert response['name'] == 'test_run'
-        assert response['status'].strip() == 'Error'
-        assert response['description'] == "'<' not supported between instances of 'int' and 'str'"
-        assert response['cdate'] <= response['mdate']
-        error_queue_after = helpers.await_queue_error(
-            openreview_client,
-            queue_names=['expertiseQueueMQStatus']
-        )
-        assert error_queue_after['expertiseQueueMQStatus']['failed'] > error_queue_before['expertiseQueueMQStatus']['failed']
-
-        response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
-        assert response.status_code == 200
-        assert not os.path.isdir(f"./tests/jobs/{error_job_id}")
+        assert response.status_code == 400, f'{response.json}'
+        assert 'sparseValue' in response.json['message']
     
     def test_delete_job_without_authorization(self, openreview_client, openreview_context):
         """Test that DELETE endpoint returns 403 when no authorization headers are provided"""
@@ -2407,7 +2382,8 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
-        assert os.path.getsize(f"./tests/jobs/{job_id}/test_run.csv") == os.path.getsize(f"./tests/jobs/{job_id}/test_run_sparse.csv")
+        assert os.path.isfile(f"./tests/jobs/{job_id}/test_run.pt")
+        assert os.path.isfile(f"./tests/jobs/{job_id}/test_run_sparse.csv")
 
         # Get normalized mean
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': job_id})
@@ -2470,7 +2446,8 @@ class TestExpertiseService():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
-        assert os.path.getsize(f"./tests/jobs/{unnorm_job_id}/test_run.csv") == os.path.getsize(f"./tests/jobs/{unnorm_job_id}/test_run_sparse.csv")
+        assert os.path.isfile(f"./tests/jobs/{unnorm_job_id}/test_run.pt")
+        assert os.path.isfile(f"./tests/jobs/{unnorm_job_id}/test_run_sparse.csv")
 
         # Check that normalized scores are different
         response = test_client.get('/expertise/results', headers=openreview_client.headers, query_string={'jobId': unnorm_job_id})
