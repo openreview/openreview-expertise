@@ -1129,8 +1129,12 @@ class ExpertiseCloudService(BaseExpertiseService):
         missing profiles and publications) by reading metadata.json from GCS.
         """
         redis_job = self.redis.load_job(job_id, user_id)
-        if redis_job.status != JobStatus.COMPLETED:
+        # The Redis-cached status is stale in the cloud flow; the authoritative
+        # status lives in the Vertex AI pipeline. Resolve it live (same source
+        # as get_expertise_status) instead of trusting redis_job.status.
+        cloud_status = self.cloud.get_job_status_by_job_id(user_id, redis_job)
+        if cloud_status['status'] != JobStatus.COMPLETED:
             raise openreview.OpenReviewException(
-                f"Metadata not available - status: {redis_job.status} | description: {redis_job.description}"
+                f"Metadata not available - status: {cloud_status['status']} | description: {cloud_status['description']}"
             )
         return self.cloud.get_job_metadata(user_id, redis_job.cloud_id)

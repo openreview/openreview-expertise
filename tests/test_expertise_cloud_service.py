@@ -472,6 +472,24 @@ class TestExpertiseCloudService():
         assert metadata_response.status_code == 200
         assert metadata_response.json == {"meta": "data"}
 
+        # Regression: the Redis-cached status is stale in the cloud flow (it is
+        # never updated to COMPLETED once the Vertex AI pipeline finishes). The
+        # metadata endpoint must resolve the live pipeline status rather than
+        # trusting redis_job.status, otherwise a genuinely-complete job is
+        # rejected with "Metadata not available - status: RUN_EXPERTISE".
+        stale_config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        stale_config.status = JobStatus.RUN_EXPERTISE
+        stale_config.description = JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
+        redis.save_job(stale_config)
+
+        metadata_response = test_client.get(
+            '/expertise/metadata',
+            headers=tmlr_client.headers,
+            query_string={'jobId': job_id},
+        )
+        assert metadata_response.status_code == 200, metadata_response.json
+        assert metadata_response.json == {"meta": "data"}
+
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_group_group_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
