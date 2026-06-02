@@ -1128,9 +1128,11 @@ class ExpertiseCloudService(BaseExpertiseService):
         Gets the dataset metadata for a given job (submission/archive counts,
         missing profiles and publications) by reading metadata.json from GCS.
         """
+        # Read metadata.json straight from GCS, mirroring get_expertise_results.
+        # We deliberately do not gate on job status: the client polls
+        # get_expertise_status to 'Completed' before calling this, and the
+        # Redis-cached status is stale in the cloud flow anyway (never updated
+        # to COMPLETED once the pipeline finishes). If the artifact isn't there
+        # yet, get_job_metadata raises.
         redis_job = self.redis.load_job(job_id, user_id)
-        if redis_job.status != JobStatus.COMPLETED:
-            raise openreview.OpenReviewException(
-                f"Metadata not available - status: {redis_job.status} | description: {redis_job.description}"
-            )
         return self.cloud.get_job_metadata(user_id, redis_job.cloud_id)
