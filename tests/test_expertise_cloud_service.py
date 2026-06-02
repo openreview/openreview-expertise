@@ -474,9 +474,9 @@ class TestExpertiseCloudService():
 
         # Regression: the Redis-cached status is stale in the cloud flow (it is
         # never updated to COMPLETED once the Vertex AI pipeline finishes). The
-        # metadata endpoint must resolve the live pipeline status rather than
-        # trusting redis_job.status, otherwise a genuinely-complete job is
-        # rejected with "Metadata not available - status: RUN_EXPERTISE".
+        # metadata endpoint must serve the metadata.json artifact straight from
+        # GCS without gating on that stale status, otherwise a genuinely-complete
+        # job is rejected with "Metadata not available - status: RUN_EXPERTISE".
         stale_config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
         stale_config.status = JobStatus.RUN_EXPERTISE
         stale_config.description = JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
