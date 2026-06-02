@@ -7,6 +7,7 @@ import json
 import pytest
 import numpy as np
 import torch
+import math
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import specter2_scincl
 import redisai
@@ -814,3 +815,522 @@ def test_all_scores_skips_reviewer_with_only_bad_embeddings(tmp_path):
     # Score is finite (no NaN from a degenerate reduction).
     score = model.scores_matrix[0, 0].item()
     assert score == score, "Score must not be NaN"
+
+
+def _pad_to_768(emb):
+    """Pad a short embedding list to 768 dimensions with zeros."""
+    return emb + [0.0] * (768 - len(emb))
+
+
+def _make_predictor(tmp_path, **kwargs):
+    """Construct a Specter2Predictor with HF model loading mocked out.
+
+    These aggregation tests only exercise all_scores() with precomputed
+    embeddings, so the tokenizer/model load is unnecessary and would slow
+    down or flake CI.
+    """
+    with patch("expertise.models.specter2_scincl.specter.AutoTokenizer.from_pretrained") as mock_tok, \
+         patch("expertise.models.specter2_scincl.specter.AutoAdapterModel.from_pretrained") as mock_model:
+        mock_tok.return_value = MagicMock()
+        mock_model.return_value = MagicMock()
+        mock_model.return_value.load_adapter = MagicMock()
+        mock_model.return_value.to = MagicMock(return_value=mock_model.return_value)
+        mock_model.return_value.eval = MagicMock(return_value=mock_model.return_value)
+        return specter2_scincl.Specter2Predictor(
+            specter_dir="../expertise-utils/specter/",
+            work_dir=str(tmp_path),
+            use_cuda=False,
+            normalize_scores=False,
+            **kwargs
+        )
+
+
+def test_reviewer_aggregation_max_matches_manual_loop(tmp_path):
+    """The vectorized max-score aggregation must match a plain Python loop.
+
+    Setup: one submission, two reviewers with no shared papers.
+      Rev1 has papers [A, B] with p2p scores [0.3, 0.7]
+      Rev2 has papers [C, D] with p2p scores [0.5, 0.2]
+    Expected: Rev1=0.7, Rev2=0.5
+    """
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "~Rev1.jsonl").write_text(
+        json.dumps({"id": "A", "content": {"title": "A", "abstract": "a"}}) + "\n"
+        + json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
+    )
+    (archive_dir / "~Rev2.jsonl").write_text(
+        json.dumps({"id": "C", "content": {"title": "C", "abstract": "c"}}) + "\n"
+        + json.dumps({"id": "D", "content": {"title": "D", "abstract": "d"}}) + "\n"
+    )
+
+    sub_dir = tmp_path / "submissions"
+    sub_dir.mkdir()
+    (sub_dir / "Sub1.jsonl").write_text(
+        json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
+    )
+
+    predictor = _make_predictor(
+        tmp_path,
+        average_score=False,
+        max_score=True,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
+
+    # Basis vectors for publications; submission is a unit vector with chosen
+    # components so dot(sub, e_i) equals the desired p2p score after normalization.
+    emb_a = _pad_to_768([1.0])                         # e0
+    emb_b = _pad_to_768([0.0, 1.0])                    # e1
+    emb_c = _pad_to_768([0.0, 0.0, 1.0])               # e2
+    emb_d = _pad_to_768([0.0, 0.0, 0.0, 1.0])          # e3
+    # Sub1 = [0.3, 0.7, 0.5, 0.2, sqrt(0.13), 0, ...]  (unit length)
+    sub_comps = [0.3, 0.7, 0.5, 0.2, math.sqrt(0.13)]
+    emb_s = _pad_to_768(sub_comps)
+
+    pub_lines = (
+        json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
+        + json.dumps({"paper_id": "B", "embedding": emb_b}) + "\n"
+        + json.dumps({"paper_id": "C", "embedding": emb_c}) + "\n"
+        + json.dumps({"paper_id": "D", "embedding": emb_d}) + "\n"
+    )
+    sub_lines = json.dumps({"paper_id": "Sub1", "embedding": emb_s}) + "\n"
+
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
+    pub_path.write_text(pub_lines)
+    sub_path.write_text(sub_lines)
+
+    predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
+
+    assert predictor.test_id_list == ["Sub1"]
+    assert set(predictor.reviewer_ids) == {"~Rev1", "~Rev2"}
+    assert predictor.scores_matrix.shape == (1, 2)
+
+    rev1_idx = predictor.reviewer_ids.index("~Rev1")
+    rev2_idx = predictor.reviewer_ids.index("~Rev2")
+    assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == 0.7000  # Rev1: max(0.3, 0.7)
+    assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == 0.5000  # Rev2: max(0.5, 0.2)
+    # Ordering: Rev1 scored higher than Rev2 for Sub1
+    assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
+
+    # Also verify against a reference loop over the same p2p matrix
+    reviewer_papers = {"~Rev1": ["A", "B"], "~Rev2": ["C", "D"]}
+    _, reference = _reference_loop(pub_path, sub_path, reviewer_papers, mode="max")
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        assert round(predictor.scores_matrix[0, col].item(), 4) == round(expected[0].item(), 4)
+
+
+def test_reviewer_aggregation_average_matches_manual_loop(tmp_path):
+    """The vectorized average-score aggregation must match a plain Python loop."""
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "~Rev1.jsonl").write_text(
+        json.dumps({"id": "A", "content": {"title": "A", "abstract": "a"}}) + "\n"
+        + json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
+    )
+    (archive_dir / "~Rev2.jsonl").write_text(
+        json.dumps({"id": "C", "content": {"title": "C", "abstract": "c"}}) + "\n"
+        + json.dumps({"id": "D", "content": {"title": "D", "abstract": "d"}}) + "\n"
+        + json.dumps({"id": "E", "content": {"title": "E", "abstract": "e"}}) + "\n"
+    )
+
+    sub_dir = tmp_path / "submissions"
+    sub_dir.mkdir()
+    (sub_dir / "Sub1.jsonl").write_text(
+        json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
+    )
+
+    predictor = _make_predictor(
+        tmp_path,
+        average_score=True,
+        max_score=False,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
+
+    emb_a = _pad_to_768([1.0])                         # e0
+    emb_b = _pad_to_768([0.0, 1.0])                    # e1
+    emb_c = _pad_to_768([0.0, 0.0, 1.0])               # e2
+    emb_d = _pad_to_768([0.0, 0.0, 0.0, 1.0])          # e3
+    emb_e = _pad_to_768([0.0, 0.0, 0.0, 0.0, 1.0])    # e4
+    # Sub1 = [0.2, 0.6, 0.4, 0.1, 0.3, sqrt(0.34), 0, ...]  (unit length)
+    sub_comps = [0.2, 0.6, 0.4, 0.1, 0.3, math.sqrt(0.34)]
+    emb_s = _pad_to_768(sub_comps)
+
+    pub_lines = (
+        json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
+        + json.dumps({"paper_id": "B", "embedding": emb_b}) + "\n"
+        + json.dumps({"paper_id": "C", "embedding": emb_c}) + "\n"
+        + json.dumps({"paper_id": "D", "embedding": emb_d}) + "\n"
+        + json.dumps({"paper_id": "E", "embedding": emb_e}) + "\n"
+    )
+    sub_lines = json.dumps({"paper_id": "Sub1", "embedding": emb_s}) + "\n"
+
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
+    pub_path.write_text(pub_lines)
+    sub_path.write_text(sub_lines)
+
+    predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
+
+    assert predictor.test_id_list == ["Sub1"]
+    assert set(predictor.reviewer_ids) == {"~Rev1", "~Rev2"}
+    assert predictor.scores_matrix.shape == (1, 2)
+
+    rev1_idx = predictor.reviewer_ids.index("~Rev1")
+    rev2_idx = predictor.reviewer_ids.index("~Rev2")
+    assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == round((0.2 + 0.6) / 2, 4)
+    assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == round((0.4 + 0.1 + 0.3) / 3, 4)
+    # Ordering: Rev1 scored higher than Rev2 for Sub1
+    assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
+
+    reviewer_papers = {"~Rev1": ["A", "B"], "~Rev2": ["C", "D", "E"]}
+    _, reference = _reference_loop(pub_path, sub_path, reviewer_papers, mode="average")
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        assert round(predictor.scores_matrix[0, col].item(), 4) == round(expected[0].item(), 4)
+
+
+def test_reviewer_aggregation_percentile_matches_manual_loop(tmp_path):
+    """The vectorized percentile aggregation must match a plain Python loop."""
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "~Rev1.jsonl").write_text(
+        json.dumps({"id": "A", "content": {"title": "A", "abstract": "a"}}) + "\n"
+        + json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
+    )
+    (archive_dir / "~Rev2.jsonl").write_text(
+        json.dumps({"id": "C", "content": {"title": "C", "abstract": "c"}}) + "\n"
+        + json.dumps({"id": "D", "content": {"title": "D", "abstract": "d"}}) + "\n"
+        + json.dumps({"id": "E", "content": {"title": "E", "abstract": "e"}}) + "\n"
+    )
+
+    sub_dir = tmp_path / "submissions"
+    sub_dir.mkdir()
+    (sub_dir / "Sub1.jsonl").write_text(
+        json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
+    )
+
+    predictor = _make_predictor(
+        tmp_path,
+        average_score=False,
+        max_score=True,  # required by constructor xor assertion; percentile_select wins in all_scores
+        percentile_select=50,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
+
+    emb_a = _pad_to_768([1.0])                         # e0
+    emb_b = _pad_to_768([0.0, 1.0])                    # e1
+    emb_c = _pad_to_768([0.0, 0.0, 1.0])               # e2
+    emb_d = _pad_to_768([0.0, 0.0, 0.0, 1.0])          # e3
+    emb_e = _pad_to_768([0.0, 0.0, 0.0, 0.0, 1.0])    # e4
+    # Sub1 = [0.2, 0.6, 0.3, 0.5, 0.1, 0.5, 0, ...]  (unit length)
+    sub_comps = [0.2, 0.6, 0.3, 0.5, 0.1, 0.5]
+    emb_s = _pad_to_768(sub_comps)
+
+    pub_lines = (
+        json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
+        + json.dumps({"paper_id": "B", "embedding": emb_b}) + "\n"
+        + json.dumps({"paper_id": "C", "embedding": emb_c}) + "\n"
+        + json.dumps({"paper_id": "D", "embedding": emb_d}) + "\n"
+        + json.dumps({"paper_id": "E", "embedding": emb_e}) + "\n"
+    )
+    sub_lines = json.dumps({"paper_id": "Sub1", "embedding": emb_s}) + "\n"
+
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
+    pub_path.write_text(pub_lines)
+    sub_path.write_text(sub_lines)
+
+    predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
+
+    assert predictor.test_id_list == ["Sub1"]
+    assert set(predictor.reviewer_ids) == {"~Rev1", "~Rev2"}
+    assert predictor.scores_matrix.shape == (1, 2)
+
+    rev1_idx = predictor.reviewer_ids.index("~Rev1")
+    rev2_idx = predictor.reviewer_ids.index("~Rev2")
+    # Rev1 papers [A=0.2, B=0.6] -> median = 0.4
+    assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == 0.4000
+    # Rev2 papers [C=0.3, D=0.5, E=0.1] -> median = 0.3
+    assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == 0.3000
+    # Ordering: Rev1 scored higher than Rev2 for Sub1
+    assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
+
+    reviewer_papers = {"~Rev1": ["A", "B"], "~Rev2": ["C", "D", "E"]}
+    _, reference = _reference_loop(pub_path, sub_path, reviewer_papers, mode="percentile", percentile=50)
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        assert round(predictor.scores_matrix[0, col].item(), 4) == round(expected[0].item(), 4)
+
+
+def test_reviewer_aggregation_with_weights_preserves_and_flips_ordering(tmp_path):
+    """Venue weights must flip reviewer ordering when raw scores differ.
+
+    Setup: Rev1 raw score 0.3, Rev2 raw score 0.8  (Rev2 > Rev1 without weights).
+    Weights: Rev1 paper gets 5.0 (boost), Rev2 paper gets 0.1 (penalty).
+    Expected: with weights Rev1 > Rev2 (ordering flips).
+    """
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "~Rev1.jsonl").write_text(
+        json.dumps({"id": "A", "content": {"title": "A", "abstract": "a"}}) + "\n"
+    )
+    (archive_dir / "~Rev2.jsonl").write_text(
+        json.dumps({"id": "B", "content": {"title": "B", "abstract": "b"}}) + "\n"
+    )
+
+    sub_dir = tmp_path / "submissions"
+    sub_dir.mkdir()
+    (sub_dir / "Sub1.jsonl").write_text(
+        json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
+    )
+
+    predictor = _make_predictor(
+        tmp_path,
+        average_score=True,
+        max_score=False,
+        venue_specific_weights=True,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
+
+    emb_a = _pad_to_768([1.0])                         # e0
+    emb_b = _pad_to_768([0.0, 1.0])                    # e1
+    # Sub1 = [0.3, 0.8, sqrt(0.27), 0, ...]  (unit length)
+    sub_comps = [0.3, 0.8, math.sqrt(0.27)]
+    emb_s = _pad_to_768(sub_comps)
+
+    pub_lines = (
+        json.dumps({"paper_id": "A", "embedding": emb_a}) + "\n"
+        + json.dumps({"paper_id": "B", "embedding": emb_b}) + "\n"
+    )
+    sub_lines = json.dumps({"paper_id": "Sub1", "embedding": emb_s}) + "\n"
+
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
+    pub_path.write_text(pub_lines)
+    sub_path.write_text(sub_lines)
+
+    # Weights: A=5.0 (boost), B=0.1 (penalty)
+    weights_meta = {"A": {"weight": 5.0}, "B": {"weight": 0.1}}
+    with open(tmp_path / "specter_reviewer_paper_data.json", "w") as f:
+        json.dump(weights_meta, f)
+
+    predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
+
+    # Manual reference for weighted average (same formula as the predictor)
+    def apply_weight(score, w):
+        epsilon = 1e-8
+        logit = torch.logit(torch.tensor(score).clamp(epsilon, 1 - epsilon), eps=epsilon)
+        return torch.sigmoid(logit + torch.log(torch.tensor(w).clamp(min=epsilon))).item()
+
+    w_a = apply_weight(0.3, 5.0)
+    w_b = apply_weight(0.8, 0.1)
+
+    rev1_idx = predictor.reviewer_ids.index("~Rev1")
+    rev2_idx = predictor.reviewer_ids.index("~Rev2")
+
+    # Exact values match
+    assert round(predictor.scores_matrix[0, rev1_idx].item(), 4) == round(w_a, 4)
+    assert round(predictor.scores_matrix[0, rev2_idx].item(), 4) == round(w_b, 4)
+    # Ordering flips: raw scores had Rev2 > Rev1; weights make Rev1 > Rev2
+    assert predictor.scores_matrix[0, rev1_idx].item() > predictor.scores_matrix[0, rev2_idx].item()
+
+    reviewer_papers = {"~Rev1": ["A"], "~Rev2": ["B"]}
+    _, reference = _reference_loop(pub_path, sub_path, reviewer_papers, mode="average", weights={"A": 5.0, "B": 0.1})
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        assert round(predictor.scores_matrix[0, col].item(), 4) == round(expected[0].item(), 4)
+
+
+def test_reviewer_aggregation_skips_bad_embeddings(tmp_path):
+    """Reviewers whose only paper has a bad (empty) embedding are dropped.
+    The remaining reviewer produces a [1, 1] matrix with a finite score.
+    """
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+    (archive_dir / "~Rev1.jsonl").write_text(
+        json.dumps({"id": "good_paper", "content": {"title": "G", "abstract": "g"}}) + "\n"
+    )
+    (archive_dir / "~Rev2.jsonl").write_text(
+        json.dumps({"id": "bad_paper", "content": {"title": "B", "abstract": "b"}}) + "\n"
+    )
+
+    sub_dir = tmp_path / "submissions"
+    sub_dir.mkdir()
+    (sub_dir / "Sub1.jsonl").write_text(
+        json.dumps({"id": "Sub1", "content": {"title": "S", "abstract": "s"}}) + "\n"
+    )
+
+    predictor = _make_predictor(
+        tmp_path,
+        average_score=True,
+        max_score=False,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
+
+    good_emb = [0.5] * 768
+    pub_lines = (
+        json.dumps({"paper_id": "good_paper", "embedding": good_emb}) + "\n"
+        + json.dumps({"paper_id": "bad_paper", "embedding": []}) + "\n"
+    )
+    sub_lines = json.dumps({"paper_id": "Sub1", "embedding": good_emb}) + "\n"
+
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
+    pub_path.write_text(pub_lines)
+    sub_path.write_text(sub_lines)
+
+    predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
+
+    assert predictor.reviewer_ids == ["~Rev1"]
+    assert predictor.scores_matrix.shape == (1, 1)
+    assert predictor.scores_matrix[0, 0].item() == predictor.scores_matrix[0, 0].item()  # not NaN
+
+    reviewer_papers = {"~Rev1": ["good_paper"]}
+    _, reference = _reference_loop(pub_path, sub_path, reviewer_papers, mode="average")
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        assert round(predictor.scores_matrix[0, col].item(), 4) == round(expected[0].item(), 4)
+
+
+def _reference_loop(pub_path, sub_path, reviewer_papers, mode="max", percentile=None, weights=None):
+    """Compute reviewer scores with a plain Python loop over the p2p matrix.
+
+    Replicates load_emb_file's L2-normalization and all_scores' reduction
+    exactly, using Python lists instead of vectorized ops.
+    """
+    def _load_norm(path):
+        ids, embs = [], []
+        with open(path) as f:
+            for line in f:
+                d = json.loads(line)
+                emb = d['embedding']
+                if len(emb) == 0:
+                    emb = [0.0] * 768
+                t = torch.tensor(emb, dtype=torch.float32)
+                t = t / (t.norm() + 1e-12)
+                ids.append(d['paper_id'])
+                embs.append(t)
+        return ids, torch.stack(embs)
+
+    train_ids, train_embs = _load_norm(pub_path)
+    test_ids, test_embs = _load_norm(sub_path)
+    p2p = test_embs @ train_embs.T
+
+    train_id_to_idx = {pid: i for i, pid in enumerate(train_ids)}
+    results = {}
+    for rev_id, paper_ids in reviewer_papers.items():
+        idxs = [train_id_to_idx[pid] for pid in paper_ids]
+        scores = p2p[:, idxs]
+        if weights is not None:
+            epsilon = 1e-8
+            w = torch.tensor([weights.get(pid, 1.0) for pid in paper_ids], dtype=torch.float32)
+            logits = torch.logit(scores.clamp(epsilon, 1 - epsilon), eps=epsilon)
+            log_w = torch.log(w.clamp(min=epsilon))
+            scores = torch.sigmoid(logits + log_w.unsqueeze(0))
+        if percentile is not None:
+            q = max(0.0, min(1.0, percentile / 100.0))
+            results[rev_id] = torch.quantile(scores, q, dim=1, interpolation='linear')
+        elif mode == "average":
+            results[rev_id] = scores.mean(dim=1)
+        elif mode == "max":
+            results[rev_id] = scores.max(dim=1)[0]
+    return test_ids, results
+
+
+@pytest.mark.parametrize("mode,avg,max_score,percentile", [
+    ("max", False, True, None),
+    ("average", True, False, None),
+    ("percentile", False, True, 50),
+])
+def test_scale_matches_reference_loop(tmp_path, mode, avg, max_score, percentile):
+    """Scale test: 30 submissions, 20 reviewers, 1-15 papers each.
+
+    Uses a shared pool of 100 papers. Each reviewer draws 1-15 random papers.
+    Submissions are random unit vectors. Asserts vectorized output matches
+    the reference loop exactly in all 3 reduction modes.
+    """
+    archive_dir = tmp_path / "archives"
+    archive_dir.mkdir()
+
+    rng = np.random.default_rng(seed=42)
+    num_papers = 100
+    num_reviewers = 20
+    num_submissions = 30
+
+    paper_ids = [f"P{i}" for i in range(1, num_papers + 1)]
+    reviewer_ids = [f"~Rev{i}" for i in range(1, num_reviewers + 1)]
+    submission_ids = [f"Sub{i}" for i in range(1, num_submissions + 1)]
+
+    reviewer_papers = {}
+    for rev_id in reviewer_ids:
+        n_papers = rng.integers(1, 16)
+        papers = rng.choice(paper_ids, size=n_papers, replace=False).tolist()
+        reviewer_papers[rev_id] = papers
+        lines = "\n".join(
+            json.dumps({"id": pid, "content": {"title": pid, "abstract": pid}})
+            for pid in papers
+        ) + "\n"
+        (archive_dir / f"{rev_id}.jsonl").write_text(lines)
+
+    sub_dir = tmp_path / "submissions"
+    sub_dir.mkdir()
+    for sid in submission_ids:
+        (sub_dir / f"{sid}.jsonl").write_text(
+            json.dumps({"id": sid, "content": {"title": sid, "abstract": sid}}) + "\n"
+        )
+
+    predictor = _make_predictor(
+        tmp_path,
+        average_score=avg,
+        max_score=max_score,
+        percentile_select=percentile,
+    )
+    predictor.set_archives_dataset(ArchivesDataset(archives_path=archive_dir))
+    predictor.set_submissions_dataset(SubmissionsDataset(submissions_path=sub_dir))
+
+    pub_embs = {}
+    for i, pid in enumerate(paper_ids):
+        vec = [0.0] * num_papers
+        vec[i] = 1.0
+        pub_embs[pid] = _pad_to_768(vec)
+
+    sub_embs = {}
+    for sid in submission_ids:
+        vec = rng.random(num_papers)
+        t = torch.tensor(vec, dtype=torch.float32)
+        t = t / t.norm()
+        sub_embs[sid] = _pad_to_768(t.tolist())
+
+    pub_lines = "\n".join(
+        json.dumps({"paper_id": pid, "embedding": emb}) for pid, emb in pub_embs.items()
+    ) + "\n"
+    sub_lines = "\n".join(
+        json.dumps({"paper_id": sid, "embedding": emb}) for sid, emb in sub_embs.items()
+    ) + "\n"
+
+    pub_path = tmp_path / "pub2vec_specter.jsonl"
+    sub_path = tmp_path / "sub2vec_specter.jsonl"
+    pub_path.write_text(pub_lines)
+    sub_path.write_text(sub_lines)
+
+    predictor.all_scores(publications_path=pub_path, submissions_path=sub_path)
+
+    test_ids, reference = _reference_loop(
+        pub_path, sub_path, reviewer_papers, mode=mode, percentile=percentile
+    )
+
+    assert predictor.test_id_list == test_ids
+    assert set(predictor.reviewer_ids) == set(reviewer_papers.keys())
+    assert predictor.scores_matrix.shape == (num_submissions, num_reviewers)
+
+    for rev_id, expected in reference.items():
+        col = predictor.reviewer_ids.index(rev_id)
+        for row in range(num_submissions):
+            assert round(predictor.scores_matrix[row, col].item(), 4) == round(expected[row].item(), 4)
