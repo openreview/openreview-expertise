@@ -160,11 +160,97 @@ class BaseExpertiseService:
         """
         raise NotImplementedError("worker_process must be implemented in a child class.")
 
+    def get_queue_job_state(self, job_id):
+        """
+        Query BullMQ for the current state of a job.
+        Returns None if the job is not found in the queue.
+        """
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self.queue.getJobState(job_id),
+                self.queue_loop
+            )
+            return future.result(timeout=5)
+        except Exception as e:
+            self.logger.warning(f"Failed to get queue state for job {job_id}: {e}")
+            return None
+
+    def reconcile_job_status(self, config):
+        """
+        Reconcile the Redis-cached job status with the BullMQ queue state.
+        The queue is the source of truth; if they disagree, update Redis.
+        """
+        bullmq_state = self.get_queue_job_state(config.job_id)
+        if bullmq_state is None:
+            # Job no longer in queue (removed after completion/failure TTL)
+            return config.status, config.description
+
+        descriptions = JobDescription.VALS.value
+
+        if bullmq_state == 'completed':
+            # BullMQ 'completed' includes our COMPLETED and DATA_ERROR
+            # (ExpectedDataError is caught without re-raising)
+            if config.status == JobStatus.DATA_ERROR:
+                return JobStatus.DATA_ERROR, config.description
+            if config.status != JobStatus.COMPLETED:
+                self.update_status(config, JobStatus.COMPLETED, descriptions[JobStatus.COMPLETED])
+            return JobStatus.COMPLETED, descriptions[JobStatus.COMPLETED]
+
+        elif bullmq_state == 'failed':
+            if config.status == JobStatus.ERROR:
+                return JobStatus.ERROR, config.description
+            if config.status != JobStatus.ERROR:
+                self.update_status(config, JobStatus.ERROR, descriptions[JobStatus.ERROR])
+            return JobStatus.ERROR, descriptions[JobStatus.ERROR]
+
+        elif bullmq_state == 'active':
+            # Worker is processing. If Redis shows a terminal state, it's stale
+            # from a previous attempt that got retried.
+            if config.status in (JobStatus.COMPLETED, JobStatus.DATA_ERROR, JobStatus.ERROR):
+                self.update_status(config, JobStatus.RUN_EXPERTISE, descriptions[JobStatus.RUN_EXPERTISE])
+                return JobStatus.RUN_EXPERTISE, descriptions[JobStatus.RUN_EXPERTISE]
+            if config.status == JobStatus.INITIALIZED:
+                self.update_status(config, JobStatus.QUEUED, descriptions[JobStatus.QUEUED])
+                return JobStatus.QUEUED, descriptions[JobStatus.QUEUED]
+            return config.status, config.description
+
+        elif bullmq_state in ('waiting', 'delayed', 'paused', 'waiting-children', 'prioritized'):
+            if config.status in (JobStatus.COMPLETED, JobStatus.DATA_ERROR, JobStatus.ERROR):
+                # Stale terminal state from a previous attempt that got retried
+                self.update_status(config, JobStatus.QUEUED, descriptions[JobStatus.QUEUED])
+                return JobStatus.QUEUED, descriptions[JobStatus.QUEUED]
+            if config.status != JobStatus.QUEUED:
+                self.update_status(config, JobStatus.QUEUED, descriptions[JobStatus.QUEUED])
+            return JobStatus.QUEUED, descriptions[JobStatus.QUEUED]
+
+        # Unknown BullMQ state - fallback to Redis
+        return config.status, config.description
+
+    def remove_queue_job(self, job_id):
+        """
+        Remove a job from the BullMQ queue if it exists.
+        """
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self.queue.getJob(job_id),
+                self.queue_loop
+            )
+            job = future.result(timeout=5)
+            if job:
+                future = asyncio.run_coroutine_threadsafe(
+                    job.remove(),
+                    self.queue_loop
+                )
+                future.result(timeout=5)
+                self.logger.info(f"Removed job {job_id} from BullMQ queue")
+        except Exception as e:
+            self.logger.warning(f"Failed to remove queue job {job_id}: {e}")
+
     def update_status(self, config, new_status, desc=None):
         """
         Common logic for updating a job's status in Redis (if not containerized).
         """
-        # from .utils import JobDescription, JobStatus  # Typically you’d import these at top
+        # from .utils import JobDescription, JobStatus  # Typically you'd import these at top
         descriptions = JobDescription.VALS.value
         config.status = new_status
 
@@ -279,8 +365,7 @@ class BaseExpertiseService:
         self.logger.info(f"Searching for jobs with query: {query_obj}")
         for config in self.redis.load_all_jobs(user_id):
             self.logger.info(f"{config.job_id} - {config.to_json()}")
-            status = config.status
-            description = config.description
+            status, description = self.reconcile_job_status(config)
 
             if check_result():
                 # Append filtered config to the status
@@ -415,10 +500,13 @@ class BaseExpertiseService:
         allowed_states = {
             JobStatus.COMPLETED, JobStatus.DATA_ERROR, JobStatus.ERROR
         }
-        if config.status not in allowed_states:
+        status, _ = self.reconcile_job_status(config)
+        if status not in allowed_states:
             raise openreview.OpenReviewException(
-                f"Bad request: cannot delete job in status {config.status}"
+                f"Bad request: cannot delete job in status {status}"
             )
+
+        self.remove_queue_job(job_id)
 
         self.logger.info(f"Deleting {config.job_dir} for {user_id}")
         if os.path.isdir(config.job_dir):
@@ -663,9 +751,8 @@ class ExpertiseService(BaseExpertiseService):
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
         config = self.redis.load_job(job_id, user_id)
-        status = config.status
-        description = config.description
-        
+        status, description = self.reconcile_job_status(config)
+
         # Append filtered config to the status
         self._filter_config(config)
         return {
@@ -701,8 +788,7 @@ class ExpertiseService(BaseExpertiseService):
         config = self.redis.load_job(job_id, user_id)
 
         # Fetch status
-        status = config.status
-        description = config.description
+        status, description = self.reconcile_job_status(config)
 
         self.logger.info(f"{user_id} able to access job at {job_id} - checking if scores are found")
         # Assemble scores
@@ -777,10 +863,11 @@ class ExpertiseService(BaseExpertiseService):
         since it doesn't read the score file.
         """
         config = self.redis.load_job(job_id, user_id)
+        status, _ = self.reconcile_job_status(config)
 
-        if config.status != JobStatus.COMPLETED:
+        if status != JobStatus.COMPLETED:
             raise openreview.OpenReviewException(
-                f"Metadata not available - status: {config.status} | description: {config.description}"
+                f"Metadata not available - status: {status} | description: {config.description}"
             )
 
         metadata_path = os.path.join(config.job_dir, 'metadata.json')
@@ -1122,6 +1209,44 @@ class ExpertiseCloudService(BaseExpertiseService):
         """
         redis_job = self.redis.load_job(job_id, user_id)
         return self.cloud.get_job_results(user_id, redis_job.cloud_id, delete_on_get)
+
+    def del_expertise_job(self, user_id, job_id):
+        """Remove job artifacts from disk, Redis, and the BullMQ queue.
+        For cloud jobs, checks live GCP status before allowing deletion."""
+        config = self.redis.load_job(job_id, user_id)
+
+        allowed_states = {
+            JobStatus.COMPLETED, JobStatus.DATA_ERROR, JobStatus.ERROR
+        }
+
+        # For cloud jobs with a cloud_id, check live GCP status
+        if config.cloud_id:
+            try:
+                cloud_return = self.cloud.get_job_status_by_job_id(user_id, config)
+                status = cloud_return.get('status', config.status)
+            except openreview.OpenReviewException:
+                # GCP job not found; fall back to reconciled queue status
+                status, _ = self.reconcile_job_status(config)
+        else:
+            status, _ = self.reconcile_job_status(config)
+
+        if status not in allowed_states:
+            raise openreview.OpenReviewException(
+                f"Bad request: cannot delete job in status {status}"
+            )
+
+        self.remove_queue_job(job_id)
+
+        self.logger.info(f"Deleting {config.job_dir} for {user_id}")
+        if os.path.isdir(config.job_dir):
+            shutil.rmtree(config.job_dir)
+        else:
+            self.logger.info("No files found - only removing Redis entry")
+
+        self.redis.remove_job(user_id, job_id)
+
+        self._filter_config(config)
+        return config.to_json()
 
     def get_expertise_metadata(self, user_id, job_id):
         """
