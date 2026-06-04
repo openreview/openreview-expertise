@@ -12,7 +12,7 @@ from enum import Enum
 from threading import Lock
 from pathlib import Path
 import multiprocessing
-from bullmq import Queue, Worker
+from bullmq import Queue, Worker, Job
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
 from expertise.service.utils import GCPInterface, extract_venue_key
 from copy import deepcopy
@@ -219,7 +219,7 @@ class BaseExpertiseService:
         if state == 'completed':
             try:
                 future = asyncio.run_coroutine_threadsafe(
-                    self.queue.getJob(job_id),
+                    Job.fromId(self.queue, job_id),
                     self.queue_loop
                 )
                 job = future.result(timeout=0.1)
@@ -240,7 +240,7 @@ class BaseExpertiseService:
         if state == 'active':
             try:
                 future = asyncio.run_coroutine_threadsafe(
-                    self.queue.getJob(job_id),
+                    Job.fromId(self.queue, job_id),
                     self.queue_loop
                 )
                 job = future.result(timeout=0.1)
@@ -611,7 +611,7 @@ class ExpertiseService(BaseExpertiseService):
         try:
             # Create dataset
             execute_create_dataset(openreview_client_v2, config=config.to_json())
-            await job.updateData({'sub_status': 'RUN_EXPERTISE'})
+            await job.updateData({**job.data, 'sub_status': 'RUN_EXPERTISE'})
 
             queue = multiprocessing.Queue()  # Queue for exception handling
             config_json = json.dumps(config.to_json())  # Serialize config
@@ -624,15 +624,15 @@ class ExpertiseService(BaseExpertiseService):
                 raise exception  # Re-raise the exception from the subprocess
 
             # Update job status
-            await job.updateData({'result': 'COMPLETED'})
+            await job.updateData({**job.data, 'result': 'COMPLETED'})
             self.update_status(config, JobStatus.COMPLETED)
 
         except ExpectedDataError as e:
             # Expected data errors - mark as data error, don't re-raise, avoid triggering retries
-            await job.updateData({'result': 'DATA_ERROR', 'error': str(e)})
+            await job.updateData({**job.data, 'result': 'DATA_ERROR', 'error': str(e)})
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
         except Exception as e:
-            await job.updateData({'result': 'ERROR', 'error': str(e)})
+            await job.updateData({**job.data, 'result': 'ERROR', 'error': str(e)})
             self.update_status(config, JobStatus.ERROR, str(e))
             # Re raise exception so that it appears in the queue
             exception = e.with_traceback(e.__traceback__)
