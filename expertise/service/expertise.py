@@ -195,14 +195,18 @@ class BaseExpertiseService:
         """
         Query BullMQ for the canonical status of a job.
         Returns (status, description) or (None, None) if the job
-        is no longer in the queue (archived).
+        is no longer in the queue (archived) or the query times out.
         """
+        import concurrent.futures
+
         try:
             future = asyncio.run_coroutine_threadsafe(
                 self.queue.getJobState(job_id),
                 self.queue_loop
             )
-            state = future.result(timeout=5)
+            state = future.result(timeout=0.1)
+        except concurrent.futures.TimeoutError:
+            return None, None
         except Exception as e:
             self.logger.warning(f"Failed to get queue state for {job_id}: {e}")
             return None, None
@@ -218,12 +222,14 @@ class BaseExpertiseService:
                     self.queue.getJob(job_id),
                     self.queue_loop
                 )
-                job = future.result(timeout=5)
+                job = future.result(timeout=0.1)
                 data = job.data if job else {}
                 result = data.get('result')
                 if result == 'DATA_ERROR':
                     desc = data.get('error', descriptions[JobStatus.DATA_ERROR])
                     return JobStatus.DATA_ERROR, desc
+            except concurrent.futures.TimeoutError:
+                pass
             except Exception:
                 pass
             return JobStatus.COMPLETED, descriptions[JobStatus.COMPLETED]
@@ -237,12 +243,14 @@ class BaseExpertiseService:
                     self.queue.getJob(job_id),
                     self.queue_loop
                 )
-                job = future.result(timeout=5)
+                job = future.result(timeout=0.1)
                 data = job.data if job else {}
                 sub_status = data.get('sub_status')
                 if sub_status and hasattr(JobStatus, sub_status):
                     status = getattr(JobStatus, sub_status)
                     return status, descriptions[status]
+            except concurrent.futures.TimeoutError:
+                pass
             except Exception:
                 pass
             return JobStatus.RUN_EXPERTISE, descriptions[JobStatus.RUN_EXPERTISE]
@@ -340,10 +348,8 @@ class BaseExpertiseService:
         self.logger.info(f"Searching for jobs with query: {query_obj}")
         for config in self.redis.load_all_jobs(user_id):
             self.logger.info(f"{config.job_id} - {config.to_json()}")
-            status, description = self._get_job_status_from_queue(config.job_id)
-            if status is None:
-                status = config.status
-                description = config.description
+            status = config.status
+            description = config.description
 
             if check_result():
                 # Append filtered config to the status
