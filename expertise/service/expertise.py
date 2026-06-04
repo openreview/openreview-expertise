@@ -1041,6 +1041,16 @@ class ExpertiseCloudService(BaseExpertiseService):
                 if status and isinstance(status, dict) and 'status' in status and 'description' in status:
                     self.logger.info(f"INFO: after status check")
 
+                    # Only update non-stale status
+                    if config.status != status['status'] or config.description != status['description']:
+                        # Vertex reports QUEUED/INITIALIZED while we're still fetching data — skip regression
+                        if config.status == JobStatus.FETCHING_DATA and status['status'] in (JobStatus.QUEUED, JobStatus.INITIALIZED):
+                            await asyncio.sleep(self.poll_interval)
+                            continue
+                        self.logger.info(f"INFO: before update status")
+                        self.update_status(config, status['status'], status['description'])
+                        self.logger.info(f"INFO: after update status")
+
                     if status['status'] == JobStatus.COMPLETED:
                         self.logger.info(f"Job {redis_id} completed successfully.")
                         return # Exit the loop on successful completion
@@ -1065,6 +1075,9 @@ class ExpertiseCloudService(BaseExpertiseService):
             # If the loop completes without a break, raise timeout
             else:
                 self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {redis_id}.")
+                config = self.redis.load_job(redis_id, user_id)
+                if config.status != JobStatus.ERROR:
+                    self.update_status(config, JobStatus.ERROR, f"Polling timed out after {self.max_attempts} attempts.")
                 raise TimeoutError(f"Polling timed out for job {redis_id} after {self.max_attempts} attempts.")
 
             self.logger.info(f"Polling loop finished for job {redis_id}.")
