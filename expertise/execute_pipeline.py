@@ -29,25 +29,25 @@ DEFAULT_CONFIG = {
 }
 DELETED_FIELDS = ['user_id', 'cdate', 'machine_type']
 
-def load_gcs(gcs_path):
+def load_gcs(gcs_path, client=None):
     """Return client and bucket for a GCS path."""
     if not gcs_path.startswith('gs://'):
         raise ValueError(f"Invalid GCS path: {gcs_path}")
 
     # Parse GCS path: gs://bucket_name/path/to/file
     bucket_name = gcs_path.split('/')[2]
-    gcs_client = storage.Client()
+    gcs_client = client if client is not None else storage.Client()
     bucket = gcs_client.bucket(bucket_name)
 
     return gcs_client, bucket
 
-def download_from_gcs(gcs_path):
+def download_from_gcs(gcs_path, client=None):
     """Download JSON content from a GCS path."""
     if not gcs_path.startswith('gs://'):
         raise ValueError(f"Invalid GCS path: {gcs_path}")
 
     # Parse GCS path: gs://bucket_name/path/to/file
-    _, bucket = load_gcs(gcs_path)
+    _, bucket = load_gcs(gcs_path, client=client)
 
     blob_name = '/'.join(gcs_path.split('/')[3:])
 
