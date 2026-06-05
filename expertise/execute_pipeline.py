@@ -120,6 +120,7 @@ def run_pipeline(
     working_dir_created = False
     dump_archives = False
     validated_request = None
+    gcs_client = None
 
     try:
         if api_request_str is not None:
@@ -133,7 +134,8 @@ def run_pipeline(
                     raw_request = json.load(f)
                 print(f"Loaded request from local file: {api_request_str}")
         elif gcs_dir is not None:
-            raw_request = download_from_gcs(gcs_dir)
+            gcs_client = storage.Client()
+            raw_request = download_from_gcs(gcs_dir, client=gcs_client)
             print("Parsed request from GCS folder")
 
         # Pop pipeline-only metadata. The pipeline doesn't authenticate against
@@ -150,7 +152,9 @@ def run_pipeline(
             'MFR_VOCAB_DIR': os.getenv('MFR_VOCAB_DIR'),
             'MFR_CHECKPOINT_DIR': os.getenv('MFR_CHECKPOINT_DIR'),
         }
-        _, bucket = load_gcs(destination_prefix)
+        if gcs_client is None:
+            gcs_client = storage.Client()
+        _, bucket = load_gcs(destination_prefix, client=gcs_client)
         blob_prefix = '/'.join(destination_prefix.split('/')[3:])
 
         # Download only the artifacts required for this model — a pipeline worker
