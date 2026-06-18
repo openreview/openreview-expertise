@@ -314,6 +314,10 @@ class Specter2Predictor(Predictor):
             self.test_id_list = test_id_list
             self.reviewer_ids = train_id_list
         else:
+            # Build a flat list of valid paper indices per reviewer.
+            # This loop does NOT do any PyTorch compute; it only prepares the
+            # index data so we can run a single bulk gather and reduction
+            # outside the loop (instead of slicing and reducing per reviewer).
             reviewer_ids = []
             reviewer_paper_indices = []
             for reviewer_id, train_note_id_list in self.pub_author_ids_to_note_id.items():
@@ -331,20 +335,32 @@ class Specter2Predictor(Predictor):
             if reviewer_ids:
                 max_papers = max(len(papers) for papers in reviewer_paper_indices)
                 num_reviewers = len(reviewer_ids)
+                # reviewer_paper_indices is a ragged Python list (reviewers have
+                # different numbers of papers), so we pad it into a dense matrix.
+                # No PyTorch compute here — just list-to-tensor formatting.
                 paper_idx = torch.zeros((num_reviewers, max_papers), dtype=torch.long)
                 mask = torch.zeros((num_reviewers, max_papers), dtype=torch.bool)
                 for r, papers in enumerate(reviewer_paper_indices):
                     paper_idx[r, :len(papers)] = torch.tensor(papers, dtype=torch.long)
                     mask[r, :len(papers)] = True
 
+                # Single bulk gather: all reviewer–paper scores at once.
+                # Old code did p2p_aff_norm[:, train_paper_idx] once per reviewer
+                # inside the loop above; now we do it once for everyone.
                 scores = p2p_aff_norm[:, paper_idx]  # (num_test, num_reviewers, max_papers)
 
+                # Apply venue weights in bulk across the entire 3D tensor.
+                # Old code did this per reviewer inside the loop above.
                 if self.venue_specific_weights:
                     weights = train_weight_tensor[paper_idx]
                     epsilon = 1e-8
                     logits = torch.logit(scores, eps=epsilon)
                     log_w = torch.log(torch.clamp(weights, min=epsilon))
                     scores = torch.sigmoid(logits + log_w.unsqueeze(0))
+
+                # Single bulk reduction across dim=2 (the paper dimension).
+                # Old code did .mean(dim=1), .max(dim=1)[0], or torch.quantile(..., dim=1)
+                # once per reviewer inside the loop above.
 
                 if self.percentile_select is not None:
                     q = max(0.0, min(1.0, self.percentile_select / 100.0))
