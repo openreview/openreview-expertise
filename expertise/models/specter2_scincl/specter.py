@@ -335,9 +335,9 @@ class Specter2Predictor(Predictor):
             if reviewer_ids:
                 max_papers = max(len(papers) for papers in reviewer_paper_indices)
                 num_reviewers = len(reviewer_ids)
-                # reviewer_paper_indices is a ragged Python list (reviewers have
-                # different numbers of papers), so we pad it into a dense matrix.
-                # No PyTorch compute here — just list-to-tensor formatting.
+                # reviewer_paper_indices holds lists of different lengths
+                # (one per reviewer). We pad them into a dense matrix so we
+                # can index all reviewers at once.
                 paper_idx = torch.zeros((num_reviewers, max_papers), dtype=torch.long)
                 mask = torch.zeros((num_reviewers, max_papers), dtype=torch.bool)
                 for r, papers in enumerate(reviewer_paper_indices):
