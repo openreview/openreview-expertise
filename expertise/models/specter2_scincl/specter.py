@@ -347,7 +347,10 @@ class Specter2Predictor(Predictor):
                 # Single bulk gather: all reviewer–paper scores at once.
                 # Old code did p2p_aff_norm[:, train_paper_idx] once per reviewer
                 # inside the loop above; now we do it once for everyone.
+                print(f"[SPECTER] num_test={paper_num_test}, num_reviewers={num_reviewers}, max_papers={max_papers}", flush=True)
+                print(f"[SPECTER] paper_idx shape: {paper_idx.shape}, estimated gather size: {paper_num_test * num_reviewers * max_papers * 4 / 1024**3:.2f} GB", flush=True)
                 scores = p2p_aff_norm[:, paper_idx]  # (num_test, num_reviewers, max_papers)
+                print(f"[SPECTER] scores shape after gather: {scores.shape}", flush=True)
 
                 # Apply venue weights in bulk across the entire 3D tensor.
                 # Old code did this per reviewer inside the loop above.
