@@ -84,25 +84,21 @@ class BaseExpertiseService:
         )
         self.start_queue_in_thread()
 
-        worker_settings = {
+        self.worker_settings = {
             'prefix': 'bullmq:expertise',
             'connection': {
                 "host": config['REDIS_ADDR'],
                 "port": config['REDIS_PORT'],
                 "db": config['REDIS_CONFIG_DB'],
             },
-            'autorun': worker_autorun
+            'autorun': False
         }
         if worker_concurrency is not None:
-            worker_settings['concurrency'] = worker_concurrency
+            self.worker_settings['concurrency'] = worker_concurrency
         if worker_lock_duration is not None:
-            worker_settings['lockDuration'] = worker_lock_duration
+            self.worker_settings['lockDuration'] = worker_lock_duration
 
-        self.worker = Worker(
-            'Expertise',
-            self.worker_process,
-            worker_settings
-        )
+        self.worker = None
         self.start_worker_in_thread()
 
         # Define required/optional fields if they are reused
@@ -139,19 +135,22 @@ class BaseExpertiseService:
         thread.start()
 
     def start_worker_in_thread(self):
-        def run_event_loop(loop):
+        def run_event_loop():
+            loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_forever()
+            self.worker = Worker(
+                'Expertise',
+                self.worker_process,
+                self.worker_settings
+            )
+            loop.run_until_complete(self.worker.run())
 
-        loop = asyncio.new_event_loop()
-        thread = threading.Thread(target=run_event_loop, args=(loop,), daemon=True)
+        thread = threading.Thread(target=run_event_loop, daemon=True)
         thread.start()
 
-        # Actually schedule the worker to run
-        asyncio.run_coroutine_threadsafe(self.worker.run(), loop)
-
     async def close(self):
-        await self.worker.close()
+        if self.worker is not None:
+            await self.worker.close()
         await self.queue.close()
 
     def worker_process(self, job, token):
