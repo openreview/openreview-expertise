@@ -197,6 +197,52 @@ def run_pipeline(
             print(f'Downloading pre-created dataset from {dataset_gcs_path}')
             download_dataset_from_gcs(dataset_gcs_path, working_dir)
 
+        # Optional: scan global embedding cache for publication embeddings.
+        # This is a fallback when the worker-side cache population missed IDs
+        # or when running the pipeline standalone.
+        try:
+            from expertise.embeddings_cache import GlobalEmbeddingsCache
+            archives_path = Path(config.job_dir) / 'archives'
+            paper_ids = []
+            if archives_path.exists():
+                for author_file in archives_path.iterdir():
+                    if not author_file.name.endswith('.jsonl'):
+                        continue
+                    with open(author_file) as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                pub = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            pid = pub.get('id')
+                            if pid:
+                                paper_ids.append(pid)
+            if paper_ids:
+                cache = GlobalEmbeddingsCache(
+                    bucket_name=os.getenv('EMBEDDING_CACHE_BUCKET', 'openreview-expertise'),
+                    cache_prefix=os.getenv('EMBEDDING_CACHE_PREFIX', 'embeddings-cache-test')
+                )
+                model_to_cache_name = {
+                    'specter2+scincl': [
+                        ('specter', 'cached_pub2vec_specter.jsonl'),
+                        ('scincl', 'cached_pub2vec_scincl.jsonl'),
+                    ],
+                    'specter2': [('specter', 'cached_pub2vec.jsonl')],
+                    'scincl': [('scincl', 'cached_pub2vec.jsonl')],
+                    'specter': [('specter', 'cached_pub2vec.jsonl')],
+                }
+                targets = model_to_cache_name.get(config.model, [])
+                for cache_key, dest_name in targets:
+                    dest_path = Path(config.job_dir) / dest_name
+                    count = cache.write_cache_file(paper_ids, cache_key, str(dest_path))
+                    if count > 0:
+                        print(f"Pre-populated {count} embeddings from global cache ({cache_key})", flush=True)
+        except Exception as e:
+            print(f"Global cache scan failed (non-critical): {e}", flush=True)
+
         print('Executing expertise')
         execute_expertise(config.to_json())
 

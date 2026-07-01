@@ -1117,6 +1117,9 @@ class GCPInterface(object):
         Returns the number of unique paper_ids written. Most-recent-wins on
         duplicate paper_ids (cloud_ids should be passed newest-first).
         Falls back to legacy 'pub2vec.jsonl' when the per-model name is absent.
+
+        If dest_path already exists, its entries are seeded first so they are
+        preserved unless a newer cloud entry overrides them.
         """
         if not cloud_ids:
             return 0
@@ -1124,6 +1127,22 @@ class GCPInterface(object):
         prefix = f"{self.jobs_folder}/"
         # Walk newest -> oldest; first occurrence wins so newer embeddings stick.
         merged = {}
+
+        # Seed from existing file so global-cache entries are not lost.
+        if os.path.isfile(dest_path):
+            with open(dest_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    pid = entry.get('paper_id')
+                    if pid:
+                        merged[pid] = {'paper_id': pid, 'embedding': entry['embedding']}
+
         candidate_names = [f"pub2vec_{model_name}.jsonl", "pub2vec.jsonl"]
         for cloud_id in cloud_ids:
             for blob_name in candidate_names:
@@ -1152,6 +1171,28 @@ class GCPInterface(object):
             for entry in merged.values():
                 f.write(json.dumps(entry) + '\n')
         return len(merged)
+
+    def populate_from_global_cache(self, paper_ids, model_name, dest_path,
+                                   cache_bucket=None, cache_prefix='embeddings-cache-test'):
+        """Query the global parquet embedding cache and write a local JSONL file.
+
+        Returns the number of embeddings found and written. Requires pyarrow.
+        Falls back silently if pyarrow is missing or the cache is unreachable.
+        """
+        if not paper_ids:
+            return 0
+        try:
+            from expertise.embeddings_cache import GlobalEmbeddingsCache
+        except ImportError:
+            self.logger.warning("pyarrow not available; skipping global embedding cache scan")
+            return 0
+        bucket = cache_bucket or self.bucket_name
+        cache = GlobalEmbeddingsCache(bucket_name=bucket, cache_prefix=cache_prefix)
+        try:
+            return cache.write_cache_file(paper_ids, model_name, dest_path)
+        except Exception as e:
+            self.logger.warning(f"Global embedding cache lookup failed for {model_name}: {e}")
+            return 0
 
     def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
         def create_folder(bucket_name, folder_path):

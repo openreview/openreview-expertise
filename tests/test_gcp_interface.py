@@ -1678,3 +1678,6 @@ def test_upload_dataset_uploads_cached_embeddings_separately(mock_storage_client
 
         assert not os.path.exists(os.path.join(job_dir, 'cached_pub2vec_specter.jsonl'))
         assert not os.path.exists(os.path.join(job_dir, 'cached_pub2vec_scincl.jsonl'))
+
+
+    mock_cache_cls.assert_called_once_with(bucket_name="default-bucket", cache_prefix="embeddings-cache-test")

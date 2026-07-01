@@ -35,7 +35,8 @@ setup(
         'importlib-metadata==4.13.0',
         'google-cloud-storage',
         'google-cloud-aiplatform',
-        'bullmq==2.11.0'
+        'bullmq==2.11.0',
+        'pyarrow'
     ],
     extras_require={
         'dev': [

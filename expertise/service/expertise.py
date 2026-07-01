@@ -845,7 +845,8 @@ class ExpertiseCloudService(BaseExpertiseService):
     }
 
     def _populate_publication_cache(self, config, request, job):
-        """Pull publication embeddings from recent same-venue jobs into config.job_dir.
+        """Pull publication embeddings from the global parquet cache and recent
+        same-venue jobs into config.job_dir.
 
         Best-effort: any failure is logged by the caller but does not block the
         pipeline. Files land alongside the dataset and get tarred up by the
@@ -856,37 +857,78 @@ class ExpertiseCloudService(BaseExpertiseService):
         if not targets:
             return
 
-        venue_key = extract_venue_key(request)
-        if not venue_key:
+        # Extract unique paper_ids from archives
+        archives_path = os.path.join(config.job_dir, 'archives')
+        paper_ids = set()
+        if os.path.isdir(archives_path):
+            for author_file in os.listdir(archives_path):
+                if not author_file.endswith('.jsonl'):
+                    continue
+                with open(os.path.join(archives_path, author_file)) as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            pub = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        pid = pub.get('id')
+                        if pid:
+                            paper_ids.add(pid)
+
+        if not paper_ids:
             return
 
-        lookback_days = self.server_config.get('EMBEDDING_CACHE_LOOKBACK_DAYS', 14)
-        max_jobs = self.server_config.get('EMBEDDING_CACHE_MAX_JOBS', 5)
-        since_ms = int(time.time() * 1000) - lookback_days * 86400 * 1000
-
-        recent = self.cloud.find_recent_venue_jobs(
-            venue_key=venue_key,
-            since_ms=since_ms,
-            limit=max_jobs,
-            exclude_cloud_id=config.cloud_id,
-        )
-        if not recent:
-            self.logger.info(f"No prior venue-matched jobs for venue={venue_key}")
-            return
+        # 1. Global cache (most comprehensive)
+        cache_bucket = self.server_config.get('EMBEDDING_CACHE_BUCKET', self.cloud.bucket_name)
+        cache_prefix = self.server_config.get('EMBEDDING_CACHE_PREFIX', 'embeddings-cache-test')
 
         for cache_key, dest_name in targets:
             dest_path = os.path.join(config.job_dir, dest_name)
-            count = self.cloud.merge_cached_publication_embeddings(
-                cloud_ids=recent,
+            count = self.cloud.populate_from_global_cache(
+                paper_ids=list(paper_ids),
                 model_name=cache_key,
                 dest_path=dest_path,
+                cache_bucket=cache_bucket,
+                cache_prefix=cache_prefix,
             )
             if count > 0:
                 asyncio.run_coroutine_threadsafe(
-                    job.log(f"Reused {count} cached publication embeddings ({cache_key}) from {len(recent)} prior venue jobs"),
+                    job.log(f"Reused {count} global cached publication embeddings ({cache_key})"),
                     self.queue_loop,
                 )
-                self.logger.info(f"Wrote {count} cached embeddings to {dest_path}")
+                self.logger.info(f"Wrote {count} global cached embeddings to {dest_path}")
+
+        # 2. Recent venue jobs (fills gaps with newest embeddings)
+        venue_key = extract_venue_key(request)
+        if venue_key:
+            lookback_days = self.server_config.get('EMBEDDING_CACHE_LOOKBACK_DAYS', 14)
+            max_jobs = self.server_config.get('EMBEDDING_CACHE_MAX_JOBS', 5)
+            since_ms = int(time.time() * 1000) - lookback_days * 86400 * 1000
+
+            recent = self.cloud.find_recent_venue_jobs(
+                venue_key=venue_key,
+                since_ms=since_ms,
+                limit=max_jobs,
+                exclude_cloud_id=config.cloud_id,
+            )
+            if recent:
+                for cache_key, dest_name in targets:
+                    dest_path = os.path.join(config.job_dir, dest_name)
+                    count = self.cloud.merge_cached_publication_embeddings(
+                        cloud_ids=recent,
+                        model_name=cache_key,
+                        dest_path=dest_path,
+                    )
+                    if count > 0:
+                        asyncio.run_coroutine_threadsafe(
+                            job.log(f"Reused {count} cached publication embeddings ({cache_key}) from {len(recent)} prior venue jobs"),
+                            self.queue_loop,
+                        )
+                        self.logger.info(f"Wrote {count} cached embeddings to {dest_path}")
+            else:
+                self.logger.info(f"No prior venue-matched jobs for venue={venue_key}")
 
     async def worker_process(self, job, token):
         descriptions = JobDescription.VALS.value
