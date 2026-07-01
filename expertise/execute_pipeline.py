@@ -223,7 +223,7 @@ def run_pipeline(
             if paper_ids:
                 cache = GlobalEmbeddingsCache(
                     bucket_name=os.getenv('EMBEDDING_CACHE_BUCKET', 'openreview-expertise'),
-                    cache_prefix=os.getenv('EMBEDDING_CACHE_PREFIX', 'embeddings-cache-test')
+                    cache_prefix=os.getenv('EMBEDDING_CACHE_PREFIX', 'embeddings-cache')
                 )
                 model_to_cache_name = {
                     'specter2+scincl': [

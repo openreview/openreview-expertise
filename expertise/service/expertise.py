@@ -882,7 +882,7 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         # 1. Global cache (most comprehensive)
         cache_bucket = self.server_config.get('EMBEDDING_CACHE_BUCKET', self.cloud.bucket_name)
-        cache_prefix = self.server_config.get('EMBEDDING_CACHE_PREFIX', 'embeddings-cache-test')
+        cache_prefix = self.server_config.get('EMBEDDING_CACHE_PREFIX', 'embeddings-cache')
 
         for cache_key, dest_name in targets:
             dest_path = os.path.join(config.job_dir, dest_name)

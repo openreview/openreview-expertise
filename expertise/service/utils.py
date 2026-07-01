@@ -1173,7 +1173,7 @@ class GCPInterface(object):
         return len(merged)
 
     def populate_from_global_cache(self, paper_ids, model_name, dest_path,
-                                   cache_bucket=None, cache_prefix='embeddings-cache-test'):
+                                   cache_bucket=None, cache_prefix='embeddings-cache'):
         """Query the global parquet embedding cache and write a local JSONL file.
 
         Returns the number of embeddings found and written. Requires pyarrow.
