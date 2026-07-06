@@ -880,9 +880,8 @@ class ExpertiseCloudService(BaseExpertiseService):
         if not paper_ids:
             return
 
-        # 1. Global cache (most comprehensive)
+        cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in self.cloud.jobs_folder else 'embeddings-cache'
         cache_bucket = self.server_config.get('EMBEDDING_CACHE_BUCKET', self.cloud.bucket_name)
-        cache_prefix = self.server_config.get('EMBEDDING_CACHE_PREFIX', 'embeddings-cache')
 
         for cache_key, dest_name in targets:
             dest_path = os.path.join(config.job_dir, dest_name)

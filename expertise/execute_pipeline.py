@@ -221,9 +221,10 @@ def run_pipeline(
                             if pid:
                                 paper_ids.append(pid)
             if paper_ids:
+                cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in destination_prefix else 'embeddings-cache'
                 cache = GlobalEmbeddingsCache(
                     bucket_name=os.getenv('EMBEDDING_CACHE_BUCKET', 'openreview-expertise'),
-                    cache_prefix=os.getenv('EMBEDDING_CACHE_PREFIX', 'embeddings-cache')
+                    cache_prefix=cache_prefix
                 )
                 model_to_cache_name = {
                     'specter2+scincl': [
