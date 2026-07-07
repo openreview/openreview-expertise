@@ -881,9 +881,10 @@ class ExpertiseCloudService(BaseExpertiseService):
             return
 
         job_gcs_path = f"gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}"
-        cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in job_gcs_path else 'embeddings-cache'
+        request_gcs_folder = request.get('gcs_folder', '')
+        cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in job_gcs_path or 'jobs-dev' in request_gcs_folder else 'embeddings-cache'
         cache_bucket = self.server_config.get('EMBEDDING_CACHE_BUCKET', self.cloud.bucket_name)
-        self.logger.info(f"Global cache: bucket={cache_bucket} prefix={cache_prefix} job_path={job_gcs_path} models={[t[0] for t in targets]} paper_ids={len(paper_ids)}")
+        self.logger.info(f"Global cache: bucket={cache_bucket} prefix={cache_prefix} job_path={job_gcs_path} gcs_folder={request_gcs_folder} jobs_folder={self.cloud.jobs_folder} cloud_id={config.cloud_id} models={[t[0] for t in targets]} paper_ids={len(paper_ids)}")
 
         for cache_key, dest_name in targets:
             dest_path = os.path.join(config.job_dir, dest_name)
