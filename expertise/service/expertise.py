@@ -891,18 +891,25 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         for cache_key, dest_name in targets:
             dest_path = os.path.join(config.job_dir, dest_name)
-            count = self.cloud.populate_from_global_cache(
-                paper_ids=list(paper_ids),
-                model_name=cache_key,
-                dest_path=dest_path,
-                cache_bucket=cache_bucket,
-                cache_prefix=cache_prefix,
-            )
-            asyncio.run_coroutine_threadsafe(
-                job.log(f"Reused {count} global cached publication embeddings ({cache_key})"),
-                self.queue_loop,
-            )
-            self.logger.info(f"Wrote {count} global cached embeddings to {dest_path} ({cache_key})")
+            try:
+                count = self.cloud.populate_from_global_cache(
+                    paper_ids=list(paper_ids),
+                    model_name=cache_key,
+                    dest_path=dest_path,
+                    cache_bucket=cache_bucket,
+                    cache_prefix=cache_prefix,
+                )
+                asyncio.run_coroutine_threadsafe(
+                    job.log(f"Reused {count} global cached publication embeddings ({cache_key})"),
+                    self.queue_loop,
+                )
+                self.logger.info(f"Wrote {count} global cached embeddings to {dest_path} ({cache_key})")
+            except Exception as e:
+                asyncio.run_coroutine_threadsafe(
+                    job.log(f"Global cache lookup failed ({cache_key}): {e}"),
+                    self.queue_loop,
+                )
+                self.logger.warning(f"Global cache lookup failed for {cache_key}: {e}")
 
         # 2. Recent venue jobs (fills gaps with newest embeddings)
         venue_key = extract_venue_key(request)

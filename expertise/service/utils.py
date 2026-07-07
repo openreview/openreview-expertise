@@ -1188,11 +1188,7 @@ class GCPInterface(object):
             return 0
         bucket = cache_bucket or self.bucket_name
         cache = GlobalEmbeddingsCache(bucket_name=bucket, cache_prefix=cache_prefix)
-        try:
-            return cache.write_cache_file(paper_ids, model_name, dest_path)
-        except Exception as e:
-            self.logger.warning(f"Global embedding cache lookup failed for {model_name}: {e}")
-            return 0
+        return cache.write_cache_file(paper_ids, model_name, dest_path)
 
     def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
         def create_folder(bucket_name, folder_path):
