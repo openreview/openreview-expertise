@@ -882,6 +882,7 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in self.cloud.jobs_folder else 'embeddings-cache'
         cache_bucket = self.server_config.get('EMBEDDING_CACHE_BUCKET', self.cloud.bucket_name)
+        self.logger.info(f"Global cache: bucket={cache_bucket} prefix={cache_prefix} models={[t[0] for t in targets]} paper_ids={len(paper_ids)}")
 
         for cache_key, dest_name in targets:
             dest_path = os.path.join(config.job_dir, dest_name)
@@ -892,12 +893,11 @@ class ExpertiseCloudService(BaseExpertiseService):
                 cache_bucket=cache_bucket,
                 cache_prefix=cache_prefix,
             )
-            if count > 0:
-                asyncio.run_coroutine_threadsafe(
-                    job.log(f"Reused {count} global cached publication embeddings ({cache_key})"),
-                    self.queue_loop,
-                )
-                self.logger.info(f"Wrote {count} global cached embeddings to {dest_path}")
+            asyncio.run_coroutine_threadsafe(
+                job.log(f"Reused {count} global cached publication embeddings ({cache_key})"),
+                self.queue_loop,
+            )
+            self.logger.info(f"Wrote {count} global cached embeddings to {dest_path} ({cache_key})")
 
         # 2. Recent venue jobs (fills gaps with newest embeddings)
         venue_key = extract_venue_key(request)
@@ -913,6 +913,7 @@ class ExpertiseCloudService(BaseExpertiseService):
                 exclude_cloud_id=config.cloud_id,
             )
             if recent:
+                self.logger.info(f"Filling gaps from {len(recent)} prior venue jobs: {recent}")
                 for cache_key, dest_name in targets:
                     dest_path = os.path.join(config.job_dir, dest_name)
                     count = self.cloud.merge_cached_publication_embeddings(
@@ -920,12 +921,11 @@ class ExpertiseCloudService(BaseExpertiseService):
                         model_name=cache_key,
                         dest_path=dest_path,
                     )
-                    if count > 0:
-                        asyncio.run_coroutine_threadsafe(
-                            job.log(f"Reused {count} cached publication embeddings ({cache_key}) from {len(recent)} prior venue jobs"),
-                            self.queue_loop,
-                        )
-                        self.logger.info(f"Wrote {count} cached embeddings to {dest_path}")
+                    asyncio.run_coroutine_threadsafe(
+                        job.log(f"Reused {count} cached publication embeddings ({cache_key}) from {len(recent)} prior venue jobs"),
+                        self.queue_loop,
+                    )
+                    self.logger.info(f"Wrote {count} cached embeddings to {dest_path} ({cache_key}) from prior venue jobs")
             else:
                 self.logger.info(f"No prior venue-matched jobs for venue={venue_key}")
 
