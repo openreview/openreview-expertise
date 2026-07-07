@@ -319,6 +319,13 @@ def run_pipeline(
             blob = bucket.blob(destination_blob)
             blob.upload_from_filename(os.path.join(config.job_dir, emb_file))
 
+        # Append newly computed embeddings to the global parquet cache so future
+        # jobs can reuse them without recomputation.
+        try:
+            _append_embeddings_to_global_cache(config.job_dir, blob_prefix, bucket)
+        except Exception as e:
+            print(f"Global cache append failed (non-critical): {e}", flush=True)
+
     except Exception as e:
         # Write error to single JSONL line in GCS if bucket is available
         if bucket is not None and blob_prefix is not None:
@@ -339,6 +346,97 @@ def run_pipeline(
         if working_dir_created and working_dir and os.path.isdir(working_dir):
             print(f'Cleaning up working directory: {working_dir}')
             shutil.rmtree(working_dir)
+
+def _append_embeddings_to_global_cache(job_dir, blob_prefix, bucket):
+    """Append pub2vec JSONL embeddings to the Hive-partitioned GCS Parquet cache.
+
+    Uses the job timestamp embedded in blob_prefix for the year_month partition.
+    Metadata columns (venueid, title, invitation, domain, cdate, mdate) are left
+    empty/null for now and will be backfilled once the pipeline carries that
+    information through.
+    """
+    try:
+        import pandas as pd
+        import pyarrow as pa
+        import pyarrow.dataset as ds
+    except ImportError:
+        print("pyarrow/pandas not available; skipping global cache append", flush=True)
+        return
+
+    cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in blob_prefix else 'embeddings-cache'
+
+    ts_ms = None
+    for part in blob_prefix.split('/'):
+        if '-' in part:
+            try:
+                ts_ms = int(part.split('-')[-1])
+                break
+            except ValueError:
+                pass
+    if ts_ms is None:
+        import time
+        ts_ms = int(time.time() * 1000)
+    import datetime
+    dt = datetime.datetime.fromtimestamp(ts_ms / 1000, tz=datetime.timezone.utc)
+    year_month = dt.strftime("%Y-%m")
+
+    model_map = {
+        'pub2vec_specter.jsonl': 'specter',
+        'pub2vec_scincl.jsonl': 'scincl',
+        'pub2vec.jsonl': 'specter',
+    }
+
+    records = []
+    for emb_file, model in model_map.items():
+        local_path = os.path.join(job_dir, emb_file)
+        if not os.path.exists(local_path):
+            continue
+        with open(local_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                pid = entry.get('paper_id')
+                emb = entry.get('embedding')
+                if pid is None or emb is None:
+                    continue
+                records.append({
+                    'paper_id': pid,
+                    'job_id': blob_prefix.split('/')[-1],
+                    'embedding': emb,
+                    'uri': f"gs://{bucket.name}/{blob_prefix}/{emb_file}",
+                    'model': model,
+                    'year_month': year_month,
+                    'venueid': '',
+                    'title': '',
+                    'invitation': '',
+                    'domain': None,
+                    'cdate': None,
+                    'mdate': None,
+                })
+
+    if not records:
+        return
+
+    df = pd.DataFrame(records)
+    table = pa.Table.from_pandas(df)
+    gcs_path = f"gs://{bucket.name}/{cache_prefix}"
+    ds.write_dataset(
+        table,
+        base_dir=gcs_path,
+        format="parquet",
+        partitioning=ds.partitioning(
+            pa.schema([("model", pa.string()), ("year_month", pa.string())]),
+            flavor="hive",
+        ),
+        existing_data_behavior="overwrite_or_ignore",
+    )
+    print(f"Appended {len(records)} embeddings to {gcs_path}", flush=True)
+
 
 if __name__ == '__main__':
     print('Starting pipeline')
