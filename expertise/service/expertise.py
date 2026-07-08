@@ -559,6 +559,7 @@ class ExpertiseService(BaseExpertiseService):
 
         except ExpectedDataError as e:
             # Expected data errors - mark as data error, don't re-raise, avoid triggering retries
+            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
         except Exception as e:
             self.update_status(config, JobStatus.ERROR, str(e))
@@ -956,6 +957,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         try:
             execute_create_dataset(openreview_client_v2, config=config.to_json())
         except ExpectedDataError as e:
+            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
             return
         except Exception as e:
@@ -978,6 +980,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         try:
             dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
         except ExpectedDataError as e:
+            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
             return
         asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})'), self.queue_loop)
