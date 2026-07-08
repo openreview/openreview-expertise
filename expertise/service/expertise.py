@@ -890,8 +890,10 @@ class ExpertiseCloudService(BaseExpertiseService):
             self.queue_loop,
         )
 
+        global_cache_start = time.time()
         for cache_key, dest_name in targets:
             dest_path = os.path.join(config.job_dir, dest_name)
+            model_start = time.time()
             try:
                 count = self.cloud.populate_from_global_cache(
                     paper_ids=list(paper_ids),
@@ -901,7 +903,7 @@ class ExpertiseCloudService(BaseExpertiseService):
                     cache_prefix=cache_prefix,
                 )
                 asyncio.run_coroutine_threadsafe(
-                    job.log(f"Reused {count} global cached publication embeddings ({cache_key})"),
+                    job.log(f"Reused {count} global cached publication embeddings ({cache_key}) in {time.time() - model_start:.2f}s"),
                     self.queue_loop,
                 )
                 self.logger.info(f"Wrote {count} global cached embeddings to {dest_path} ({cache_key})")
@@ -911,10 +913,15 @@ class ExpertiseCloudService(BaseExpertiseService):
                     self.queue_loop,
                 )
                 self.logger.warning(f"Global cache lookup failed for {cache_key}: {e}")
+        asyncio.run_coroutine_threadsafe(
+            job.log(f"Global cache lookup completed in {time.time() - global_cache_start:.2f}s"),
+            self.queue_loop,
+        )
 
         # 2. Recent venue jobs (fills gaps with newest embeddings)
         venue_key = extract_venue_key(request)
         if venue_key:
+            venue_start = time.time()
             lookback_days = self.server_config.get('EMBEDDING_CACHE_LOOKBACK_DAYS', 14)
             max_jobs = self.server_config.get('EMBEDDING_CACHE_MAX_JOBS', 5)
             since_ms = int(time.time() * 1000) - lookback_days * 86400 * 1000
@@ -929,18 +936,23 @@ class ExpertiseCloudService(BaseExpertiseService):
                 self.logger.info(f"Filling gaps from {len(recent)} prior venue jobs: {recent}")
                 for cache_key, dest_name in targets:
                     dest_path = os.path.join(config.job_dir, dest_name)
+                    model_start = time.time()
                     count = self.cloud.merge_cached_publication_embeddings(
                         cloud_ids=recent,
                         model_name=cache_key,
                         dest_path=dest_path,
                     )
                     asyncio.run_coroutine_threadsafe(
-                        job.log(f"Reused {count} cached publication embeddings ({cache_key}) from {len(recent)} prior venue jobs"),
+                        job.log(f"Reused {count} cached publication embeddings ({cache_key}) from {len(recent)} prior venue jobs in {time.time() - model_start:.2f}s"),
                         self.queue_loop,
                     )
                     self.logger.info(f"Wrote {count} cached embeddings to {dest_path} ({cache_key}) from prior venue jobs")
             else:
                 self.logger.info(f"No prior venue-matched jobs for venue={venue_key}")
+            asyncio.run_coroutine_threadsafe(
+                job.log(f"Venue cache merge completed in {time.time() - venue_start:.2f}s"),
+                self.queue_loop,
+            )
 
     async def worker_process(self, job, token):
         descriptions = JobDescription.VALS.value
@@ -959,9 +971,9 @@ class ExpertiseCloudService(BaseExpertiseService):
         config = self.redis.load_job(redis_id, user_id)
         openreview_client_v2 = openreview.api.OpenReviewClient(token=or_token, baseurl=config.baseurl_v2)
 
-        stage_start = time.time()
         _log('Task 1: fetching data from OpenReview and building dataset')
         self.update_status(config, JobStatus.FETCHING_DATA)
+        task1_start = time.time()
         try:
             execute_create_dataset(openreview_client_v2, config=config.to_json())
         except ExpectedDataError as e:
@@ -975,17 +987,21 @@ class ExpertiseCloudService(BaseExpertiseService):
             if config.status != JobStatus.ERROR:
                 self.update_status(config, JobStatus.ERROR, str(e))
             raise e.with_traceback(e.__traceback__)
-        _log(f'Task 1 completed in {_elapsed(stage_start)}')
+        _log(f'Dataset creation completed in {_elapsed(task1_start)}')
 
-        stage_start = time.time()
         config = self.redis.load_job(redis_id, user_id)
         config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
         machine_type = self.compute_machine_type_from_dataset(config)
         self.logger.info(f"Machine type for {redis_id}: {machine_type}")
+
+        cache_start = time.time()
         try:
             self._populate_publication_cache(config, request, job)
         except Exception as e:
             self.logger.warning(f"Embedding cache lookup failed for {redis_id}: {e}")
+        _log(f'Embedding cache prep completed in {_elapsed(cache_start)}')
+
+        upload_start = time.time()
         _log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset')
         try:
             dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
@@ -993,9 +1009,9 @@ class ExpertiseCloudService(BaseExpertiseService):
             _log(f'Job finished with expected data error: {e}')
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
             return
-        _log(f'Dataset upload and cache prep completed in {_elapsed(stage_start)}')
+        _log(f'Dataset upload completed in {_elapsed(upload_start)}')
 
-        stage_start = time.time()
+        submit_start = time.time()
         _log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})')
         try:
             self.cloud.create_job(
@@ -1014,15 +1030,17 @@ class ExpertiseCloudService(BaseExpertiseService):
             if config.status != JobStatus.ERROR:
                 self.update_status(config, JobStatus.ERROR, f"Error creating cloud job: {e}")
             raise e.with_traceback(e.__traceback__)
-        _log(f'Vertex pipeline submitted in {_elapsed(stage_start)}')
+        _log(f'Vertex pipeline submitted in {_elapsed(submit_start)}')
 
-        stage_start = time.time()
+        poll_start = time.time()
         try:
             self.logger.info(f"In polling worker...")
             for attempt in range(self.max_attempts):
                 self.logger.info(f"{redis_id} - attempt {attempt + 1} of {self.max_attempts}...")
+                poll_iter_start = time.time()
                 config = self.redis.load_job(redis_id, user_id)
                 status = self.cloud.get_job_status_by_job_id(user_id, config)
+                status_elapsed = _elapsed(poll_iter_start)
                 self.logger.info(f"Invoked get_job_status_by_job_id for {redis_id} - status: {status}")
 
                 # Check status validity
@@ -1040,11 +1058,13 @@ class ExpertiseCloudService(BaseExpertiseService):
                         self.logger.info(f"INFO: after update status")
 
                     if status['status'] == JobStatus.COMPLETED:
-                        _log(f'Job completed in {_elapsed(job_start)} (polling took {_elapsed(stage_start)})')
+                        _log(f'Status check took {status_elapsed}')
+                        _log(f'Job completed in {_elapsed(job_start)} (polling took {_elapsed(poll_start)})')
                         return
 
                     elif status['status'] == JobStatus.DATA_ERROR:
-                        _log(f'Job completed with expected error in {_elapsed(job_start)} (polling took {_elapsed(stage_start)}): {status["description"]}')
+                        _log(f'Status check took {status_elapsed}')
+                        _log(f'Job completed with expected error in {_elapsed(job_start)} (polling took {_elapsed(poll_start)}): {status["description"]}')
                         return
 
                     elif status['status'] == JobStatus.ERROR:
