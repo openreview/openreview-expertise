@@ -948,16 +948,24 @@ class ExpertiseCloudService(BaseExpertiseService):
         request = job.data['request']
         redis_id = job.data['redis_id']
         or_token = job.data['token']
+        job_start = time.time()
+
+        def _elapsed(start):
+            return f"{time.time() - start:.2f}s"
+
+        def _log(msg):
+            asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
 
         config = self.redis.load_job(redis_id, user_id)
         openreview_client_v2 = openreview.api.OpenReviewClient(token=or_token, baseurl=config.baseurl_v2)
 
-        asyncio.run_coroutine_threadsafe(job.log('Task 1: fetching data from OpenReview and building dataset'), self.queue_loop)
+        stage_start = time.time()
+        _log('Task 1: fetching data from OpenReview and building dataset')
         self.update_status(config, JobStatus.FETCHING_DATA)
         try:
             execute_create_dataset(openreview_client_v2, config=config.to_json())
         except ExpectedDataError as e:
-            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
+            _log(f'Job finished with expected data error: {e}')
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
             return
         except Exception as e:
@@ -967,7 +975,9 @@ class ExpertiseCloudService(BaseExpertiseService):
             if config.status != JobStatus.ERROR:
                 self.update_status(config, JobStatus.ERROR, str(e))
             raise e.with_traceback(e.__traceback__)
+        _log(f'Task 1 completed in {_elapsed(stage_start)}')
 
+        stage_start = time.time()
         config = self.redis.load_job(redis_id, user_id)
         config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
         machine_type = self.compute_machine_type_from_dataset(config)
@@ -976,15 +986,17 @@ class ExpertiseCloudService(BaseExpertiseService):
             self._populate_publication_cache(config, request, job)
         except Exception as e:
             self.logger.warning(f"Embedding cache lookup failed for {redis_id}: {e}")
-        asyncio.run_coroutine_threadsafe(job.log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset'), self.queue_loop)
+        _log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset')
         try:
             dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
         except ExpectedDataError as e:
-            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
+            _log(f'Job finished with expected data error: {e}')
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
             return
-        asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})'), self.queue_loop)
+        _log(f'Dataset upload and cache prep completed in {_elapsed(stage_start)}')
 
+        stage_start = time.time()
+        _log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})')
         try:
             self.cloud.create_job(
                 deepcopy(request),
@@ -1001,10 +1013,10 @@ class ExpertiseCloudService(BaseExpertiseService):
             config = self.redis.load_job(redis_id, user_id)
             if config.status != JobStatus.ERROR:
                 self.update_status(config, JobStatus.ERROR, f"Error creating cloud job: {e}")
-            # If we fail to create the job, we should not proceed with polling
-            # Re-raise exception to appear in the queue
             raise e.with_traceback(e.__traceback__)
+        _log(f'Vertex pipeline submitted in {_elapsed(stage_start)}')
 
+        stage_start = time.time()
         try:
             self.logger.info(f"In polling worker...")
             for attempt in range(self.max_attempts):
@@ -1028,13 +1040,12 @@ class ExpertiseCloudService(BaseExpertiseService):
                         self.logger.info(f"INFO: after update status")
 
                     if status['status'] == JobStatus.COMPLETED:
-                        self.logger.info(f"Job {redis_id} completed successfully.")
-                        return # Exit the loop on successful completion
+                        _log(f'Job completed in {_elapsed(job_start)} (polling took {_elapsed(stage_start)})')
+                        return
 
                     elif status['status'] == JobStatus.DATA_ERROR:
-                        # Expected data errors - job is "complete" from queue perspective
-                        self.logger.info(f"Job {redis_id} completed with expected error: {status['description']}")
-                        return # Exit the loop - don't raise exception
+                        _log(f'Job completed with expected error in {_elapsed(job_start)} (polling took {_elapsed(stage_start)}): {status["description"]}')
+                        return
 
                     elif status['status'] == JobStatus.ERROR:
                         self.logger.error(f"Job {redis_id} encountered an error: {status['description']}")
@@ -1048,7 +1059,6 @@ class ExpertiseCloudService(BaseExpertiseService):
                 await asyncio.sleep(self.poll_interval)
                 self.logger.info(f"INFO: after sleep")
 
-            # If the loop completes without a break, raise timeout
             else:
                 self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {redis_id}.")
                 config = self.redis.load_job(redis_id, user_id)
@@ -1059,7 +1069,6 @@ class ExpertiseCloudService(BaseExpertiseService):
             self.logger.info(f"Polling loop finished for job {redis_id}.")
 
         except Exception as e:
-            # Re-raise exception to appear in the queue
             raise e.with_traceback(e.__traceback__)
 
     def start_expertise(self, request, client):
