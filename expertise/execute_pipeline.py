@@ -6,6 +6,7 @@ import tarfile
 import tempfile
 import shutil
 import time
+from pathlib import Path
 from expertise.execute_expertise import execute_expertise
 from expertise.service import load_model_artifacts, artifacts_for_model
 from expertise.service.utils import APIRequest, JobConfig, ExpectedDataError
