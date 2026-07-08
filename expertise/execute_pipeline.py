@@ -197,13 +197,14 @@ def run_pipeline(
             print(f'Downloading pre-created dataset from {dataset_gcs_path}')
             download_dataset_from_gcs(dataset_gcs_path, working_dir)
 
-        # Optional: scan global embedding cache for publication embeddings.
-        # This is a fallback when the worker-side cache population missed IDs
-        # or when running the pipeline standalone.
+        # Query the global parquet embedding cache for publication embeddings.
+        # Missing embeddings are computed from the paper data below and appended
+        # back to the cache after scoring.
+        cache_start = time.time()
         try:
             from expertise.embeddings_cache import GlobalEmbeddingsCache
             archives_path = Path(config.job_dir) / 'archives'
-            paper_ids = []
+            paper_ids = set()
             if archives_path.exists():
                 for author_file in archives_path.iterdir():
                     if not author_file.name.endswith('.jsonl'):
@@ -219,7 +220,7 @@ def run_pipeline(
                                 continue
                             pid = pub.get('id')
                             if pid:
-                                paper_ids.append(pid)
+                                paper_ids.add(pid)
             if paper_ids:
                 cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in destination_prefix else 'embeddings-cache'
                 cache = GlobalEmbeddingsCache(
@@ -236,13 +237,19 @@ def run_pipeline(
                     'specter': [('specter', 'cached_pub2vec.jsonl')],
                 }
                 targets = model_to_cache_name.get(config.model, [])
+                total_cached = 0
                 for cache_key, dest_name in targets:
                     dest_path = Path(config.job_dir) / dest_name
-                    count = cache.write_cache_file(paper_ids, cache_key, str(dest_path))
+                    count = cache.write_cache_file(list(paper_ids), cache_key, str(dest_path))
+                    total_cached += count
                     if count > 0:
                         print(f"Pre-populated {count} embeddings from global cache ({cache_key})", flush=True)
+                print(f"Global cache lookup completed in {time.time() - cache_start:.2f}s ({total_cached}/{len(paper_ids)} embeddings found)", flush=True)
+            else:
+                print("No paper IDs found; skipping global cache lookup", flush=True)
         except Exception as e:
-            print(f"Global cache scan failed (non-critical): {e}", flush=True)
+            print(f"Global cache lookup failed: {e}", flush=True)
+            raise
 
         print('Executing expertise')
         execute_expertise(config.to_json())

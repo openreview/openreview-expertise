@@ -994,13 +994,6 @@ class ExpertiseCloudService(BaseExpertiseService):
         machine_type = self.compute_machine_type_from_dataset(config)
         self.logger.info(f"Machine type for {redis_id}: {machine_type}")
 
-        cache_start = time.time()
-        try:
-            self._populate_publication_cache(config, request, job)
-        except Exception as e:
-            self.logger.warning(f"Embedding cache lookup failed for {redis_id}: {e}")
-        _log(f'Embedding cache prep completed in {_elapsed(cache_start)}')
-
         upload_start = time.time()
         _log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset')
         try:
