@@ -7,6 +7,9 @@ import tempfile
 import shutil
 import time
 from pathlib import Path
+import pyarrow
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
 from expertise.execute_expertise import execute_expertise
 from expertise.service import load_model_artifacts, artifacts_for_model
 from expertise.service.utils import APIRequest, JobConfig, ExpectedDataError
