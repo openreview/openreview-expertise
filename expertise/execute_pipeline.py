@@ -432,19 +432,42 @@ def _append_embeddings_to_global_cache(job_dir, blob_prefix, bucket):
         return
 
     df = pd.DataFrame(records)
-    table = pa.Table.from_pandas(df)
     gcs_path = f"gs://{bucket.name}/{cache_prefix}"
-    ds.write_dataset(
-        table,
-        base_dir=gcs_path,
-        format="parquet",
-        partitioning=ds.partitioning(
-            pa.schema([("model", pa.string()), ("year_month", pa.string())]),
-            flavor="hive",
-        ),
-        existing_data_behavior="overwrite_or_ignore",
-    )
-    print(f"Appended {len(records)} embeddings to {gcs_path}", flush=True)
+    existing_ids = set()
+    try:
+        existing_dataset = ds.dataset(gcs_path, partitioning="hive")
+        existing_table = existing_dataset.to_table(
+            columns=["paper_id"],
+            filter=(pc.field("model").isin(df["model"].unique().tolist()))
+        )
+        if existing_table.num_rows > 0:
+            existing_ids = set(existing_table.column("paper_id").to_pylist())
+    except Exception as e:
+        print(f"No existing cache to filter against: {e}", flush=True)
+
+    if existing_ids:
+        df = df[~df["paper_id"].isin(existing_ids)]
+
+    if df.empty:
+        print("No new embeddings to append; all paper_ids already cached", flush=True)
+        return
+
+    for model, model_df in df.groupby("model"):
+        partition_path = f"{gcs_path}/model={model}/year_month={year_month}"
+        blobs = list(bucket.list_blobs(prefix=partition_path + "/"))
+        part_files = [b.name for b in blobs if b.name.endswith(".parquet")]
+        next_idx = len(part_files)
+        dest_blob_name = f"{cache_prefix}/model={model}/year_month={year_month}/part-{next_idx:08d}.parquet"
+        table = pa.Table.from_pandas(model_df)
+        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
+            local_path = tmp.name
+        try:
+            pq.write_table(table, local_path, compression="zstd")
+            bucket.blob(dest_blob_name).upload_from_filename(local_path)
+        finally:
+            if os.path.exists(local_path):
+                os.remove(local_path)
+        print(f"Appended {len(model_df)} new embeddings to gs://{bucket.name}/{dest_blob_name}", flush=True)
 
 
 if __name__ == '__main__':
