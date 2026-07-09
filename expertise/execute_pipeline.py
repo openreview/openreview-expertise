@@ -456,11 +456,11 @@ def _append_embeddings_to_global_cache(job_dir, blob_prefix, bucket):
         return
 
     for model, model_df in df.groupby("model"):
-        partition_path = f"{gcs_path}/model={model}/year_month={year_month}"
-        blobs = list(bucket.list_blobs(prefix=partition_path + "/"))
+        partition_blob_prefix = f"{cache_prefix}/model={model}/year_month={year_month}/"
+        blobs = list(bucket.list_blobs(prefix=partition_blob_prefix))
         part_files = [b.name for b in blobs if b.name.endswith(".parquet")]
         next_idx = len(part_files)
-        dest_blob_name = f"{cache_prefix}/model={model}/year_month={year_month}/part-{next_idx:08d}.parquet"
+        dest_blob_name = f"{partition_blob_prefix}part-{next_idx:08d}.parquet"
         table = pa.Table.from_pandas(model_df)
         with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
             local_path = tmp.name
