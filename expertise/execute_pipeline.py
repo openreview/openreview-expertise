@@ -245,7 +245,7 @@ def run_pipeline(
                 total_cached = 0
                 for cache_key, dest_name in targets:
                     dest_path = Path(config.job_dir) / dest_name
-                    count = cache.write_cache_file(list(paper_ids), cache_key, str(dest_path))
+                    count = cache.write_cache_file(list(paper_ids), cache_key, str(dest_path), job_id=cloud_id)
                     total_cached += count
                     if count > 0:
                         print(f"Pre-populated {count} embeddings from global cache ({cache_key})", flush=True)
