@@ -1,4 +1,5 @@
-from unittest.mock import patch, MagicMock
+import concurrent.futures
+from unittest.mock import patch, MagicMock, AsyncMock
 import random
 from pathlib import Path
 import openreview
@@ -238,7 +239,139 @@ class TestExpertiseService():
         with pytest.raises(openreview.OpenReviewException) as excinfo:
             redis.load_job('test_ttl', 'user@test.com')
         assert 'Job not found' in str(excinfo.value)
-    
+
+    @staticmethod
+    def _make_service_for_queue_tests():
+        mock_logger = MagicMock()
+        config = {
+            'WORKER_ATTEMPTS': 1,
+            'WORKER_BACKOFF_DELAY': 60000,
+            'ACTIVE_JOBS': 1,
+            'LOCK_DURATION': 300000,
+            'REDIS_ADDR': 'localhost',
+            'REDIS_PORT': 6379,
+            'REDIS_CONFIG_DB': 10,
+            'REDIS_EMBEDDINGS_DB': 11,
+            'JOB_CONFIG_TTL': 3600,
+            'DEFAULT_CONFIG': {},
+        }
+        mock_worker_cls = MagicMock()
+        mock_worker_instance = MagicMock()
+        mock_worker_instance.run = AsyncMock()
+        mock_worker_cls.return_value = mock_worker_instance
+        with patch('expertise.service.expertise.Queue'), \
+             patch('expertise.service.expertise.Worker', mock_worker_cls), \
+             patch('expertise.service.expertise.threading.Thread'), \
+             patch('expertise.service.expertise.RedisDatabase'):
+            service = expertise.service.expertise.ExpertiseService(config, mock_logger)
+        return service
+
+    def test_queue_status_completed(self):
+        """BullMQ 'completed' -> COMPLETED."""
+        service = self._make_service_for_queue_tests()
+        mock_future = MagicMock()
+        mock_future.result.return_value = 'completed'
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status == JobStatus.COMPLETED
+        assert desc == JobDescription.VALS.value[JobStatus.COMPLETED]
+
+    def test_queue_status_completed_data_error(self):
+        """Completed job with result='DATA_ERROR' in job data -> DATA_ERROR."""
+        service = self._make_service_for_queue_tests()
+        state_future = MagicMock()
+        state_future.result.return_value = 'completed'
+        mock_job = MagicMock()
+        mock_job.data = {'result': 'DATA_ERROR', 'error': 'No papers found'}
+        job_future = MagicMock()
+        job_future.result.return_value = mock_job
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status == JobStatus.DATA_ERROR
+        assert desc == 'No papers found'
+
+    def test_queue_status_failed(self):
+        """BullMQ 'failed' -> ERROR."""
+        service = self._make_service_for_queue_tests()
+        mock_future = MagicMock()
+        mock_future.result.return_value = 'failed'
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status == JobStatus.ERROR
+        assert desc == JobDescription.VALS.value[JobStatus.ERROR]
+
+    def test_queue_status_active_no_sub_status(self):
+        """BullMQ 'active' without sub_status -> RUN_EXPERTISE."""
+        service = self._make_service_for_queue_tests()
+        state_future = MagicMock()
+        state_future.result.return_value = 'active'
+        mock_job = MagicMock()
+        mock_job.data = {}
+        job_future = MagicMock()
+        job_future.result.return_value = mock_job
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status == JobStatus.RUN_EXPERTISE
+        assert desc == JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
+
+    def test_queue_status_active_with_sub_status(self):
+        """BullMQ 'active' with sub_status='FETCHING_DATA' -> FETCHING_DATA."""
+        service = self._make_service_for_queue_tests()
+        state_future = MagicMock()
+        state_future.result.return_value = 'active'
+        mock_job = MagicMock()
+        mock_job.data = {'sub_status': 'FETCHING_DATA'}
+        job_future = MagicMock()
+        job_future.result.return_value = mock_job
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status == JobStatus.FETCHING_DATA
+        assert desc == JobDescription.VALS.value[JobStatus.FETCHING_DATA]
+
+    @pytest.mark.parametrize("queue_state", [
+        'waiting', 'delayed', 'paused', 'waiting-children', 'prioritized'
+    ])
+    def test_queue_status_queued_variants(self, queue_state):
+        """All BullMQ waiting-like states -> QUEUED."""
+        service = self._make_service_for_queue_tests()
+        mock_future = MagicMock()
+        mock_future.result.return_value = queue_state
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status == JobStatus.QUEUED
+        assert desc == JobDescription.VALS.value[JobStatus.QUEUED]
+
+    def test_queue_status_timeout_falls_back(self):
+        """TimeoutError from BullMQ returns (None, None) so caller falls back to Redis."""
+        service = self._make_service_for_queue_tests()
+        mock_future = MagicMock()
+        mock_future.result.side_effect = concurrent.futures.TimeoutError
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status is None
+        assert desc is None
+
+    def test_queue_status_exception_falls_back(self):
+        """Exception from BullMQ returns (None, None) so caller falls back to Redis."""
+        service = self._make_service_for_queue_tests()
+        mock_future = MagicMock()
+        mock_future.result.side_effect = RuntimeError('BullMQ down')
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status is None
+        assert desc is None
+        service.logger.warning.assert_called_once()
+
+    def test_queue_status_none_state_falls_back(self):
+        """BullMQ returns None state (job archived / not in queue) -> (None, None)."""
+        service = self._make_service_for_queue_tests()
+        mock_future = MagicMock()
+        mock_future.result.return_value = None
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status is None
+        assert desc is None
+
     def test_manual_ttl_override(self):
         """Test manual TTL override in save_job"""
         redis = RedisDatabase(

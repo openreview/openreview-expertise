@@ -29,25 +29,25 @@ DEFAULT_CONFIG = {
 }
 DELETED_FIELDS = ['user_id', 'cdate', 'machine_type']
 
-def load_gcs(gcs_path):
+def load_gcs(gcs_path, client=None):
     """Return client and bucket for a GCS path."""
     if not gcs_path.startswith('gs://'):
         raise ValueError(f"Invalid GCS path: {gcs_path}")
 
     # Parse GCS path: gs://bucket_name/path/to/file
     bucket_name = gcs_path.split('/')[2]
-    gcs_client = storage.Client()
+    gcs_client = client if client is not None else storage.Client()
     bucket = gcs_client.bucket(bucket_name)
 
     return gcs_client, bucket
 
-def download_from_gcs(gcs_path):
+def download_from_gcs(gcs_path, client=None):
     """Download JSON content from a GCS path."""
     if not gcs_path.startswith('gs://'):
         raise ValueError(f"Invalid GCS path: {gcs_path}")
 
     # Parse GCS path: gs://bucket_name/path/to/file
-    _, bucket = load_gcs(gcs_path)
+    _, bucket = load_gcs(gcs_path, client=client)
 
     blob_name = '/'.join(gcs_path.split('/')[3:])
 
@@ -120,6 +120,7 @@ def run_pipeline(
     working_dir_created = False
     dump_archives = False
     validated_request = None
+    gcs_client = None
 
     try:
         if api_request_str is not None:
@@ -133,7 +134,8 @@ def run_pipeline(
                     raw_request = json.load(f)
                 print(f"Loaded request from local file: {api_request_str}")
         elif gcs_dir is not None:
-            raw_request = download_from_gcs(gcs_dir)
+            gcs_client = storage.Client()
+            raw_request = download_from_gcs(gcs_dir, client=gcs_client)
             print("Parsed request from GCS folder")
 
         # Pop pipeline-only metadata. The pipeline doesn't authenticate against
@@ -150,7 +152,9 @@ def run_pipeline(
             'MFR_VOCAB_DIR': os.getenv('MFR_VOCAB_DIR'),
             'MFR_CHECKPOINT_DIR': os.getenv('MFR_CHECKPOINT_DIR'),
         }
-        _, bucket = load_gcs(destination_prefix)
+        if gcs_client is None:
+            gcs_client = storage.Client()
+        _, bucket = load_gcs(destination_prefix, client=gcs_client)
         blob_prefix = '/'.join(destination_prefix.split('/')[3:])
 
         # Download only the artifacts required for this model — a pipeline worker
