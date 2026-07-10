@@ -48,18 +48,25 @@ class EnsembleModel:
         self.mfr_predictor.set_submissions_dataset(submissions_dataset)
 
     def embed_submissions(self, specter_submissions_path=None, mfr_submissions_path=None, skip_specter=False):
+        result = {}
         if not skip_specter:
             print("SPECTER:")
-            self.specter_predictor.embed_submissions(specter_submissions_path)
+            result['specter'] = self.specter_predictor.embed_submissions(specter_submissions_path)
         print("MFR:")
         self.mfr_predictor.embed_submissions(mfr_submissions_path)
+        return result
 
-    def embed_publications(self, specter_publications_path=None, mfr_publications_path=None, skip_specter=False):
+    def embed_publications(self, specter_publications_path=None, mfr_publications_path=None,
+                           cached_specter_publications=None, skip_specter=False):
+        result = {}
         if not skip_specter:
             print("SPECTER:")
-            self.specter_predictor.embed_publications(specter_publications_path)
+            result['specter'] = self.specter_predictor.embed_publications(
+                specter_publications_path, cached_publications=cached_specter_publications
+            )
         print("MFR:")
         self.mfr_predictor.embed_publications(mfr_publications_path)
+        return result
 
     def all_scores(self, specter_publications_path=None, mfr_publications_path=None,
                    specter_submissions_path=None, mfr_submissions_path=None,

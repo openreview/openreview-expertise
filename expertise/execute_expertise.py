@@ -1,14 +1,23 @@
 from pathlib import Path
-import openreview, os, json, csv
+import csv
+import json
+import os
+import time
+
+import openreview
 from .create_dataset import OpenReviewExpertise
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
 from .utils.utils import aggregate_by_group, generate_sparse_scores, generate_sparse_scores_from_matrix
 
+
 # Move run.py functionality to a function that accepts a config dict
-def execute_expertise(config):
+def execute_expertise(config, cached_publication_embeddings=None):
 
     config = ModelConfig(config_dict=config)
+    new_embeddings = {}
+    timings = []
+
 
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
     venue_specific_weights = 'weight_specification' in config['dataset'].keys()
@@ -53,15 +62,35 @@ def execute_expertise(config):
         predictor.set_submissions_dataset(submissions_dataset)
         if not config['model_params'].get('skip_specter', False):
             publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+            submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
             if config['model_params'].get('use_redis', False):
                 publication_path = None
-            predictor.embed_publications(publications_path=publication_path)
-            predictor.embed_submissions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'))
-        predictor.all_scores(
-            publications_path=publication_path,
-            submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
-            scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
-        )
+            if cached_publication_embeddings is not None:
+                start = time.time()
+                new_embeddings['pub2vec.jsonl'] = predictor.embed_publications(
+                    cached_publications=cached_publication_embeddings.get('specter')
+                )
+                timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+                start = time.time()
+                predictor.embed_submissions()
+                timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+                start = time.time()
+                predictor.all_scores(scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'))
+                timings.append({'stage': 'score_computation', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            else:
+                start = time.time()
+                predictor.embed_publications(publications_path=publication_path)
+                timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+                start = time.time()
+                predictor.embed_submissions(submissions_path=submissions_path)
+                timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+                start = time.time()
+                predictor.all_scores(
+                    publications_path=publication_path,
+                    submissions_path=submissions_path,
+                    scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+                )
+                timings.append({'stage': 'score_computation', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
     if config['model'] == 'specter2+scincl':
         print("Importing specter2_scincl module...", flush=True)
@@ -82,23 +111,44 @@ def execute_expertise(config):
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
-        specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_specter.jsonl')
-        scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_scincl.jsonl')
-        predictor.embed_publications(
-            specter_publications_path=specter_publication_path,
-            scincl_publications_path=scincl_publication_path
-        )
-        predictor.embed_submissions(
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
-            scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl')
-        )
-        predictor.all_scores(
-            specter_publications_path=specter_publication_path,
-            scincl_publications_path=scincl_publication_path,
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
-            scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl'),
-            matrix_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt')
-        )
+        if cached_publication_embeddings is not None:
+            start = time.time()
+            pub_result = predictor.embed_publications(
+                cached_specter_publications=cached_publication_embeddings.get('specter'),
+                cached_scincl_publications=cached_publication_embeddings.get('scincl')
+            )
+            timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            new_embeddings['pub2vec_specter.jsonl'] = pub_result.get('specter', {})
+            new_embeddings['pub2vec_scincl.jsonl'] = pub_result.get('scincl', {})
+            start = time.time()
+            predictor.embed_submissions()
+            timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.all_scores(matrix_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'))
+            timings.append({'stage': 'score_computation', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+        else:
+            specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_specter.jsonl')
+            scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_scincl.jsonl')
+            start = time.time()
+            predictor.embed_publications(
+                specter_publications_path=specter_publication_path,
+                scincl_publications_path=scincl_publication_path
+            )
+            timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.embed_submissions(
+                specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
+                scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl')
+            )
+            timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.all_scores(
+                specter_publications_path=specter_publication_path,
+                scincl_publications_path=scincl_publication_path,
+                specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
+                scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl'),
+                matrix_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt')
+            )
 
     if config['model'] == 'scincl':
         from .models import specter2_scincl
@@ -117,19 +167,38 @@ def execute_expertise(config):
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
-        scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
-        predictor.embed_publications(
-            scincl_publication_path
-        )
-        predictor.embed_submissions(
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
-        )
-        predictor.all_scores(
-            scincl_publication_path,
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
-            Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'),
-            p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
-        )
+        if cached_publication_embeddings is not None:
+            start = time.time()
+            new_embeddings['pub2vec.jsonl'] = predictor.embed_publications(
+                cached_publications=cached_publication_embeddings.get('scincl')
+            )
+            timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.embed_submissions()
+            timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.all_scores(
+                matrix_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'),
+                p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
+            )
+            timings.append({'stage': 'score_computation', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+        else:
+            scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+            submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+            start = time.time()
+            predictor.embed_publications(scincl_publication_path)
+            timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.embed_submissions(submissions_path)
+            timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.all_scores(
+                scincl_publication_path,
+                submissions_path,
+                Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'),
+                p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
+            )
+            timings.append({'stage': 'score_computation', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
     if config['model'] == 'specter2':
         from .models import specter2_scincl
@@ -148,19 +217,38 @@ def execute_expertise(config):
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
-        specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
-        predictor.embed_publications(
-            specter_publication_path
-        )
-        predictor.embed_submissions(
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
-        )
-        predictor.all_scores(
-            specter_publication_path,
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
-            Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'),
-            p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
-        )
+        if cached_publication_embeddings is not None:
+            start = time.time()
+            new_embeddings['pub2vec.jsonl'] = predictor.embed_publications(
+                cached_publications=cached_publication_embeddings.get('specter')
+            )
+            timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.embed_submissions()
+            timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.all_scores(
+                matrix_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'),
+                p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
+            )
+            timings.append({'stage': 'score_computation', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+        else:
+            specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+            submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+            start = time.time()
+            predictor.embed_publications(specter_publication_path)
+            timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.embed_submissions(submissions_path)
+            timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.all_scores(
+                specter_publication_path,
+                submissions_path,
+                Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'),
+                p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
+            )
+            timings.append({'stage': 'score_computation', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
     if config['model'] == 'mfr':
         from .models import multifacet_recommender
@@ -175,13 +263,19 @@ def execute_expertise(config):
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
+        start = time.time()
         predictor.embed_publications(publications_path=None)
+        timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+        start = time.time()
         predictor.embed_submissions(submissions_path=None)
+        timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+        start = time.time()
         predictor.all_scores(
             publications_path=None,
             submissions_path=None,
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
         )
+        timings.append({'stage': 'score_computation', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
     if config['model'] == 'specter+mfr':
         from .models import multifacet_recommender
@@ -202,23 +296,46 @@ def execute_expertise(config):
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
-        specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
-        if config['model_params'].get('use_redis', False):
-            specter_publication_path = None
-        predictor.embed_publications(
-            specter_publications_path=specter_publication_path,
-            mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False)
-        )
-        predictor.embed_submissions(
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
-            mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
-        predictor.all_scores(
-            specter_publications_path=specter_publication_path,
-            mfr_publications_path=None,
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
-            mfr_submissions_path=None,
-            scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
-        )
+        skip_specter = config['model_params'].get('skip_specter', False)
+        if cached_publication_embeddings is not None:
+            use_redis = config['model_params'].get('use_redis', False)
+            start = time.time()
+            new_embeddings['pub2vec.jsonl'] = predictor.embed_publications(
+                cached_specter_publications=None if use_redis else cached_publication_embeddings.get('specter'),
+                skip_specter=skip_specter
+            ).get('specter', {})
+            timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.embed_submissions(skip_specter=skip_specter)
+            timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.all_scores(scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'))
+            timings.append({'stage': 'score_computation', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+        else:
+            specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+            if config['model_params'].get('use_redis', False):
+                specter_publication_path = None
+            submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+            start = time.time()
+            predictor.embed_publications(
+                specter_publications_path=specter_publication_path,
+                mfr_publications_path=None, skip_specter=skip_specter
+            )
+            timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.embed_submissions(
+                specter_submissions_path=submissions_path,
+                mfr_submissions_path=None, skip_specter=skip_specter)
+            timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            start = time.time()
+            predictor.all_scores(
+                specter_publications_path=specter_publication_path,
+                mfr_publications_path=None,
+                specter_submissions_path=submissions_path,
+                mfr_submissions_path=None,
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+            )
+            timings.append({'stage': 'score_computation', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
     # Sparse-score dispatch. sparse_value is a required positive integer (the
     # config layer validates and defaults it), so we can rely on it being
@@ -229,6 +346,7 @@ def execute_expertise(config):
     #    generate sparse directly from the matrix via torch.topk.
     #  - Legacy predictors that only expose preliminary_scores (bm25, mfr,
     #    specter+mfr): keep the tuple-based path.
+    start = time.time()
     sparse_value = config['model_params']['sparse_value']
     sparse_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '_sparse.csv')
     if 'alternate_match_group' in config.keys():
@@ -244,6 +362,10 @@ def execute_expertise(config):
         )
     else:
         generate_sparse_scores(predictor.preliminary_scores, sparse_value, sparse_path)
+    timings.append({'stage': 'sparse_scores', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+
+    return new_embeddings, timings
+
 
 def execute_create_dataset(client_v2, config=None):
 

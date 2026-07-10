@@ -10,16 +10,22 @@ class Predictor:
         }
         return json.dumps(data) + '\n'
 
-    def _load_cached_publication_embeddings(self, publications_path):
+    def _load_cached_publication_embeddings(self, publications_path=None, cached_publications=None):
         """Load cached embeddings and return (lookup_dict, jsonl_lines).
+
+        Args:
+            publications_path: path to the embeddings file whose sidecar
+                cached_<basename> will be read from disk (legacy path mode).
+            cached_publications: optional dict mapping paper_id -> embedding
+                (list of floats) supplied directly in memory.
 
         Returns:
             lookup: dict mapping paper_id -> embedding (list of floats)
-            jsonl_lines: dict mapping paper_id -> original JSON line (str)
-
-        The jsonl_lines are the original lines from the cache file, which can be
-        written directly to avoid precision loss from re-serialization.
+            jsonl_lines: dict mapping paper_id -> original JSON line (str), or
+                None when embeddings were supplied in memory.
         """
+        if cached_publications is not None:
+            return cached_publications, None
         if not publications_path:
             return {}, {}
         publications_path = str(publications_path)

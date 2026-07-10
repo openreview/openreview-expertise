@@ -14,7 +14,7 @@ from pathlib import Path
 import multiprocessing
 from bullmq import Queue, Worker
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
-from expertise.service.utils import GCPInterface, extract_venue_key
+from expertise.service.utils import GCPInterface
 from copy import deepcopy
 import asyncio
 import threading
@@ -831,128 +831,6 @@ class ExpertiseCloudService(BaseExpertiseService):
             return self.server_config.get('MEDIUM_NAME')
         else:
             return self.server_config.get('LARGE_NAME')
-
-    # Maps the request's `model` field to (cache_lookup_key, dest_filename) pairs.
-    # cache_lookup_key picks which pub2vec_*.jsonl to read from prior jobs;
-    # dest_filename is what the predictor reads off disk for that model run.
-    _PUBLICATION_CACHE_TARGETS = {
-        'specter2+scincl': [
-            ('specter', 'cached_pub2vec_specter.jsonl'),
-            ('scincl',  'cached_pub2vec_scincl.jsonl'),
-        ],
-        'specter2': [('specter', 'cached_pub2vec.jsonl')],
-        'scincl':   [('scincl',  'cached_pub2vec.jsonl')],
-        'specter':  [('specter', 'cached_pub2vec.jsonl')],
-    }
-
-    def _populate_publication_cache(self, config, request, job):
-        """Pull publication embeddings from the global parquet cache and recent
-        same-venue jobs into config.job_dir.
-
-        Best-effort: any failure is logged by the caller but does not block the
-        pipeline. Files land alongside the dataset and get tarred up by the
-        next upload_dataset call.
-        """
-        model_name = (request.get('model') or {}).get('name')
-        targets = self._PUBLICATION_CACHE_TARGETS.get(model_name)
-        if not targets:
-            return
-
-        # Extract unique paper_ids from archives
-        archives_path = os.path.join(config.job_dir, 'archives')
-        paper_ids = set()
-        if os.path.isdir(archives_path):
-            for author_file in os.listdir(archives_path):
-                if not author_file.endswith('.jsonl'):
-                    continue
-                with open(os.path.join(archives_path, author_file)) as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            pub = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        pid = pub.get('id')
-                        if pid:
-                            paper_ids.add(pid)
-
-        if not paper_ids:
-            return
-
-        job_gcs_path = f"gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}"
-        request_gcs_folder = request.get('gcs_folder', '')
-        cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in job_gcs_path or 'jobs-dev' in request_gcs_folder else 'embeddings-cache'
-        cache_bucket = self.server_config.get('EMBEDDING_CACHE_BUCKET', self.cloud.bucket_name)
-        asyncio.run_coroutine_threadsafe(
-            job.log(f"Global cache: bucket={cache_bucket} prefix={cache_prefix} job_path={job_gcs_path} gcs_folder={request_gcs_folder} jobs_folder={self.cloud.jobs_folder} cloud_id={config.cloud_id} models={[t[0] for t in targets]} paper_ids={len(paper_ids)}"),
-            self.queue_loop,
-        )
-
-        global_cache_start = time.time()
-        for cache_key, dest_name in targets:
-            dest_path = os.path.join(config.job_dir, dest_name)
-            model_start = time.time()
-            try:
-                count = self.cloud.populate_from_global_cache(
-                    paper_ids=list(paper_ids),
-                    model_name=cache_key,
-                    dest_path=dest_path,
-                    cache_bucket=cache_bucket,
-                    cache_prefix=cache_prefix,
-                )
-                asyncio.run_coroutine_threadsafe(
-                    job.log(f"Reused {count} global cached publication embeddings ({cache_key}) in {time.time() - model_start:.2f}s"),
-                    self.queue_loop,
-                )
-                self.logger.info(f"Wrote {count} global cached embeddings to {dest_path} ({cache_key})")
-            except Exception as e:
-                asyncio.run_coroutine_threadsafe(
-                    job.log(f"Global cache lookup failed ({cache_key}): {e}"),
-                    self.queue_loop,
-                )
-                self.logger.warning(f"Global cache lookup failed for {cache_key}: {e}")
-        asyncio.run_coroutine_threadsafe(
-            job.log(f"Global cache lookup completed in {time.time() - global_cache_start:.2f}s"),
-            self.queue_loop,
-        )
-
-        # 2. Recent venue jobs (fills gaps with newest embeddings)
-        venue_key = extract_venue_key(request)
-        if venue_key:
-            venue_start = time.time()
-            lookback_days = self.server_config.get('EMBEDDING_CACHE_LOOKBACK_DAYS', 14)
-            max_jobs = self.server_config.get('EMBEDDING_CACHE_MAX_JOBS', 5)
-            since_ms = int(time.time() * 1000) - lookback_days * 86400 * 1000
-
-            recent = self.cloud.find_recent_venue_jobs(
-                venue_key=venue_key,
-                since_ms=since_ms,
-                limit=max_jobs,
-                exclude_cloud_id=config.cloud_id,
-            )
-            if recent:
-                self.logger.info(f"Filling gaps from {len(recent)} prior venue jobs: {recent}")
-                for cache_key, dest_name in targets:
-                    dest_path = os.path.join(config.job_dir, dest_name)
-                    model_start = time.time()
-                    count = self.cloud.merge_cached_publication_embeddings(
-                        cloud_ids=recent,
-                        model_name=cache_key,
-                        dest_path=dest_path,
-                    )
-                    asyncio.run_coroutine_threadsafe(
-                        job.log(f"Reused {count} cached publication embeddings ({cache_key}) from {len(recent)} prior venue jobs in {time.time() - model_start:.2f}s"),
-                        self.queue_loop,
-                    )
-                    self.logger.info(f"Wrote {count} cached embeddings to {dest_path} ({cache_key}) from prior venue jobs")
-            else:
-                self.logger.info(f"No prior venue-matched jobs for venue={venue_key}")
-            asyncio.run_coroutine_threadsafe(
-                job.log(f"Venue cache merge completed in {time.time() - venue_start:.2f}s"),
-                self.queue_loop,
-            )
 
     async def worker_process(self, job, token):
         descriptions = JobDescription.VALS.value

@@ -95,11 +95,6 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     with open(sparse_file, 'w') as f:
         f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
-    ## Build embeddings
-    embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
-    with open(embeddings_dir, 'w') as f:
-        f.write(json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}))
-
     ## Build metadata
     metadata_file = os.path.join(working_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
@@ -128,7 +123,10 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     assert 'hf_models/specter2_adapter' not in downloaded_subdirs
     assert 'hf_models/scincl' not in downloaded_subdirs
 
-    # Ensure execute_create_dataset and execute_expertise were called
+    # Ensure execute_expertise was called with in-memory cached embeddings.
+    mock_execute_expertise.assert_called_once()
+    assert mock_execute_expertise.call_args.kwargs['cached_publication_embeddings'] == {'specter': {}}
+
     # Use the gcs_test_bucket fixture to get actual
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix/"
@@ -152,12 +150,9 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     assert metadata_content["archives_count"] == 4
     assert metadata_content["no_publications_count"] == 0
 
-    # Check for pub2vec.jsonl file
+    # Embedding JSONL files are no longer uploaded to the job folder.
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
-    assert pub2vec_blob.exists()
-    pub2vec_content = pub2vec_blob.download_as_text()
-    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
-    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
+    assert not pub2vec_blob.exists()
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
@@ -214,11 +209,6 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     with open(sparse_file, 'w') as f:
         f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
-    ## Build embeddings
-    embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
-    with open(embeddings_dir, 'w') as f:
-        f.write(json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}))
-
     ## Build metadata
     metadata_file = os.path.join(working_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
@@ -239,8 +229,11 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
 
     # Assertions
 
-    # Ensure execute_create_dataset and execute_expertise were called
-    # Use the gcs_test_bucket fixture to get actual 
+    # Ensure execute_expertise was called with in-memory cached embeddings.
+    mock_execute_expertise.assert_called_once()
+    assert mock_execute_expertise.call_args.kwargs['cached_publication_embeddings'] == {'specter': {}}
+
+    # Use the gcs_test_bucket fixture to get actual
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix_gcs_dir/"
 
@@ -263,12 +256,9 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     assert metadata_content["archives_count"] == 4
     assert metadata_content["no_publications_count"] == 0
 
-    # Check for pub2vec.jsonl file
+    # Embedding JSONL files are no longer uploaded to the job folder.
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
-    assert pub2vec_blob.exists()
-    pub2vec_content = pub2vec_blob.download_as_text()
-    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
-    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
+    assert not pub2vec_blob.exists()
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
@@ -325,11 +315,6 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     with open(sparse_file, 'w') as f:
         f.write("test_user,sub_user,0.5\ntest_user,sub_user,0.5")
 
-    ## Build embeddings
-    embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
-    with open(embeddings_dir, 'w') as f:
-        f.write(json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}))
-
     ## Build metadata
     metadata_file = os.path.join(working_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
@@ -350,8 +335,9 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix_grp/"
 
-    # Ensure execute_create_dataset and execute_expertise were called
+    # Ensure execute_expertise was called with in-memory cached embeddings.
     mock_execute_expertise.assert_called_once()
+    assert mock_execute_expertise.call_args.kwargs['cached_publication_embeddings'] == {'specter': {}}
 
     # Pipeline uploads scores.csv directly (group-group matching: cols are
     # already [entityA, entityB, score] in canonical order).
@@ -369,12 +355,9 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     assert metadata_content["archives_count"] == 4
     assert metadata_content["no_publications_count"] == 0
 
-    # Check for pub2vec.jsonl file
+    # Embedding JSONL files are no longer uploaded to the job folder.
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
-    assert pub2vec_blob.exists()
-    pub2vec_content = pub2vec_blob.download_as_text()
-    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
-    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
+    assert not pub2vec_blob.exists()
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))

@@ -1,7 +1,6 @@
 import argparse
 import os
 import json
-import csv
 import tarfile
 import tempfile
 import shutil
@@ -66,13 +65,7 @@ def download_from_gcs(gcs_path):
     return json.loads(content)
 
 def download_dataset_from_gcs(gcs_path, local_dir):
-    """Download a dataset tarball from GCS and extract it into local_dir.
-
-    Cached publication embeddings (cached_pub2vec_*.jsonl) are stored alongside
-    the dataset/ folder at the job's GCS root rather than inside the tarball
-    (see upload_dataset for rationale). Pull them directly into local_dir so
-    the predictor finds them next to pub2vec_*.jsonl as before.
-    """
+    """Download a dataset tarball from GCS and extract it into local_dir."""
     _, bucket = load_gcs(gcs_path)
     blob_name = '/'.join(gcs_path.split('/')[3:])
 
@@ -99,14 +92,6 @@ def download_dataset_from_gcs(gcs_path, local_dir):
         if tarball_path and os.path.exists(tarball_path):
             os.remove(tarball_path)
 
-    job_root_prefix = blob_name.rsplit('/', 2)[0] + '/'
-    for blob in bucket.list_blobs(prefix=job_root_prefix, delimiter='/'):
-        name = blob.name.rsplit('/', 1)[-1]
-        if name.startswith('cached_pub2vec_') and name.endswith('.jsonl'):
-            dest = os.path.join(local_dir, name)
-            blob.download_to_filename(dest)
-            print(f"Downloaded cached embeddings {name} to {dest}")
-
 
 def run_pipeline(
         api_request_str=None,
@@ -126,7 +111,10 @@ def run_pipeline(
     dump_archives = False
     validated_request = None
 
+    timings = []
+
     try:
+        start = time.time()  # request_load
         if api_request_str is not None:
             try:
                 raw_request: dict = json.loads(api_request_str)
@@ -140,6 +128,7 @@ def run_pipeline(
         elif gcs_dir is not None:
             raw_request = download_from_gcs(gcs_dir)
             print("Parsed request from GCS folder")
+        timings.append({'stage': 'request_load', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         # Pop pipeline-only metadata. The pipeline doesn't authenticate against
         # OpenReview, so token/baseurl_v2 are not part of the upload anymore.
@@ -163,7 +152,9 @@ def run_pipeline(
         requested_model = raw_request.get('model', {}).get('name', DEFAULT_CONFIG['model'])
         required_artifacts = artifacts_for_model(requested_model)
         print(f'Loading model artifacts for model={requested_model}: {required_artifacts}')
+        start = time.time()  # artifact_load
         load_model_artifacts(subdirs=required_artifacts)
+        timings.append({'stage': 'artifact_load', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         print('Creating job ID')
         job_id = generate_job_id()
@@ -200,11 +191,14 @@ def run_pipeline(
 
         if dataset_gcs_path:
             print(f'Downloading pre-created dataset from {dataset_gcs_path}')
+            start = time.time()  # dataset_download
             download_dataset_from_gcs(dataset_gcs_path, working_dir)
+            timings.append({'stage': 'dataset_download', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         # Query the global parquet embedding cache for publication embeddings.
         # Missing embeddings are computed from the paper data below and appended
         # back to the cache after scoring.
+        start = time.time()  # cache_scan
         cache_start = time.time()
         try:
             from expertise.embeddings_cache import GlobalEmbeddingsCache
@@ -232,33 +226,48 @@ def run_pipeline(
                     bucket_name=os.getenv('EMBEDDING_CACHE_BUCKET', 'openreview-expertise'),
                     cache_prefix=cache_prefix
                 )
-                model_to_cache_name = {
-                    'specter2+scincl': [
-                        ('specter', 'cached_pub2vec_specter.jsonl'),
-                        ('scincl', 'cached_pub2vec_scincl.jsonl'),
-                    ],
-                    'specter2': [('specter', 'cached_pub2vec.jsonl')],
-                    'scincl': [('scincl', 'cached_pub2vec.jsonl')],
-                    'specter': [('specter', 'cached_pub2vec.jsonl')],
+                model_to_cache_key = {
+                    'specter2+scincl': ['specter', 'scincl'],
+                    'specter2': ['specter'],
+                    'scincl': ['scincl'],
+                    'specter': ['specter'],
                 }
-                targets = model_to_cache_name.get(config.model, [])
+                targets = model_to_cache_key.get(config.model, [])
+                cached_publication_embeddings = {}
                 total_cached = 0
                 job_id_for_cache = destination_prefix.rstrip('/').split('/')[-1]
-                for cache_key, dest_name in targets:
-                    dest_path = Path(config.job_dir) / dest_name
-                    count = cache.write_cache_file(list(paper_ids), cache_key, str(dest_path), job_id=job_id_for_cache)
+                for cache_key in targets:
+                    scan_start = time.time()
+                    embeddings = cache.get_embeddings(list(paper_ids), cache_key)
+                    scan_time_s = time.time() - scan_start
+                    cached_publication_embeddings[cache_key] = embeddings
+                    count = len(embeddings)
                     total_cached += count
                     if count > 0:
                         print(f"Pre-populated {count} embeddings from global cache ({cache_key})", flush=True)
+                    cache._log_metrics(
+                        job_id=job_id_for_cache,
+                        model_name=cache_key,
+                        paper_count=len(paper_ids),
+                        cached_count=count,
+                        scan_time_s=scan_time_s,
+                        serialize_time_s=0.0,
+                        write_time_s=0.0,
+                        total_time_s=scan_time_s,
+                    )
                 print(f"Global cache lookup completed in {time.time() - cache_start:.2f}s ({total_cached}/{len(paper_ids)} embeddings found)", flush=True)
             else:
                 print("No paper IDs found; skipping global cache lookup", flush=True)
+                cached_publication_embeddings = {}
         except Exception as e:
             print(f"Global cache lookup failed: {e}", flush=True)
             raise
+        finally:
+            timings.append({'stage': 'cache_scan', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         print('Executing expertise')
-        execute_expertise(config.to_json())
+        new_embeddings, expertise_timings = execute_expertise(config.to_json(), cached_publication_embeddings=cached_publication_embeddings)
+        timings.extend(expertise_timings)
 
         # Fetch and write to storage
         print('Fetching and writing to storage')
@@ -270,6 +279,7 @@ def run_pipeline(
         # happens at read time in both the local and cloud reader paths,
         # consistent with how ExpertiseService.get_expertise_results has
         # always handled it.
+        start = time.time()  # upload_scores
         print("Uploading score CSV(s)...", flush=True)
         for csv_file in [d for d in os.listdir(config.job_dir) if d.endswith('.csv')]:
             dest_name = 'scores_sparse.csv' if '_sparse' in csv_file else 'scores.csv'
@@ -278,17 +288,19 @@ def run_pipeline(
             src = os.path.join(config.job_dir, csv_file)
             blob.upload_from_filename(src)
         print("Finished uploading score CSV(s)", flush=True)
+        timings.append({'stage': 'upload_scores', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
-        # Upload the full scores matrix (.pt) directly. Same direct-streaming
-        # pattern as the embedding files — source bytes go disk → resumable-
-        # upload buffer → GCS without ever being parsed in Python.
+        # Upload the full scores matrix (.pt) directly.
+        start = time.time()  # upload_matrix
         print("Dumping scores matrix(es)", flush=True)
         for pt_file in [d for d in os.listdir(config.job_dir) if d.endswith('.pt')]:
             destination_blob = f"{blob_prefix}/{pt_file}"
             blob = bucket.blob(destination_blob)
             blob.upload_from_filename(os.path.join(config.job_dir, pt_file))
+        timings.append({'stage': 'upload_matrix', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         # Dump config
+        start = time.time()  # upload_metadata
         print("Dumping job config", flush=True)
         destination_blob = f"{blob_prefix}/job_config.json"
         blob = bucket.blob(destination_blob)
@@ -302,6 +314,7 @@ def run_pipeline(
                 blob = bucket.blob(destination_blob)
                 contents = json.dumps(json.load(f))
                 blob.upload_from_string(contents)
+        timings.append({'stage': 'upload_metadata', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         # Dump archives
         archives_dir = os.path.join(config.job_dir, 'archives')
@@ -321,23 +334,16 @@ def run_pipeline(
                 contents = '\n'.join([json.dumps(r) for r in result])
                 blob.upload_from_string(contents)
 
-        # Always dump embeddings to bucket. Source jsonl already has exactly
-        # {'paper_id', 'embedding'} (see Predictor._build_embedding_jsonl), so
-        # there's nothing to transform — upload the file directly via a
-        # resumable upload to avoid loading 500k embeddings (~12GB of Python
-        # objects) into memory just to re-serialize them.
-        print("Dumping embeddings", flush=True)
-        for emb_file in [d for d in os.listdir(config.job_dir) if '.jsonl' in d]:
-            destination_blob = f"{blob_prefix}/{emb_file}"
-            blob = bucket.blob(destination_blob)
-            blob.upload_from_filename(os.path.join(config.job_dir, emb_file))
-
         # Append newly computed embeddings to the global parquet cache so future
-        # jobs can reuse them without recomputation.
+        # jobs can reuse them without recomputation. No JSONL embedding files
+        # are written to the job folder.
+        start = time.time()  # cache_append
         try:
-            _append_embeddings_to_global_cache(config.job_dir, blob_prefix, bucket)
+            _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket)
         except Exception as e:
             print(f"Global cache append failed (non-critical): {e}", flush=True)
+        finally:
+            timings.append({'stage': 'cache_append', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
     except Exception as e:
         # Write error to single JSONL line in GCS if bucket is available
@@ -353,17 +359,31 @@ def run_pipeline(
         exception = e.with_traceback(e.__traceback__)
         raise exception
     finally:
+        start = time.time()  # cleanup
+        # Upload stage timings as a single CSV at the end.
+        if bucket is not None and blob_prefix is not None and timings:
+            try:
+                lines = ['stage,start,end,duration']
+                for row in timings:
+                    lines.append(f"{row['stage']},{row['start']},{row['end']},{row['duration']}")
+                blob = bucket.blob(f"{blob_prefix}/stage_timings.csv")
+                blob.upload_from_string('\n'.join(lines))
+            except Exception as e:
+                print(f"Failed to upload stage timings: {e}", flush=True)
         # Clean up working directory to prevent disk exhaustion
         # For Vertex AI, the container is ephemeral, but explicit cleanup
         # ensures no disk leak when running locally or in tests
         if working_dir_created and working_dir and os.path.isdir(working_dir):
             print(f'Cleaning up working directory: {working_dir}')
             shutil.rmtree(working_dir)
+        timings.append({'stage': 'cleanup', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
-def _append_embeddings_to_global_cache(job_dir, blob_prefix, bucket):
-    """Append pub2vec JSONL embeddings to the Hive-partitioned GCS Parquet cache.
+def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
+    """Append newly computed in-memory embeddings to the Hive-partitioned GCS Parquet cache.
 
-    Uses the job timestamp embedded in blob_prefix for the year_month partition.
+    new_embeddings is a dict mapping filename (e.g. 'pub2vec_specter.jsonl') to a
+    dict of paper_id -> embedding (list of floats). Uses the job timestamp embedded
+    in blob_prefix for the year_month partition.
     Metadata columns (venueid, title, invitation, domain, cdate, mdate) are left
     empty/null for now and will be backfilled once the pipeline carries that
     information through.
@@ -400,39 +420,28 @@ def _append_embeddings_to_global_cache(job_dir, blob_prefix, bucket):
     }
 
     records = []
-    for emb_file, model in model_map.items():
-        local_path = os.path.join(job_dir, emb_file)
-        if not os.path.exists(local_path):
+    for emb_file, embeddings in (new_embeddings or {}).items():
+        model = model_map.get(emb_file)
+        if model is None or not embeddings:
             continue
-        with open(local_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                pid = entry.get('paper_id')
-                emb = entry.get('embedding')
-                if pid is None or emb is None:
-                    continue
-                records.append({
-                    'paper_id': pid,
-                    'job_id': blob_prefix.split('/')[-1],
-                    'embedding': emb,
-                    'uri': f"gs://{bucket.name}/{blob_prefix}/{emb_file}",
-                    'model': model,
-                    'year_month': year_month,
-                    'venueid': '',
-                    'title': '',
-                    'invitation': '',
-                    'domain': None,
-                    'cdate': None,
-                    'mdate': None,
-                })
+        for pid, emb in embeddings.items():
+            records.append({
+                'paper_id': pid,
+                'job_id': blob_prefix.split('/')[-1],
+                'embedding': emb,
+                'uri': f"gs://{bucket.name}/{blob_prefix}/{emb_file}",
+                'model': model,
+                'year_month': year_month,
+                'venueid': '',
+                'title': '',
+                'invitation': '',
+                'domain': None,
+                'cdate': None,
+                'mdate': None,
+            })
 
     if not records:
+        print("No new embeddings to append", flush=True)
         return
 
     df = pd.DataFrame(records)
