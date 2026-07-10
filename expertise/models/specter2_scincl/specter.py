@@ -203,7 +203,7 @@ class Specter2Predictor(Predictor):
         return self.submission_embeddings
 
     def embed_publications(self, publications_path=None, cached_publications=None):
-        if not self.use_redis and not cached_publications:
+        if not self.use_redis and cached_publications is None:
             assert publications_path, "Either publications_path, cached_publications must be given or use_redis must be set to true"
         print('Embedding publications...')
         metadata_file = os.path.join(self.work_dir, "specter_reviewer_paper_data.json")
