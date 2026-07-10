@@ -1,10 +1,10 @@
-import csv
 import json
 import os
 import tempfile
 import time
 from typing import List, Dict
 
+import pandas as pd
 import pyarrow.dataset as ds
 import pyarrow.compute as pc
 from google.cloud import storage
@@ -42,37 +42,34 @@ class GlobalEmbeddingsCache:
             bucket = client.bucket(self.bucket_name)
             blob = bucket.blob(blob_name)
 
-            csv_path = tempfile.mktemp(suffix=".csv")
-            fieldnames = [
-                "timestamp", "job_id", "model", "paper_count", "cached_count",
-                "scan_time_s", "serialize_time_s", "write_time_s", "total_time_s"
-            ]
-            row = {
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "job_id": job_id,
-                "model": model_name,
-                "paper_count": paper_count,
-                "cached_count": cached_count,
-                "scan_time_s": scan_time_s,
-                "serialize_time_s": serialize_time_s,
-                "write_time_s": write_time_s,
-                "total_time_s": total_time_s,
-            }
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
+                csv_path = tmp.name
+            try:
+                if blob.exists():
+                    blob.download_to_filename(csv_path)
+                    df = pd.read_csv(csv_path)
+                else:
+                    df = pd.DataFrame(columns=[
+                        "timestamp", "job_id", "model", "paper_count", "cached_count",
+                        "scan_time_s", "serialize_time_s", "write_time_s", "total_time_s"
+                    ])
 
-            if blob.exists():
-                blob.download_to_filename(csv_path)
-                append = True
-            else:
-                append = False
-
-            with open(csv_path, "a", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                if not append:
-                    writer.writeheader()
-                writer.writerow(row)
-
-            blob.upload_from_filename(csv_path)
-            os.remove(csv_path)
+                df = pd.concat([df, pd.DataFrame([{
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "job_id": job_id,
+                    "model": model_name,
+                    "paper_count": paper_count,
+                    "cached_count": cached_count,
+                    "scan_time_s": scan_time_s,
+                    "serialize_time_s": serialize_time_s,
+                    "write_time_s": write_time_s,
+                    "total_time_s": total_time_s,
+                }])], ignore_index=True)
+                df.to_csv(csv_path, index=False)
+                blob.upload_from_filename(csv_path)
+            finally:
+                if os.path.exists(csv_path):
+                    os.remove(csv_path)
         except Exception as e:
             print(f"Cache metrics log failed: {e}", flush=True)
 
