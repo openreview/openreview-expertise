@@ -195,7 +195,7 @@ def run_pipeline(
             download_dataset_from_gcs(dataset_gcs_path, working_dir)
             timings.append({'stage': 'dataset_download', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
-        # Query the global parquet embedding cache for publication embeddings.
+        # Query the global parquet embedding cache for note embeddings.
         # Missing embeddings are computed from the paper data below and appended
         # back to the cache after scoring.
         start = time.time()  # cache_scan
@@ -203,7 +203,10 @@ def run_pipeline(
         try:
             from expertise.embeddings_cache import GlobalEmbeddingsCache
             archives_path = Path(config.job_dir) / 'archives'
-            paper_ids = set()
+            submissions_path = Path(config.job_dir) / 'submissions'
+            submissions_json = Path(config.job_dir) / 'submissions.json'
+
+            publication_ids = set()
             if archives_path.exists():
                 for author_file in archives_path.iterdir():
                     if not author_file.name.endswith('.jsonl'):
@@ -219,46 +222,69 @@ def run_pipeline(
                                 continue
                             pid = pub.get('id')
                             if pid:
-                                paper_ids.add(pid)
-            if paper_ids:
+                                publication_ids.add(pid)
+
+            submission_ids = set()
+            if submissions_path.exists():
+                for submission_file in submissions_path.iterdir():
+                    if not submission_file.name.endswith('.jsonl'):
+                        continue
+                    note_id = submission_file.stem
+                    if note_id:
+                        submission_ids.add(note_id)
+            if submissions_json.exists():
+                with open(submissions_json) as f:
+                    for note_id in json.load(f).keys():
+                        if note_id:
+                            submission_ids.add(note_id)
+
+            note_ids = publication_ids | submission_ids
+            model_to_cache_key = {
+                'specter2+scincl': ['specter', 'scincl'],
+                'specter2': ['specter'],
+                'scincl': ['scincl'],
+                'specter': ['specter'],
+            }
+            targets = model_to_cache_key.get(config.model, [])
+
+            if note_ids and targets:
                 cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in destination_prefix else 'embeddings-cache'
                 cache = GlobalEmbeddingsCache(
                     bucket_name=os.getenv('EMBEDDING_CACHE_BUCKET', 'openreview-expertise'),
                     cache_prefix=cache_prefix
                 )
-                model_to_cache_key = {
-                    'specter2+scincl': ['specter', 'scincl'],
-                    'specter2': ['specter'],
-                    'scincl': ['scincl'],
-                    'specter': ['specter'],
-                }
-                targets = model_to_cache_key.get(config.model, [])
-                cached_publication_embeddings = {}
+                cached_publication_embeddings = {cache_key: {} for cache_key in targets}
+                cached_submission_embeddings = {cache_key: {} for cache_key in targets}
                 total_cached = 0
                 job_id_for_cache = destination_prefix.rstrip('/').split('/')[-1]
+
+                scan_start = time.time()
+                embeddings_by_model = cache.get_embeddings_for_models(list(note_ids), targets)
+                scan_time_s = time.time() - scan_start
+
                 for cache_key in targets:
-                    scan_start = time.time()
-                    embeddings = cache.get_embeddings(list(paper_ids), cache_key)
-                    scan_time_s = time.time() - scan_start
-                    cached_publication_embeddings[cache_key] = embeddings
-                    count = len(embeddings)
+                    model_embeddings = embeddings_by_model.get(cache_key, {})
+                    cached_publication_embeddings[cache_key] = model_embeddings
+                    cached_submission_embeddings[cache_key] = model_embeddings
+                    count = len(model_embeddings)
                     total_cached += count
                     if count > 0:
                         print(f"Pre-populated {count} embeddings from global cache ({cache_key})", flush=True)
                     cache._log_metrics(
                         job_id=job_id_for_cache,
                         model_name=cache_key,
-                        paper_count=len(paper_ids),
+                        paper_count=len(note_ids),
                         cached_count=count,
                         scan_time_s=scan_time_s,
                         serialize_time_s=0.0,
                         write_time_s=0.0,
                         total_time_s=scan_time_s,
                     )
-                print(f"Global cache lookup completed in {time.time() - cache_start:.2f}s ({total_cached}/{len(paper_ids)} embeddings found)", flush=True)
+                print(f"Global cache lookup completed in {time.time() - cache_start:.2f}s ({total_cached}/{len(note_ids)} embeddings found)", flush=True)
             else:
-                print("No paper IDs found; skipping global cache lookup", flush=True)
+                print("No note IDs found; skipping global cache lookup", flush=True)
                 cached_publication_embeddings = {}
+                cached_submission_embeddings = {}
         except Exception as e:
             print(f"Global cache lookup failed: {e}", flush=True)
             raise
@@ -266,7 +292,11 @@ def run_pipeline(
             timings.append({'stage': 'cache_scan', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         print('Executing expertise')
-        new_embeddings, expertise_timings = execute_expertise(config.to_json(), cached_publication_embeddings=cached_publication_embeddings)
+        new_embeddings, expertise_timings = execute_expertise(
+            config.to_json(),
+            cached_publication_embeddings=cached_publication_embeddings,
+            cached_submission_embeddings=cached_submission_embeddings,
+        )
         timings.extend(expertise_timings)
 
         # Fetch and write to storage
@@ -413,16 +443,15 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
     dt = datetime.datetime.fromtimestamp(ts_ms / 1000, tz=datetime.timezone.utc)
     year_month = dt.strftime("%Y-%m")
 
-    model_map = {
-        'pub2vec_specter.jsonl': 'specter',
-        'pub2vec_scincl.jsonl': 'scincl',
-        'pub2vec.jsonl': 'specter',
-    }
+    def _model_for_emb_file(emb_file):
+        if 'scincl' in emb_file:
+            return 'scincl'
+        return 'specter'
 
     records = []
     for emb_file, embeddings in (new_embeddings or {}).items():
-        model = model_map.get(emb_file)
-        if model is None or not embeddings:
+        model = _model_for_emb_file(emb_file)
+        if not embeddings:
             continue
         for pid, emb in embeddings.items():
             records.append({

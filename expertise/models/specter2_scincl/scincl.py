@@ -171,23 +171,36 @@ class SciNCLPredictor(Predictor):
         with open(os.path.join(self.work_dir, "scincl_submission_paper_ids.txt"), 'w') as f_out:
             f_out.write('\n'.join(paper_ids_list)+'\n')
 
-    def embed_submissions(self, submissions_path=None):
+    def embed_submissions(self, submissions_path=None, cached_submissions=None):
         print('Embedding submissions...')
         metadata_file = os.path.join(self.work_dir, "scincl_submission_paper_data.json")
 
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
 
+        cached = cached_submissions or {}
         self.submission_embeddings = {}
-        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
+        new_embeddings = {}
+        remaining = {}
+        for paper_id, paper in paper_data.items():
+            emb = cached.get(paper_id)
+            if emb is not None:
+                self.submission_embeddings[paper_id] = emb
+            else:
+                remaining[paper_id] = paper
+        if cached:
+            print(f"Reusing {len(self.submission_embeddings)} cached submission embeddings; computing {len(remaining)}.")
+
+        for batch_data in tqdm(self._fetch_batches(remaining, self.batch_size), desc='Embedding Subs', total=int(len(remaining.keys())/self.batch_size), unit="batches"):
             for item in self._batch_predict(batch_data):
                 self.submission_embeddings[item['paper_id']] = item['embedding']
+                new_embeddings[item['paper_id']] = item['embedding']
 
         if submissions_path:
             with open(submissions_path, 'w') as f:
                 for pid, emb in self.submission_embeddings.items():
                     f.write(json.dumps({'paper_id': pid, 'embedding': emb}) + '\n')
-        return self.submission_embeddings
+        return new_embeddings
 
     def embed_publications(self, publications_path=None, cached_publications=None):
         if not self.use_redis and cached_publications is None:

@@ -12,7 +12,7 @@ from .utils.utils import aggregate_by_group, generate_sparse_scores, generate_sp
 
 
 # Move run.py functionality to a function that accepts a config dict
-def execute_expertise(config, cached_publication_embeddings=None):
+def execute_expertise(config, cached_publication_embeddings=None, cached_submission_embeddings=None):
 
     config = ModelConfig(config_dict=config)
     new_embeddings = {}
@@ -65,14 +65,16 @@ def execute_expertise(config, cached_publication_embeddings=None):
             submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
             if config['model_params'].get('use_redis', False):
                 publication_path = None
-            if cached_publication_embeddings is not None:
+            if cached_publication_embeddings is not None or cached_submission_embeddings is not None:
                 start = time.time()
                 new_embeddings['pub2vec.jsonl'] = predictor.embed_publications(
                     cached_publications=cached_publication_embeddings.get('specter')
                 )
                 timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
                 start = time.time()
-                predictor.embed_submissions()
+                new_embeddings['sub2vec.jsonl'] = predictor.embed_submissions(
+                    cached_submissions=cached_submission_embeddings.get('specter')
+                )
                 timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
                 start = time.time()
                 predictor.all_scores(scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'))
@@ -111,7 +113,7 @@ def execute_expertise(config, cached_publication_embeddings=None):
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
-        if cached_publication_embeddings is not None:
+        if cached_publication_embeddings is not None or cached_submission_embeddings is not None:
             start = time.time()
             pub_result = predictor.embed_publications(
                 cached_specter_publications=cached_publication_embeddings.get('specter'),
@@ -121,8 +123,13 @@ def execute_expertise(config, cached_publication_embeddings=None):
             new_embeddings['pub2vec_specter.jsonl'] = pub_result.get('specter', {})
             new_embeddings['pub2vec_scincl.jsonl'] = pub_result.get('scincl', {})
             start = time.time()
-            predictor.embed_submissions()
+            sub_result = predictor.embed_submissions(
+                cached_specter_submissions=cached_submission_embeddings.get('specter'),
+                cached_scincl_submissions=cached_submission_embeddings.get('scincl')
+            )
             timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            new_embeddings['sub2vec_specter.jsonl'] = sub_result.get('specter', {})
+            new_embeddings['sub2vec_scincl.jsonl'] = sub_result.get('scincl', {})
             start = time.time()
             predictor.all_scores(matrix_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'))
             timings.append({'stage': 'score_computation', 'start': start, 'end': (end := time.time()), 'duration': end - start})
@@ -167,14 +174,16 @@ def execute_expertise(config, cached_publication_embeddings=None):
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
-        if cached_publication_embeddings is not None:
+        if cached_publication_embeddings is not None or cached_submission_embeddings is not None:
             start = time.time()
-            new_embeddings['pub2vec.jsonl'] = predictor.embed_publications(
+            new_embeddings['pub2vec_scincl.jsonl'] = predictor.embed_publications(
                 cached_publications=cached_publication_embeddings.get('scincl')
             )
             timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
             start = time.time()
-            predictor.embed_submissions()
+            new_embeddings['sub2vec_scincl.jsonl'] = predictor.embed_submissions(
+                cached_submissions=cached_submission_embeddings.get('scincl')
+            )
             timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
             start = time.time()
             predictor.all_scores(
@@ -217,14 +226,16 @@ def execute_expertise(config, cached_publication_embeddings=None):
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
-        if cached_publication_embeddings is not None:
+        if cached_publication_embeddings is not None or cached_submission_embeddings is not None:
             start = time.time()
             new_embeddings['pub2vec.jsonl'] = predictor.embed_publications(
                 cached_publications=cached_publication_embeddings.get('specter')
             )
             timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
             start = time.time()
-            predictor.embed_submissions()
+            new_embeddings['sub2vec.jsonl'] = predictor.embed_submissions(
+                cached_submissions=cached_submission_embeddings.get('specter')
+            )
             timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
             start = time.time()
             predictor.all_scores(
@@ -297,7 +308,7 @@ def execute_expertise(config, cached_publication_embeddings=None):
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
         skip_specter = config['model_params'].get('skip_specter', False)
-        if cached_publication_embeddings is not None:
+        if cached_publication_embeddings is not None or cached_submission_embeddings is not None:
             use_redis = config['model_params'].get('use_redis', False)
             start = time.time()
             new_embeddings['pub2vec.jsonl'] = predictor.embed_publications(
@@ -306,7 +317,10 @@ def execute_expertise(config, cached_publication_embeddings=None):
             ).get('specter', {})
             timings.append({'stage': 'pub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
             start = time.time()
-            predictor.embed_submissions(skip_specter=skip_specter)
+            new_embeddings['sub2vec.jsonl'] = predictor.embed_submissions(
+                cached_specter_submissions=None if use_redis else cached_submission_embeddings.get('specter'),
+                skip_specter=skip_specter
+            ).get('specter', {})
             timings.append({'stage': 'sub_embedding', 'start': start, 'end': (end := time.time()), 'duration': end - start})
             start = time.time()
             predictor.all_scores(scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv'))

@@ -47,11 +47,14 @@ class EnsembleModel:
         print("Setting MultiFacetRecommender submissions")
         self.mfr_predictor.set_submissions_dataset(submissions_dataset)
 
-    def embed_submissions(self, specter_submissions_path=None, mfr_submissions_path=None, skip_specter=False):
+    def embed_submissions(self, specter_submissions_path=None, mfr_submissions_path=None,
+                          cached_specter_submissions=None, skip_specter=False):
         result = {}
         if not skip_specter:
             print("SPECTER:")
-            result['specter'] = self.specter_predictor.embed_submissions(specter_submissions_path)
+            result['specter'] = self.specter_predictor.embed_submissions(
+                specter_submissions_path, cached_submissions=cached_specter_submissions
+            )
         print("MFR:")
         self.mfr_predictor.embed_submissions(mfr_submissions_path)
         return result

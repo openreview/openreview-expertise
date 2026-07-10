@@ -62,13 +62,18 @@ class EnsembleModel:
         print("Setting SciNCL submissions")
         self.scincl_predictor.set_submissions_dataset(submissions_dataset)
 
-    def embed_submissions(self, specter_submissions_path=None, scincl_submissions_path=None, skip_specter=False):
+    def embed_submissions(self, specter_submissions_path=None, scincl_submissions_path=None,
+                          cached_specter_submissions=None, cached_scincl_submissions=None, skip_specter=False):
         result = {}
         if not skip_specter:
             print("SPECTER:")
-            result['specter'] = self.specter_predictor.embed_submissions(specter_submissions_path)
+            result['specter'] = self.specter_predictor.embed_submissions(
+                specter_submissions_path, cached_submissions=cached_specter_submissions
+            )
         print("SciNCL:")
-        result['scincl'] = self.scincl_predictor.embed_submissions(scincl_submissions_path)
+        result['scincl'] = self.scincl_predictor.embed_submissions(
+            scincl_submissions_path, cached_submissions=cached_scincl_submissions
+        )
         return result
 
     def embed_publications(self, specter_publications_path=None, scincl_publications_path=None,
