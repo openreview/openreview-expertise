@@ -16,7 +16,7 @@ class GlobalEmbeddingsCache:
     Expected layout:
         gs://<bucket>/<prefix>/model=<model>/year_month=<YYYY-MM>/*.parquet
 
-    Schema columns: paper_id (string), embedding (list<float>), model, year_month
+    Schema columns: paper_id (string), embedding (list<float>), model, year_month, embedding_date
     """
 
     def __init__(self, bucket_name: str, cache_prefix: str = "embeddings-cache"):
@@ -72,10 +72,12 @@ class GlobalEmbeddingsCache:
         except Exception as e:
             print(f"Cache metrics log failed: {e}", flush=True)
 
-    def get_embeddings_for_models(self, paper_ids: List[str], model_names: List[str]) -> Dict[str, Dict[str, List[float]]]:
+    def get_embeddings_for_models(self, paper_ids: List[str], model_names: List[str],
+                                    paper_mdates: Dict[str, str] = None) -> Dict[str, Dict[str, List[float]]]:
         """
         Retrieve embeddings for the given paper_ids across multiple models in a
-        single dataset scan.
+        single dataset scan. If paper_mdates is provided, only return embeddings
+        whose cached embedding_date is greater than or equal to the paper's mdate.
 
         Returns a dict mapping model_name -> {paper_id -> embedding}.
         """
@@ -88,7 +90,7 @@ class GlobalEmbeddingsCache:
         try:
             dataset = self._get_dataset()
             table = dataset.to_table(
-                columns=["paper_id", "embedding", "model"],
+                columns=["paper_id", "embedding", "model", "embedding_date"],
                 filter=(
                     pc.field("model").isin(model_names)
                     & pc.field("paper_id").isin(unique_pids)
@@ -100,16 +102,25 @@ class GlobalEmbeddingsCache:
         serialize_start = time.time()
         rows = table.to_pydict()
         self._last_serialize_time_s = time.time() - serialize_start
-        for pid, emb, model in zip(rows["paper_id"], rows["embedding"], rows["model"]):
-            if model in result:
-                result[model][pid] = emb
+        for pid, emb, model, embedding_date in zip(rows["paper_id"], rows["embedding"], rows["model"], rows["embedding_date"]):
+            if model not in result:
+                continue
+            requested_mdate = (paper_mdates or {}).get(pid)
+            if requested_mdate and embedding_date:
+                try:
+                    if embedding_date < requested_mdate:
+                        continue
+                except Exception:
+                    pass
+            result[model][pid] = emb
         return result
 
-    def get_embeddings(self, paper_ids: List[str], model_name: str) -> Dict[str, List[float]]:
+    def get_embeddings(self, paper_ids: List[str], model_name: str,
+                       paper_mdates: Dict[str, str] = None) -> Dict[str, List[float]]:
         """
         Retrieve embeddings for the given paper_ids from the global cache.
 
         Returns a dict mapping paper_id -> embedding (list of floats).
         """
-        result = self.get_embeddings_for_models(paper_ids, [model_name])
+        result = self.get_embeddings_for_models(paper_ids, [model_name], paper_mdates=paper_mdates)
         return result.get(model_name, {})

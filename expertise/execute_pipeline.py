@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import os
 import json
 import tarfile
@@ -206,6 +207,17 @@ def run_pipeline(
             submissions_path = Path(config.job_dir) / 'submissions'
             submissions_json = Path(config.job_dir) / 'submissions.json'
 
+            def _iso_mdate(raw):
+                if raw is None:
+                    return None
+                if isinstance(raw, (int, float)):
+                    try:
+                        return datetime.datetime.fromtimestamp(raw / 1000, tz=datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    except Exception:
+                        return None
+                return str(raw)
+
+            paper_mdates = {}
             publication_ids = set()
             if archives_path.exists():
                 for author_file in archives_path.iterdir():
@@ -223,6 +235,8 @@ def run_pipeline(
                             pid = pub.get('id')
                             if pid:
                                 publication_ids.add(pid)
+                                if pub.get('mdate'):
+                                    paper_mdates[pid] = _iso_mdate(pub['mdate'])
 
             submission_ids = set()
             if submissions_path.exists():
@@ -232,11 +246,24 @@ def run_pipeline(
                     note_id = submission_file.stem
                     if note_id:
                         submission_ids.add(note_id)
+                        with open(submission_file) as f:
+                            for line in f:
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                try:
+                                    sub = json.loads(line)
+                                except json.JSONDecodeError:
+                                    continue
+                                if sub.get('mdate'):
+                                    paper_mdates[note_id] = _iso_mdate(sub['mdate'])
             if submissions_json.exists():
                 with open(submissions_json) as f:
-                    for note_id in json.load(f).keys():
+                    for note_id, note in json.load(f).items():
                         if note_id:
                             submission_ids.add(note_id)
+                            if isinstance(note, dict) and note.get('mdate'):
+                                paper_mdates[note_id] = _iso_mdate(note['mdate'])
 
             note_ids = publication_ids | submission_ids
             model_to_cache_key = {
@@ -260,7 +287,7 @@ def run_pipeline(
                 job_id_for_cache = destination_prefix.rstrip('/').split('/')[-1]
 
                 scan_start = time.time()
-                embeddings_by_model = cache.get_embeddings_for_models(list(note_ids), targets)
+                embeddings_by_model = cache.get_embeddings_for_models(list(note_ids), targets, paper_mdates=paper_mdates)
                 serialize_time_s = getattr(cache, '_last_serialize_time_s', 0.0)
                 scan_time_s = time.time() - scan_start - serialize_time_s
 
@@ -426,9 +453,6 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
     new_embeddings is a dict mapping filename (e.g. 'pub2vec_specter.jsonl') to a
     dict of paper_id -> embedding (list of floats). Uses the job timestamp embedded
     in blob_prefix for the year_month partition.
-    Metadata columns (venueid, title, invitation, domain, cdate, mdate) are left
-    empty/null for now and will be backfilled once the pipeline carries that
-    information through.
 
     Returns a dict mapping model name -> write/upload duration in seconds.
     """
@@ -462,6 +486,8 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
             return 'scincl'
         return 'specter'
 
+    embedding_date = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
     records = []
     for emb_file, embeddings in (new_embeddings or {}).items():
         model = _model_for_emb_file(emb_file)
@@ -479,8 +505,7 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
                 'title': '',
                 'invitation': '',
                 'domain': None,
-                'cdate': None,
-                'mdate': None,
+                'embedding_date': embedding_date,
             })
 
     if not records:
@@ -493,12 +518,25 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
         existing_dataset = ds.dataset(gcs_path, partitioning="hive")
         for model in df["model"].unique().tolist():
             existing_table = existing_dataset.to_table(
-                columns=["paper_id"],
+                columns=["paper_id", "embedding_date"],
                 filter=(pc.field("model") == model)
             )
-            if existing_table.num_rows > 0:
-                existing_ids = set(existing_table.column("paper_id").to_pylist())
-                df = df[~((df["model"] == model) & df["paper_id"].isin(existing_ids))]
+            if existing_table.num_rows == 0:
+                continue
+            existing_rows = existing_table.to_pydict()
+            latest_embedding_date = {}
+            for pid, edate in zip(existing_rows["paper_id"], existing_rows["embedding_date"]):
+                if edate is None:
+                    continue
+                if pid not in latest_embedding_date or edate > latest_embedding_date[pid]:
+                    latest_embedding_date[pid] = edate
+            if latest_embedding_date:
+                mask = (df["model"] == model) & df["paper_id"].isin(latest_embedding_date)
+                keep = []
+                for _, row in df[mask].iterrows():
+                    keep.append(row["embedding_date"] > latest_embedding_date[row["paper_id"]])
+                mask_keep = pd.Series(keep, index=df[mask].index)
+                df = df[~(mask & ~mask_keep)]
     except Exception as e:
         print(f"No existing cache to filter against: {e}", flush=True)
 
