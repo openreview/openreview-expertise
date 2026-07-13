@@ -247,6 +247,7 @@ def run_pipeline(
             }
             targets = model_to_cache_key.get(config.model, [])
 
+            model_metrics = {}
             if note_ids and targets:
                 cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in destination_prefix else 'embeddings-cache'
                 cache = GlobalEmbeddingsCache(
@@ -260,7 +261,8 @@ def run_pipeline(
 
                 scan_start = time.time()
                 embeddings_by_model = cache.get_embeddings_for_models(list(note_ids), targets)
-                scan_time_s = time.time() - scan_start
+                serialize_time_s = getattr(cache, '_last_serialize_time_s', 0.0)
+                scan_time_s = time.time() - scan_start - serialize_time_s
 
                 for cache_key in targets:
                     model_embeddings = embeddings_by_model.get(cache_key, {})
@@ -270,16 +272,12 @@ def run_pipeline(
                     total_cached += count
                     if count > 0:
                         print(f"Pre-populated {count} embeddings from global cache ({cache_key})", flush=True)
-                    cache._log_metrics(
-                        job_id=job_id_for_cache,
-                        model_name=cache_key,
-                        paper_count=len(note_ids),
-                        cached_count=count,
-                        scan_time_s=scan_time_s,
-                        serialize_time_s=0.0,
-                        write_time_s=0.0,
-                        total_time_s=scan_time_s,
-                    )
+                    model_metrics[cache_key] = {
+                        'paper_count': len(note_ids),
+                        'cached_count': count,
+                        'scan_time_s': scan_time_s,
+                        'serialize_time_s': serialize_time_s,
+                    }
                 print(f"Global cache lookup completed in {time.time() - cache_start:.2f}s ({total_cached}/{len(note_ids)} embeddings found)", flush=True)
             else:
                 print("No note IDs found; skipping global cache lookup", flush=True)
@@ -368,12 +366,26 @@ def run_pipeline(
         # jobs can reuse them without recomputation. No JSONL embedding files
         # are written to the job folder.
         start = time.time()  # cache_append
+        per_model_write_times = {}
         try:
-            _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket)
+            per_model_write_times = _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket)
         except Exception as e:
             print(f"Global cache append failed (non-critical): {e}", flush=True)
         finally:
             timings.append({'stage': 'cache_append', 'start': start, 'end': (end := time.time()), 'duration': end - start})
+            if model_metrics:
+                for cache_key, metrics in model_metrics.items():
+                    write_time_s = per_model_write_times.get(cache_key, 0.0)
+                    cache._log_metrics(
+                        job_id=job_id_for_cache,
+                        model_name=cache_key,
+                        paper_count=metrics['paper_count'],
+                        cached_count=metrics['cached_count'],
+                        scan_time_s=metrics['scan_time_s'],
+                        serialize_time_s=metrics['serialize_time_s'],
+                        write_time_s=write_time_s,
+                        total_time_s=metrics['scan_time_s'] + metrics['serialize_time_s'] + write_time_s,
+                    )
 
     except Exception as e:
         # Write error to single JSONL line in GCS if bucket is available
@@ -417,6 +429,8 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
     Metadata columns (venueid, title, invitation, domain, cdate, mdate) are left
     empty/null for now and will be backfilled once the pipeline carries that
     information through.
+
+    Returns a dict mapping model name -> write/upload duration in seconds.
     """
     try:
         import pandas as pd
@@ -424,7 +438,7 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
         import pyarrow.dataset as ds
     except ImportError:
         print("pyarrow/pandas not available; skipping global cache append", flush=True)
-        return
+        return {}
 
     cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in blob_prefix else 'embeddings-cache'
 
@@ -475,41 +489,42 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
 
     df = pd.DataFrame(records)
     gcs_path = f"gs://{bucket.name}/{cache_prefix}"
-    existing_ids = set()
     try:
         existing_dataset = ds.dataset(gcs_path, partitioning="hive")
-        existing_table = existing_dataset.to_table(
-            columns=["paper_id"],
-            filter=(pc.field("model").isin(df["model"].unique().tolist()))
-        )
-        if existing_table.num_rows > 0:
-            existing_ids = set(existing_table.column("paper_id").to_pylist())
+        for model in df["model"].unique().tolist():
+            existing_table = existing_dataset.to_table(
+                columns=["paper_id"],
+                filter=(pc.field("model") == model)
+            )
+            if existing_table.num_rows > 0:
+                existing_ids = set(existing_table.column("paper_id").to_pylist())
+                df = df[~((df["model"] == model) & df["paper_id"].isin(existing_ids))]
     except Exception as e:
         print(f"No existing cache to filter against: {e}", flush=True)
 
-    if existing_ids:
-        df = df[~df["paper_id"].isin(existing_ids)]
-
     if df.empty:
         print("No new embeddings to append; all paper_ids already cached", flush=True)
-        return
+        return {}
 
-    for model, model_df in df.groupby("model"):
-        partition_blob_prefix = f"{cache_prefix}/model={model}/year_month={year_month}/"
-        blobs = list(bucket.list_blobs(prefix=partition_blob_prefix))
-        part_files = [b.name for b in blobs if b.name.endswith(".parquet")]
-        next_idx = len(part_files)
-        dest_blob_name = f"{partition_blob_prefix}part-{next_idx:08d}.parquet"
-        table = pa.Table.from_pandas(model_df)
-        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
-            local_path = tmp.name
-        try:
-            pq.write_table(table, local_path, compression="zstd")
-            bucket.blob(dest_blob_name).upload_from_filename(local_path)
-        finally:
-            if os.path.exists(local_path):
-                os.remove(local_path)
-        print(f"Appended {len(model_df)} new embeddings to gs://{bucket.name}/{dest_blob_name}", flush=True)
+    part_files = [b.name for b in bucket.list_blobs(prefix=cache_prefix) if b.name.endswith(".parquet")]
+    next_idx = len(part_files)
+    basename_template = f"part-{next_idx:08d}-{{i}}.parquet"
+    write_start = time.time()
+    try:
+        ds.write_dataset(
+            pa.Table.from_pandas(df),
+            gcs_path,
+            format="parquet",
+            partitioning=["model", "year_month"],
+            basename_template=basename_template,
+            existing_data_behavior="overwrite_or_ignore",
+        )
+    except Exception as e:
+        print(f"Global cache write_dataset failed: {e}", flush=True)
+        return {}
+    total_write_time = time.time() - write_start
+    print(f"Appended {len(df)} new embeddings to {gcs_path}", flush=True)
+    return {model: total_write_time for model in df['model'].unique()}
 
 
 if __name__ == '__main__':

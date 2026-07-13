@@ -1,4 +1,3 @@
-import json
 import os
 import tempfile
 import time
@@ -98,7 +97,9 @@ class GlobalEmbeddingsCache:
         except Exception:
             return result
 
+        serialize_start = time.time()
         rows = table.to_pydict()
+        self._last_serialize_time_s = time.time() - serialize_start
         for pid, emb, model in zip(rows["paper_id"], rows["embedding"], rows["model"]):
             if model in result:
                 result[model][pid] = emb
@@ -112,44 +113,3 @@ class GlobalEmbeddingsCache:
         """
         result = self.get_embeddings_for_models(paper_ids, [model_name])
         return result.get(model_name, {})
-
-    def write_cache_file(self, paper_ids: List[str], model_name: str, dest_path: str,
-                         job_id: str = None) -> int:
-        """
-        Query the global cache and write the results to a local JSONL file
-        in the format expected by Predictor._load_cached_publication_embeddings.
-        Returns the number of embeddings written.
-        """
-        total_start = time.time()
-        unique_pids = list(set(paper_ids))
-
-        scan_start = time.time()
-        embeddings = self.get_embeddings(paper_ids, model_name)
-        scan_time_s = time.time() - scan_start
-
-        serialize_start = time.time()
-        if not embeddings:
-            return 0
-        rows = list(embeddings.items())
-        serialize_time_s = time.time() - serialize_start
-
-        write_start = time.time()
-        with open(dest_path, 'w') as f:
-            for pid, emb in rows:
-                f.write(json.dumps({"paper_id": pid, "embedding": emb}) + '\n')
-        write_time_s = time.time() - write_start
-        total_time_s = time.time() - total_start
-
-        if job_id:
-            self._log_metrics(
-                job_id=job_id,
-                model_name=model_name,
-                paper_count=len(unique_pids),
-                cached_count=len(embeddings),
-                scan_time_s=scan_time_s,
-                serialize_time_s=serialize_time_s,
-                write_time_s=write_time_s,
-                total_time_s=total_time_s,
-            )
-
-        return len(embeddings)
