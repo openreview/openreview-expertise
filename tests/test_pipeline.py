@@ -50,7 +50,7 @@ def _setup_pipeline_cc(clean_start_conference, client, openreview_client):
 def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
-    mock_execute_expertise.return_value = {}
+    mock_execute_expertise.return_value = {'pub2vec.jsonl': {}}
 
     # Prepare input API request string
     api_request_str = json.dumps({
@@ -165,7 +165,7 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
 def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
-    mock_execute_expertise.return_value = {}
+    mock_execute_expertise.return_value = {'pub2vec.jsonl': {}}
 
     # Prepare input API request string
     api_request = {
@@ -272,7 +272,7 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
 def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
-    mock_execute_expertise.return_value = {}
+    mock_execute_expertise.return_value = {'pub2vec.jsonl': {}}
 
     # Prepare input API request string
     api_request_str = json.dumps({
@@ -374,7 +374,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
 def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
-    mock_execute_expertise.return_value = {}
+    mock_execute_expertise.return_value = {'pub2vec.jsonl': {}}
 
     # Prepare input API request string
     api_request_str = json.dumps({

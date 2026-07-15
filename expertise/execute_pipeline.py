@@ -261,6 +261,7 @@ def run_pipeline(
                 'specter2': ['specter'],
                 'scincl': ['scincl'],
                 'specter': ['specter'],
+                'specter+mfr': ['specter'],
             }
             targets = model_to_cache_key.get(config.model, [])
 
