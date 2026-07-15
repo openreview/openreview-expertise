@@ -838,24 +838,16 @@ class ExpertiseCloudService(BaseExpertiseService):
         request = job.data['request']
         redis_id = job.data['redis_id']
         or_token = job.data['token']
-        job_start = time.time()
-
-        def _elapsed(start):
-            return f"{time.time() - start:.2f}s"
-
-        def _log(msg):
-            asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
 
         config = self.redis.load_job(redis_id, user_id)
         openreview_client_v2 = openreview.api.OpenReviewClient(token=or_token, baseurl=config.baseurl_v2)
 
-        _log('Task 1: fetching data from OpenReview and building dataset')
+        asyncio.run_coroutine_threadsafe(job.log('Task 1: fetching data from OpenReview and building dataset'), self.queue_loop)
         self.update_status(config, JobStatus.FETCHING_DATA)
-        task1_start = time.time()
         try:
             execute_create_dataset(openreview_client_v2, config=config.to_json())
         except ExpectedDataError as e:
-            _log(f'Job finished with expected data error: {e}')
+            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
             return
         except Exception as e:
@@ -865,25 +857,21 @@ class ExpertiseCloudService(BaseExpertiseService):
             if config.status != JobStatus.ERROR:
                 self.update_status(config, JobStatus.ERROR, str(e))
             raise e.with_traceback(e.__traceback__)
-        _log(f'Dataset creation completed in {_elapsed(task1_start)}')
 
         config = self.redis.load_job(redis_id, user_id)
         config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
         machine_type = self.compute_machine_type_from_dataset(config)
         self.logger.info(f"Machine type for {redis_id}: {machine_type}")
 
-        upload_start = time.time()
-        _log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset')
+        asyncio.run_coroutine_threadsafe(job.log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset'), self.queue_loop)
         try:
             dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
         except ExpectedDataError as e:
-            _log(f'Job finished with expected data error: {e}')
+            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
             return
-        _log(f'Dataset upload completed in {_elapsed(upload_start)}')
 
-        submit_start = time.time()
-        _log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})')
+        asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})'), self.queue_loop)
         try:
             self.cloud.create_job(
                 deepcopy(request),
@@ -901,17 +889,13 @@ class ExpertiseCloudService(BaseExpertiseService):
             if config.status != JobStatus.ERROR:
                 self.update_status(config, JobStatus.ERROR, f"Error creating cloud job: {e}")
             raise e.with_traceback(e.__traceback__)
-        _log(f'Vertex pipeline submitted in {_elapsed(submit_start)}')
 
-        poll_start = time.time()
         try:
             self.logger.info(f"In polling worker...")
             for attempt in range(self.max_attempts):
                 self.logger.info(f"{redis_id} - attempt {attempt + 1} of {self.max_attempts}...")
-                poll_iter_start = time.time()
                 config = self.redis.load_job(redis_id, user_id)
                 status = self.cloud.get_job_status_by_job_id(user_id, config)
-                status_elapsed = _elapsed(poll_iter_start)
                 self.logger.info(f"Invoked get_job_status_by_job_id for {redis_id} - status: {status}")
 
                 # Check status validity
@@ -929,13 +913,9 @@ class ExpertiseCloudService(BaseExpertiseService):
                         self.logger.info(f"INFO: after update status")
 
                     if status['status'] == JobStatus.COMPLETED:
-                        _log(f'Status check took {status_elapsed}')
-                        _log(f'Job completed in {_elapsed(job_start)} (polling took {_elapsed(poll_start)})')
                         return
 
                     elif status['status'] == JobStatus.DATA_ERROR:
-                        _log(f'Status check took {status_elapsed}')
-                        _log(f'Job completed with expected error in {_elapsed(job_start)} (polling took {_elapsed(poll_start)}): {status["description"]}')
                         return
 
                     elif status['status'] == JobStatus.ERROR:

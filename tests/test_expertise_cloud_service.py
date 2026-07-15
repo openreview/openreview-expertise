@@ -343,7 +343,6 @@ class TestExpertiseCloudService():
         assert any(n.startswith('archives/') for n in _names), f"No archive entries in tarball. Found: {_names}"
 
         setup_job_mocks()
-        time.sleep(5)
         response = test_client.post(
             '/expertise',
             data = json.dumps({

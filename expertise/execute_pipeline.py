@@ -112,10 +112,7 @@ def run_pipeline(
     dump_archives = False
     validated_request = None
 
-    timings = []
-
     try:
-        start = time.time()  # request_load
         if api_request_str is not None:
             try:
                 raw_request: dict = json.loads(api_request_str)
@@ -129,7 +126,6 @@ def run_pipeline(
         elif gcs_dir is not None:
             raw_request = download_from_gcs(gcs_dir)
             print("Parsed request from GCS folder")
-        timings.append({'stage': 'request_load', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         # Pop pipeline-only metadata. The pipeline doesn't authenticate against
         # OpenReview, so token/baseurl_v2 are not part of the upload anymore.
@@ -153,9 +149,7 @@ def run_pipeline(
         requested_model = raw_request.get('model', {}).get('name', DEFAULT_CONFIG['model'])
         required_artifacts = artifacts_for_model(requested_model)
         print(f'Loading model artifacts for model={requested_model}: {required_artifacts}')
-        start = time.time()  # artifact_load
         load_model_artifacts(subdirs=required_artifacts)
-        timings.append({'stage': 'artifact_load', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         print('Creating job ID')
         job_id = generate_job_id()
@@ -192,15 +186,11 @@ def run_pipeline(
 
         if dataset_gcs_path:
             print(f'Downloading pre-created dataset from {dataset_gcs_path}')
-            start = time.time()  # dataset_download
             download_dataset_from_gcs(dataset_gcs_path, working_dir)
-            timings.append({'stage': 'dataset_download', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         # Query the global parquet embedding cache for note embeddings.
         # Missing embeddings are computed from the paper data below and appended
         # back to the cache after scoring.
-        start = time.time()  # cache_scan
-        cache_start = time.time()
         try:
             from expertise.embeddings_cache import GlobalEmbeddingsCache
             archives_path = Path(config.job_dir) / 'archives'
@@ -313,16 +303,13 @@ def run_pipeline(
         except Exception as e:
             print(f"Global cache lookup failed: {e}", flush=True)
             raise
-        finally:
-            timings.append({'stage': 'cache_scan', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         print('Executing expertise')
-        new_embeddings, expertise_timings = execute_expertise(
+        new_embeddings = execute_expertise(
             config.to_json(),
             cached_publication_embeddings=cached_publication_embeddings,
             cached_submission_embeddings=cached_submission_embeddings,
         )
-        timings.extend(expertise_timings)
 
         # Fetch and write to storage
         print('Fetching and writing to storage')
@@ -334,7 +321,6 @@ def run_pipeline(
         # happens at read time in both the local and cloud reader paths,
         # consistent with how ExpertiseService.get_expertise_results has
         # always handled it.
-        start = time.time()  # upload_scores
         print("Uploading score CSV(s)...", flush=True)
         for csv_file in [d for d in os.listdir(config.job_dir) if d.endswith('.csv')]:
             dest_name = 'scores_sparse.csv' if '_sparse' in csv_file else 'scores.csv'
@@ -343,16 +329,13 @@ def run_pipeline(
             src = os.path.join(config.job_dir, csv_file)
             blob.upload_from_filename(src)
         print("Finished uploading score CSV(s)", flush=True)
-        timings.append({'stage': 'upload_scores', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         # Upload the full scores matrix (.pt) directly.
-        start = time.time()  # upload_matrix
         print("Dumping scores matrix(es)", flush=True)
         for pt_file in [d for d in os.listdir(config.job_dir) if d.endswith('.pt')]:
             destination_blob = f"{blob_prefix}/{pt_file}"
             blob = bucket.blob(destination_blob)
             blob.upload_from_filename(os.path.join(config.job_dir, pt_file))
-        timings.append({'stage': 'upload_matrix', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         # Dump config
         start = time.time()  # upload_metadata
@@ -369,7 +352,6 @@ def run_pipeline(
                 blob = bucket.blob(destination_blob)
                 contents = json.dumps(json.load(f))
                 blob.upload_from_string(contents)
-        timings.append({'stage': 'upload_metadata', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
         # Dump archives
         archives_dir = os.path.join(config.job_dir, 'archives')
@@ -392,27 +374,24 @@ def run_pipeline(
         # Append newly computed embeddings to the global parquet cache so future
         # jobs can reuse them without recomputation. No JSONL embedding files
         # are written to the job folder.
-        start = time.time()  # cache_append
         per_model_write_times = {}
         try:
             per_model_write_times = _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket)
         except Exception as e:
             print(f"Global cache append failed (non-critical): {e}", flush=True)
-        finally:
-            timings.append({'stage': 'cache_append', 'start': start, 'end': (end := time.time()), 'duration': end - start})
-            if model_metrics:
-                for cache_key, metrics in model_metrics.items():
-                    write_time_s = per_model_write_times.get(cache_key, 0.0)
-                    cache._log_metrics(
-                        job_id=job_id_for_cache,
-                        model_name=cache_key,
-                        paper_count=metrics['paper_count'],
-                        cached_count=metrics['cached_count'],
-                        scan_time_s=metrics['scan_time_s'],
-                        serialize_time_s=metrics['serialize_time_s'],
-                        write_time_s=write_time_s,
-                        total_time_s=metrics['scan_time_s'] + metrics['serialize_time_s'] + write_time_s,
-                    )
+        if model_metrics:
+            for cache_key, metrics in model_metrics.items():
+                write_time_s = per_model_write_times.get(cache_key, 0.0)
+                cache._log_metrics(
+                    job_id=job_id_for_cache,
+                    model_name=cache_key,
+                    paper_count=metrics['paper_count'],
+                    cached_count=metrics['cached_count'],
+                    scan_time_s=metrics['scan_time_s'],
+                    serialize_time_s=metrics['serialize_time_s'],
+                    write_time_s=write_time_s,
+                    total_time_s=metrics['scan_time_s'] + metrics['serialize_time_s'] + write_time_s,
+                )
 
     except Exception as e:
         # Write error to single JSONL line in GCS if bucket is available
@@ -428,24 +407,12 @@ def run_pipeline(
         exception = e.with_traceback(e.__traceback__)
         raise exception
     finally:
-        start = time.time()  # cleanup
-        # Upload stage timings as a single CSV at the end.
-        if bucket is not None and blob_prefix is not None and timings:
-            try:
-                lines = ['stage,start,end,duration']
-                for row in timings:
-                    lines.append(f"{row['stage']},{row['start']},{row['end']},{row['duration']}")
-                blob = bucket.blob(f"{blob_prefix}/stage_timings.csv")
-                blob.upload_from_string('\n'.join(lines))
-            except Exception as e:
-                print(f"Failed to upload stage timings: {e}", flush=True)
         # Clean up working directory to prevent disk exhaustion
         # For Vertex AI, the container is ephemeral, but explicit cleanup
         # ensures no disk leak when running locally or in tests
         if working_dir_created and working_dir and os.path.isdir(working_dir):
             print(f'Cleaning up working directory: {working_dir}')
             shutil.rmtree(working_dir)
-        timings.append({'stage': 'cleanup', 'start': start, 'end': (end := time.time()), 'duration': end - start})
 
 def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
     """Append newly computed in-memory embeddings to the Hive-partitioned GCS Parquet cache.
