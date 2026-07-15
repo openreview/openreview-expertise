@@ -508,7 +508,6 @@ def test_run_pipeline_stale_cache_triggers_recompute(mock_load_model_artifacts, 
             "model": pa.array(["specter"], pa.string()),
             "year_month": pa.array(["2024-01"], pa.string()),
             "embedding_date": pa.array(["2024-01-15T00:00:00Z"], pa.string()),
-            "job_id": pa.array(["old-job"], pa.string()),
         })
         part_dir = Path(tmpdir) / "model=specter" / "year_month=2024-01"
         part_dir.mkdir(parents=True)
@@ -521,7 +520,7 @@ def test_run_pipeline_stale_cache_triggers_recompute(mock_load_model_artifacts, 
             self._dataset = ds.dataset(str(tmpdir), partitioning="hive")
             return self._dataset
 
-        with patch("expertise.execute_pipeline.GlobalEmbeddingsCache._get_dataset", _patched_get_dataset):
+        with patch("expertise.embeddings_cache.GlobalEmbeddingsCache._get_dataset", _patched_get_dataset):
             api_request_str = json.dumps({
                 "name": "test_stale_cache",
                 "entityA": {

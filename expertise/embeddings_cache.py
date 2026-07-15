@@ -1,7 +1,8 @@
 from typing import List, Dict
 
-import pyarrow.dataset as ds
+import pyarrow as pa
 import pyarrow.compute as pc
+import pyarrow.dataset as ds
 from google.cloud import storage
 
 
@@ -54,18 +55,24 @@ class GlobalEmbeddingsCache:
         except Exception:
             return result
 
-        rows = table.to_pydict()
-        for pid, emb, model, embedding_date in zip(rows["paper_id"], rows["embedding"], rows["model"], rows["embedding_date"]):
-            if model not in result:
-                continue
-            requested_mdate = (paper_mdates or {}).get(pid)
-            if requested_mdate and embedding_date:
-                try:
-                    if embedding_date < requested_mdate:
-                        continue
-                except Exception:
-                    pass
-            result[model][pid] = emb
+        if paper_mdates and len(table) > 0:
+            mdate_list = [paper_mdates.get(pid.as_py(), None) for pid in table["paper_id"]]
+            table = table.append_column("requested_mdate", pa.array(mdate_list, type=pa.string()))
+            keep = pc.or_(
+                pc.is_null(table["requested_mdate"]),
+                pc.or_(
+                    pc.is_null(table["embedding_date"]),
+                    pc.greater_equal(table["embedding_date"], table["requested_mdate"])
+                )
+            )
+            keep = pc.if_else(pc.is_null(keep), True, keep)
+            table = table.filter(keep)
+
+        for model in model_names:
+            model_table = table.filter(pc.equal(table["model"], model))
+            if len(model_table) > 0:
+                rows = model_table.to_pydict()
+                result[model] = dict(zip(rows["paper_id"], rows["embedding"]))
         return result
 
     def get_embeddings(self, paper_ids: List[str], model_name: str,
