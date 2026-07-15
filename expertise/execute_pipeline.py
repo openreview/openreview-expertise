@@ -359,9 +359,16 @@ def run_pipeline(
                 contents = '\n'.join([json.dumps(r) for r in result])
                 blob.upload_from_string(contents)
 
+        # Dump embeddings JSONL files to the job folder for backwards
+        # compatibility. These can be used to revert to master if needed.
+        print("Dumping embeddings", flush=True)
+        for emb_file in [d for d in os.listdir(config.job_dir) if '.jsonl' in d]:
+            destination_blob = f"{blob_prefix}/{emb_file}"
+            blob = bucket.blob(destination_blob)
+            blob.upload_from_filename(os.path.join(config.job_dir, emb_file))
+
         # Append newly computed embeddings to the global parquet cache so future
-        # jobs can reuse them without recomputation. No JSONL embedding files
-        # are written to the job folder.
+        # jobs can reuse them without recomputation.
         try:
             _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket)
         except Exception as e:
@@ -425,15 +432,9 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
         for pid, emb in embeddings.items():
             records.append({
                 'paper_id': pid,
-                'job_id': blob_prefix.split('/')[-1],
                 'embedding': emb,
-                'uri': f"gs://{bucket.name}/{blob_prefix}/{emb_file}",
                 'model': model,
                 'year_month': year_month,
-                'venueid': '',
-                'title': '',
-                'invitation': '',
-                'domain': None,
                 'embedding_date': embedding_date,
             })
 
@@ -473,9 +474,8 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
         print("No new embeddings to append; all paper_ids already cached", flush=True)
         return
 
-    part_files = [b.name for b in bucket.list_blobs(prefix=cache_prefix) if b.name.endswith(".parquet")]
-    next_idx = len(part_files)
-    basename_template = f"part-{next_idx:08d}-{{i}}.parquet"
+    job_id = blob_prefix.split('/')[-1]
+    basename_template = f"{job_id}-{{i}}.parquet"
     try:
         ds.write_dataset(
             pa.Table.from_pandas(df),
