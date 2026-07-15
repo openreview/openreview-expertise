@@ -262,6 +262,8 @@ def run_pipeline(
             }
             targets = model_to_cache_key.get(config.model, [])
 
+            cached_publication_embeddings = {}
+            cached_submission_embeddings = {}
             if note_ids and targets:
                 cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in destination_prefix else 'embeddings-cache'
                 cache = GlobalEmbeddingsCache(
@@ -285,11 +287,8 @@ def run_pipeline(
                 print(f"Global cache lookup completed ({total_cached}/{len(note_ids)} embeddings found)", flush=True)
             else:
                 print("No note IDs found; skipping global cache lookup", flush=True)
-                cached_publication_embeddings = {}
-                cached_submission_embeddings = {}
         except Exception as e:
             print(f"Global cache lookup failed: {e}", flush=True)
-            raise
 
         print('Executing expertise')
         new_embeddings = execute_expertise(

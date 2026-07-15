@@ -49,6 +49,32 @@ def _setup_pipeline_cc(clean_start_conference, client, openreview_client):
         post_publications=DEFAULT_POST_PUBLICATIONS
     )
 
+@pytest.fixture(scope="module", autouse=True)
+def _mock_global_cache_for_pipeline():
+    """Prevent pipeline tests from doing real GCS cache lookups."""
+    empty_table = pa.table({
+        "paper_id": pa.array([], pa.string()),
+        "embedding": pa.array([], pa.list_(pa.float32())),
+        "model": pa.array([], pa.string()),
+        "year_month": pa.array([], pa.string()),
+        "embedding_date": pa.array([], pa.string()),
+    })
+    tmpdir = tempfile.mkdtemp()
+    pq.write_table(empty_table, os.path.join(tmpdir, "empty.parquet"))
+
+    dataset = ds.dataset(tmpdir)
+
+    def _patched(self):
+        if self._dataset is not None:
+            return self._dataset
+        self._dataset = dataset
+        return self._dataset
+
+    patcher = patch("expertise.embeddings_cache.GlobalEmbeddingsCache._get_dataset", _patched)
+    patcher.start()
+    yield
+    patcher.stop()
+
 # Test case for the `run_pipeline` function
 @patch("expertise.execute_pipeline.execute_expertise")  # Mock execute_expertise
 @patch("expertise.execute_pipeline.load_model_artifacts")  # Mock load_model_artifacts
