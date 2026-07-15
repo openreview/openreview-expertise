@@ -55,6 +55,8 @@ class SciNCLPredictor(Predictor):
             self.cuda_device = torch.device("cuda:0")
         else:
             self.cuda_device = torch.device("cpu")
+        self.publication_embeddings = {}
+        self.submission_embeddings = {}
         self.scores_matrix = None
         self.test_id_list = None
         self.reviewer_ids = None
