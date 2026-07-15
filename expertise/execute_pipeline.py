@@ -6,9 +6,7 @@ import tarfile
 import tempfile
 import shutil
 from pathlib import Path
-import pyarrow
 import pyarrow.compute as pc
-import pyarrow.parquet as pq
 from expertise.execute_expertise import execute_expertise
 from expertise.service import load_model_artifacts, artifacts_for_model
 from expertise.service.utils import APIRequest, JobConfig, ExpectedDataError
@@ -453,20 +451,18 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
             )
             if existing_table.num_rows == 0:
                 continue
-            existing_rows = existing_table.to_pydict()
-            latest_embedding_date = {}
-            for pid, edate in zip(existing_rows["paper_id"], existing_rows["embedding_date"]):
-                if edate is None:
-                    continue
-                if pid not in latest_embedding_date or edate > latest_embedding_date[pid]:
-                    latest_embedding_date[pid] = edate
+            latest_table = existing_table.group_by("paper_id").aggregate([("embedding_date", "max")])
+            latest_rows = latest_table.to_pydict()
+            latest_embedding_date = {
+                pid: edate for pid, edate in zip(latest_rows["paper_id"], latest_rows["embedding_date_max"])
+                if edate is not None
+            }
             if latest_embedding_date:
                 mask = (df["model"] == model) & df["paper_id"].isin(latest_embedding_date)
-                keep = []
-                for _, row in df[mask].iterrows():
-                    keep.append(row["embedding_date"] > latest_embedding_date[row["paper_id"]])
-                mask_keep = pd.Series(keep, index=df[mask].index)
-                df = df[~(mask & ~mask_keep)]
+                existing_dates = pd.Series(latest_embedding_date)
+                mapped = df.loc[mask, "paper_id"].map(existing_dates)
+                stale_idx = df.loc[mask].index[df.loc[mask, "embedding_date"] <= mapped]
+                df = df.drop(stale_idx)
     except Exception as e:
         print(f"No existing cache to filter against: {e}", flush=True)
 

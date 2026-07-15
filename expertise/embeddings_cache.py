@@ -3,7 +3,6 @@ from typing import List, Dict
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
-from google.cloud import storage
 
 
 class GlobalEmbeddingsCache:
