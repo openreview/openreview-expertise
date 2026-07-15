@@ -1,9 +1,5 @@
-import os
-import tempfile
-import time
 from typing import List, Dict
 
-import pandas as pd
 import pyarrow.dataset as ds
 import pyarrow.compute as pc
 from google.cloud import storage
@@ -30,47 +26,6 @@ class GlobalEmbeddingsCache:
         gcs_path = f"gs://{self.bucket_name}/{self.cache_prefix}"
         self._dataset = ds.dataset(gcs_path, partitioning="hive")
         return self._dataset
-
-    def _log_metrics(self, job_id: str, model_name: str, paper_count: int,
-                     cached_count: int, scan_time_s: float, serialize_time_s: float,
-                     write_time_s: float, total_time_s: float):
-        try:
-            metrics_prefix = f"{self.cache_prefix}-metrics"
-            blob_name = f"{metrics_prefix}/scan-metrics.csv"
-            client = storage.Client()
-            bucket = client.bucket(self.bucket_name)
-            blob = bucket.blob(blob_name)
-
-            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
-                csv_path = tmp.name
-            try:
-                if blob.exists():
-                    blob.download_to_filename(csv_path)
-                    df = pd.read_csv(csv_path)
-                else:
-                    df = pd.DataFrame(columns=[
-                        "timestamp", "job_id", "model", "paper_count", "cached_count",
-                        "scan_time_s", "serialize_time_s", "write_time_s", "total_time_s"
-                    ])
-
-                df = pd.concat([df, pd.DataFrame([{
-                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                    "job_id": job_id,
-                    "model": model_name,
-                    "paper_count": paper_count,
-                    "cached_count": cached_count,
-                    "scan_time_s": scan_time_s,
-                    "serialize_time_s": serialize_time_s,
-                    "write_time_s": write_time_s,
-                    "total_time_s": total_time_s,
-                }])], ignore_index=True)
-                df.to_csv(csv_path, index=False)
-                blob.upload_from_filename(csv_path)
-            finally:
-                if os.path.exists(csv_path):
-                    os.remove(csv_path)
-        except Exception as e:
-            print(f"Cache metrics log failed: {e}", flush=True)
 
     def get_embeddings_for_models(self, paper_ids: List[str], model_names: List[str],
                                     paper_mdates: Dict[str, str] = None) -> Dict[str, Dict[str, List[float]]]:
@@ -99,9 +54,7 @@ class GlobalEmbeddingsCache:
         except Exception:
             return result
 
-        serialize_start = time.time()
         rows = table.to_pydict()
-        self._last_serialize_time_s = time.time() - serialize_start
         for pid, emb, model, embedding_date in zip(rows["paper_id"], rows["embedding"], rows["model"], rows["embedding_date"]):
             if model not in result:
                 continue
