@@ -56,7 +56,9 @@ class GlobalEmbeddingsCache:
 
         if paper_mdates and len(table) > 0:
             mdate_list = [paper_mdates.get(pid.as_py(), None) for pid in table["paper_id"]]
-            table = table.append_column("requested_mdate", pa.array(mdate_list, type=pa.string()))
+            requested = pa.array(mdate_list, pa.int64())
+            ts_col = pc.cast(requested, pa.timestamp('ms'))
+            table = table.append_column("requested_mdate", ts_col)
             keep = pc.or_(
                 pc.is_null(table["requested_mdate"]),
                 pc.or_(

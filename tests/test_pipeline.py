@@ -162,8 +162,7 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
 
     # Ensure execute_expertise was called with in-memory cached embeddings.
     mock_execute_expertise.assert_called_once()
-    assert mock_execute_expertise.call_args.kwargs['cached_publication_embeddings'] == {'specter': {}}
-    assert mock_execute_expertise.call_args.kwargs['cached_submission_embeddings'] == {'specter': {}}
+    assert mock_execute_expertise.call_args.kwargs['cached_embeddings'] == {'specter': {}}
 
     # Use the gcs_test_bucket fixture to get actual
     bucket = gcs_test_bucket
@@ -277,8 +276,7 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
 
     # Ensure execute_expertise was called with in-memory cached embeddings.
     mock_execute_expertise.assert_called_once()
-    assert mock_execute_expertise.call_args.kwargs['cached_publication_embeddings'] == {'specter': {}}
-    assert mock_execute_expertise.call_args.kwargs['cached_submission_embeddings'] == {'specter': {}}
+    assert mock_execute_expertise.call_args.kwargs['cached_embeddings'] == {'specter': {}}
 
     # Use the gcs_test_bucket fixture to get actual
     bucket = gcs_test_bucket
@@ -392,8 +390,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
 
     # Ensure execute_expertise was called with in-memory cached embeddings.
     mock_execute_expertise.assert_called_once()
-    assert mock_execute_expertise.call_args.kwargs['cached_publication_embeddings'] == {'specter': {}}
-    assert mock_execute_expertise.call_args.kwargs['cached_submission_embeddings'] == {'specter': {}}
+    assert mock_execute_expertise.call_args.kwargs['cached_embeddings'] == {'specter': {}}
 
     # Pipeline uploads scores.csv directly (group-group matching: cols are
     # already [entityA, entityB, score] in canonical order).
@@ -602,8 +599,7 @@ def test_run_pipeline_stale_cache_triggers_recompute(mock_load_model_artifacts, 
             # The cache has paper1 with embedding_date 2024-01-15, but the paper's mdate is 2024-06-01.
             # GlobalEmbeddingsCache should filter it out, so execute_expertise gets empty embeddings.
             mock_execute_expertise.assert_called_once()
-            assert mock_execute_expertise.call_args.kwargs['cached_publication_embeddings'] == {'specter': {}}
-            assert mock_execute_expertise.call_args.kwargs['cached_submission_embeddings'] == {'specter': {}}
+            assert mock_execute_expertise.call_args.kwargs['cached_embeddings'] == {'specter': {}}
 
             shutil.rmtree(working_dir)
 

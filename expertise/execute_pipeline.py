@@ -194,16 +194,6 @@ def run_pipeline(
             submissions_path = Path(config.job_dir) / 'submissions'
             submissions_json = Path(config.job_dir) / 'submissions.json'
 
-            def _iso_mdate(raw):
-                if raw is None:
-                    return None
-                if isinstance(raw, (int, float)):
-                    try:
-                        return datetime.datetime.fromtimestamp(raw / 1000, tz=datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                    except Exception:
-                        return None
-                return str(raw)
-
             paper_mdates = {}
             publication_ids = set()
             if archives_path.exists():
@@ -223,7 +213,7 @@ def run_pipeline(
                             if pid:
                                 publication_ids.add(pid)
                                 if pub.get('mdate'):
-                                    paper_mdates[pid] = _iso_mdate(pub['mdate'])
+                                    paper_mdates[pid] = int(pub['mdate'])
 
             submission_ids = set()
             if submissions_path.exists():
@@ -243,14 +233,14 @@ def run_pipeline(
                                 except json.JSONDecodeError:
                                     continue
                                 if sub.get('mdate'):
-                                    paper_mdates[note_id] = _iso_mdate(sub['mdate'])
+                                    paper_mdates[note_id] = int(sub['mdate'])
             if submissions_json.exists():
                 with open(submissions_json) as f:
                     for note_id, note in json.load(f).items():
                         if note_id:
                             submission_ids.add(note_id)
                             if isinstance(note, dict) and note.get('mdate'):
-                                paper_mdates[note_id] = _iso_mdate(note['mdate'])
+                                paper_mdates[note_id] = int(note['mdate'])
 
             note_ids = publication_ids | submission_ids
             model_to_cache_key = {
@@ -262,24 +252,21 @@ def run_pipeline(
             }
             targets = model_to_cache_key.get(config.model, [])
 
-            cached_publication_embeddings = {}
-            cached_submission_embeddings = {}
+            cached_embeddings = {}
             if note_ids and targets:
                 cache_prefix = 'embeddings-cache-dev' if 'jobs-dev' in destination_prefix else 'embeddings-cache'
                 cache = GlobalEmbeddingsCache(
                     bucket_name=os.getenv('EMBEDDING_CACHE_BUCKET', 'openreview-expertise'),
                     cache_prefix=cache_prefix
                 )
-                cached_publication_embeddings = {cache_key: {} for cache_key in targets}
-                cached_submission_embeddings = {cache_key: {} for cache_key in targets}
+                cached_embeddings = {cache_key: {} for cache_key in targets}
                 total_cached = 0
 
                 embeddings_by_model = cache.get_embeddings_for_models(list(note_ids), targets, paper_mdates=paper_mdates)
 
                 for cache_key in targets:
                     model_embeddings = embeddings_by_model.get(cache_key, {})
-                    cached_publication_embeddings[cache_key] = model_embeddings
-                    cached_submission_embeddings[cache_key] = model_embeddings
+                    cached_embeddings[cache_key] = model_embeddings
                     count = len(model_embeddings)
                     total_cached += count
                     if count > 0:
@@ -293,8 +280,7 @@ def run_pipeline(
         print('Executing expertise')
         new_embeddings = execute_expertise(
             config.to_json(),
-            cached_publication_embeddings=cached_publication_embeddings,
-            cached_submission_embeddings=cached_submission_embeddings,
+            cached_embeddings=cached_embeddings,
         )
 
         # Fetch and write to storage
