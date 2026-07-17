@@ -260,7 +260,6 @@ def run_pipeline(
                     cache_prefix=cache_prefix
                 )
                 cached_embeddings = {cache_key: {} for cache_key in targets}
-                total_cached = 0
 
                 embeddings_by_model = cache.get_embeddings_for_models(list(note_ids), targets, paper_mdates=paper_mdates)
 
@@ -268,10 +267,8 @@ def run_pipeline(
                     model_embeddings = embeddings_by_model.get(cache_key, {})
                     cached_embeddings[cache_key] = model_embeddings
                     count = len(model_embeddings)
-                    total_cached += count
                     if count > 0:
                         print(f"Pre-populated {count} embeddings from global cache ({cache_key})", flush=True)
-                print(f"Global cache lookup completed ({total_cached}/{len(note_ids)} embeddings found)", flush=True)
             else:
                 print("No note IDs found; skipping global cache lookup", flush=True)
         except Exception as e:
