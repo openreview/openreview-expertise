@@ -63,7 +63,7 @@ def execute_expertise(config, cached_embeddings=None):
             submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
             if config['model_params'].get('use_redis', False):
                 publication_path = None
-            predictor.cached_embeddings = (cached_embeddings or {}).get('specter') or {}
+            predictor.cached_embeddings = (cached_embeddings or {}).get('specter', {})
             predictor.publication_embeddings = predictor.embed(
                 os.path.join(predictor.work_dir, "specter_reviewer_paper_data.json"),
                 output_path=publication_path
@@ -103,8 +103,8 @@ def execute_expertise(config, cached_embeddings=None):
         scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_scincl.jsonl')
         specter_submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl')
         scincl_submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl')
-        predictor.specter_predictor.cached_embeddings = (cached_embeddings or {}).get('specter') or {}
-        predictor.scincl_predictor.cached_embeddings = (cached_embeddings or {}).get('scincl') or {}
+        predictor.specter_predictor.cached_embeddings = (cached_embeddings or {}).get('specter', {})
+        predictor.scincl_predictor.cached_embeddings = (cached_embeddings or {}).get('scincl', {})
         predictor.specter_predictor.publication_embeddings = predictor.specter_predictor.embed(
             os.path.join(predictor.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
             output_path=specter_publication_path
@@ -152,7 +152,7 @@ def execute_expertise(config, cached_embeddings=None):
         predictor.set_submissions_dataset(submissions_dataset)
         scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
         submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
-        predictor.cached_embeddings = (cached_embeddings or {}).get('scincl') or {}
+        predictor.cached_embeddings = (cached_embeddings or {}).get('scincl', {})
         predictor.publication_embeddings = predictor.embed(
             os.path.join(predictor.work_dir, "scincl_reviewer_paper_data.json"),
             output_path=scincl_publication_path
@@ -189,7 +189,7 @@ def execute_expertise(config, cached_embeddings=None):
         predictor.set_submissions_dataset(submissions_dataset)
         specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
         submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
-        predictor.cached_embeddings = (cached_embeddings or {}).get('specter') or {}
+        predictor.cached_embeddings = (cached_embeddings or {}).get('specter', {})
         predictor.publication_embeddings = predictor.embed(
             os.path.join(predictor.work_dir, "specter_reviewer_paper_data.json"),
             output_path=specter_publication_path
@@ -253,7 +253,7 @@ def execute_expertise(config, cached_embeddings=None):
             specter_publication_path = None
         submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
         use_redis = config['model_params'].get('use_redis', False)
-        predictor.specter_predictor.cached_embeddings = {} if use_redis else (cached_embeddings or {}).get('specter') or {}
+        predictor.specter_predictor.cached_embeddings = {} if use_redis else (cached_embeddings or {}).get('specter', {})
         if not skip_specter:
             predictor.specter_predictor.publication_embeddings = predictor.specter_predictor.embed(
                 os.path.join(predictor.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
