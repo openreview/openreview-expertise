@@ -198,7 +198,6 @@ class Specter2Predictor(Predictor):
                     for pid, paper in json.load(f).items()
                 }
 
-        print('Loading cached publications...')
         if self.publication_embeddings:
             paper_emb_train, train_id_list, train_bad_id_set, train_weight_tensor = self._load_emb_dict(self.publication_embeddings, paper_id_to_weight=train_paper_id_to_weight)
         else:
@@ -210,7 +209,6 @@ class Specter2Predictor(Predictor):
         for idx, paper_id in enumerate(train_id_list):
             paper_id2train_idx[paper_id] = idx
 
-        print('Loading cached submissions...')
         if self.submission_embeddings:
             paper_emb_test, test_id_list, test_bad_id_set, _ = self._load_emb_dict(self.submission_embeddings)
         else:
