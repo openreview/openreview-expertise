@@ -16,7 +16,7 @@ class Predictor:
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
 
-        cached = getattr(self, 'cached_embeddings', None) or {}
+        cached = getattr(self, 'cached_embeddings', {})
         embeddings = {}
         remaining = {}
         for paper_id, paper in paper_data.items():
