@@ -57,6 +57,7 @@ class SciNCLPredictor(Predictor):
             self.cuda_device = torch.device("cpu")
         self.publication_embeddings = {}
         self.submission_embeddings = {}
+        self.cached_embeddings = {}
         self.scores_matrix = None
         self.test_id_list = None
         self.reviewer_ids = None
@@ -173,28 +174,6 @@ class SciNCLPredictor(Predictor):
         with open(os.path.join(self.work_dir, "scincl_submission_paper_ids.txt"), 'w') as f_out:
             f_out.write('\n'.join(paper_ids_list)+'\n')
 
-    def embed_submissions(self, submissions_path=None, cached_submissions=None):
-        print('Embedding submissions...')
-        return self._embed_papers(
-            os.path.join(self.work_dir, "scincl_submission_paper_data.json"),
-            submissions_path,
-            cached_submissions,
-            'Embedding Subs',
-            'submission_embeddings'
-        )
-
-    def embed_publications(self, publications_path=None, cached_publications=None):
-        if not self.use_redis and cached_publications is None:
-            assert publications_path, "Either publications_path, cached_publications must be given or use_redis must be set to true"
-        print('Embedding publications...')
-        cached, _ = self._load_cached_publication_embeddings(publications_path, cached_publications)
-        return self._embed_papers(
-            os.path.join(self.work_dir, "scincl_reviewer_paper_data.json"),
-            publications_path,
-            cached,
-            'Embedding Pubs',
-            'publication_embeddings'
-        )
 
     def all_scores(self, publications_path=None, submissions_path=None, matrix_path=None, p2p_path=None):
         def load_emb_file(emb_file, paper_id_to_weight=None):

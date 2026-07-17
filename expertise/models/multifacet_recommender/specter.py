@@ -63,6 +63,9 @@ class SpecterPredictor:
         else:
             self.cuda_device = torch.device("cpu")
         self.preliminary_scores = None
+        self.publication_embeddings = {}
+        self.submission_embeddings = {}
+        self.cached_embeddings = {}
         self.sparse_value = sparse_value
         if not os.path.exists(self.work_dir) and not os.path.isdir(self.work_dir):
             os.makedirs(self.work_dir)
@@ -172,13 +175,12 @@ class SpecterPredictor:
         with open(os.path.join(self.work_dir, "specter_submission_paper_ids.txt"), 'w') as f_out:
             f_out.write('\n'.join(paper_ids_list)+'\n')
 
-    def _embed_papers(self, metadata_file, output_path, cached_embeddings, desc, emb_attr):
+    def embed(self, metadata_file, output_path=None):
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
 
-        cached = cached_embeddings or {}
+        cached = self.cached_embeddings or {}
         embeddings = {}
-        new_embeddings = {}
         remaining = {}
         for paper_id, paper in paper_data.items():
             emb = cached.get(paper_id)
@@ -187,42 +189,17 @@ class SpecterPredictor:
             else:
                 remaining[paper_id] = paper
         if cached:
-            print(f"Reusing {len(embeddings)} cached {desc.lower()} embeddings; computing {len(remaining)}.")
+            print(f"Reusing {len(embeddings)} cached embeddings; computing {len(remaining)}.")
 
-        for batch_data in tqdm(self._fetch_batches(remaining, self.batch_size), desc=desc, total=int(len(remaining.keys()) / self.batch_size), unit="batches"):
+        for batch_data in tqdm(self._fetch_batches(remaining, self.batch_size), desc='Embedding', total=int(len(remaining.keys()) / self.batch_size), unit="batches"):
             for item in self._batch_predict(batch_data):
                 embeddings[item['paper_id']] = item['embedding']
-                new_embeddings[item['paper_id']] = item['embedding']
-
-        setattr(self, emb_attr, embeddings)
 
         if output_path:
             with open(output_path, 'w') as f:
                 for pid, emb in embeddings.items():
                     f.write(json.dumps({'paper_id': pid, 'embedding': emb}) + '\n')
-        return new_embeddings
-
-    def embed_submissions(self, submissions_path=None, cached_submissions=None):
-        print('Embedding submissions...')
-        return self._embed_papers(
-            os.path.join(self.work_dir, "specter_submission_paper_data.json"),
-            submissions_path,
-            cached_submissions,
-            'Embedding Subs',
-            'submission_embeddings'
-        )
-
-    def embed_publications(self, publications_path=None, cached_publications=None):
-        if not self.use_redis and cached_publications is None:
-            assert publications_path, "Either publications_path, cached_publications must be given or use_redis must be set to true"
-        print('Embedding publications...')
-        return self._embed_papers(
-            os.path.join(self.work_dir, "specter_reviewer_paper_data.json"),
-            publications_path,
-            cached_publications,
-            'Embedding Pubs',
-            'publication_embeddings'
-        )
+        return embeddings
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
         def load_emb_file(emb_file):

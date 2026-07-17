@@ -82,11 +82,14 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
     publications_path.mkdir()
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
-    smfrModel.embed_publications(specter_publications_path=publications_path.joinpath('pub2vec.jsonl'),
-                                 mfr_publications_path=None,
-                                 skip_specter=config['model_params'].get('skip_specter', False))
-    smfrModel.embed_submissions(submissions_path.joinpath('sub2vec.jsonl'),
-            mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+    smfrModel.embed_publications(
+        specter_pub_path=publications_path.joinpath('pub2vec.jsonl'),
+        skip_specter=config['model_params'].get('skip_specter', False)
+    )
+    smfrModel.embed_submissions(
+        specter_sub_path=submissions_path.joinpath('sub2vec.jsonl'),
+        skip_specter=config['model_params'].get('skip_specter', False)
+    )
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()
@@ -98,7 +101,10 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
         scores_path=scores_path.joinpath(config['name'] + '.csv')
     )
 
-    specterModel.embed_publications(publications_path.joinpath('pub2vec.jsonl'))
+    specterModel.embed(
+        os.path.join(specterModel.work_dir, "specter_reviewer_paper_data.json"),
+        publications_path.joinpath('pub2vec.jsonl')
+    )
 
 def test_sparse_scores(tmp_path, create_smfr):
     config = {
@@ -121,11 +127,14 @@ def test_sparse_scores(tmp_path, create_smfr):
     publications_path.mkdir()
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
-    smfrModel.embed_publications(specter_publications_path=publications_path.joinpath('pub2vec.jsonl'),
-                                 mfr_publications_path=None,
-                                 skip_specter=config['model_params'].get('skip_specter', False))
-    smfrModel.embed_submissions(submissions_path.joinpath('sub2vec.jsonl'),
-            mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+    smfrModel.embed_publications(
+        specter_pub_path=publications_path.joinpath('pub2vec.jsonl'),
+        skip_specter=config['model_params'].get('skip_specter', False)
+    )
+    smfrModel.embed_submissions(
+        specter_sub_path=submissions_path.joinpath('sub2vec.jsonl'),
+        skip_specter=config['model_params'].get('skip_specter', False)
+    )
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()

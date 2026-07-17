@@ -382,7 +382,11 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
     """Append newly computed in-memory embeddings to the Hive-partitioned GCS Parquet cache.
 
     new_embeddings is a dict mapping filename (e.g. 'pub2vec_specter.jsonl') to a
-    dict of paper_id -> embedding (list of floats).
+    dict of paper_id -> embedding (list of floats). Uses current UTC time for the
+    year_month partition and embedding_date.
+
+    Returns None on success. Returns {} and logs a warning if pyarrow/pandas are unavailable.
+    Failures during write are caught and logged as non-critical.
     """
     try:
         import pandas as pd

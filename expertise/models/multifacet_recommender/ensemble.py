@@ -47,28 +47,32 @@ class EnsembleModel:
         print("Setting MultiFacetRecommender submissions")
         self.mfr_predictor.set_submissions_dataset(submissions_dataset)
 
-    def embed_submissions(self, specter_submissions_path=None, mfr_submissions_path=None,
-                          cached_specter_submissions=None, skip_specter=False):
+    def embed_publications(self, specter_pub_path=None, mfr_pub_path=None, skip_specter=False):
         result = {}
         if not skip_specter:
             print("SPECTER:")
-            result['specter'] = self.specter_predictor.embed_submissions(
-                specter_submissions_path, cached_submissions=cached_specter_submissions
+            result['specter'] = self.specter_predictor.embed(
+                os.path.join(self.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+                output_path=specter_pub_path
             )
+            self.specter_predictor.publication_embeddings = result['specter']
         print("MFR:")
-        self.mfr_predictor.embed_submissions(mfr_submissions_path)
+        if mfr_pub_path is not None:
+            self.mfr_predictor.embed_publications(mfr_pub_path)
         return result
 
-    def embed_publications(self, specter_publications_path=None, mfr_publications_path=None,
-                           cached_specter_publications=None, skip_specter=False):
+    def embed_submissions(self, specter_sub_path=None, mfr_sub_path=None, skip_specter=False):
         result = {}
         if not skip_specter:
             print("SPECTER:")
-            result['specter'] = self.specter_predictor.embed_publications(
-                specter_publications_path, cached_publications=cached_specter_publications
+            result['specter'] = self.specter_predictor.embed(
+                os.path.join(self.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+                output_path=specter_sub_path
             )
+            self.specter_predictor.submission_embeddings = result['specter']
         print("MFR:")
-        self.mfr_predictor.embed_publications(mfr_publications_path)
+        if mfr_sub_path is not None:
+            self.mfr_predictor.embed_submissions(mfr_sub_path)
         return result
 
     def all_scores(self, specter_publications_path=None, mfr_publications_path=None,
