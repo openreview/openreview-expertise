@@ -530,7 +530,7 @@ def test_run_pipeline_stale_cache_triggers_recompute(mock_load_model_artifacts, 
             "embedding": pa.array([[0.1, 0.2]], pa.list_(pa.float32())),
             "model": pa.array(["specter"], pa.string()),
             "year_month": pa.array(["2024-01"], pa.string()),
-            "embedding_date": pa.array(["2024-01-15T00:00:00Z"], pa.string()),
+            "embedding_date": pa.array([1705276800000], pa.timestamp('ms')),
         })
         part_dir = Path(tmpdir) / "model=specter" / "year_month=2024-01"
         part_dir.mkdir(parents=True)
@@ -586,7 +586,7 @@ def test_run_pipeline_stale_cache_triggers_recompute(mock_load_model_artifacts, 
             archives_dir = os.path.join(working_dir, 'archives')
             os.makedirs(archives_dir, exist_ok=True)
             with open(os.path.join(archives_dir, 'author.jsonl'), 'w') as f:
-                f.write(json.dumps({"id": "paper1", "mdate": "2024-06-01T00:00:00Z", "content": {"title": "T"}}))
+                f.write(json.dumps({"id": "paper1", "mdate": 1717200000000, "content": {"title": "T"}}))
 
             with open(os.path.join(working_dir, 'pub2vec.jsonl'), 'w') as f:
                 f.write(json.dumps({"paper_id": "paper1", "embedding": [0.1, 0.2]}) + '\n')
