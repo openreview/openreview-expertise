@@ -104,7 +104,6 @@ class Predictor:
         emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
         emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
         weight_tensor = torch.tensor(weight_list, device=torch.device('cpu'), dtype=torch.float32)
-        print(len(bad_id_set))
         return emb_tensor, id_list, bad_id_set, weight_tensor
 
     def _load_emb_dict(self, emb_dict, paper_id_to_weight=None):
@@ -126,5 +125,4 @@ class Predictor:
         emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
         emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
         weight_tensor = torch.tensor(weight_list, device=torch.device('cpu'), dtype=torch.float32)
-        print(len(bad_id_set))
         return emb_tensor, id_list, bad_id_set, weight_tensor
