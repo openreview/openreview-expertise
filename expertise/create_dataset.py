@@ -613,17 +613,7 @@ class OpenReviewExpertise(object):
                 if isinstance(paper_abstr, dict):
                     paper_abstr = paper_abstr.get('value')
 
-                def _iso_mdate(raw):
-                    if raw is None:
-                        return None
-                    if isinstance(raw, (int, float)):
-                        try:
-                            return datetime.datetime.fromtimestamp(raw / 1000, tz=datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                        except Exception:
-                            return None
-                    return str(raw)
-
-                paper_mdate = _iso_mdate(getattr(paper, 'mdate', None))
+                paper_mdate = getattr(paper, 'mdate', None)
 
                 reduced_submissions[paper_id] = {
                     'id': paper_id,

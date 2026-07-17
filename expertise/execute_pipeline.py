@@ -382,10 +382,7 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
     """Append newly computed in-memory embeddings to the Hive-partitioned GCS Parquet cache.
 
     new_embeddings is a dict mapping filename (e.g. 'pub2vec_specter.jsonl') to a
-    dict of paper_id -> embedding (list of floats). Uses the job timestamp embedded
-    in blob_prefix for the year_month partition.
-
-    Returns a dict mapping model name -> write/upload duration in seconds.
+    dict of paper_id -> embedding (list of floats).
     """
     try:
         import pandas as pd
@@ -444,12 +441,11 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
                 pid: edate for pid, edate in zip(latest_rows["paper_id"], latest_rows["embedding_date_max"])
                 if edate is not None
             }
-            if latest_embedding_date:
-                mask = (df["model"] == model) & df["paper_id"].isin(latest_embedding_date)
-                existing_dates = pd.Series(latest_embedding_date)
-                mapped = df.loc[mask, "paper_id"].map(existing_dates)
-                stale_idx = df.loc[mask].index[df.loc[mask, "embedding_date"] <= mapped]
-                df = df.drop(stale_idx)
+            mask = (df["model"] == model) & df["paper_id"].isin(latest_embedding_date)
+            existing_dates = pd.Series(latest_embedding_date)
+            mapped = df.loc[mask, "paper_id"].map(existing_dates)
+            stale_idx = df.loc[mask].index[df.loc[mask, "embedding_date"] <= mapped]
+            df = df.drop(stale_idx)
     except Exception as e:
         print(f"No existing cache to filter against: {e}", flush=True)
 
