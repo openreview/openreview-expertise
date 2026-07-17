@@ -454,13 +454,15 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
         return
 
     try:
-        table = pa.Table.from_pandas(df)
-        embedding_date_idx = table.schema.get_field_index("embedding_date")
-        table = table.set_column(
-            embedding_date_idx,
-            "embedding_date",
-            pc.cast(table.column("embedding_date"), pa.timestamp('ms'))
-        )
+        filtered = df.to_dict('records')
+        table = pa.table({
+            'paper_id': [r['paper_id'] for r in filtered],
+            'embedding': [r['embedding'] for r in filtered],
+            'model': [r['model'] for r in filtered],
+            'year_month': [r['year_month'] for r in filtered],
+            'embedding_date': pa.array([r['embedding_date'] for r in filtered], pa.timestamp('ms')),
+            'job_id': [r['job_id'] for r in filtered],
+        })
         ds.write_dataset(
             table,
             gcs_path,
