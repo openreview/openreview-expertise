@@ -10,9 +10,9 @@ class GlobalEmbeddingsCache:
     Reads embeddings from a Hive-partitioned Parquet store on GCS.
 
     Expected layout:
-        gs://<bucket>/<prefix>/model=<model>/year_month=<YYYY-MM>/*.parquet
+        gs://<bucket>/<prefix>/model=<model>/year_month=<YYYY-MM>/job_id=<job_id>/*.parquet
 
-    Schema columns: paper_id (string), embedding (list<float>), model, year_month, embedding_date
+    Schema columns: paper_id (string), embedding (list<float>), embedding_date (timestamp[ms]), model, year_month, job_id
     """
 
     def __init__(self, bucket_name: str, cache_prefix: str = "embeddings-cache"):

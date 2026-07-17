@@ -405,8 +405,9 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
             return 'scincl'
         return 'specter'
 
-    embedding_date = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    embedding_date = dt.replace(tzinfo=None)
 
+    job_id = blob_prefix.split('/')[-1]
     records = []
     for emb_file, embeddings in (new_embeddings or {}).items():
         model = _model_for_emb_file(emb_file)
@@ -419,6 +420,7 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
                 'model': model,
                 'year_month': year_month,
                 'embedding_date': embedding_date,
+                'job_id': job_id,
             })
 
     if not records:
@@ -455,15 +457,26 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
         print("No new embeddings to append; all paper_ids already cached", flush=True)
         return
 
-    job_id = blob_prefix.split('/')[-1]
-    basename_template = f"{job_id}-{{i}}.parquet"
     try:
+        table = pa.Table.from_pandas(df)
+        embedding_date_idx = table.schema.get_field_index("embedding_date")
+        table = table.set_column(
+            embedding_date_idx,
+            "embedding_date",
+            pc.cast(table.column("embedding_date"), pa.timestamp('ms'))
+        )
         ds.write_dataset(
-            pa.Table.from_pandas(df),
+            table,
             gcs_path,
             format="parquet",
-            partitioning=["model", "year_month"],
-            basename_template=basename_template,
+            partitioning=ds.partitioning(
+                pa.schema([
+                    ("model", pa.string()),
+                    ("year_month", pa.string()),
+                    ("job_id", pa.string()),
+                ]),
+                flavor="hive",
+            ),
             existing_data_behavior="overwrite_or_ignore",
         )
     except Exception as e:
