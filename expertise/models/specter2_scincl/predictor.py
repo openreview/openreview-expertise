@@ -2,6 +2,8 @@ from tqdm import tqdm
 import json
 import os
 
+import torch
+
 class Predictor:
     def _build_embedding_jsonl(self, paper, embedding):
         data = {
@@ -78,3 +80,51 @@ class Predictor:
                     lookup[pid] = emb
                     jsonl_lines[pid] = line + '\n'
         return lookup, jsonl_lines
+
+    def _load_emb_file(self, emb_file, paper_id_to_weight=None):
+        paper_emb_size_default = 768
+        id_list = []
+        emb_list = []
+        weight_list = []
+        bad_id_set = set()
+        for line in emb_file:
+            paper_data = json.loads(line.rstrip())
+            paper_id = paper_data['paper_id']
+            paper_emb_size = len(paper_data['embedding'])
+            assert paper_emb_size == 0 or paper_emb_size == paper_emb_size_default
+            if paper_emb_size == 0:
+                paper_emb = [0] * paper_emb_size_default
+                bad_id_set.add(paper_id)
+            else:
+                paper_emb = paper_data['embedding']
+            id_list.append(paper_id)
+            emb_list.append(paper_emb)
+            if paper_id_to_weight is not None:
+                weight_list.append(paper_id_to_weight.get(paper_id, 1.0))
+        emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
+        emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
+        weight_tensor = torch.tensor(weight_list, device=torch.device('cpu'), dtype=torch.float32)
+        print(len(bad_id_set))
+        return emb_tensor, id_list, bad_id_set, weight_tensor
+
+    def _load_emb_dict(self, emb_dict, paper_id_to_weight=None):
+        paper_emb_size_default = 768
+        id_list = []
+        emb_list = []
+        weight_list = []
+        bad_id_set = set()
+        for paper_id, paper_emb in emb_dict.items():
+            paper_emb_size = len(paper_emb)
+            assert paper_emb_size == 0 or paper_emb_size == paper_emb_size_default
+            if paper_emb_size == 0:
+                paper_emb = [0] * paper_emb_size_default
+                bad_id_set.add(paper_id)
+            if paper_id_to_weight is not None:
+                weight_list.append(paper_id_to_weight.get(paper_id, 1.0))
+            id_list.append(paper_id)
+            emb_list.append(paper_emb)
+        emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
+        emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
+        weight_tensor = torch.tensor(weight_list, device=torch.device('cpu'), dtype=torch.float32)
+        print(len(bad_id_set))
+        return emb_tensor, id_list, bad_id_set, weight_tensor

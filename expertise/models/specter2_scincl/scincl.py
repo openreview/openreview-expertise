@@ -176,54 +176,6 @@ class SciNCLPredictor(Predictor):
 
 
     def all_scores(self, publications_path=None, submissions_path=None, matrix_path=None, p2p_path=None):
-        def load_emb_file(emb_file, paper_id_to_weight=None):
-            paper_emb_size_default = 768
-            id_list = []
-            emb_list = []
-            weight_list = []
-            bad_id_set = set()
-            for line in emb_file:
-                paper_data = json.loads(line.rstrip())
-                paper_id = paper_data['paper_id']
-                paper_emb_size = len(paper_data['embedding'])
-                assert paper_emb_size == 0 or paper_emb_size == paper_emb_size_default
-                if paper_emb_size == 0:
-                    paper_emb = [0] * paper_emb_size_default
-                    bad_id_set.add(paper_id)
-                else:
-                    paper_emb = paper_data['embedding']
-                id_list.append(paper_id)
-                emb_list.append(paper_emb)
-                if paper_id_to_weight is not None:
-                    weight_list.append(paper_id_to_weight.get(paper_id, 1.0))
-            emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
-            emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
-            weight_tensor = torch.tensor(weight_list, device=torch.device('cpu'), dtype=torch.float32)
-            print(len(bad_id_set))
-            return emb_tensor, id_list, bad_id_set, weight_tensor
-
-        def load_emb_dict(emb_dict, paper_id_to_weight=None):
-            paper_emb_size_default = 768
-            id_list = []
-            emb_list = []
-            weight_list = []
-            bad_id_set = set()
-            for paper_id, paper_emb in emb_dict.items():
-                paper_emb_size = len(paper_emb)
-                assert paper_emb_size == 0 or paper_emb_size == paper_emb_size_default
-                if paper_emb_size == 0:
-                    paper_emb = [0] * paper_emb_size_default
-                    bad_id_set.add(paper_id)
-                if paper_id_to_weight is not None:
-                    weight_list.append(paper_id_to_weight.get(paper_id, 1.0))
-                id_list.append(paper_id)
-                emb_list.append(paper_emb)
-            emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
-            emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
-            weight_tensor = torch.tensor(weight_list, device=torch.device('cpu'), dtype=torch.float32)
-            print(len(bad_id_set))
-            return emb_tensor, id_list, bad_id_set, weight_tensor
-
         train_paper_id_to_weight = None
         if self.venue_specific_weights:
             metadata_file = os.path.join(self.work_dir, "scincl_reviewer_paper_data.json")
@@ -235,10 +187,10 @@ class SciNCLPredictor(Predictor):
 
         print('Loading cached publications...')
         if self.publication_embeddings:
-            paper_emb_train, train_id_list, train_bad_id_set, train_weight_tensor = load_emb_dict(self.publication_embeddings, paper_id_to_weight=train_paper_id_to_weight)
+            paper_emb_train, train_id_list, train_bad_id_set, train_weight_tensor = self._load_emb_dict(self.publication_embeddings, paper_id_to_weight=train_paper_id_to_weight)
         else:
             with open(publications_path) as f_in:
-                paper_emb_train, train_id_list, train_bad_id_set, train_weight_tensor = load_emb_file(f_in, paper_id_to_weight=train_paper_id_to_weight)
+                paper_emb_train, train_id_list, train_bad_id_set, train_weight_tensor = self._load_emb_file(f_in, paper_id_to_weight=train_paper_id_to_weight)
         paper_num_train = len(train_id_list)
 
         paper_id2train_idx = {}
@@ -247,10 +199,10 @@ class SciNCLPredictor(Predictor):
 
         print('Loading cached submissions...')
         if self.submission_embeddings:
-            paper_emb_test, test_id_list, test_bad_id_set, _ = load_emb_dict(self.submission_embeddings)
+            paper_emb_test, test_id_list, test_bad_id_set, _ = self._load_emb_dict(self.submission_embeddings)
         else:
             with open(submissions_path) as f_in:
-                paper_emb_test, test_id_list, test_bad_id_set, _ = load_emb_file(f_in)
+                paper_emb_test, test_id_list, test_bad_id_set, _ = self._load_emb_file(f_in)
         paper_num_test = len(test_id_list)
 
         print('Computing all scores...')
