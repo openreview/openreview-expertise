@@ -82,14 +82,16 @@ def test_smfr_scores(tmp_path, create_smfr, create_specter):
     publications_path.mkdir()
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
-    smfrModel.embed_publications(
-        specter_pub_path=publications_path.joinpath('pub2vec.jsonl'),
-        skip_specter=config['model_params'].get('skip_specter', False)
+    smfrModel.specter_predictor.publication_embeddings = smfrModel.specter_predictor.embed(
+        os.path.join(smfrModel.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+        publications_path.joinpath('pub2vec.jsonl')
     )
-    smfrModel.embed_submissions(
-        specter_sub_path=submissions_path.joinpath('sub2vec.jsonl'),
-        skip_specter=config['model_params'].get('skip_specter', False)
+    smfrModel.mfr_predictor.embed_publications(None)
+    smfrModel.specter_predictor.submission_embeddings = smfrModel.specter_predictor.embed(
+        os.path.join(smfrModel.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+        submissions_path.joinpath('sub2vec.jsonl')
     )
+    smfrModel.mfr_predictor.embed_submissions(None)
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()
@@ -127,14 +129,16 @@ def test_sparse_scores(tmp_path, create_smfr):
     publications_path.mkdir()
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
-    smfrModel.embed_publications(
-        specter_pub_path=publications_path.joinpath('pub2vec.jsonl'),
-        skip_specter=config['model_params'].get('skip_specter', False)
+    smfrModel.specter_predictor.publication_embeddings = smfrModel.specter_predictor.embed(
+        os.path.join(smfrModel.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+        publications_path.joinpath('pub2vec.jsonl')
     )
-    smfrModel.embed_submissions(
-        specter_sub_path=submissions_path.joinpath('sub2vec.jsonl'),
-        skip_specter=config['model_params'].get('skip_specter', False)
+    smfrModel.mfr_predictor.embed_publications(None)
+    smfrModel.specter_predictor.submission_embeddings = smfrModel.specter_predictor.embed(
+        os.path.join(smfrModel.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+        submissions_path.joinpath('sub2vec.jsonl')
     )
+    smfrModel.mfr_predictor.embed_submissions(None)
 
     scores_path = tmp_path / 'scores'
     scores_path.mkdir()

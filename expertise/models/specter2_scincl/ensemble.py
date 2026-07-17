@@ -62,40 +62,6 @@ class EnsembleModel:
         print("Setting SciNCL submissions")
         self.scincl_predictor.set_submissions_dataset(submissions_dataset)
 
-    def embed_publications(self, specter_pub_path=None, scincl_pub_path=None, skip_specter=False):
-        result = {}
-        if not skip_specter:
-            print("SPECTER:")
-            result['specter'] = self.specter_predictor.embed(
-                os.path.join(self.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
-                output_path=specter_pub_path
-            )
-            self.specter_predictor.publication_embeddings = result['specter']
-        print("SciNCL:")
-        result['scincl'] = self.scincl_predictor.embed(
-            os.path.join(self.scincl_predictor.work_dir, "scincl_reviewer_paper_data.json"),
-            output_path=scincl_pub_path
-        )
-        self.scincl_predictor.publication_embeddings = result['scincl']
-        return result
-
-    def embed_submissions(self, specter_sub_path=None, scincl_sub_path=None, skip_specter=False):
-        result = {}
-        if not skip_specter:
-            print("SPECTER:")
-            result['specter'] = self.specter_predictor.embed(
-                os.path.join(self.specter_predictor.work_dir, "specter_submission_paper_data.json"),
-                output_path=specter_sub_path
-            )
-            self.specter_predictor.submission_embeddings = result['specter']
-        print("SciNCL:")
-        result['scincl'] = self.scincl_predictor.embed(
-            os.path.join(self.scincl_predictor.work_dir, "scincl_submission_paper_data.json"),
-            output_path=scincl_sub_path
-        )
-        self.scincl_predictor.submission_embeddings = result['scincl']
-        return result
-
     def all_scores(self, specter_publications_path=None, scincl_publications_path=None,
                    specter_submissions_path=None, scincl_submissions_path=None,
                    matrix_path=None):
