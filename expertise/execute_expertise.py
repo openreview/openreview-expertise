@@ -265,6 +265,8 @@ def execute_expertise(config, cached_embeddings=None):
             output_path=submissions_path
         )
         new_embeddings['sub2vec.jsonl'] = {k: v for k, v in predictor.specter_predictor.submission_embeddings.items() if k not in predictor.specter_predictor.cached_embeddings}
+        predictor.mfr_predictor.embed_publications(None)
+        predictor.mfr_predictor.embed_submissions(None)
         predictor.all_scores(
             specter_publications_path=specter_publication_path,
             mfr_publications_path=None,
