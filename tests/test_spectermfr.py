@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy
 import openreview
 import json
+import os
 import pytest
 import numpy as np
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
