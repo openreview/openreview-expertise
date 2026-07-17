@@ -350,7 +350,7 @@ def run_pipeline(
         # Append newly computed embeddings to the global parquet cache so future
         # jobs can reuse them without recomputation.
         try:
-            _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket)
+            _append_embeddings_to_global_cache(new_embeddings, blob_prefix, job_id, bucket)
         except Exception as e:
             print(f"Global cache append failed (non-critical): {e}", flush=True)
 
@@ -375,7 +375,7 @@ def run_pipeline(
             print(f'Cleaning up working directory: {working_dir}')
             shutil.rmtree(working_dir)
 
-def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
+def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, job_id, bucket):
     """Append newly computed in-memory embeddings to the Hive-partitioned GCS Parquet cache.
 
     new_embeddings is a dict mapping filename (e.g. 'pub2vec_specter.jsonl') to a
@@ -405,7 +405,6 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, bucket):
 
     embedding_date = dt.replace(tzinfo=None)
 
-    job_id = blob_prefix.split('/')[-1]
     records = []
     for emb_file, embeddings in (new_embeddings or {}).items():
         model = _model_for_emb_file(emb_file)

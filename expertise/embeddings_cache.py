@@ -73,7 +73,11 @@ class GlobalEmbeddingsCache:
             model_table = table.filter(pc.equal(table["model"], model))
             if len(model_table) > 0:
                 rows = model_table.to_pydict()
-                result[model] = dict(zip(rows["paper_id"], rows["embedding"]))
+                best = {}
+                for pid, emb, edate in zip(rows["paper_id"], rows["embedding"], rows["embedding_date"]):
+                    if pid not in best or edate > best[pid][1]:
+                        best[pid] = (emb, edate)
+                result[model] = {pid: emb for pid, (emb, _) in best.items()}
         return result
 
     def get_embeddings(self, paper_ids: List[str], model_name: str,
