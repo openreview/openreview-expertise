@@ -36,7 +36,7 @@ setup(
         'google-cloud-storage',
         'google-cloud-aiplatform',
         'bullmq==2.11.0',
-        'pyarrow'
+        'pyarrow==23.0.1'
     ],
     extras_require={
         'dev': [
