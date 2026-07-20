@@ -62,20 +62,6 @@ class EnsembleModel:
         print("Setting SciNCL submissions")
         self.scincl_predictor.set_submissions_dataset(submissions_dataset)
 
-    def embed_submissions(self, specter_submissions_path=None, scincl_submissions_path=None, skip_specter=False):
-        if not skip_specter:
-            print("SPECTER:")
-            self.specter_predictor.embed_submissions(specter_submissions_path)
-        print("SciNCL:")
-        self.scincl_predictor.embed_submissions(scincl_submissions_path)
-
-    def embed_publications(self, specter_publications_path=None, scincl_publications_path=None, skip_specter=False):
-        if not skip_specter:
-            print("SPECTER:")
-            self.specter_predictor.embed_publications(specter_publications_path)
-        print("SciNCL:")
-        self.scincl_predictor.embed_publications(scincl_publications_path)
-
     def all_scores(self, specter_publications_path=None, scincl_publications_path=None,
                    specter_submissions_path=None, scincl_submissions_path=None,
                    matrix_path=None):

@@ -14,7 +14,7 @@ from pathlib import Path
 import multiprocessing
 from bullmq import Queue, Worker
 from expertise.execute_expertise import execute_create_dataset, execute_expertise
-from expertise.service.utils import GCPInterface, extract_venue_key
+from expertise.service.utils import GCPInterface
 from copy import deepcopy
 import asyncio
 import threading
@@ -559,6 +559,7 @@ class ExpertiseService(BaseExpertiseService):
 
         except ExpectedDataError as e:
             # Expected data errors - mark as data error, don't re-raise, avoid triggering retries
+            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
         except Exception as e:
             self.update_status(config, JobStatus.ERROR, str(e))
@@ -831,63 +832,6 @@ class ExpertiseCloudService(BaseExpertiseService):
         else:
             return self.server_config.get('LARGE_NAME')
 
-    # Maps the request's `model` field to (cache_lookup_key, dest_filename) pairs.
-    # cache_lookup_key picks which pub2vec_*.jsonl to read from prior jobs;
-    # dest_filename is what the predictor reads off disk for that model run.
-    _PUBLICATION_CACHE_TARGETS = {
-        'specter2+scincl': [
-            ('specter', 'cached_pub2vec_specter.jsonl'),
-            ('scincl',  'cached_pub2vec_scincl.jsonl'),
-        ],
-        'specter2': [('specter', 'cached_pub2vec.jsonl')],
-        'scincl':   [('scincl',  'cached_pub2vec.jsonl')],
-        'specter':  [('specter', 'cached_pub2vec.jsonl')],
-    }
-
-    def _populate_publication_cache(self, config, request, job):
-        """Pull publication embeddings from recent same-venue jobs into config.job_dir.
-
-        Best-effort: any failure is logged by the caller but does not block the
-        pipeline. Files land alongside the dataset and get tarred up by the
-        next upload_dataset call.
-        """
-        model_name = (request.get('model') or {}).get('name')
-        targets = self._PUBLICATION_CACHE_TARGETS.get(model_name)
-        if not targets:
-            return
-
-        venue_key = extract_venue_key(request)
-        if not venue_key:
-            return
-
-        lookback_days = self.server_config.get('EMBEDDING_CACHE_LOOKBACK_DAYS', 14)
-        max_jobs = self.server_config.get('EMBEDDING_CACHE_MAX_JOBS', 5)
-        since_ms = int(time.time() * 1000) - lookback_days * 86400 * 1000
-
-        recent = self.cloud.find_recent_venue_jobs(
-            venue_key=venue_key,
-            since_ms=since_ms,
-            limit=max_jobs,
-            exclude_cloud_id=config.cloud_id,
-        )
-        if not recent:
-            self.logger.info(f"No prior venue-matched jobs for venue={venue_key}")
-            return
-
-        for cache_key, dest_name in targets:
-            dest_path = os.path.join(config.job_dir, dest_name)
-            count = self.cloud.merge_cached_publication_embeddings(
-                cloud_ids=recent,
-                model_name=cache_key,
-                dest_path=dest_path,
-            )
-            if count > 0:
-                asyncio.run_coroutine_threadsafe(
-                    job.log(f"Reused {count} cached publication embeddings ({cache_key}) from {len(recent)} prior venue jobs"),
-                    self.queue_loop,
-                )
-                self.logger.info(f"Wrote {count} cached embeddings to {dest_path}")
-
     async def worker_process(self, job, token):
         descriptions = JobDescription.VALS.value
         user_id = job.data['user_id']
@@ -903,6 +847,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         try:
             execute_create_dataset(openreview_client_v2, config=config.to_json())
         except ExpectedDataError as e:
+            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
             return
         except Exception as e:
@@ -917,18 +862,16 @@ class ExpertiseCloudService(BaseExpertiseService):
         config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
         machine_type = self.compute_machine_type_from_dataset(config)
         self.logger.info(f"Machine type for {redis_id}: {machine_type}")
-        try:
-            self._populate_publication_cache(config, request, job)
-        except Exception as e:
-            self.logger.warning(f"Embedding cache lookup failed for {redis_id}: {e}")
+
         asyncio.run_coroutine_threadsafe(job.log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset'), self.queue_loop)
         try:
             dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
         except ExpectedDataError as e:
+            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
             self.update_status(config, JobStatus.DATA_ERROR, str(e))
             return
-        asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})'), self.queue_loop)
 
+        asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})'), self.queue_loop)
         try:
             self.cloud.create_job(
                 deepcopy(request),
@@ -945,8 +888,6 @@ class ExpertiseCloudService(BaseExpertiseService):
             config = self.redis.load_job(redis_id, user_id)
             if config.status != JobStatus.ERROR:
                 self.update_status(config, JobStatus.ERROR, f"Error creating cloud job: {e}")
-            # If we fail to create the job, we should not proceed with polling
-            # Re-raise exception to appear in the queue
             raise e.with_traceback(e.__traceback__)
 
         try:
@@ -972,13 +913,10 @@ class ExpertiseCloudService(BaseExpertiseService):
                         self.logger.info(f"INFO: after update status")
 
                     if status['status'] == JobStatus.COMPLETED:
-                        self.logger.info(f"Job {redis_id} completed successfully.")
-                        return # Exit the loop on successful completion
+                        return
 
                     elif status['status'] == JobStatus.DATA_ERROR:
-                        # Expected data errors - job is "complete" from queue perspective
-                        self.logger.info(f"Job {redis_id} completed with expected error: {status['description']}")
-                        return # Exit the loop - don't raise exception
+                        return
 
                     elif status['status'] == JobStatus.ERROR:
                         self.logger.error(f"Job {redis_id} encountered an error: {status['description']}")
@@ -992,7 +930,6 @@ class ExpertiseCloudService(BaseExpertiseService):
                 await asyncio.sleep(self.poll_interval)
                 self.logger.info(f"INFO: after sleep")
 
-            # If the loop completes without a break, raise timeout
             else:
                 self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {redis_id}.")
                 config = self.redis.load_job(redis_id, user_id)
@@ -1003,7 +940,6 @@ class ExpertiseCloudService(BaseExpertiseService):
             self.logger.info(f"Polling loop finished for job {redis_id}.")
 
         except Exception as e:
-            # Re-raise exception to appear in the queue
             raise e.with_traceback(e.__traceback__)
 
     def start_expertise(self, request, client):

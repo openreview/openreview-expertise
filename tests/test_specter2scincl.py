@@ -8,6 +8,7 @@ import pytest
 import numpy as np
 import torch
 import math
+import os
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from expertise.models import specter2_scincl
 import redisai
@@ -137,13 +138,21 @@ def test_specncl_scores(tmp_path, create_specncl):
     publications_path.mkdir()
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
-    specnclModel.embed_publications(
-        specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
-        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl')
+    specnclModel.specter_predictor.publication_embeddings = specnclModel.specter_predictor.embed(
+        os.path.join(specnclModel.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+        publications_path.joinpath('pub2vec_specter.jsonl')
     )
-    specnclModel.embed_submissions(
-        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
-        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
+    specnclModel.scincl_predictor.publication_embeddings = specnclModel.scincl_predictor.embed(
+        os.path.join(specnclModel.scincl_predictor.work_dir, "scincl_reviewer_paper_data.json"),
+        publications_path.joinpath('pub2vec_scincl.jsonl')
+    )
+    specnclModel.specter_predictor.submission_embeddings = specnclModel.specter_predictor.embed(
+        os.path.join(specnclModel.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+        submissions_path.joinpath('sub2vec_specter.jsonl')
+    )
+    specnclModel.scincl_predictor.submission_embeddings = specnclModel.scincl_predictor.embed(
+        os.path.join(specnclModel.scincl_predictor.work_dir, "scincl_submission_paper_data.json"),
+        submissions_path.joinpath('sub2vec_scincl.jsonl')
     )
 
     scores_path = tmp_path / 'scores'
@@ -182,13 +191,21 @@ def test_sparse_scores(tmp_path, create_specncl):
     publications_path.mkdir()
     submissions_path = tmp_path / 'submissions'
     submissions_path.mkdir()
-    specnclModel.embed_publications(
-        specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
-        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl')
+    specnclModel.specter_predictor.publication_embeddings = specnclModel.specter_predictor.embed(
+        os.path.join(specnclModel.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+        publications_path.joinpath('pub2vec_specter.jsonl')
     )
-    specnclModel.embed_submissions(
-        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
-        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
+    specnclModel.scincl_predictor.publication_embeddings = specnclModel.scincl_predictor.embed(
+        os.path.join(specnclModel.scincl_predictor.work_dir, "scincl_reviewer_paper_data.json"),
+        publications_path.joinpath('pub2vec_scincl.jsonl')
+    )
+    specnclModel.specter_predictor.submission_embeddings = specnclModel.specter_predictor.embed(
+        os.path.join(specnclModel.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+        submissions_path.joinpath('sub2vec_specter.jsonl')
+    )
+    specnclModel.scincl_predictor.submission_embeddings = specnclModel.scincl_predictor.embed(
+        os.path.join(specnclModel.scincl_predictor.work_dir, "scincl_submission_paper_data.json"),
+        submissions_path.joinpath('sub2vec_scincl.jsonl')
     )
 
     scores_path = tmp_path / 'scores'
@@ -306,13 +323,21 @@ def test_normalization(tmp_path, create_specncl):
     publications_path.mkdir()
     submissions_path = unnorm_path / 'submissions'
     submissions_path.mkdir()
-    specnclModel.embed_publications(
-        specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
-        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl')
+    specnclModel.specter_predictor.publication_embeddings = specnclModel.specter_predictor.embed(
+        os.path.join(specnclModel.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+        publications_path.joinpath('pub2vec_specter.jsonl')
     )
-    specnclModel.embed_submissions(
-        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
-        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
+    specnclModel.scincl_predictor.publication_embeddings = specnclModel.scincl_predictor.embed(
+        os.path.join(specnclModel.scincl_predictor.work_dir, "scincl_reviewer_paper_data.json"),
+        publications_path.joinpath('pub2vec_scincl.jsonl')
+    )
+    specnclModel.specter_predictor.submission_embeddings = specnclModel.specter_predictor.embed(
+        os.path.join(specnclModel.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+        submissions_path.joinpath('sub2vec_specter.jsonl')
+    )
+    specnclModel.scincl_predictor.submission_embeddings = specnclModel.scincl_predictor.embed(
+        os.path.join(specnclModel.scincl_predictor.work_dir, "scincl_submission_paper_data.json"),
+        submissions_path.joinpath('sub2vec_scincl.jsonl')
     )
 
     scores_path = unnorm_path / 'scores'
@@ -358,13 +383,21 @@ def test_normalization(tmp_path, create_specncl):
     publications_path.mkdir()
     submissions_path = norm_path / 'submissions'
     submissions_path.mkdir()
-    specnclModel.embed_publications(
-        specter_publications_path=publications_path.joinpath('pub2vec_specter.jsonl'),
-        scincl_publications_path=publications_path.joinpath('pub2vec_scincl.jsonl')
+    specnclModel.specter_predictor.publication_embeddings = specnclModel.specter_predictor.embed(
+        os.path.join(specnclModel.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+        publications_path.joinpath('pub2vec_specter.jsonl')
     )
-    specnclModel.embed_submissions(
-        specter_submissions_path=submissions_path.joinpath('sub2vec_specter.jsonl'),
-        scincl_submissions_path=submissions_path.joinpath('sub2vec_scincl.jsonl'),
+    specnclModel.scincl_predictor.publication_embeddings = specnclModel.scincl_predictor.embed(
+        os.path.join(specnclModel.scincl_predictor.work_dir, "scincl_reviewer_paper_data.json"),
+        publications_path.joinpath('pub2vec_scincl.jsonl')
+    )
+    specnclModel.specter_predictor.submission_embeddings = specnclModel.specter_predictor.embed(
+        os.path.join(specnclModel.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+        submissions_path.joinpath('sub2vec_specter.jsonl')
+    )
+    specnclModel.scincl_predictor.submission_embeddings = specnclModel.scincl_predictor.embed(
+        os.path.join(specnclModel.scincl_predictor.work_dir, "scincl_submission_paper_data.json"),
+        submissions_path.joinpath('sub2vec_scincl.jsonl')
     )
 
     scores_path = norm_path / 'scores'
@@ -590,8 +623,14 @@ def test_cached_embeddings_produce_identical_results(tmp_path):
     fresh_pub_path.parent.mkdir(exist_ok=True)
     fresh_sub_path.parent.mkdir(exist_ok=True)
 
-    model_fresh.specter_predictor.embed_publications(fresh_pub_path)
-    model_fresh.specter_predictor.embed_submissions(fresh_sub_path)
+    model_fresh.specter_predictor.publication_embeddings = model_fresh.specter_predictor.embed(
+        os.path.join(model_fresh.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+        fresh_pub_path
+    )
+    model_fresh.specter_predictor.submission_embeddings = model_fresh.specter_predictor.embed(
+        os.path.join(model_fresh.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+        fresh_sub_path
+    )
 
     # Copy fresh embeddings to create "cached" version
     cached_pub_path = work_dir_cached / "cached_pub2vec_specter.jsonl"
@@ -617,8 +656,14 @@ def test_cached_embeddings_produce_identical_results(tmp_path):
     output_sub_path = work_dir_cached / "sub2vec_specter.jsonl"
 
     # Run embed_publications - it should use the cached embeddings
-    model_cached.specter_predictor.embed_publications(output_pub_path)
-    model_cached.specter_predictor.embed_submissions(output_sub_path)
+    model_cached.specter_predictor.publication_embeddings = model_cached.specter_predictor.embed(
+        os.path.join(model_cached.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+        output_pub_path
+    )
+    model_cached.specter_predictor.submission_embeddings = model_cached.specter_predictor.embed(
+        os.path.join(model_cached.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+        output_sub_path
+    )
 
     # Compare the output files byte-for-byte
     fresh_content = fresh_pub_path.read_text()
@@ -678,7 +723,14 @@ def test_venue_specific_weights_with_weightless_cache(tmp_path):
     # Embed once to get real embeddings, then strip the embedding lines into
     # weightless cached_pub2vec_*.jsonl files to simulate cache from a prior
     # job that ran without venue_specific_weights.
-    model.embed_publications(specter_pub_path, scincl_pub_path)
+    model.specter_predictor.publication_embeddings = model.specter_predictor.embed(
+        os.path.join(model.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+        specter_pub_path
+    )
+    model.scincl_predictor.publication_embeddings = model.scincl_predictor.embed(
+        os.path.join(model.scincl_predictor.work_dir, "scincl_reviewer_paper_data.json"),
+        scincl_pub_path
+    )
 
     def strip_weight_into_cache(src, dst):
         with open(src) as f_in, open(dst, "w") as f_out:
@@ -694,13 +746,31 @@ def test_venue_specific_weights_with_weightless_cache(tmp_path):
     specter_pub_path.unlink()
     scincl_pub_path.unlink()
 
+    def _load_jsonl_cache(path):
+        lookup = {}
+        with open(path) as f:
+            for line in f:
+                entry = json.loads(line)
+                lookup[entry["paper_id"]] = entry["embedding"]
+        return lookup
+
+    model.specter_predictor.cached_embeddings = _load_jsonl_cache(specter_cache)
+    model.scincl_predictor.cached_embeddings = _load_jsonl_cache(scincl_cache)
+
     # Re-run with weightless cache present. all_scores must not raise KeyError.
     # Spy on _batch_predict so we can prove the cache was the source of truth
     # rather than the model. If the cache wasn't consumed, embed_publications
     # would re-run inference and call _batch_predict at least once per predictor.
     with patch.object(model.specter_predictor, '_batch_predict', wraps=model.specter_predictor._batch_predict) as specter_spy, \
          patch.object(model.scincl_predictor, '_batch_predict', wraps=model.scincl_predictor._batch_predict) as scincl_spy:
-        model.embed_publications(specter_pub_path, scincl_pub_path)
+        model.specter_predictor.publication_embeddings = model.specter_predictor.embed(
+            os.path.join(model.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+            specter_pub_path
+        )
+        model.scincl_predictor.publication_embeddings = model.scincl_predictor.embed(
+            os.path.join(model.scincl_predictor.work_dir, "scincl_reviewer_paper_data.json"),
+            scincl_pub_path
+        )
         assert specter_spy.call_count == 0, (
             f"Expected cache hit for all papers, but specter._batch_predict ran {specter_spy.call_count} times"
         )
@@ -708,7 +778,14 @@ def test_venue_specific_weights_with_weightless_cache(tmp_path):
             f"Expected cache hit for all papers, but scincl._batch_predict ran {scincl_spy.call_count} times"
         )
 
-    model.embed_submissions(specter_sub_path, scincl_sub_path)
+    model.specter_predictor.submission_embeddings = model.specter_predictor.embed(
+        os.path.join(model.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+        specter_sub_path
+    )
+    model.scincl_predictor.submission_embeddings = model.scincl_predictor.embed(
+        os.path.join(model.scincl_predictor.work_dir, "scincl_submission_paper_data.json"),
+        scincl_sub_path
+    )
 
     # Cache lines should pass through verbatim (byte-equal to what we wrote).
     assert specter_pub_path.read_text() == specter_cache.read_text()

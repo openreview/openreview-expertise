@@ -353,12 +353,12 @@ class TestExpertiseCloudService():
                     },
                     "entityB": {
                         'type': "Note",
-                        'invitation': "TMLR/-/Submission" 
+                        'invitation': "TMLR/-/Submission"
                     },
                     "model": {
                             "name": "specter+mfr",
-                            'useTitle': False, 
-                            'useAbstract': True, 
+                            'useTitle': False,
+                            'useAbstract': True,
                             'skipSpecter': False,
                             'scoreComputation': 'avg'
                     },

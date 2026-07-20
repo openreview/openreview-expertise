@@ -613,8 +613,11 @@ class OpenReviewExpertise(object):
                 if isinstance(paper_abstr, dict):
                     paper_abstr = paper_abstr.get('value')
 
+                paper_mdate = getattr(paper, 'mdate', None)
+
                 reduced_submissions[paper_id] = {
                     'id': paper_id,
+                    'mdate': paper_mdate,
                     'content': {
                         'title': paper_title,
                         'abstract': paper_abstr

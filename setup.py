@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='openreview-expertise',
-    version='2.2.6',
+    version='2.2.7',
     description='OpenReview paper-reviewer affinity modeling',
     url='https://github.com/openreview/openreview-expertise',
     author='OpenReview',
@@ -35,7 +35,8 @@ setup(
         'importlib-metadata==4.13.0',
         'google-cloud-storage',
         'google-cloud-aiplatform',
-        'bullmq==2.11.0'
+        'bullmq==2.11.0',
+        'pyarrow==23.0.1'
     ],
     extras_require={
         'dev': [
