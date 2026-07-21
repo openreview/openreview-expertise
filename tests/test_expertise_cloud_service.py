@@ -567,8 +567,8 @@ class TestExpertiseCloudService():
 
         # The signer should have been called with the scores blob path and requested duration
         mock_sign_url.assert_called_once()
-        _, kwargs = mock_sign_url.call_args
-        assert kwargs.get('duration_minutes') == 15
+        args, kwargs = mock_sign_url.call_args
+        assert (kwargs.get('duration_minutes') if kwargs else args[2]) == 15
 
         # Request as a different user should be forbidden
         forbidden_response = test_client.get(

@@ -1545,11 +1545,14 @@ class GCPInterface(object):
             )
 
         source_credentials, project = google_auth_default()
+        # The impersonation token only needs to live long enough to sign the URL;
+        # it is independent of the signed URL's expiration.
+        token_lifetime_seconds = min(int(duration_minutes) * 60, 300)
         target_credentials = ImpersonatedCredentials(
             source_credentials=source_credentials,
             target_principal=self.url_signer_service_account,
             target_scopes=['https://www.googleapis.com/auth/cloud-platform'],
-            lifetime=duration_minutes * 60,
+            lifetime=token_lifetime_seconds,
         )
         client = storage.Client(credentials=target_credentials, project=project)
         blob = client.bucket(bucket_name).blob(blob_name)

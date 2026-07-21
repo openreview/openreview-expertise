@@ -470,16 +470,7 @@ def signed_url():
         elif 'bad request' in error_type.lower():
             status = 400
 
-        if status == 400:
-            message = 'Bad request'
-        elif status == 403:
-            message = 'Forbidden'
-        elif status == 404:
-            message = 'Not found'
-        else:
-            message = 'Internal server error'
-
-        return flask.jsonify(format_error(status, message)), status
+        return flask.jsonify(format_error(status, error_type)), status
 
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle), exc_info=True)
