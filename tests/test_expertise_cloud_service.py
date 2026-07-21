@@ -565,10 +565,11 @@ class TestExpertiseCloudService():
         assert signed_url_response.status_code == 200, signed_url_response.json
         assert signed_url_response.json == {'signedUrl': 'https://signed.url/test-scores'}
 
-        # The signer should have been called with the scores blob path
+        # The signer should have been called with the bucket and scores blob path
         mock_sign_url.assert_called_once()
         args, kwargs = mock_sign_url.call_args
-        assert (kwargs.get('duration_minutes') if kwargs else args[2]) is None
+        assert len(args) == 2
+        assert args[1] == f'{gcs_jobs_prefix}/{config.cloud_id}/scores.csv'
 
         # Request as a different user should be forbidden
         forbidden_response = test_client.get(
