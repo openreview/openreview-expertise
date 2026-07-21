@@ -1487,27 +1487,16 @@ class GCPInterface(object):
         return _get_scores_and_metadata_streaming(job_blobs, target_blob, job_id, group_group_matching, paper_paper_matching)
 
     def _select_score_blob(self, job_blobs):
-        """Return the single score blob for a job, preferring the sparse file."""
+        """Return the single full score blob for a job."""
         score_files = [
             blob for blob in job_blobs
-            if blob.name.endswith('scores.csv') or blob.name.endswith('scores_sparse.csv')
-            or blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
+            if blob.name.endswith('scores.csv') or blob.name.endswith('scores.jsonl')
         ]
-        if len(score_files) < 1 or len(score_files) > 2:
+        if len(score_files) != 1:
             raise openreview.OpenReviewException(
-                f'Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}'
+                f'Internal Error: incorrect score files found expected [1] found {len(score_files)}'
             )
-
-        sparse_score_files = [blob for blob in score_files if 'sparse' in blob.name]
-        if len(sparse_score_files) == 1:
-            return sparse_score_files[0]
-
-        non_sparse_score_files = [blob for blob in score_files if 'sparse' not in blob.name]
-        if len(non_sparse_score_files) != 1:
-            raise openreview.OpenReviewException(
-                f'Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}'
-            )
-        return non_sparse_score_files[0]
+        return score_files[0]
 
     def sign_url(self, bucket_name, blob_name):
         """Generate a V4 signed URL for a GCS blob.
@@ -1534,7 +1523,7 @@ class GCPInterface(object):
         blob = client.bucket(bucket_name).blob(blob_name)
         return blob.generate_signed_url(
             version='v4',
-            expiration=datetime.timedelta(minutes=10),
+            expiration=datetime.timedelta(minutes=5),
             method='GET',
         )
 

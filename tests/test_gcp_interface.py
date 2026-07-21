@@ -1479,7 +1479,7 @@ def test_sign_url_with_impersonation(mock_storage_client, mock_credentials_cls, 
 @patch("expertise.service.utils.google_auth_default")
 @patch("expertise.service.utils.ImpersonatedCredentials")
 @patch("expertise.service.utils.storage.Client")
-def test_get_job_results_signed_url_sparse(mock_storage_client, mock_credentials_cls, mock_auth_default, openreview_client):
+def test_get_job_results_signed_url_full(mock_storage_client, mock_credentials_cls, mock_auth_default, openreview_client):
     mock_auth_default.return_value = (MagicMock(), 'test_project')
     mock_credentials_cls.return_value = MagicMock()
 
@@ -1491,20 +1491,16 @@ def test_get_job_results_signed_url_sparse(mock_storage_client, mock_credentials
     mock_metadata_blob.name = "jobs/job-1/metadata.json"
 
     mock_score_blob = MagicMock()
-    mock_score_blob.name = "jobs/job-1/scores.jsonl"
-
-    mock_sparse_blob = MagicMock()
-    mock_sparse_blob.name = "jobs/job-1/scores_sparse.jsonl"
+    mock_score_blob.name = "jobs/job-1/scores.csv"
 
     mock_signed_blob = MagicMock()
-    mock_signed_blob.generate_signed_url.return_value = 'https://signed.url/sparse'
+    mock_signed_blob.generate_signed_url.return_value = 'https://signed.url/full'
 
     mock_bucket = MagicMock()
     mock_bucket.list_blobs.return_value = [
         mock_request_blob,
         mock_metadata_blob,
         mock_score_blob,
-        mock_sparse_blob,
     ]
     mock_bucket.blob.return_value = mock_signed_blob
 
@@ -1525,10 +1521,8 @@ def test_get_job_results_signed_url_sparse(mock_storage_client, mock_credentials
 
     result = gcp_interface.get_job_results_signed_url("test_user", "job-1")
 
-    assert result == 'https://signed.url/sparse'
-    mock_bucket.blob.assert_called_once_with("jobs/job-1/scores_sparse.jsonl")
-    mock_bucket.list_blobs.assert_called_once_with(prefix="jobs/job-1/")
-    mock_bucket.blob.assert_called_once_with("jobs/job-1/scores_sparse.jsonl")
+    assert result == 'https://signed.url/full'
+    mock_bucket.blob.assert_called_once_with("jobs/job-1/scores.csv")
 
 
 @patch("expertise.service.utils.storage.Client")
