@@ -1414,3 +1414,144 @@ def test_find_recent_venue_jobs_respects_limit_and_exclusion(mock_storage_client
     assert result == ["job-old-1719500000000"]
 
 
+@patch("expertise.service.utils.storage.Client")
+def test_sign_url_not_configured(mock_storage_client, openreview_client):
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    with pytest.raises(openreview.OpenReviewException, match="Signed URLs are not configured"):
+        gcp_interface.sign_url("test-bucket", "jobs/job-1/scores.csv")
+
+
+@patch("expertise.service.utils.google_auth_default")
+@patch("expertise.service.utils.ImpersonatedCredentials")
+@patch("expertise.service.utils.storage.Client")
+def test_sign_url_with_impersonation(mock_storage_client, mock_credentials_cls, mock_auth_default, openreview_client):
+    mock_source_credentials = MagicMock()
+    mock_target_credentials = MagicMock()
+    mock_auth_default.return_value = (mock_source_credentials, 'test_project')
+    mock_credentials_cls.return_value = mock_target_credentials
+
+    mock_blob = MagicMock()
+    mock_blob.generate_signed_url.return_value = 'https://signed.url/test'
+    mock_bucket = MagicMock()
+    mock_bucket.blob.return_value = mock_blob
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+    gcp_interface.url_signer_service_account = 'url-signer@test-project.iam.gserviceaccount.com'
+
+    result = gcp_interface.sign_url("test-bucket", "jobs/job-1/scores.csv", duration_minutes=5)
+
+    assert result == 'https://signed.url/test'
+    mock_credentials_cls.assert_called_once_with(
+        source_credentials=mock_source_credentials,
+        target_principal='url-signer@test-project.iam.gserviceaccount.com',
+        target_scopes=['https://www.googleapis.com/auth/cloud-platform'],
+        lifetime=300,
+    )
+    mock_blob.generate_signed_url.assert_called_once_with(
+        version='v4',
+        expiration=datetime.timedelta(minutes=5),
+        method='GET',
+    )
+
+
+@patch("expertise.service.utils.google_auth_default")
+@patch("expertise.service.utils.ImpersonatedCredentials")
+@patch("expertise.service.utils.storage.Client")
+def test_get_job_results_signed_url_sparse(mock_storage_client, mock_credentials_cls, mock_auth_default, openreview_client):
+    mock_auth_default.return_value = (MagicMock(), 'test_project')
+    mock_credentials_cls.return_value = MagicMock()
+
+    mock_request_blob = MagicMock()
+    mock_request_blob.name = "jobs/job-1/request.json"
+    mock_request_blob.download_as_string.return_value = json.dumps({"user_id": "test_user"})
+
+    mock_metadata_blob = MagicMock()
+    mock_metadata_blob.name = "jobs/job-1/metadata.json"
+
+    mock_score_blob = MagicMock()
+    mock_score_blob.name = "jobs/job-1/scores.jsonl"
+
+    mock_sparse_blob = MagicMock()
+    mock_sparse_blob.name = "jobs/job-1/scores_sparse.jsonl"
+
+    mock_signed_blob = MagicMock()
+    mock_signed_blob.generate_signed_url.return_value = 'https://signed.url/sparse'
+
+    mock_bucket = MagicMock()
+    mock_bucket.list_blobs.return_value = [
+        mock_request_blob,
+        mock_metadata_blob,
+        mock_score_blob,
+        mock_sparse_blob,
+    ]
+    mock_bucket.blob.return_value = mock_signed_blob
+
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+    gcp_interface.url_signer_service_account = 'url-signer@test-project.iam.gserviceaccount.com'
+
+    result = gcp_interface.get_job_results_signed_url("test_user", "job-1", duration_minutes=10)
+
+    assert result == 'https://signed.url/sparse'
+    mock_bucket.list_blobs.assert_called_once_with(prefix="jobs/job-1/")
+    mock_bucket.blob.assert_called_once_with("jobs/job-1/scores_sparse.jsonl")
+
+
+@patch("expertise.service.utils.storage.Client")
+def test_get_job_results_signed_url_forbidden(mock_storage_client, openreview_client):
+    mock_request_blob = MagicMock()
+    mock_request_blob.name = "jobs/job-1/request.json"
+    mock_request_blob.download_as_string.return_value = json.dumps({"user_id": "other_user"})
+
+    mock_bucket = MagicMock()
+    mock_bucket.list_blobs.return_value = [mock_request_blob]
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    with pytest.raises(openreview.OpenReviewException, match="Forbidden: Insufficient permissions to access job"):
+        gcp_interface.get_job_results_signed_url("test_user", "job-1")
+

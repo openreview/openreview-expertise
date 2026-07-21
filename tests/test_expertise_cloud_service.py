@@ -107,6 +107,7 @@ class TestExpertiseCloudService():
             "GCP_BUCKET_NAME" : GCS_TEST_BUCKET,
             "GCP_JOBS_FOLDER" : gcs_jobs_prefix,
             "GCP_SERVICE_LABEL":{'dev': 'expertise'},
+            "GCP_URL_SIGNER_SERVICE_ACCOUNT": 'url-signer@test-project.iam.gserviceaccount.com',
             "POLL_INTERVAL": 1,
             "POLL_MAX_ATTEMPTS": 5,
             "model_params": {
@@ -489,6 +490,94 @@ class TestExpertiseCloudService():
         )
         assert metadata_response.status_code == 200, metadata_response.json
         assert metadata_response.json == {"meta": "data"}
+
+    @patch("expertise.service.utils.GCPInterface.sign_url")
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
+    def test_signed_url_endpoint(self, mock_pipeline_job, mock_sign_url, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
+        def setup_job_mocks():
+            mock_pipeline_instance = MagicMock()
+            mock_pipeline_job.return_value = mock_pipeline_instance
+
+            mock_pipeline_running = MagicMock()
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
+            mock_pipeline_running.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_succeeded = MagicMock()
+            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
+            mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+
+            return mock_pipeline_instance
+
+        mock_sign_url.return_value = 'https://signed.url/test-scores'
+
+        redis = RedisDatabase(
+            host=openreview_context_cloud['config']['REDIS_ADDR'],
+            port=openreview_context_cloud['config']['REDIS_PORT'],
+            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
+            sync_on_disk=False
+        )
+
+        abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
+        abc_client.impersonate('CLD.cc')
+
+        tmlr_client = openreview.api.OpenReviewClient(token=openreview_client.token)
+        tmlr_client.impersonate('TMLR')
+
+        test_client = openreview_context_cloud['test_client']
+
+        setup_job_mocks()
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                "name": "test_signed_url",
+                "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
+                "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
+                "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'},
+                "dataset": {'minimumPubDate': 0}
+            }),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
+        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
+
+        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+
+        # Upload mock results
+        metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
+        metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
+
+        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.csv")
+        scores_blob.upload_from_string('entityA,entityB,score\nuser1,note1,0.99\n')
+
+        # Request signed URL as the job owner
+        signed_url_response = test_client.get(
+            '/expertise/signed-url',
+            headers=abc_client.headers,
+            query_string={'jobId': job_id, 'duration': 15}
+        )
+        assert signed_url_response.status_code == 200, signed_url_response.json
+        assert signed_url_response.json == {'signedUrl': 'https://signed.url/test-scores'}
+
+        # The signer should have been called with the scores blob path and requested duration
+        mock_sign_url.assert_called_once()
+        _, kwargs = mock_sign_url.call_args
+        assert kwargs.get('duration_minutes') == 15
+
+        # Request as a different user should be forbidden
+        forbidden_response = test_client.get(
+            '/expertise/signed-url',
+            headers=tmlr_client.headers,
+            query_string={'jobId': job_id}
+        )
+        assert forbidden_response.status_code == 403, forbidden_response.json
+        assert 'forbidden' in forbidden_response.json['message'].lower()
 
     @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_group_group_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
