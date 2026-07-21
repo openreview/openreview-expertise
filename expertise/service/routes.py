@@ -470,11 +470,20 @@ def signed_url():
         elif 'bad request' in error_type.lower():
             status = 400
 
-        return flask.jsonify(format_error(status, error_type)), status
+        if status == 400:
+            message = 'Bad request'
+        elif status == 403:
+            message = 'Forbidden'
+        elif status == 404:
+            message = 'Not found'
+        else:
+            message = 'Internal server error'
+
+        return flask.jsonify(format_error(status, message)), status
 
     except Exception as error_handle:
         flask.current_app.logger.error(str(error_handle), exc_info=True)
-        return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
+        return flask.jsonify(format_error(500, 'Internal server error')), 500
 
 @BLUEPRINT.route('/startup')
 def startup():
