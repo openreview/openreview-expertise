@@ -1072,11 +1072,11 @@ class ExpertiseCloudService(BaseExpertiseService):
         redis_job = self.redis.load_job(job_id, user_id)
         return self.cloud.get_job_metadata(user_id, redis_job.cloud_id)
 
-    def get_expertise_signed_url(self, user_id, job_id, duration=10):
+    def get_expertise_signed_url(self, user_id, job_id):
         """Return a signed URL for the results file of a cloud job.
 
         Loading the job from Redis validates the caller. The cloud-side
         request.json check is applied again inside get_job_results_signed_url.
         """
         redis_job = self.redis.load_job(job_id, user_id)
-        return self.cloud.get_job_results_signed_url(user_id, redis_job.cloud_id, duration)
+        return self.cloud.get_job_results_signed_url(user_id, redis_job.cloud_id)

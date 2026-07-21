@@ -1396,13 +1396,15 @@ class GCPInterface(object):
 
     def get_job_results(self, user_id, job_id, delete_on_get=False):
 
-        def _get_scores_and_metadata_streaming(all_blobs, job_id, group_group_matching, paper_paper_matching):
+        def _get_scores_and_metadata_streaming(all_blobs, target_blob, job_id, group_group_matching, paper_paper_matching):
             """
             Extracts the scores and metadata from the GCS bucket and returns a generator that yields
             chunks of results to enable streaming
 
             :param all_blobs: A list of all blobs for a given job
             :type all_blobs: list
+            :param target_blob: The score blob selected for this job
+            :type target_blob: google.cloud.storage.Blob
             :param job_id: Unique job ID
             :type job_id: str
 
@@ -1411,16 +1413,8 @@ class GCPInterface(object):
             metadata_files = [
                 blob for blob in all_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name
             ]
-            score_files = [
-                blob for blob in all_blobs
-                if blob.name.endswith('scores.csv') or blob.name.endswith('scores_sparse.csv')
-                or blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
-            ]
-
             if len(metadata_files) != 1:
                 raise openreview.OpenReviewException(f"Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}")
-            if len(score_files) < 1 or len(score_files) > 2:
-                raise openreview.OpenReviewException(f"Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}")
 
             # First yield the metadata
             metadata = json.loads(metadata_files[0].download_as_string())
@@ -1474,65 +1468,48 @@ class GCPInterface(object):
 
                 downloader.close()
 
-            # Determine whether to use sparse or non-sparse score files
-            sparse_score_files = [
-                blob for blob in score_files if 'sparse' in blob.name
-            ]
-
             # Then stream the scores
-            if len(sparse_score_files) == 1:
-                yield from stream_score_file(sparse_score_files[0])
-            else:
-                non_sparse_score_files = [
-                    blob for blob in score_files if 'sparse' not in blob.name
-                ]
-                if len(non_sparse_score_files) != 1:
-                    raise openreview.OpenReviewException(f"Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}")
-
-                yield from stream_score_file(non_sparse_score_files[0])
+            yield from stream_score_file(target_blob)
 
         # Main function implementation
-        job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
+        job_blobs, api_request = self._authenticate_job_request(user_id, job_id)
         self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}/")
         self.logger.info(f"Found {len(job_blobs)} blobs")
-        all_requests = [
-            json.loads(blob.download_as_string()) for blob in job_blobs if self.request_fname in blob.name
-        ]
-        authenticated_requests = [
-            req for req in all_requests if user_id == req['user_id'] or user_id in SUPERUSER_IDS
-        ]
-        if len(all_requests) == 0:
-            raise openreview.OpenReviewException('Job not found')
-        if len(authenticated_requests) == 0:
-            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
-        if len(authenticated_requests) > 1:
-            raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
-
-        # Validate score and metadata files exist before returning the streaming generator.
-        # If validation is deferred into the generator, exceptions fire after the HTTP
-        # response has already started — causing a broken chunked response on the client.
-        score_files = [
-            blob for blob in job_blobs
-            if blob.name.endswith('scores.csv') or blob.name.endswith('scores_sparse.csv')
-            or blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
-        ]
-        metadata_files = [blob for blob in job_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name]
-        if len(metadata_files) != 1:
-            raise openreview.OpenReviewException(f'Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}')
-        if len(score_files) < 1 or len(score_files) > 2:
-            raise openreview.OpenReviewException(f'Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}')
+        target_blob = self._select_score_blob(job_blobs)
 
         # Matching type drives the entityA/entityB column mapping for new CSV
         # blobs (legacy JSONL blobs already have it baked in).
-        api_request = authenticated_requests[0]
         entityA_type = api_request.get('entityA', {}).get('type', '')
         entityB_type = api_request.get('entityB', {}).get('type', '')
         group_group_matching = entityA_type == 'Group' and entityB_type == 'Group'
         paper_paper_matching = entityA_type == 'Note' and entityB_type == 'Note'
 
-        return _get_scores_and_metadata_streaming(job_blobs, job_id, group_group_matching, paper_paper_matching)
+        return _get_scores_and_metadata_streaming(job_blobs, target_blob, job_id, group_group_matching, paper_paper_matching)
 
-    def sign_url(self, bucket_name, blob_name, duration_minutes=10):
+    def _select_score_blob(self, job_blobs):
+        """Return the single score blob for a job, preferring the sparse file."""
+        score_files = [
+            blob for blob in job_blobs
+            if blob.name.endswith('scores.csv') or blob.name.endswith('scores_sparse.csv')
+            or blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
+        ]
+        if len(score_files) < 1 or len(score_files) > 2:
+            raise openreview.OpenReviewException(
+                f'Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}'
+            )
+
+        sparse_score_files = [blob for blob in score_files if 'sparse' in blob.name]
+        if len(sparse_score_files) == 1:
+            return sparse_score_files[0]
+
+        non_sparse_score_files = [blob for blob in score_files if 'sparse' not in blob.name]
+        if len(non_sparse_score_files) != 1:
+            raise openreview.OpenReviewException(
+                f'Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}'
+            )
+        return non_sparse_score_files[0]
+
+    def sign_url(self, bucket_name, blob_name):
         """Generate a V4 signed URL for a GCS blob.
 
         Uses service account impersonation so the URL is signed by
@@ -1547,30 +1524,26 @@ class GCPInterface(object):
         source_credentials, project = google_auth_default()
         # The impersonation token only needs to live long enough to sign the URL;
         # it is independent of the signed URL's expiration.
-        token_lifetime_seconds = min(int(duration_minutes) * 60, 300)
         target_credentials = ImpersonatedCredentials(
             source_credentials=source_credentials,
             target_principal=self.url_signer_service_account,
             target_scopes=['https://www.googleapis.com/auth/cloud-platform'],
-            lifetime=token_lifetime_seconds,
+            lifetime=300,
         )
         client = storage.Client(credentials=target_credentials, project=project)
         blob = client.bucket(bucket_name).blob(blob_name)
         return blob.generate_signed_url(
             version='v4',
-            expiration=datetime.timedelta(minutes=duration_minutes),
+            expiration=datetime.timedelta(minutes=10),
             method='GET',
         )
 
-    def get_job_results_signed_url(self, user_id, job_id, duration_minutes=10):
-        """Return a signed URL for the results file of a cloud job.
+    def _authenticate_job_request(self, user_id, job_id):
+        """Load a job's blobs and verify the user may access it.
 
-        Reuses the same permission and file-selection logic as
-        get_job_results, but returns a signed URL instead of streaming
-        the contents.
+        Returns (job_blobs, authenticated_request).
         """
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
-        self.logger.info(f"Searching for signed URL job {job_id} | prefix={self.jobs_folder}/{job_id}/")
         all_requests = [
             json.loads(blob.download_as_string()) for blob in job_blobs if self.request_fname in blob.name
         ]
@@ -1584,28 +1557,20 @@ class GCPInterface(object):
         if len(authenticated_requests) > 1:
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
-        score_files = [
-            blob for blob in job_blobs
-            if blob.name.endswith('scores.csv') or blob.name.endswith('scores_sparse.csv')
-            or blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
-        ]
-        if len(score_files) < 1 or len(score_files) > 2:
-            raise openreview.OpenReviewException(
-                f'Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}'
-            )
+        return job_blobs, authenticated_requests[0]
 
-        sparse_score_files = [blob for blob in score_files if 'sparse' in blob.name]
-        if len(sparse_score_files) == 1:
-            target_blob = sparse_score_files[0]
-        else:
-            non_sparse_score_files = [blob for blob in score_files if 'sparse' not in blob.name]
-            if len(non_sparse_score_files) != 1:
-                raise openreview.OpenReviewException(
-                    f'Internal Error: incorrect non-sparse score files found expected [1] found {len(non_sparse_score_files)}'
-                )
-            target_blob = non_sparse_score_files[0]
+    def get_job_results_signed_url(self, user_id, job_id):
+        """Return a signed URL for the results file of a cloud job.
 
-        return self.sign_url(self.bucket_name, target_blob.name, duration_minutes)
+        Reuses the same permission and file-selection logic as
+        get_job_results, but returns a signed URL instead of streaming
+        the contents. Sparse scores are preferred because they are the
+        output the service normally returns for large jobs.
+        """
+        job_blobs, _ = self._authenticate_job_request(user_id, job_id)
+        self.logger.info(f"Searching for signed URL job {job_id} | prefix={self.jobs_folder}/{job_id}/")
+        target_blob = self._select_score_blob(job_blobs)
+        return self.sign_url(self.bucket_name, target_blob.name)
 
     def get_job_metadata(self, user_id, job_id):
         """

@@ -560,15 +560,15 @@ class TestExpertiseCloudService():
         signed_url_response = test_client.get(
             '/expertise/signed-url',
             headers=abc_client.headers,
-            query_string={'jobId': job_id, 'duration': 15}
+            query_string={'jobId': job_id}
         )
         assert signed_url_response.status_code == 200, signed_url_response.json
         assert signed_url_response.json == {'signedUrl': 'https://signed.url/test-scores'}
 
-        # The signer should have been called with the scores blob path and requested duration
+        # The signer should have been called with the scores blob path
         mock_sign_url.assert_called_once()
         args, kwargs = mock_sign_url.call_args
-        assert (kwargs.get('duration_minutes') if kwargs else args[2]) == 15
+        assert (kwargs.get('duration_minutes') if kwargs else args[2]) is None
 
         # Request as a different user should be forbidden
         forbidden_response = test_client.get(

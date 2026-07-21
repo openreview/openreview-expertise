@@ -1460,7 +1460,7 @@ def test_sign_url_with_impersonation(mock_storage_client, mock_credentials_cls, 
     )
     gcp_interface.url_signer_service_account = 'url-signer@test-project.iam.gserviceaccount.com'
 
-    result = gcp_interface.sign_url("test-bucket", "jobs/job-1/scores.csv", duration_minutes=5)
+    result = gcp_interface.sign_url("test-bucket", "jobs/job-1/scores.csv")
 
     assert result == 'https://signed.url/test'
     mock_credentials_cls.assert_called_once_with(
@@ -1471,7 +1471,7 @@ def test_sign_url_with_impersonation(mock_storage_client, mock_credentials_cls, 
     )
     mock_blob.generate_signed_url.assert_called_once_with(
         version='v4',
-        expiration=datetime.timedelta(minutes=5),
+        expiration=datetime.timedelta(minutes=10),
         method='GET',
     )
 
@@ -1523,9 +1523,10 @@ def test_get_job_results_signed_url_sparse(mock_storage_client, mock_credentials
     )
     gcp_interface.url_signer_service_account = 'url-signer@test-project.iam.gserviceaccount.com'
 
-    result = gcp_interface.get_job_results_signed_url("test_user", "job-1", duration_minutes=10)
+    result = gcp_interface.get_job_results_signed_url("test_user", "job-1")
 
     assert result == 'https://signed.url/sparse'
+    mock_bucket.blob.assert_called_once_with("jobs/job-1/scores_sparse.jsonl")
     mock_bucket.list_blobs.assert_called_once_with(prefix="jobs/job-1/")
     mock_bucket.blob.assert_called_once_with("jobs/job-1/scores_sparse.jsonl")
 
