@@ -1518,9 +1518,9 @@ class GCPInterface(object):
 
         return _get_scores_and_metadata_streaming(job_blobs, job_id, group_group_matching, paper_paper_matching)
 
-    def _select_score_blob(self, job_blobs, fmt='full'):
+    def _select_score_blob(self, job_blobs, sparse=False):
         """Return the single score blob for a job in the requested format."""
-        suffix = 'scores_sparse' if fmt == 'sparse' else 'scores'
+        suffix = 'scores_sparse' if sparse else 'scores'
         score_files = [
             blob for blob in job_blobs
             if blob.name.endswith(f'{suffix}.csv') or blob.name.endswith(f'{suffix}.jsonl')
@@ -1560,11 +1560,11 @@ class GCPInterface(object):
             method='GET',
         )
 
-    def get_job_results_signed_url(self, user_id, job_id, fmt='full'):
+    def get_job_results_signed_url(self, user_id, job_id, sparse=False):
         """Return a signed URL for the results file of a cloud job.
 
         The caller must be the job owner or a superuser. The URL is signed
-        for `scores.csv` by default; pass fmt='sparse' for `scores_sparse.csv`.
+        for `scores.csv` by default; pass sparse=True for `scores_sparse.csv`.
         """
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
         self.logger.info(f"Searching for signed URL job {job_id} | prefix={self.jobs_folder}/{job_id}/")
@@ -1581,7 +1581,7 @@ class GCPInterface(object):
         if len(authenticated_requests) > 1:
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
-        target_blob = self._select_score_blob(job_blobs, fmt)
+        target_blob = self._select_score_blob(job_blobs, sparse=sparse)
         return self.sign_url(self.bucket_name, target_blob.name)
 
     def get_job_metadata(self, user_id, job_id):

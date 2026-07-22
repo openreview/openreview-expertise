@@ -579,7 +579,7 @@ class TestExpertiseCloudService():
         sparse_url_response = test_client.get(
             '/expertise/results/all',
             headers=abc_client.headers,
-            query_string={'jobId': job_id, 'format': 'sparse'}
+            query_string={'jobId': job_id, 'sparse': 'true'}
         )
         assert sparse_url_response.status_code == 302, sparse_url_response.status
         assert sparse_url_response.location == 'https://signed.url/test-scores'

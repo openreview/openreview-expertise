@@ -433,8 +433,8 @@ def results_all():
     :param jobId: The ID of a submitted job
     :type jobId: str
 
-    :param format: Optional format, 'full' or 'sparse' (default 'full')
-    :type format: str
+    :param sparse: Set to true to request the sparse score file (default false)
+    :type sparse: bool
 
     """
 
@@ -447,12 +447,10 @@ def results_all():
         if not flask.current_app.config.get('USE_GCP'):
             raise openreview.OpenReviewException('Bad request: signed URLs are only available in cloud mode')
 
-        fmt = flask.request.args.get('format', 'full')
-        if fmt not in ('full', 'sparse'):
-            raise openreview.OpenReviewException("Bad request: format must be 'full' or 'sparse'")
+        sparse = flask.request.args.get('sparse', 'false').lower() in ('true', '1', 'yes')
 
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
-        result = expertise_service.get_expertise_signed_url(user_id, job_id, fmt)
+        result = expertise_service.get_expertise_signed_url(user_id, job_id, sparse=sparse)
         return flask.redirect(result, code=302)
 
     except openreview.OpenReviewException as error_handle:
