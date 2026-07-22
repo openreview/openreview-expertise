@@ -556,24 +556,42 @@ class TestExpertiseCloudService():
         scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.csv")
         scores_blob.upload_from_string('entityA,entityB,score\nuser1,note1,0.99\n')
 
-        # Request signed URL as the job owner
+        # Request full results signed URL as the job owner
         signed_url_response = test_client.get(
-            '/expertise/signed-url',
+            '/expertise/results/all',
             headers=abc_client.headers,
             query_string={'jobId': job_id}
         )
         assert signed_url_response.status_code == 200, signed_url_response.json
         assert signed_url_response.json == {'signedUrl': 'https://signed.url/test-scores'}
 
-        # The signer should have been called with the bucket and scores blob path
+        # The signer should have been called with the bucket and scores.csv blob path
         mock_sign_url.assert_called_once()
         args, kwargs = mock_sign_url.call_args
         assert len(args) == 2
         assert args[1] == f'{gcs_jobs_prefix}/{config.cloud_id}/scores.csv'
 
+        # Request sparse results signed URL as the job owner
+        mock_sign_url.reset_mock()
+        sparse_scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.csv")
+        sparse_scores_blob.upload_from_string('entityA,entityB,score\nuser2,note2,0.88\n')
+
+        sparse_url_response = test_client.get(
+            '/expertise/results/all',
+            headers=abc_client.headers,
+            query_string={'jobId': job_id, 'format': 'sparse'}
+        )
+        assert sparse_url_response.status_code == 200, sparse_url_response.json
+        assert sparse_url_response.json == {'signedUrl': 'https://signed.url/test-scores'}
+
+        mock_sign_url.assert_called_once()
+        args, kwargs = mock_sign_url.call_args
+        assert len(args) == 2
+        assert args[1] == f'{gcs_jobs_prefix}/{config.cloud_id}/scores_sparse.csv'
+
         # Request as a different user should be forbidden
         forbidden_response = test_client.get(
-            '/expertise/signed-url',
+            '/expertise/results/all',
             headers=tmlr_client.headers,
             query_string={'jobId': job_id}
         )

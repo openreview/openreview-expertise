@@ -418,11 +418,11 @@ def metadata():
         flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
-@BLUEPRINT.route('/expertise/signed-url', methods=['GET'])
+@BLUEPRINT.route('/expertise/results/all', methods=['GET'])
 @require_auth
-def signed_url():
+def results_all():
     """
-    Return a time-limited signed URL for a cloud job's results file.
+    Return a time-limited signed URL for a cloud job's full results file.
 
     The caller must have access to the job (same check as /expertise/results).
     Only available when the service is running in cloud/GCP mode.
@@ -432,6 +432,9 @@ def signed_url():
 
     :param jobId: The ID of a submitted job
     :type jobId: str
+
+    :param format: Optional format, 'full' or 'sparse' (default 'full')
+    :type format: str
 
     """
 
@@ -444,8 +447,12 @@ def signed_url():
         if not flask.current_app.config.get('USE_GCP'):
             raise openreview.OpenReviewException('Bad request: signed URLs are only available in cloud mode')
 
+        fmt = flask.request.args.get('format', 'full')
+        if fmt not in ('full', 'sparse'):
+            raise openreview.OpenReviewException("Bad request: format must be 'full' or 'sparse'")
+
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
-        result = expertise_service.get_expertise_signed_url(user_id, job_id)
+        result = expertise_service.get_expertise_signed_url(user_id, job_id, fmt)
         return flask.jsonify({'signedUrl': result}), 200
 
     except openreview.OpenReviewException as error_handle:

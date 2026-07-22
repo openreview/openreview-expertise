@@ -1525,6 +1525,59 @@ def test_get_job_results_signed_url_full(mock_storage_client, mock_credentials_c
     mock_bucket.blob.assert_called_once_with("jobs/job-1/scores.csv")
 
 
+@patch("expertise.service.utils.google_auth_default")
+@patch("expertise.service.utils.ImpersonatedCredentials")
+@patch("expertise.service.utils.storage.Client")
+def test_get_job_results_signed_url_sparse(mock_storage_client, mock_credentials_cls, mock_auth_default, openreview_client):
+    mock_auth_default.return_value = (MagicMock(), 'test_project')
+    mock_credentials_cls.return_value = MagicMock()
+
+    mock_request_blob = MagicMock()
+    mock_request_blob.name = "jobs/job-1/request.json"
+    mock_request_blob.download_as_string.return_value = json.dumps({"user_id": "test_user"})
+
+    mock_metadata_blob = MagicMock()
+    mock_metadata_blob.name = "jobs/job-1/metadata.json"
+
+    mock_score_blob = MagicMock()
+    mock_score_blob.name = "jobs/job-1/scores.csv"
+
+    mock_sparse_blob = MagicMock()
+    mock_sparse_blob.name = "jobs/job-1/scores_sparse.csv"
+
+    mock_signed_blob = MagicMock()
+    mock_signed_blob.generate_signed_url.return_value = 'https://signed.url/sparse'
+
+    mock_bucket = MagicMock()
+    mock_bucket.list_blobs.return_value = [
+        mock_request_blob,
+        mock_metadata_blob,
+        mock_score_blob,
+        mock_sparse_blob,
+    ]
+    mock_bucket.blob.return_value = mock_signed_blob
+
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+    gcp_interface.url_signer_service_account = 'url-signer@test-project.iam.gserviceaccount.com'
+
+    result = gcp_interface.get_job_results_signed_url("test_user", "job-1", fmt='sparse')
+
+    assert result == 'https://signed.url/sparse'
+    mock_bucket.blob.assert_called_once_with("jobs/job-1/scores_sparse.csv")
+
+
 @patch("expertise.service.utils.storage.Client")
 def test_get_job_results_signed_url_forbidden(mock_storage_client, openreview_client):
     mock_request_blob = MagicMock()
