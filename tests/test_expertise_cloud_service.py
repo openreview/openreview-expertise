@@ -562,8 +562,8 @@ class TestExpertiseCloudService():
             headers=abc_client.headers,
             query_string={'jobId': job_id}
         )
-        assert signed_url_response.status_code == 200, signed_url_response.json
-        assert signed_url_response.json == {'signedUrl': 'https://signed.url/test-scores'}
+        assert signed_url_response.status_code == 302, signed_url_response.status
+        assert signed_url_response.location == 'https://signed.url/test-scores'
 
         # The signer should have been called with the bucket and scores.csv blob path
         mock_sign_url.assert_called_once()
@@ -581,8 +581,8 @@ class TestExpertiseCloudService():
             headers=abc_client.headers,
             query_string={'jobId': job_id, 'format': 'sparse'}
         )
-        assert sparse_url_response.status_code == 200, sparse_url_response.json
-        assert sparse_url_response.json == {'signedUrl': 'https://signed.url/test-scores'}
+        assert sparse_url_response.status_code == 302, sparse_url_response.status
+        assert sparse_url_response.location == 'https://signed.url/test-scores'
 
         mock_sign_url.assert_called_once()
         args, kwargs = mock_sign_url.call_args

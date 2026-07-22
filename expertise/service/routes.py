@@ -453,7 +453,7 @@ def results_all():
 
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
         result = expertise_service.get_expertise_signed_url(user_id, job_id, fmt)
-        return flask.jsonify({'signedUrl': result}), 200
+        return flask.redirect(result, code=302)
 
     except openreview.OpenReviewException as error_handle:
         flask.current_app.logger.error(str(error_handle), exc_info=True)
