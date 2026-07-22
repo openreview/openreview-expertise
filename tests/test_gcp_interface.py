@@ -1490,8 +1490,8 @@ def test_get_job_results_signed_url_full(mock_storage_client, mock_credentials_c
     mock_metadata_blob = MagicMock()
     mock_metadata_blob.name = "jobs/job-1/metadata.json"
 
-    mock_score_blob = MagicMock()
-    mock_score_blob.name = "jobs/job-1/scores.csv"
+    mock_matrix_blob = MagicMock()
+    mock_matrix_blob.name = "jobs/job-1/unt7kb2ux4-1784734761747.pt"
 
     mock_signed_blob = MagicMock()
     mock_signed_blob.generate_signed_url.return_value = 'https://signed.url/full'
@@ -1500,7 +1500,7 @@ def test_get_job_results_signed_url_full(mock_storage_client, mock_credentials_c
     mock_bucket.list_blobs.return_value = [
         mock_request_blob,
         mock_metadata_blob,
-        mock_score_blob,
+        mock_matrix_blob,
     ]
     mock_bucket.blob.return_value = mock_signed_blob
 
@@ -1522,7 +1522,7 @@ def test_get_job_results_signed_url_full(mock_storage_client, mock_credentials_c
     result = gcp_interface.get_job_results_signed_url("test_user", "job-1")
 
     assert result == 'https://signed.url/full'
-    mock_bucket.blob.assert_called_once_with("jobs/job-1/scores.csv")
+    mock_bucket.blob.assert_called_once_with("jobs/job-1/unt7kb2ux4-1784734761747.pt")
 
 
 @patch("expertise.service.utils.google_auth_default")

@@ -553,8 +553,8 @@ class TestExpertiseCloudService():
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
         metadata_blob.upload_from_string(json.dumps({"meta": "data"}))
 
-        scores_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/scores.csv")
-        scores_blob.upload_from_string('entityA,entityB,score\nuser1,note1,0.99\n')
+        matrix_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/{config.cloud_id}.pt")
+        matrix_blob.upload_from_string('fake pt bytes')
 
         # Request full results signed URL as the job owner
         signed_url_response = test_client.get(
@@ -565,11 +565,11 @@ class TestExpertiseCloudService():
         assert signed_url_response.status_code == 302, signed_url_response.status
         assert signed_url_response.location == 'https://signed.url/test-scores'
 
-        # The signer should have been called with the bucket and scores.csv blob path
+        # The signer should have been called with the bucket and the .pt matrix blob path
         mock_sign_url.assert_called_once()
         args, kwargs = mock_sign_url.call_args
         assert len(args) == 2
-        assert args[1] == f'{gcs_jobs_prefix}/{config.cloud_id}/scores.csv'
+        assert args[1] == f'{gcs_jobs_prefix}/{config.cloud_id}/{config.cloud_id}.pt'
 
         # Request sparse results signed URL as the job owner
         mock_sign_url.reset_mock()

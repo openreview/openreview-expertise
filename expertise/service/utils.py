@@ -1519,15 +1519,36 @@ class GCPInterface(object):
         return _get_scores_and_metadata_streaming(job_blobs, job_id, group_group_matching, paper_paper_matching)
 
     def _select_score_blob(self, job_blobs, sparse=False):
-        """Return the single score blob for a job in the requested format."""
-        suffix = 'scores_sparse' if sparse else 'scores'
-        score_files = [
-            blob for blob in job_blobs
-            if blob.name.endswith(f'{suffix}.csv') or blob.name.endswith(f'{suffix}.jsonl')
-        ]
+        """Return the single results blob for a job in the requested format."""
+        if sparse:
+            suffix = 'scores_sparse'
+            score_files = [
+                blob for blob in job_blobs
+                if blob.name.endswith(f'{suffix}.csv') or blob.name.endswith(f'{suffix}.jsonl')
+            ]
+        else:
+            # Full matrix: prefer dense CSV/JSONL if present, otherwise fall back
+            # to the binary PyTorch matrix file produced by specter2/scincl models.
+            score_files = [
+                blob for blob in job_blobs
+                if blob.name.endswith('scores.csv') or blob.name.endswith('scores.jsonl')
+            ]
+            if not score_files:
+                matrix_files = [
+                    blob for blob in job_blobs
+                    if blob.name.endswith('.pt')
+                ]
+                if len(matrix_files) == 1:
+                    return matrix_files[0]
+                if len(matrix_files) > 1:
+                    raise openreview.OpenReviewException(
+                        f'Internal Error: multiple matrix files found expected [1] found {len(matrix_files)}'
+                    )
+
         if len(score_files) != 1:
+            target = 'sparse' if sparse else 'full'
             raise openreview.OpenReviewException(
-                f'Internal Error: incorrect {suffix} score files found expected [1] found {len(score_files)}'
+                f'Internal Error: incorrect {target} score files found expected [1] found {len(score_files)}'
             )
         return score_files[0]
 
@@ -1564,7 +1585,8 @@ class GCPInterface(object):
         """Return a signed URL for the results file of a cloud job.
 
         The caller must be the job owner or a superuser. The URL is signed
-        for `scores.csv` by default; pass sparse=True for `scores_sparse.csv`.
+        for the full results (`scores.csv` or the `.pt` matrix) by default;
+        pass sparse=True for `scores_sparse.csv`.
         """
         job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
         self.logger.info(f"Searching for signed URL job {job_id} | prefix={self.jobs_folder}/{job_id}/")
