@@ -1572,7 +1572,7 @@ def test_get_job_results_signed_url_sparse(mock_storage_client, mock_credentials
     )
     gcp_interface.url_signer_service_account = 'url-signer@test-project.iam.gserviceaccount.com'
 
-    result = gcp_interface.get_job_results_signed_url("test_user", "job-1", fmt='sparse')
+    result = gcp_interface.get_job_results_signed_url("test_user", "job-1", sparse=True)
 
     assert result == 'https://signed.url/sparse'
     mock_bucket.blob.assert_called_once_with("jobs/job-1/scores_sparse.csv")
