@@ -1471,7 +1471,7 @@ def test_sign_url_with_impersonation(mock_storage_client, mock_credentials_cls, 
     )
     mock_blob.generate_signed_url.assert_called_once_with(
         version='v4',
-        expiration=datetime.timedelta(minutes=10),
+        expiration=datetime.timedelta(minutes=5),
         method='GET',
     )
 
