@@ -418,6 +418,60 @@ def metadata():
         flask.current_app.logger.error(str(error_handle), exc_info=True)
         return flask.jsonify(format_error(500, 'Internal server error: {}'.format(error_handle))), 500
 
+@BLUEPRINT.route('/expertise/results/all', methods=['GET'])
+@require_auth
+def results_all():
+    """
+    Return a time-limited signed URL for a cloud job's full results file.
+
+    The caller must have access to the job (same check as /expertise/results).
+    Only available when the service is running in cloud/GCP mode.
+
+    :param token: Authorization from a logged in user
+    :type token: str
+
+    :param jobId: The ID of a submitted job
+    :type jobId: str
+
+    :param sparse: Set to true to request the sparse score file (default false)
+    :type sparse: bool
+
+    """
+
+    try:
+        user_id = g.user_id
+        flask.current_app.logger.debug('GET receives ' + str(flask.request.args))
+        job_id = flask.request.args.get('jobId', None)
+        if job_id is None or len(job_id) == 0:
+            raise openreview.OpenReviewException('Bad request: jobId is required')
+        if not flask.current_app.config.get('USE_GCP'):
+            raise openreview.OpenReviewException('Bad request: signed URLs are only available in cloud mode')
+
+        sparse = flask.request.args.get('sparse', 'false').lower() in ('true', '1', 'yes')
+
+        expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
+        result = expertise_service.get_expertise_signed_url(user_id, job_id, sparse=sparse)
+        return flask.redirect(result, code=302)
+
+    except openreview.OpenReviewException as error_handle:
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
+
+        error_type = str(error_handle)
+        status = 500
+
+        if 'not found' in error_type.lower():
+            status = 404
+        elif 'forbidden' in error_type.lower():
+            status = 403
+        elif 'bad request' in error_type.lower():
+            status = 400
+
+        return flask.jsonify(format_error(status, error_type)), status
+
+    except Exception as error_handle:
+        flask.current_app.logger.error(str(error_handle), exc_info=True)
+        return flask.jsonify(format_error(500, 'Internal server error')), 500
+
 @BLUEPRINT.route('/startup')
 def startup():
     """An endpoint for checking availability for predictions"""
