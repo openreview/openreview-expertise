@@ -269,9 +269,13 @@ class TestExpertiseService():
     def test_queue_status_completed(self):
         """BullMQ 'completed' -> COMPLETED."""
         service = self._make_service_for_queue_tests()
-        mock_future = MagicMock()
-        mock_future.result.return_value = 'completed'
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
+        state_future = MagicMock()
+        state_future.result.return_value = 'completed'
+        mock_job = MagicMock()
+        mock_job.data = {}
+        job_future = MagicMock()
+        job_future.result.return_value = mock_job
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
             status, desc = service._get_job_status_from_queue('job-123')
         assert status == JobStatus.COMPLETED
         assert desc == JobDescription.VALS.value[JobStatus.COMPLETED]
