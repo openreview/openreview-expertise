@@ -63,6 +63,9 @@ class SpecterPredictor:
         else:
             self.cuda_device = torch.device("cpu")
         self.preliminary_scores = None
+        self.publication_embeddings = {}
+        self.submission_embeddings = {}
+        self.cached_embeddings = {}
         self.sparse_value = sparse_value
         if not os.path.exists(self.work_dir) and not os.path.isdir(self.work_dir):
             os.makedirs(self.work_dir)
@@ -92,7 +95,7 @@ class SpecterPredictor:
             yield batch
 
     def _batch_predict(self, batch_data):
-        jsonl_out = []
+        out = []
         text_batch = [d[1]['title'] + self.tokenizer.sep_token + (d[1].get('abstract') or '') for d in batch_data]
         # preprocess the input
         inputs = self.tokenizer(text_batch, padding=True, truncation=True, return_tensors="pt", max_length=512)
@@ -104,14 +107,17 @@ class SpecterPredictor:
 
         for paper, embedding in zip(batch_data, embeddings):
             paper = paper[1]
-            jsonl_out.append(json.dumps({'paper_id': paper['paper_id'], 'embedding': embedding.detach().cpu().numpy().tolist()}) + '\n')
+            out.append({
+                'paper_id': paper['paper_id'],
+                'embedding': embedding.detach().cpu().numpy().tolist()
+            })
 
         # clean up batch data
         del embeddings
         del output
         del inputs
         torch.cuda.empty_cache()
-        return jsonl_out
+        return out
 
     def set_archives_dataset(self, archives_dataset):
         self.pub_note_id_to_author_ids = defaultdict(list)
@@ -169,37 +175,31 @@ class SpecterPredictor:
         with open(os.path.join(self.work_dir, "specter_submission_paper_ids.txt"), 'w') as f_out:
             f_out.write('\n'.join(paper_ids_list)+'\n')
 
-    def embed_submissions(self, submissions_path=None):
-        print('Embedding submissions...')
-        metadata_file = os.path.join(self.work_dir, "specter_submission_paper_data.json")
-        ids_file = os.path.join(self.work_dir, "specter_submission_paper_ids.txt")
-
+    def embed(self, metadata_file, output_path=None):
         with open(metadata_file, 'r') as f:
             paper_data = json.load(f)
 
-        sub_jsonl = []
-        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Subs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
-            sub_jsonl.extend(self._batch_predict(batch_data))
+        cached = self.cached_embeddings or {}
+        embeddings = {}
+        remaining = {}
+        for paper_id, paper in paper_data.items():
+            emb = cached.get(paper_id)
+            if emb is not None:
+                embeddings[paper_id] = emb
+            else:
+                remaining[paper_id] = paper
+        if cached:
+            print(f"Reusing {len(embeddings)} cached embeddings; computing {len(remaining)}.")
 
-        with open(submissions_path, 'w') as f:
-            f.writelines(sub_jsonl)
+        for batch_data in tqdm(self._fetch_batches(remaining, self.batch_size), desc='Embedding', total=int(len(remaining.keys()) / self.batch_size), unit="batches"):
+            for item in self._batch_predict(batch_data):
+                embeddings[item['paper_id']] = item['embedding']
 
-    def embed_publications(self, publications_path=None):
-        if not self.use_redis:
-            assert publications_path, "Either publications_path must be given or use_redis must be set to true"
-        print('Embedding publications...')
-        metadata_file = os.path.join(self.work_dir, "specter_reviewer_paper_data.json")
-        ids_file = os.path.join(self.work_dir, "specter_reviewer_paper_ids.txt")
-
-        with open(metadata_file, 'r') as f:
-            paper_data = json.load(f)
-
-        pub_jsonl = []
-        for batch_data in tqdm(self._fetch_batches(paper_data, self.batch_size), desc='Embedding Pubs', total=int(len(paper_data.keys())/self.batch_size), unit="batches"):
-            pub_jsonl.extend(self._batch_predict(batch_data))
-
-        with open(publications_path, 'w') as f:
-            f.writelines(pub_jsonl)
+        if output_path:
+            with open(output_path, 'w') as f:
+                for pid, emb in embeddings.items():
+                    f.write(json.dumps({'paper_id': pid, 'embedding': emb}) + '\n')
+        return embeddings
 
     def all_scores(self, publications_path=None, submissions_path=None, scores_path=None):
         def load_emb_file(emb_file):
@@ -224,19 +224,43 @@ class SpecterPredictor:
             print(len(bad_id_set))
             return emb_tensor, id_list, bad_id_set
 
+        def load_emb_dict(emb_dict):
+            paper_emb_size_default = 768
+            id_list = []
+            emb_list = []
+            bad_id_set = set()
+            for paper_id, paper_emb in emb_dict.items():
+                paper_emb_size = len(paper_emb)
+                assert paper_emb_size == 0 or paper_emb_size == paper_emb_size_default
+                if paper_emb_size == 0:
+                    paper_emb = [0] * paper_emb_size_default
+                    bad_id_set.add(paper_id)
+                id_list.append(paper_id)
+                emb_list.append(paper_emb)
+            emb_tensor = torch.tensor(emb_list, device=torch.device('cpu'))
+            emb_tensor = emb_tensor / (emb_tensor.norm(dim=1, keepdim=True) + 0.000000000001)
+            print(len(bad_id_set))
+            return emb_tensor, id_list, bad_id_set
+
         print('Loading cached publications...')
-        with open(publications_path) as f_in:
-            paper_emb_train, train_id_list, train_bad_id_set = load_emb_file(f_in)
+        if self.publication_embeddings:
+            paper_emb_train, train_id_list, train_bad_id_set = load_emb_dict(self.publication_embeddings)
+        else:
+            with open(publications_path) as f_in:
+                paper_emb_train, train_id_list, train_bad_id_set = load_emb_file(f_in)
         paper_num_train = len(train_id_list)
 
         paper_id2train_idx = {}
         for idx, paper_id in enumerate(train_id_list):
             paper_id2train_idx[paper_id] = idx
 
-        with open(submissions_path) as f_in:
-            print('Loading cached submissions...')
-            paper_emb_test, test_id_list, test_bad_id_set = load_emb_file(f_in)
-            paper_num_test = len(test_id_list)
+        print('Loading cached submissions...')
+        if self.submission_embeddings:
+            paper_emb_test, test_id_list, test_bad_id_set = load_emb_dict(self.submission_embeddings)
+        else:
+            with open(submissions_path) as f_in:
+                paper_emb_test, test_id_list, test_bad_id_set = load_emb_file(f_in)
+        paper_num_test = len(test_id_list)
 
         print('Computing all scores...')
         p2p_aff = paper_emb_test @ paper_emb_train.T

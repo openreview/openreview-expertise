@@ -5,7 +5,12 @@ import io
 import json
 import os
 import shutil
+import tempfile
+from pathlib import Path
 import openreview
+import pyarrow as pa
+import pyarrow.dataset as ds
+import pyarrow.parquet as pq
 from conftest import GCSTestHelper
 from expertise.service.utils import ExpectedDataError
 
@@ -44,13 +49,39 @@ def _setup_pipeline_cc(clean_start_conference, client, openreview_client):
         post_publications=DEFAULT_POST_PUBLICATIONS
     )
 
+@pytest.fixture(scope="module", autouse=True)
+def _mock_global_cache_for_pipeline():
+    """Prevent pipeline tests from doing real GCS cache lookups."""
+    empty_table = pa.table({
+        "paper_id": pa.array([], pa.string()),
+        "embedding": pa.array([], pa.list_(pa.float32())),
+        "model": pa.array([], pa.string()),
+        "year_month": pa.array([], pa.string()),
+        "embedding_date": pa.array([], pa.string()),
+    })
+    tmpdir = tempfile.mkdtemp()
+    pq.write_table(empty_table, os.path.join(tmpdir, "empty.parquet"))
+
+    dataset = ds.dataset(tmpdir)
+
+    def _patched(self):
+        if self._dataset is not None:
+            return self._dataset
+        self._dataset = dataset
+        return self._dataset
+
+    patcher = patch("expertise.embeddings_cache.GlobalEmbeddingsCache._get_dataset", _patched)
+    patcher.start()
+    yield
+    patcher.stop()
+
 # Test case for the `run_pipeline` function
 @patch("expertise.execute_pipeline.execute_expertise")  # Mock execute_expertise
 @patch("expertise.execute_pipeline.load_model_artifacts")  # Mock load_model_artifacts
 def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
-    mock_execute_expertise.return_value = None
+    mock_execute_expertise.return_value = {'pub2vec.jsonl': {}}
 
     # Prepare input API request string
     api_request_str = json.dumps({
@@ -95,11 +126,6 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     with open(sparse_file, 'w') as f:
         f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
-    ## Build embeddings
-    embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
-    with open(embeddings_dir, 'w') as f:
-        f.write(json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}))
-
     ## Build metadata
     metadata_file = os.path.join(working_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
@@ -111,6 +137,12 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     for i in range(4):
         with open(os.path.join(archives_dir, f'archive_{i}.jsonl'), 'w') as f:
             f.write(json.dumps({"id": f"user_{i}", "content": {"title": f"Paper {i}"}}))
+
+    ## Build embeddings JSONL files so the upload path is exercised
+    with open(os.path.join(working_dir, 'pub2vec.jsonl'), 'w') as f:
+        f.write(json.dumps({"paper_id": "note1", "embedding": [0.1, 0.2]}) + '\n')
+    with open(os.path.join(working_dir, 'sub2vec.jsonl'), 'w') as f:
+        f.write(json.dumps({"paper_id": "note1", "embedding": [0.1, 0.2]}) + '\n')
 
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
@@ -128,7 +160,10 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     assert 'hf_models/specter2_adapter' not in downloaded_subdirs
     assert 'hf_models/scincl' not in downloaded_subdirs
 
-    # Ensure execute_create_dataset and execute_expertise were called
+    # Ensure execute_expertise was called with in-memory cached embeddings.
+    mock_execute_expertise.assert_called_once()
+    assert mock_execute_expertise.call_args.kwargs['cached_embeddings'] == {'specter': {}}
+
     # Use the gcs_test_bucket fixture to get actual
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix/"
@@ -152,12 +187,11 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
     assert metadata_content["archives_count"] == 4
     assert metadata_content["no_publications_count"] == 0
 
-    # Check for pub2vec.jsonl file
+    # Embedding JSONL files are uploaded to the job folder for backwards compat.
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
-    pub2vec_content = pub2vec_blob.download_as_text()
-    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
-    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
+    sub2vec_blob = bucket.blob(f"{prefix}sub2vec.jsonl")
+    assert sub2vec_blob.exists()
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
@@ -169,7 +203,7 @@ def test_run_pipeline(mock_load_model_artifacts, mock_execute_expertise, openrev
 def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
-    mock_execute_expertise.return_value = None
+    mock_execute_expertise.return_value = {'pub2vec.jsonl': {}}
 
     # Prepare input API request string
     api_request = {
@@ -214,15 +248,16 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     with open(sparse_file, 'w') as f:
         f.write("note1,test_user,0.5\nnote2,test_user,0.5")
 
-    ## Build embeddings
-    embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
-    with open(embeddings_dir, 'w') as f:
-        f.write(json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}))
-
     ## Build metadata
     metadata_file = os.path.join(working_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
         f.write(json.dumps({"submission_count": 2, "archives_count": 4, "no_publications_count": 0}))
+
+    ## Build embeddings JSONL files so the upload path is exercised
+    with open(os.path.join(working_dir, 'pub2vec.jsonl'), 'w') as f:
+        f.write(json.dumps({"paper_id": "note1", "embedding": [0.1, 0.2]}) + '\n')
+    with open(os.path.join(working_dir, 'sub2vec.jsonl'), 'w') as f:
+        f.write(json.dumps({"paper_id": "note1", "embedding": [0.1, 0.2]}) + '\n')
 
     ## Write a request file to GCS
     request_blob_name = f"{gcs_jobs_prefix}/test_prefix_gcs_dir/request.json"
@@ -239,8 +274,11 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
 
     # Assertions
 
-    # Ensure execute_create_dataset and execute_expertise were called
-    # Use the gcs_test_bucket fixture to get actual 
+    # Ensure execute_expertise was called with in-memory cached embeddings.
+    mock_execute_expertise.assert_called_once()
+    assert mock_execute_expertise.call_args.kwargs['cached_embeddings'] == {'specter': {}}
+
+    # Use the gcs_test_bucket fixture to get actual
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix_gcs_dir/"
 
@@ -263,12 +301,11 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
     assert metadata_content["archives_count"] == 4
     assert metadata_content["no_publications_count"] == 0
 
-    # Check for pub2vec.jsonl file
+    # Embedding JSONL files are uploaded to the job folder for backwards compat.
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
-    pub2vec_content = pub2vec_blob.download_as_text()
-    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
-    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
+    sub2vec_blob = bucket.blob(f"{prefix}sub2vec.jsonl")
+    assert sub2vec_blob.exists()
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
@@ -280,7 +317,7 @@ def test_run_pipeline_gcsdir(mock_load_model_artifacts, mock_execute_expertise, 
 def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
-    mock_execute_expertise.return_value = None
+    mock_execute_expertise.return_value = {'pub2vec.jsonl': {}}
 
     # Prepare input API request string
     api_request_str = json.dumps({
@@ -325,11 +362,6 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     with open(sparse_file, 'w') as f:
         f.write("test_user,sub_user,0.5\ntest_user,sub_user,0.5")
 
-    ## Build embeddings
-    embeddings_dir = os.path.join(working_dir, 'pub2vec.jsonl')
-    with open(embeddings_dir, 'w') as f:
-        f.write(json.dumps({"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]}))
-
     ## Build metadata
     metadata_file = os.path.join(working_dir, 'metadata.json')
     with open(metadata_file, 'w') as f:
@@ -342,6 +374,12 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
         with open(os.path.join(archives_dir, f'archive_{i}.jsonl'), 'w') as f:
             f.write(json.dumps({"id": f"user_{i}", "content": {"title": f"Paper {i}"}}))
 
+    ## Build embeddings JSONL files so the upload path is exercised
+    with open(os.path.join(working_dir, 'pub2vec.jsonl'), 'w') as f:
+        f.write(json.dumps({"paper_id": "note1", "embedding": [0.1, 0.2]}) + '\n')
+    with open(os.path.join(working_dir, 'sub2vec.jsonl'), 'w') as f:
+        f.write(json.dumps({"paper_id": "note1", "embedding": [0.1, 0.2]}) + '\n')
+
     # Call the function
     from expertise.execute_pipeline import run_pipeline  # Replace with the actual module path
     run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
@@ -350,8 +388,9 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     bucket = gcs_test_bucket
     prefix = f"{gcs_jobs_prefix}/test_prefix_grp/"
 
-    # Ensure execute_create_dataset and execute_expertise were called
+    # Ensure execute_expertise was called with in-memory cached embeddings.
     mock_execute_expertise.assert_called_once()
+    assert mock_execute_expertise.call_args.kwargs['cached_embeddings'] == {'specter': {}}
 
     # Pipeline uploads scores.csv directly (group-group matching: cols are
     # already [entityA, entityB, score] in canonical order).
@@ -369,12 +408,11 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
     assert metadata_content["archives_count"] == 4
     assert metadata_content["no_publications_count"] == 0
 
-    # Check for pub2vec.jsonl file
+    # Embedding JSONL files are uploaded to the job folder for backwards compat.
     pub2vec_blob = bucket.blob(f"{prefix}pub2vec.jsonl")
     assert pub2vec_blob.exists()
-    pub2vec_content = pub2vec_blob.download_as_text()
-    pub2vec_data = [json.loads(line) for line in pub2vec_content.strip().split('\n')]
-    assert {"paper_id": "paperId", "embedding": [0.1, 0.2, 0.3]} in pub2vec_data
+    sub2vec_blob = bucket.blob(f"{prefix}sub2vec.jsonl")
+    assert sub2vec_blob.exists()
 
     # Check archives subdirectory for 4 files
     archives_blobs = list(bucket.list_blobs(prefix=f"{prefix}archives/"))
@@ -388,7 +426,7 @@ def test_run_pipeline_group(mock_load_model_artifacts, mock_execute_expertise, o
 def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     # Mock other external dependencies
     mock_load_model_artifacts.return_value = None
-    mock_execute_expertise.return_value = None
+    mock_execute_expertise.return_value = {'pub2vec.jsonl': {}}
 
     # Prepare input API request string
     api_request_str = json.dumps({
@@ -475,7 +513,97 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
 
     shutil.rmtree(working_dir)  # Clean up
 
-    # Test case for the `run_pipeline` function
+
+@patch("expertise.execute_pipeline.execute_expertise")
+@patch("expertise.execute_pipeline.load_model_artifacts")
+def test_run_pipeline_stale_cache_triggers_recompute(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+    """If a paper's mdate is newer than the cached embedding_date, the cache entry
+    is treated as stale and execute_expertise receives empty cached embeddings,
+    forcing recomputation."""
+    mock_load_model_artifacts.return_value = None
+    mock_execute_expertise.return_value = {'pub2vec.jsonl': {'paper1': [0.1, 0.2]}}
+
+    # Build a local parquet dataset with a stale embedding (older than paper mdate)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        table = pa.table({
+            "paper_id": pa.array(["paper1"], pa.string()),
+            "embedding": pa.array([[0.1, 0.2]], pa.list_(pa.float32())),
+            "model": pa.array(["specter"], pa.string()),
+            "year_month": pa.array(["2024-01"], pa.string()),
+            "embedding_date": pa.array([1705276800000], pa.timestamp('ms')),
+        })
+        part_dir = Path(tmpdir) / "model=specter" / "year_month=2024-01"
+        part_dir.mkdir(parents=True)
+        pq.write_table(table, part_dir / "part-00000.parquet")
+
+        # Patch _get_dataset so GlobalEmbeddingsCache reads the local dataset
+        def _patched_get_dataset(self):
+            if self._dataset is not None:
+                return self._dataset
+            self._dataset = ds.dataset(str(tmpdir), partitioning="hive")
+            return self._dataset
+
+        with patch("expertise.embeddings_cache.GlobalEmbeddingsCache._get_dataset", _patched_get_dataset):
+            api_request_str = json.dumps({
+                "name": "test_stale_cache",
+                "entityA": {
+                    'type': "Group",
+                    'memberOf': "PIPELINE.cc/Reviewers",
+                },
+                "entityB": {
+                    'type': "Note",
+                    'invitation': "PIPELINE.cc/-/Submission"
+                },
+                "model": {
+                    "name": "specter+mfr",
+                    'useTitle': False,
+                    'useAbstract': True,
+                    'skipSpecter': False,
+                    'scoreComputation': 'avg'
+                },
+                "user_id": "openreview.net",
+                "token": openreview_client.token,
+                "baseurl_v2": "http://localhost:3001",
+                "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/test_stale_cache",
+                "dump_embs": True,
+                "dump_archives": False,
+            })
+
+            os.environ["SPECTER_DIR"] = "/path/to/specter"
+            os.environ["MFR_VOCAB_DIR"] = "/path/to/mfr_vocab"
+            os.environ["MFR_CHECKPOINT_DIR"] = "/path/to/mfr_checkpoint"
+
+            working_dir = './test_pipeline'
+            os.makedirs(working_dir, exist_ok=True)
+
+            with open(os.path.join(working_dir, 'scores.csv'), 'w') as f:
+                f.write("n1,u1,0.5")
+            with open(os.path.join(working_dir, 'scores_sparse.csv'), 'w') as f:
+                f.write("n1,u1,0.5")
+            with open(os.path.join(working_dir, 'metadata.json'), 'w') as f:
+                f.write(json.dumps({"submission_count": 1, "archives_count": 1, "no_publications_count": 0}))
+
+            archives_dir = os.path.join(working_dir, 'archives')
+            os.makedirs(archives_dir, exist_ok=True)
+            with open(os.path.join(archives_dir, 'author.jsonl'), 'w') as f:
+                f.write(json.dumps({"id": "paper1", "mdate": 1717200000000, "content": {"title": "T"}}))
+
+            with open(os.path.join(working_dir, 'pub2vec.jsonl'), 'w') as f:
+                f.write(json.dumps({"paper_id": "paper1", "embedding": [0.1, 0.2]}) + '\n')
+            with open(os.path.join(working_dir, 'sub2vec.jsonl'), 'w') as f:
+                f.write(json.dumps({"paper_id": "n1", "embedding": [0.3, 0.4]}) + '\n')
+
+            from expertise.execute_pipeline import run_pipeline
+            run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
+
+            # The cache has paper1 with embedding_date 2024-01-15, but the paper's mdate is 2024-06-01.
+            # GlobalEmbeddingsCache should filter it out, so execute_expertise gets empty embeddings.
+            mock_execute_expertise.assert_called_once()
+            assert mock_execute_expertise.call_args.kwargs['cached_embeddings'] == {'specter': {}}
+
+            shutil.rmtree(working_dir)
+
+# Test case for the `run_pipeline` function
 @patch("expertise.execute_pipeline.execute_expertise")  # Mock execute_expertise
 @patch("expertise.execute_pipeline.load_model_artifacts")  # Mock load_model_artifacts
 def test_runtime_errors(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):

@@ -999,11 +999,6 @@ class GCPInterface(object):
     def upload_dataset(self, config, vertex_id=None):
         """Package dataset files from config.job_dir into a single tarball and upload to GCS.
 
-        Cached publication embeddings (cached_pub2vec_*.jsonl) are uploaded directly
-        to the job's GCS root, not packed into the tarball. They're large and gzip
-        poorly (embeddings are near-random floats), so single-threaded gzip becomes
-        the bottleneck; uncompressed upload over the same network is faster.
-
         Returns the full GCS path to the uploaded tarball.
         """
         job_dir = config.job_dir
@@ -1014,11 +1009,6 @@ class GCPInterface(object):
         dataset_gcs_path = f"gs://{self.bucket_name}/{blob_name}"
 
         dataset_items = ['archives', 'submissions', 'submissions.json', 'metadata.json', 'publications_by_profile_id.json']
-        cached_jsonls = sorted(
-            f for f in os.listdir(job_dir)
-            if f.startswith('cached_pub2vec_') and f.endswith('.jsonl')
-            and os.path.isfile(os.path.join(job_dir, f))
-        ) if os.path.isdir(job_dir) else []
         items_to_pack = [
             item for item in dataset_items
             if os.path.exists(os.path.join(job_dir, item))
@@ -1036,16 +1026,7 @@ class GCPInterface(object):
             self.bucket.blob(blob_name).upload_from_filename(tarball_path)
             self.logger.info(f"Uploaded dataset tarball to {dataset_gcs_path}")
 
-            for cached_name in cached_jsonls:
-                cached_blob_name = f"{job_root_path}/{cached_name}"
-                self.bucket.blob(cached_blob_name).upload_from_filename(
-                    os.path.join(job_dir, cached_name)
-                )
-                self.logger.info(
-                    f"Uploaded cached embeddings to gs://{self.bucket_name}/{cached_blob_name}"
-                )
-
-            for item in items_to_pack + cached_jsonls:
+            for item in items_to_pack:
                 path = os.path.join(job_dir, item)
                 if os.path.isdir(path):
                     shutil.rmtree(path)
@@ -1110,48 +1091,6 @@ class GCPInterface(object):
                     matches.append((ts, cid))
         matches.sort(key=lambda item: item[0], reverse=True)
         return [cid for _, cid in matches[:limit]]
-
-    def merge_cached_publication_embeddings(self, cloud_ids, model_name, dest_path):
-        """Download pub2vec_{model_name}.jsonl from each cloud_id and merge into dest_path.
-
-        Returns the number of unique paper_ids written. Most-recent-wins on
-        duplicate paper_ids (cloud_ids should be passed newest-first).
-        Falls back to legacy 'pub2vec.jsonl' when the per-model name is absent.
-        """
-        if not cloud_ids:
-            return 0
-
-        prefix = f"{self.jobs_folder}/"
-        # Walk newest -> oldest; first occurrence wins so newer embeddings stick.
-        merged = {}
-        candidate_names = [f"pub2vec_{model_name}.jsonl", "pub2vec.jsonl"]
-        for cloud_id in cloud_ids:
-            for blob_name in candidate_names:
-                blob = self.bucket.blob(f"{prefix}{cloud_id}/{blob_name}")
-                try:
-                    raw = blob.download_as_text()
-                except Exception:
-                    continue
-                for line in raw.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    pid = entry.get('paper_id')
-                    if pid and pid not in merged:
-                        merged[pid] = {'paper_id': pid, 'embedding': entry['embedding']}
-                break
-
-        if not merged:
-            return 0
-
-        with open(dest_path, 'w') as f:
-            for entry in merged.values():
-                f.write(json.dumps(entry) + '\n')
-        return len(merged)
 
     def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
         def create_folder(bucket_name, folder_path):

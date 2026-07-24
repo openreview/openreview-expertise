@@ -1,14 +1,21 @@
 from pathlib import Path
-import openreview, os, json, csv
+import csv
+import json
+import os
+
+import openreview
 from .create_dataset import OpenReviewExpertise
 from .dataset import ArchivesDataset, SubmissionsDataset, BidsDataset
 from .config import ModelConfig
 from .utils.utils import aggregate_by_group, generate_sparse_scores, generate_sparse_scores_from_matrix
 
+
 # Move run.py functionality to a function that accepts a config dict
-def execute_expertise(config):
+def execute_expertise(config, cached_embeddings=None):
 
     config = ModelConfig(config_dict=config)
+    new_embeddings = {}
+
 
     archives_dataset = ArchivesDataset(archives_path=Path(config['dataset']['directory']).joinpath('archives'))
     venue_specific_weights = 'weight_specification' in config['dataset'].keys()
@@ -53,15 +60,25 @@ def execute_expertise(config):
         predictor.set_submissions_dataset(submissions_dataset)
         if not config['model_params'].get('skip_specter', False):
             publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
+            submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
             if config['model_params'].get('use_redis', False):
                 publication_path = None
-            predictor.embed_publications(publications_path=publication_path)
-            predictor.embed_submissions(submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'))
-        predictor.all_scores(
-            publications_path=publication_path,
-            submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
-            scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
-        )
+            predictor.cached_embeddings = (cached_embeddings or {}).get('specter', {})
+            predictor.publication_embeddings = predictor.embed(
+                os.path.join(predictor.work_dir, "specter_reviewer_paper_data.json"),
+                output_path=publication_path
+            )
+            predictor.submission_embeddings = predictor.embed(
+                os.path.join(predictor.work_dir, "specter_submission_paper_data.json"),
+                output_path=submissions_path
+            )
+            new_embeddings['pub2vec.jsonl'] = {k: v for k, v in predictor.publication_embeddings.items() if k not in predictor.cached_embeddings}
+            new_embeddings['sub2vec.jsonl'] = {k: v for k, v in predictor.submission_embeddings.items() if k not in predictor.cached_embeddings}
+            predictor.all_scores(
+                publications_path=publication_path,
+                submissions_path=submissions_path,
+                scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
+            )
 
     if config['model'] == 'specter2+scincl':
         print("Importing specter2_scincl module...", flush=True)
@@ -84,19 +101,35 @@ def execute_expertise(config):
         predictor.set_submissions_dataset(submissions_dataset)
         specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_specter.jsonl')
         scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec_scincl.jsonl')
-        predictor.embed_publications(
-            specter_publications_path=specter_publication_path,
-            scincl_publications_path=scincl_publication_path
+        specter_submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl')
+        scincl_submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl')
+        predictor.specter_predictor.cached_embeddings = (cached_embeddings or {}).get('specter', {})
+        predictor.scincl_predictor.cached_embeddings = (cached_embeddings or {}).get('scincl', {})
+        predictor.specter_predictor.publication_embeddings = predictor.specter_predictor.embed(
+            os.path.join(predictor.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+            output_path=specter_publication_path
         )
-        predictor.embed_submissions(
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
-            scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl')
+        predictor.scincl_predictor.publication_embeddings = predictor.scincl_predictor.embed(
+            os.path.join(predictor.scincl_predictor.work_dir, "scincl_reviewer_paper_data.json"),
+            output_path=scincl_publication_path
         )
+        new_embeddings['pub2vec_specter.jsonl'] = {k: v for k, v in predictor.specter_predictor.publication_embeddings.items() if k not in predictor.specter_predictor.cached_embeddings}
+        new_embeddings['pub2vec_scincl.jsonl'] = {k: v for k, v in predictor.scincl_predictor.publication_embeddings.items() if k not in predictor.scincl_predictor.cached_embeddings}
+        predictor.specter_predictor.submission_embeddings = predictor.specter_predictor.embed(
+            os.path.join(predictor.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+            output_path=specter_submissions_path
+        )
+        predictor.scincl_predictor.submission_embeddings = predictor.scincl_predictor.embed(
+            os.path.join(predictor.scincl_predictor.work_dir, "scincl_submission_paper_data.json"),
+            output_path=scincl_submissions_path
+        )
+        new_embeddings['sub2vec_specter.jsonl'] = {k: v for k, v in predictor.specter_predictor.submission_embeddings.items() if k not in predictor.specter_predictor.cached_embeddings}
+        new_embeddings['sub2vec_scincl.jsonl'] = {k: v for k, v in predictor.scincl_predictor.submission_embeddings.items() if k not in predictor.scincl_predictor.cached_embeddings}
         predictor.all_scores(
             specter_publications_path=specter_publication_path,
             scincl_publications_path=scincl_publication_path,
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_specter.jsonl'),
-            scincl_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec_scincl.jsonl'),
+            specter_submissions_path=specter_submissions_path,
+            scincl_submissions_path=scincl_submissions_path,
             matrix_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt')
         )
 
@@ -118,15 +151,21 @@ def execute_expertise(config):
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
         scincl_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
-        predictor.embed_publications(
-            scincl_publication_path
+        submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+        predictor.cached_embeddings = (cached_embeddings or {}).get('scincl', {})
+        predictor.publication_embeddings = predictor.embed(
+            os.path.join(predictor.work_dir, "scincl_reviewer_paper_data.json"),
+            output_path=scincl_publication_path
         )
-        predictor.embed_submissions(
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+        predictor.submission_embeddings = predictor.embed(
+            os.path.join(predictor.work_dir, "scincl_submission_paper_data.json"),
+            output_path=submissions_path
         )
+        new_embeddings['pub2vec_scincl.jsonl'] = {k: v for k, v in predictor.publication_embeddings.items() if k not in predictor.cached_embeddings}
+        new_embeddings['sub2vec_scincl.jsonl'] = {k: v for k, v in predictor.submission_embeddings.items() if k not in predictor.cached_embeddings}
         predictor.all_scores(
             scincl_publication_path,
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
+            submissions_path,
             Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'),
             p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
         )
@@ -149,15 +188,21 @@ def execute_expertise(config):
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
         specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
-        predictor.embed_publications(
-            specter_publication_path
+        submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+        predictor.cached_embeddings = (cached_embeddings or {}).get('specter', {})
+        predictor.publication_embeddings = predictor.embed(
+            os.path.join(predictor.work_dir, "specter_reviewer_paper_data.json"),
+            output_path=specter_publication_path
         )
-        predictor.embed_submissions(
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+        predictor.submission_embeddings = predictor.embed(
+            os.path.join(predictor.work_dir, "specter_submission_paper_data.json"),
+            output_path=submissions_path
         )
+        new_embeddings['pub2vec.jsonl'] = {k: v for k, v in predictor.publication_embeddings.items() if k not in predictor.cached_embeddings}
+        new_embeddings['sub2vec.jsonl'] = {k: v for k, v in predictor.submission_embeddings.items() if k not in predictor.cached_embeddings}
         predictor.all_scores(
             specter_publication_path,
-            Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
+            submissions_path,
             Path(config['model_params']['scores_path']).joinpath(config['name'] + '.pt'),
             p2p_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '_p2p' + '.json')
         )
@@ -202,20 +247,30 @@ def execute_expertise(config):
         )
         predictor.set_archives_dataset(archives_dataset)
         predictor.set_submissions_dataset(submissions_dataset)
+        skip_specter = config['model_params'].get('skip_specter', False)
         specter_publication_path = Path(config['model_params']['publications_path']).joinpath('pub2vec.jsonl')
         if config['model_params'].get('use_redis', False):
             specter_publication_path = None
-        predictor.embed_publications(
-            specter_publications_path=specter_publication_path,
-            mfr_publications_path=None, skip_specter=config['model_params'].get('skip_specter', False)
+        submissions_path = Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl')
+        use_redis = config['model_params'].get('use_redis', False)
+        predictor.specter_predictor.cached_embeddings = {} if use_redis else (cached_embeddings or {}).get('specter', {})
+        if not skip_specter:
+            predictor.specter_predictor.publication_embeddings = predictor.specter_predictor.embed(
+                os.path.join(predictor.specter_predictor.work_dir, "specter_reviewer_paper_data.json"),
+                output_path=specter_publication_path
+            )
+            new_embeddings['pub2vec.jsonl'] = {k: v for k, v in predictor.specter_predictor.publication_embeddings.items() if k not in predictor.specter_predictor.cached_embeddings}
+        predictor.specter_predictor.submission_embeddings = predictor.specter_predictor.embed(
+            os.path.join(predictor.specter_predictor.work_dir, "specter_submission_paper_data.json"),
+            output_path=submissions_path
         )
-        predictor.embed_submissions(
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
-            mfr_submissions_path=None, skip_specter=config['model_params'].get('skip_specter', False))
+        new_embeddings['sub2vec.jsonl'] = {k: v for k, v in predictor.specter_predictor.submission_embeddings.items() if k not in predictor.specter_predictor.cached_embeddings}
+        predictor.mfr_predictor.embed_publications(None)
+        predictor.mfr_predictor.embed_submissions(None)
         predictor.all_scores(
             specter_publications_path=specter_publication_path,
             mfr_publications_path=None,
-            specter_submissions_path=Path(config['model_params']['submissions_path']).joinpath('sub2vec.jsonl'),
+            specter_submissions_path=submissions_path,
             mfr_submissions_path=None,
             scores_path=Path(config['model_params']['scores_path']).joinpath(config['name'] + '.csv')
         )
@@ -244,6 +299,9 @@ def execute_expertise(config):
         )
     else:
         generate_sparse_scores(predictor.preliminary_scores, sparse_value, sparse_path)
+
+    return new_embeddings
+
 
 def execute_create_dataset(client_v2, config=None):
 
