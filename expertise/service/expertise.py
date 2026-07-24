@@ -228,9 +228,11 @@ class BaseExpertiseService:
                     desc = data.get('error', descriptions[JobStatus.DATA_ERROR])
                     return JobStatus.DATA_ERROR, desc
             except concurrent.futures.TimeoutError:
-                pass
-            except Exception:
-                pass
+                self.logger.warning(f"Timeout fetching completed job {job_id} from queue")
+                return None, None
+            except Exception as e:
+                self.logger.warning(f"Failed to fetch completed job {job_id} from queue: {e}")
+                return None, None
             return JobStatus.COMPLETED, descriptions[JobStatus.COMPLETED]
 
         if state == 'failed':
@@ -249,9 +251,11 @@ class BaseExpertiseService:
                     status = getattr(JobStatus, sub_status)
                     return status, descriptions[status]
             except concurrent.futures.TimeoutError:
-                pass
-            except Exception:
-                pass
+                self.logger.warning(f"Timeout fetching active job {job_id} from queue")
+                return None, None
+            except Exception as e:
+                self.logger.warning(f"Failed to fetch active job {job_id} from queue: {e}")
+                return None, None
             return JobStatus.RUN_EXPERTISE, descriptions[JobStatus.RUN_EXPERTISE]
 
         if state in ('waiting', 'delayed', 'paused', 'waiting-children', 'prioritized'):
@@ -598,7 +602,6 @@ class ExpertiseService(BaseExpertiseService):
         )
 
     async def worker_process(self, job, token):
-        descriptions = JobDescription.VALS.value
         job_id = job.data['job_id']
         user_id = job.data['user_id']
         config = self.redis.load_job(job_id, user_id)
@@ -852,13 +855,14 @@ class ExpertiseService(BaseExpertiseService):
         since it doesn't read the score file.
         """
         config = self.redis.load_job(job_id, user_id)
-        status, _ = self._get_job_status_from_queue(job_id)
+        status, description = self._get_job_status_from_queue(job_id)
         if status is None:
             status = config.status
+            description = config.description
 
         if status != JobStatus.COMPLETED:
             raise openreview.OpenReviewException(
-                f"Metadata not available - status: {status} | description: {config.description}"
+                f"Metadata not available - status: {status} | description: {description}"
             )
 
         metadata_path = os.path.join(config.job_dir, 'metadata.json')
