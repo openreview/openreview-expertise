@@ -17,6 +17,8 @@ from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
 from google.cloud.aiplatform_v1.types import PipelineState
+from google.auth import default as google_auth_default
+from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 from copy import deepcopy
 from expertise.config import ModelConfig
 from expertise.utils.utils import generate_job_id
@@ -872,6 +874,7 @@ class GCPInterface(object):
             self.jobs_folder = config['GCP_JOBS_FOLDER']
             self.service_label = config['GCP_SERVICE_LABEL']
             self.service_account = config.get('GCP_SERVICE_ACCOUNT')
+            self.url_signer_service_account = config.get('GCP_URL_SIGNER_SERVICE_ACCOUNT')
             # Per-tier pipeline names derived from base name + machine tier suffix
             self.pipeline_name_by_tier = {
                 config.get('SMALL_NAME', 'small'):  f"{self.pipeline_name}-{config.get('SMALL_NAME', 'small')}",
@@ -890,6 +893,7 @@ class GCPInterface(object):
             self.jobs_folder = jobs_folder
             self.service_label = service_label
             self.service_account = service_account
+            self.url_signer_service_account = None
 
         required_fields = [
             self.project_id,
@@ -1504,20 +1508,6 @@ class GCPInterface(object):
         if len(authenticated_requests) > 1:
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
-        # Validate score and metadata files exist before returning the streaming generator.
-        # If validation is deferred into the generator, exceptions fire after the HTTP
-        # response has already started — causing a broken chunked response on the client.
-        score_files = [
-            blob for blob in job_blobs
-            if blob.name.endswith('scores.csv') or blob.name.endswith('scores_sparse.csv')
-            or blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
-        ]
-        metadata_files = [blob for blob in job_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name]
-        if len(metadata_files) != 1:
-            raise openreview.OpenReviewException(f'Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}')
-        if len(score_files) < 1 or len(score_files) > 2:
-            raise openreview.OpenReviewException(f'Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}')
-
         # Matching type drives the entityA/entityB column mapping for new CSV
         # blobs (legacy JSONL blobs already have it baked in).
         api_request = authenticated_requests[0]
@@ -1527,6 +1517,94 @@ class GCPInterface(object):
         paper_paper_matching = entityA_type == 'Note' and entityB_type == 'Note'
 
         return _get_scores_and_metadata_streaming(job_blobs, job_id, group_group_matching, paper_paper_matching)
+
+    def _select_score_blob(self, job_blobs, sparse=False):
+        """Return the single results blob for a job in the requested format."""
+        if sparse:
+            suffix = 'scores_sparse'
+            score_files = [
+                blob for blob in job_blobs
+                if blob.name.endswith(f'{suffix}.csv') or blob.name.endswith(f'{suffix}.jsonl')
+            ]
+        else:
+            # Full matrix: prefer dense CSV/JSONL if present, otherwise fall back
+            # to the binary PyTorch matrix file produced by specter2/scincl models.
+            score_files = [
+                blob for blob in job_blobs
+                if blob.name.endswith('scores.csv') or blob.name.endswith('scores.jsonl')
+            ]
+            if not score_files:
+                matrix_files = [
+                    blob for blob in job_blobs
+                    if blob.name.endswith('.pt')
+                ]
+                if len(matrix_files) == 1:
+                    return matrix_files[0]
+                if len(matrix_files) > 1:
+                    raise openreview.OpenReviewException(
+                        f'Internal Error: multiple matrix files found expected [1] found {len(matrix_files)}'
+                    )
+
+        if len(score_files) != 1:
+            target = 'sparse' if sparse else 'full'
+            raise openreview.OpenReviewException(
+                f'Internal Error: incorrect {target} score files found expected [1] found {len(score_files)}'
+            )
+        return score_files[0]
+
+    def sign_url(self, bucket_name, blob_name):
+        """Generate a V4 signed URL for a GCS blob.
+
+        Uses service account impersonation so the URL is signed by
+        GCP_URL_SIGNER_SERVICE_ACCOUNT rather than the runtime identity,
+        which on GCE only carries a token and cannot sign directly.
+        """
+        if not self.url_signer_service_account:
+            raise openreview.OpenReviewException(
+                'Signed URLs are not configured: GCP_URL_SIGNER_SERVICE_ACCOUNT is not set'
+            )
+
+        source_credentials, project = google_auth_default()
+        # The impersonation token only needs to live long enough to sign the URL;
+        # it is independent of the signed URL's expiration.
+        target_credentials = ImpersonatedCredentials(
+            source_credentials=source_credentials,
+            target_principal=self.url_signer_service_account,
+            target_scopes=['https://www.googleapis.com/auth/cloud-platform'],
+            lifetime=300,
+        )
+        client = storage.Client(credentials=target_credentials, project=project)
+        blob = client.bucket(bucket_name).blob(blob_name)
+        return blob.generate_signed_url(
+            version='v4',
+            expiration=datetime.timedelta(minutes=5),
+            method='GET',
+        )
+
+    def get_job_results_signed_url(self, user_id, job_id, sparse=False):
+        """Return a signed URL for the results file of a cloud job.
+
+        The caller must be the job owner or a superuser. The URL is signed
+        for the full results (`scores.csv` or the `.pt` matrix) by default;
+        pass sparse=True for `scores_sparse.csv`.
+        """
+        job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
+        self.logger.info(f"Searching for signed URL job {job_id} | prefix={self.jobs_folder}/{job_id}/")
+        all_requests = [
+            json.loads(blob.download_as_string()) for blob in job_blobs if self.request_fname in blob.name
+        ]
+        authenticated_requests = [
+            req for req in all_requests if user_id == req['user_id'] or user_id in SUPERUSER_IDS
+        ]
+        if len(all_requests) == 0:
+            raise openreview.OpenReviewException('Job not found')
+        if len(authenticated_requests) == 0:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
+        if len(authenticated_requests) > 1:
+            raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
+
+        target_blob = self._select_score_blob(job_blobs, sparse=sparse)
+        return self.sign_url(self.bucket_name, target_blob.name)
 
     def get_job_metadata(self, user_id, job_id):
         """
