@@ -10,7 +10,6 @@ import pyarrow.compute as pc
 from expertise.execute_expertise import execute_expertise
 from expertise.service import load_model_artifacts, artifacts_for_model
 from expertise.service.utils import APIRequest, JobConfig, ExpectedDataError
-from expertise.utils.utils import generate_job_id
 from google.cloud import storage
 
 DEFAULT_CONFIG = {
@@ -149,7 +148,7 @@ def run_pipeline(
         load_model_artifacts(subdirs=required_artifacts)
 
         print('Creating job ID')
-        job_id = generate_job_id()
+        job_id = blob_prefix.split('/')[-1]
         if working_dir is None:
             working_dir = f"/app/{job_id}"
             working_dir_created = True
