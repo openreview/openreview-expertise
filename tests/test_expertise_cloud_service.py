@@ -473,16 +473,6 @@ class TestExpertiseCloudService():
         assert metadata_response.status_code == 200
         assert metadata_response.json == {"meta": "data"}
 
-        # Regression: the Redis-cached status is stale in the cloud flow (it is
-        # never updated to COMPLETED once the Vertex AI pipeline finishes). The
-        # metadata endpoint must serve the metadata.json artifact straight from
-        # GCS without gating on that stale status, otherwise a genuinely-complete
-        # job is rejected with "Metadata not available - status: RUN_EXPERTISE".
-        stale_config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
-        stale_config.status = JobStatus.RUN_EXPERTISE
-        stale_config.description = JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
-        redis.save_job(stale_config)
-
         metadata_response = test_client.get(
             '/expertise/metadata',
             headers=tmlr_client.headers,
@@ -1205,7 +1195,7 @@ class TestExpertiseCloudService():
         assert response['status'] == 'Data Error'
         assert response['description'] == "No papers found for: invitation_ids: ['CLD_ERR.cc/-/Submission']"
 
-    def test_status_returns_redis_when_no_cloud_id(self, openreview_client, openreview_context_cloud):
+    def test_status_returns_404_when_job_not_in_queue(self, openreview_client, openreview_context_cloud):
 
         cfg = openreview_context_cloud["config"]
         test_client = openreview_context_cloud["test_client"]
@@ -1218,7 +1208,7 @@ class TestExpertiseCloudService():
             sync_on_disk=False,
         )
 
-        # Prepare a job with no cloud_id and ensure job_dir exists so load_job passes
+        # Prepare a job config and ensure job_dir exists so load_job passes
         job_id = f"job_no_cloud_{int(time.time())}"
         job_dir = os.path.join(cfg["WORKING_DIR"], job_id)
         os.makedirs(job_dir, exist_ok=True)
@@ -1245,8 +1235,6 @@ class TestExpertiseCloudService():
             job_dir=job_dir,
             cdate=1234567890000,
             mdate=1234567890000,
-            status=JobStatus.QUEUED,
-            description=JobDescription.VALS.value[JobStatus.QUEUED],
         )
         config.api_request = api_req
         redis.save_job(config)
@@ -1254,18 +1242,13 @@ class TestExpertiseCloudService():
         # Use a client with the default token (openreview.net)
         user_client = openreview.api.OpenReviewClient(token=openreview_client.token)
 
-        # Hit the status endpoint; should return Redis-backed values without error
+        # Hit the status endpoint; should return 404 because the job is not in BullMQ
         resp = test_client.get(
             "/expertise/status",
             headers=user_client.headers,
             query_string={"jobId": job_id},
         )
-        assert resp.status_code == 200
-        body = resp.get_json()
-        assert body["jobId"] == job_id
-        assert body["status"] == JobStatus.QUEUED
-        assert body["description"] == JobDescription.VALS.value[JobStatus.QUEUED]
-        assert body["request"] == api_req.to_json()
+        assert resp.status_code == 404
 
     @patch("expertise.service.expertise.execute_create_dataset")
     def test_status_transitions_to_fetching_data_before_dataset_creation(self, mock_create_dataset, openreview_client, openreview_context_cloud):
@@ -1274,19 +1257,15 @@ class TestExpertiseCloudService():
         cfg = openreview_context_cloud['config']
         test_client = openreview_context_cloud['test_client']
 
-        redis = RedisDatabase(
-            host=cfg['REDIS_ADDR'],
-            port=cfg['REDIS_PORT'],
-            db=cfg['REDIS_CONFIG_DB'],
-            sync_on_disk=False,
-        )
-
         captured = {}
+        original_update_status = expertise.service.expertise.ExpertiseCloudService._update_job_status
+
+        async def wrapped_update_status(self, job, new_status, desc=None, error=None):
+            if new_status == JobStatus.FETCHING_DATA:
+                captured['status_at_create'] = new_status
+            return await original_update_status(self, job, new_status, desc, error)
 
         def capture_then_short_circuit(*args, **kwargs):
-            cfg_dict = kwargs.get('config') or args[1]
-            loaded = redis.load_job(cfg_dict['job_id'], cfg_dict['user_id'])
-            captured['status_at_create'] = loaded.status
             raise ExpectedDataError("intentional short-circuit to capture mid-flow status")
 
         mock_create_dataset.side_effect = capture_then_short_circuit
@@ -1294,44 +1273,45 @@ class TestExpertiseCloudService():
         abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
         abc_client.impersonate('CLD.cc')
 
-        response = test_client.post(
-            '/expertise',
-            data=json.dumps({
-                "name": "test_status_transition",
-                "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
-                "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
-                "model": {
-                    "name": "specter2+scincl",
-                    'useTitle': False,
-                    'useAbstract': True,
-                    'skipSpecter': False,
-                    'scoreComputation': 'avg',
-                },
-                "dataset": {'minimumPubDate': 0},
-            }),
-            content_type='application/json',
-            headers=abc_client.headers,
-        )
-        assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['jobId']
+        patcher = patch.object(expertise.service.expertise.ExpertiseCloudService, '_update_job_status', wrapped_update_status)
+        patcher.start()
+        try:
+            response = test_client.post(
+                '/expertise',
+                data=json.dumps({
+                    "name": "test_status_transition",
+                    "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
+                    "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
+                    "model": {
+                        "name": "specter2+scincl",
+                        'useTitle': False,
+                        'useAbstract': True,
+                        'skipSpecter': False,
+                        'scoreComputation': 'avg',
+                    },
+                    "dataset": {'minimumPubDate': 0},
+                }),
+                content_type='application/json',
+                headers=abc_client.headers,
+            )
+            assert response.status_code == 200, f'{response.json}'
+            job_id = response.json['jobId']
 
-        # Immediately after enqueue, the worker hasn't run yet — status is QUEUED.
-        status_resp = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
-        assert status_resp['status'] == JobStatus.QUEUED, status_resp
+            # Wait for the worker to dequeue and hit the patched execute_create_dataset.
+            deadline = time.time() + 30
+            while 'status_at_create' not in captured and time.time() < deadline:
+                time.sleep(0.1)
+            assert 'status_at_create' in captured, "Worker never invoked execute_create_dataset"
 
-        # Wait for the worker to dequeue and hit the patched execute_create_dataset.
-        deadline = time.time() + 30
-        while 'status_at_create' not in captured and time.time() < deadline:
-            time.sleep(0.5)
-        assert 'status_at_create' in captured, "Worker never invoked execute_create_dataset"
+            # The persisted status at the moment the worker began dataset creation must be FETCHING_DATA.
+            assert captured['status_at_create'] == JobStatus.FETCHING_DATA, (
+                f"Expected status FETCHING_DATA at execute_create_dataset entry, got {captured['status_at_create']!r}"
+            )
 
-        # The persisted status at the moment the worker began dataset creation must be FETCHING_DATA.
-        assert captured['status_at_create'] == JobStatus.FETCHING_DATA, (
-            f"Expected status FETCHING_DATA at execute_create_dataset entry, got {captured['status_at_create']!r}"
-        )
-
-        # ExpectedDataError handling resolves the job to Data Error — confirms the worker followed the
-        # update_status → execute_create_dataset → exception-handling path we're exercising.
-        time.sleep(LATENCY_OFFSET)
-        final = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
-        assert final['status'] == JobStatus.DATA_ERROR, final
+            # ExpectedDataError handling resolves the job to Data Error — confirms the worker followed the
+            # update_status → execute_create_dataset → exception-handling path we're exercising.
+            time.sleep(LATENCY_OFFSET)
+            final = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
+            assert final['status'] == JobStatus.DATA_ERROR, final
+        finally:
+            patcher.stop()

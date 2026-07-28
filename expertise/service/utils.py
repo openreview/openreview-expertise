@@ -477,8 +477,6 @@ class JobConfig(object):
         job_dir=None,
         cdate=None,
         mdate=None,
-        status=None,
-        description=None,
         match_group=None,
         match_paper_invitation=None,
         match_paper_venueid=None,
@@ -510,8 +508,6 @@ class JobConfig(object):
         self.job_dir = job_dir
         self.cdate = cdate
         self.mdate = mdate
-        self.status = status
-        self.description = description
         self.match_group = match_group
         self.match_paper_invitation = match_paper_invitation
         self.match_paper_venueid = match_paper_venueid
@@ -548,8 +544,6 @@ class JobConfig(object):
             'job_dir',
             'cdate',
             'mdate',
-            'status',
-            'description',
             'match_group',
             'match_paper_invitation',
             'match_paper_venueid',
@@ -621,7 +615,6 @@ class JobConfig(object):
                 if submissions:
                     config.provided_submissions = submissions
 
-        descriptions = JobDescription.VALS.value
         config = JobConfig()
 
         # Set metadata fields from request
@@ -640,8 +633,6 @@ class JobConfig(object):
         config.job_dir = root_dir
         config.cdate = int(time.time() * 1000)
         config.mdate = config.cdate
-        config.status = JobStatus.INITIALIZED.value
-        config.description = descriptions[JobStatus.INITIALIZED]
 
         # Handle Group cases
         config.match_group = starting_config.get('match_group', None)
@@ -806,8 +797,6 @@ class JobConfig(object):
             job_dir = job_config.get('job_dir'),
             cdate = job_config.get('cdate'),
             mdate = job_config.get('mdate'),
-            status = job_config.get('status'),
-            description = job_config.get('description'),
             match_group = job_config.get('match_group'),
             match_paper_invitation = job_config.get('match_paper_invitation'),
             match_paper_venueid = job_config.get('match_paper_venueid'),
@@ -1184,17 +1173,7 @@ class GCPInterface(object):
         job_id = config.cloud_id
 
         if job_id is None:
-            # Return just information in Redis
-            return {
-                'name': config.name,
-                'tauthor': config.user_id,
-                'jobId': config.job_id,
-                'status': config.status,
-                'description': config.description,
-                'cdate': config.cdate,
-                'mdate': config.mdate,
-                'request': config.api_request.to_json()
-            }
+            raise openreview.OpenReviewException('Cloud job id not found')
 
         job_blobs = self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}")
         self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}")

@@ -267,12 +267,12 @@ class TestExpertiseService():
         return service
 
     def test_queue_status_completed(self):
-        """BullMQ 'completed' -> COMPLETED."""
+        """BullMQ 'completed' with status in job data -> COMPLETED."""
         service = self._make_service_for_queue_tests()
         state_future = MagicMock()
         state_future.result.return_value = 'completed'
         mock_job = MagicMock()
-        mock_job.data = {}
+        mock_job.data = {'status': JobStatus.COMPLETED, 'description': JobDescription.VALS.value[JobStatus.COMPLETED]}
         job_future = MagicMock()
         job_future.result.return_value = mock_job
         with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
@@ -281,12 +281,12 @@ class TestExpertiseService():
         assert desc == JobDescription.VALS.value[JobStatus.COMPLETED]
 
     def test_queue_status_completed_data_error(self):
-        """Completed job with result='DATA_ERROR' in job data -> DATA_ERROR."""
+        """Completed job with status='DATA_ERROR' in job data -> DATA_ERROR."""
         service = self._make_service_for_queue_tests()
         state_future = MagicMock()
         state_future.result.return_value = 'completed'
         mock_job = MagicMock()
-        mock_job.data = {'result': 'DATA_ERROR', 'error': 'No papers found'}
+        mock_job.data = {'status': JobStatus.DATA_ERROR, 'description': 'No papers found', 'error': 'No papers found'}
         job_future = MagicMock()
         job_future.result.return_value = mock_job
         with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
@@ -294,8 +294,8 @@ class TestExpertiseService():
         assert status == JobStatus.DATA_ERROR
         assert desc == 'No papers found'
 
-    def test_queue_status_completed_job_from_id_timeout(self):
-        """Timeout fetching completed job data -> fall back to Redis."""
+    def test_queue_status_completed_job_data_timeout(self):
+        """Timeout fetching job data -> (None, None)."""
         service = self._make_service_for_queue_tests()
         state_future = MagicMock()
         state_future.result.return_value = 'completed'
@@ -307,8 +307,8 @@ class TestExpertiseService():
         assert desc is None
         service.logger.warning.assert_called_once()
 
-    def test_queue_status_completed_job_from_id_exception(self):
-        """Exception fetching completed job data -> fall back to Redis."""
+    def test_queue_status_completed_job_data_exception(self):
+        """Exception fetching job data -> (None, None)."""
         service = self._make_service_for_queue_tests()
         state_future = MagicMock()
         state_future.result.return_value = 'completed'
@@ -323,15 +323,19 @@ class TestExpertiseService():
     def test_queue_status_failed(self):
         """BullMQ 'failed' -> ERROR."""
         service = self._make_service_for_queue_tests()
-        mock_future = MagicMock()
-        mock_future.result.return_value = 'failed'
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
+        state_future = MagicMock()
+        state_future.result.return_value = 'failed'
+        mock_job = MagicMock()
+        mock_job.data = {}
+        job_future = MagicMock()
+        job_future.result.return_value = mock_job
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
             status, desc = service._get_job_status_from_queue('job-123')
         assert status == JobStatus.ERROR
         assert desc == JobDescription.VALS.value[JobStatus.ERROR]
 
-    def test_queue_status_active_no_sub_status(self):
-        """BullMQ 'active' without sub_status -> RUN_EXPERTISE."""
+    def test_queue_status_active_no_status(self):
+        """BullMQ 'active' without status -> RUN_EXPERTISE."""
         service = self._make_service_for_queue_tests()
         state_future = MagicMock()
         state_future.result.return_value = 'active'
@@ -344,13 +348,13 @@ class TestExpertiseService():
         assert status == JobStatus.RUN_EXPERTISE
         assert desc == JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
 
-    def test_queue_status_active_with_sub_status(self):
-        """BullMQ 'active' with sub_status='FETCHING_DATA' -> FETCHING_DATA."""
+    def test_queue_status_active_with_status(self):
+        """BullMQ 'active' with status='FETCHING_DATA' -> FETCHING_DATA."""
         service = self._make_service_for_queue_tests()
         state_future = MagicMock()
         state_future.result.return_value = 'active'
         mock_job = MagicMock()
-        mock_job.data = {'sub_status': 'FETCHING_DATA'}
+        mock_job.data = {'status': JobStatus.FETCHING_DATA, 'description': JobDescription.VALS.value[JobStatus.FETCHING_DATA]}
         job_future = MagicMock()
         job_future.result.return_value = mock_job
         with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
@@ -358,8 +362,8 @@ class TestExpertiseService():
         assert status == JobStatus.FETCHING_DATA
         assert desc == JobDescription.VALS.value[JobStatus.FETCHING_DATA]
 
-    def test_queue_status_active_job_from_id_timeout(self):
-        """Timeout fetching active job data -> fall back to Redis."""
+    def test_queue_status_active_job_data_timeout(self):
+        """Timeout fetching active job data -> (None, None)."""
         service = self._make_service_for_queue_tests()
         state_future = MagicMock()
         state_future.result.return_value = 'active'
@@ -371,8 +375,8 @@ class TestExpertiseService():
         assert desc is None
         service.logger.warning.assert_called_once()
 
-    def test_queue_status_active_job_from_id_exception(self):
-        """Exception fetching active job data -> fall back to Redis."""
+    def test_queue_status_active_job_data_exception(self):
+        """Exception fetching active job data -> (None, None)."""
         service = self._make_service_for_queue_tests()
         state_future = MagicMock()
         state_future.result.return_value = 'active'
@@ -390,15 +394,19 @@ class TestExpertiseService():
     def test_queue_status_queued_variants(self, queue_state):
         """All BullMQ waiting-like states -> QUEUED."""
         service = self._make_service_for_queue_tests()
-        mock_future = MagicMock()
-        mock_future.result.return_value = queue_state
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
+        state_future = MagicMock()
+        state_future.result.return_value = queue_state
+        mock_job = MagicMock()
+        mock_job.data = {}
+        job_future = MagicMock()
+        job_future.result.return_value = mock_job
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
             status, desc = service._get_job_status_from_queue('job-123')
         assert status == JobStatus.QUEUED
         assert desc == JobDescription.VALS.value[JobStatus.QUEUED]
 
-    def test_queue_status_timeout_falls_back(self):
-        """TimeoutError from BullMQ returns (None, None) so caller falls back to Redis."""
+    def test_queue_status_timeout(self):
+        """TimeoutError from BullMQ returns (None, None)."""
         service = self._make_service_for_queue_tests()
         mock_future = MagicMock()
         mock_future.result.side_effect = concurrent.futures.TimeoutError
@@ -407,8 +415,8 @@ class TestExpertiseService():
         assert status is None
         assert desc is None
 
-    def test_queue_status_exception_falls_back(self):
-        """Exception from BullMQ returns (None, None) so caller falls back to Redis."""
+    def test_queue_status_exception(self):
+        """Exception from BullMQ returns (None, None)."""
         service = self._make_service_for_queue_tests()
         mock_future = MagicMock()
         mock_future.result.side_effect = RuntimeError('BullMQ down')
@@ -418,7 +426,7 @@ class TestExpertiseService():
         assert desc is None
         service.logger.warning.assert_called_once()
 
-    def test_queue_status_none_state_falls_back(self):
+    def test_queue_status_none_state(self):
         """BullMQ returns None state (job archived / not in queue) -> (None, None)."""
         service = self._make_service_for_queue_tests()
         mock_future = MagicMock()
@@ -848,16 +856,6 @@ class TestExpertiseService():
                 assert pub['weight'] == expected_weight, f"{model_name} publication {paper_id} has weight {pub['weight']}, expected {expected_weight}"
 
         assert upweighted_note_id not in all_publication_ids
-
-        # Check that all configs are completed
-        redis = RedisDatabase(
-            host='localhost',
-            port=6379,
-            db=10
-        )
-        returned_configs = redis.load_all_jobs('openreview.net')
-        for config in returned_configs:
-            assert config.status == 'Completed', f"Found job with status {config.status}: {config.job_id}"
 
         # Make a request with weight specification, use articleSubmittedToOpenReview
         response = test_client.post(
@@ -1747,75 +1745,80 @@ class TestExpertiseService():
             sync_on_disk=False
         )
 
-        job_id = 'running_job_' + str(random.randint(10000, 99999))
-        job_dir = f"./tests/jobs/{job_id}"
-        os.makedirs(job_dir, exist_ok=True)
-
-        running_config = JobConfig(
-            name='test_running_delete',
-            user_id=config['OPENREVIEW_USERNAME'],
-            job_id=job_id,
-            job_dir=job_dir,
-            status=JobStatus.RUN_EXPERTISE,
-            description=JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
-        )
-        redis.save_job(running_config)
-
         test_client = openreview_context['test_client']
-        response = test_client.delete(f'/expertise/{job_id}', headers=openreview_client.headers)
-        # Deletion should be prevented while running
-        assert response.status_code == 400
-        assert 'Error' in response.json['name']
-        assert 'bad request' in response.json['message'].lower()
-        assert 'cannot delete job' in response.json['message'].lower()
 
-        # Directory and Redis entry should still exist
-        assert os.path.isdir(job_dir)
-        loaded = redis.load_job(job_id, config['OPENREVIEW_USERNAME'])
-        assert loaded.job_id == job_id
+        def mock_status(job_id):
+            if job_id.startswith('running_job_'):
+                return JobStatus.RUN_EXPERTISE, JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
+            if job_id.startswith('completed_job_'):
+                return JobStatus.COMPLETED, JobDescription.VALS.value[JobStatus.COMPLETED]
+            if job_id.startswith('error_job_'):
+                return JobStatus.ERROR, JobDescription.VALS.value[JobStatus.ERROR]
+            return None, None
 
-        redis.remove_job(config['OPENREVIEW_USERNAME'], job_id)
-        shutil.rmtree(job_dir, ignore_errors=True)
+        with patch.object(expertise.service.expertise.ExpertiseService, '_get_job_status_from_queue', side_effect=mock_status):
+            job_id = 'running_job_' + str(random.randint(10000, 99999))
+            job_dir = f"./tests/jobs/{job_id}"
+            os.makedirs(job_dir, exist_ok=True)
 
-        # Delete on job completed
-        completed_job_id = 'completed_job_' + str(random.randint(10000, 99999))
-        completed_dir = f"./tests/jobs/{completed_job_id}"
-        os.makedirs(completed_dir, exist_ok=True)
-        completed_config = JobConfig(
-            name='test_completed_delete',
-            user_id=config['OPENREVIEW_USERNAME'],
-            job_id=completed_job_id,
-            job_dir=completed_dir,
-            status=JobStatus.COMPLETED,
-            description=JobDescription.VALS.value[JobStatus.COMPLETED]
-        )
-        redis.save_job(completed_config)
+            running_config = JobConfig(
+                name='test_running_delete',
+                user_id=config['OPENREVIEW_USERNAME'],
+                job_id=job_id,
+                job_dir=job_dir
+            )
+            redis.save_job(running_config)
 
-        response = test_client.delete(f'/expertise/{completed_job_id}', headers=openreview_client.headers)
-        assert response.status_code == 200, response.json
-        assert not os.path.isdir(completed_dir)
-        with pytest.raises(openreview.OpenReviewException, match='Job not found'):
-            redis.load_job(completed_job_id, config['OPENREVIEW_USERNAME'])
+            response = test_client.delete(f'/expertise/{job_id}', headers=openreview_client.headers)
+            # Deletion should be prevented while running
+            assert response.status_code == 400
+            assert 'Error' in response.json['name']
+            assert 'bad request' in response.json['message'].lower()
+            assert 'cannot delete job' in response.json['message'].lower()
 
-        # Delete on job error
-        error_job_id = 'error_job_' + str(random.randint(10000, 99999))
-        error_dir = f"./tests/jobs/{error_job_id}"
-        os.makedirs(error_dir, exist_ok=True)
-        error_config = JobConfig(
-            name='test_error_delete',
-            user_id=config['OPENREVIEW_USERNAME'],
-            job_id=error_job_id,
-            job_dir=error_dir,
-            status=JobStatus.ERROR,
-            description=JobDescription.VALS.value[JobStatus.ERROR]
-        )
-        redis.save_job(error_config)
+            # Directory and Redis entry should still exist
+            assert os.path.isdir(job_dir)
+            loaded = redis.load_job(job_id, config['OPENREVIEW_USERNAME'])
+            assert loaded.job_id == job_id
 
-        response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
-        assert response.status_code == 200, response.json
-        assert not os.path.isdir(error_dir)
-        with pytest.raises(openreview.OpenReviewException, match='Job not found'):
-            redis.load_job(error_job_id, config['OPENREVIEW_USERNAME'])
+            redis.remove_job(config['OPENREVIEW_USERNAME'], job_id)
+            shutil.rmtree(job_dir, ignore_errors=True)
+
+            # Delete on job completed
+            completed_job_id = 'completed_job_' + str(random.randint(10000, 99999))
+            completed_dir = f"./tests/jobs/{completed_job_id}"
+            os.makedirs(completed_dir, exist_ok=True)
+            completed_config = JobConfig(
+                name='test_completed_delete',
+                user_id=config['OPENREVIEW_USERNAME'],
+                job_id=completed_job_id,
+                job_dir=completed_dir
+            )
+            redis.save_job(completed_config)
+
+            response = test_client.delete(f'/expertise/{completed_job_id}', headers=openreview_client.headers)
+            assert response.status_code == 200, response.json
+            assert not os.path.isdir(completed_dir)
+            with pytest.raises(openreview.OpenReviewException, match='Job not found'):
+                redis.load_job(completed_job_id, config['OPENREVIEW_USERNAME'])
+
+            # Delete on job error
+            error_job_id = 'error_job_' + str(random.randint(10000, 99999))
+            error_dir = f"./tests/jobs/{error_job_id}"
+            os.makedirs(error_dir, exist_ok=True)
+            error_config = JobConfig(
+                name='test_error_delete',
+                user_id=config['OPENREVIEW_USERNAME'],
+                job_id=error_job_id,
+                job_dir=error_dir
+            )
+            redis.save_job(error_config)
+
+            response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
+            assert response.status_code == 200, response.json
+            assert not os.path.isdir(error_dir)
+            with pytest.raises(openreview.OpenReviewException, match='Job not found'):
+                redis.load_job(error_job_id, config['OPENREVIEW_USERNAME'])
 
     def test_delete_job_with_different_user(self, openreview_client, openreview_context):
         """Try to delete a job with a different user than the job owner."""
@@ -1834,9 +1837,7 @@ class TestExpertiseService():
             name='test_owned_delete',
             user_id=config['OPENREVIEW_USERNAME'],
             job_id=job_id,
-            job_dir=job_dir,
-            status=JobStatus.QUEUED,
-            description=JobDescription.VALS.value[JobStatus.QUEUED]
+            job_dir=job_dir
         )
         redis.save_job(owned_config)
 
