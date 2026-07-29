@@ -635,10 +635,34 @@ def aggregate_by_group(config):
                 if score_length:
                     average_score[profile_id][archive_id] = round(score_sum/score_length, 2)
 
-    # Build the in-memory list only — no CSV side-file. The aggregated CSV
-    # was previously written to {name}.csv and uploaded to GCS, but no
-    # downstream consumer reads it (the API always serves scores_sparse.csv,
-    # and execute_expertise consumes preliminary_scores in memory).
+    # Build the in-memory list used by generate_sparse_scores.
+    # Also persist the aggregated profile-profile matrix so that group-group
+    # jobs can expose a meaningful "full" score download via signed URL.
+    # The raw {name}.pt file still contains per-paper rows; this matrix
+    # contains one row per group_B member profile and one column per
+    # group_A archive member.
+    sorted_archive_members = sorted(archive_members)
+    sorted_submission_members = sorted(submission_members)
+    archive_id_to_idx = {aid: i for i, aid in enumerate(sorted_archive_members)}
+    profile_id_to_idx = {pid: i for i, pid in enumerate(sorted_submission_members)}
+
+    group_scores = torch.zeros(
+        (len(sorted_submission_members), len(sorted_archive_members)),
+        dtype=torch.float32,
+    )
+    for profile_id, archive_scores in average_score.items():
+        row = profile_id_to_idx[profile_id]
+        for archive_id, score in archive_scores.items():
+            col = archive_id_to_idx[archive_id]
+            group_scores[row, col] = score
+
+    group_matrix_path = Path(config['model_params']['scores_path']).joinpath(config['name'] + '_group.pt')
+    torch.save({
+        'scores': group_scores,
+        'test_ids': sorted_submission_members,
+        'reviewer_ids': sorted_archive_members,
+    }, group_matrix_path)
+
     preliminary_scores = []
     for submission_member, archive_scores in average_score.items():
         for archive_member, score in archive_scores.items():
