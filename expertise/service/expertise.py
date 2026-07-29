@@ -971,10 +971,10 @@ class ExpertiseCloudService(BaseExpertiseService):
                         self.logger.info(f"INFO: after update status")
 
                     if status['status'] == JobStatus.COMPLETED:
-                        return
+                        break
 
                     elif status['status'] == JobStatus.DATA_ERROR:
-                        return
+                        break
 
                     elif status['status'] == JobStatus.ERROR:
                         self.logger.error(f"Job {redis_id} encountered an error: {status['description']}")

@@ -253,9 +253,13 @@ class TestExpertiseCloudService():
         assert response['name'] == 'test_run', f"Job name: {response['name']}, status: {response}"
         assert response['status'] != 'Error'
 
-        # Let request process
-        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
-        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        # Wait for the cloud worker to poll the mocked Vertex job to completion
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'])
+            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+            try_time = time.time() - start_time
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         # Check proper user ID
