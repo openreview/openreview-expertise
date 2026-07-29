@@ -390,9 +390,9 @@ class TestExpertiseCloudService():
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-        ## Expect 3*4 calls from the worker thread, 3*2 calls from /expertise/status and 0 calls from /expertise/status/all
+        ## Status endpoints read from BullMQ, so only the worker polls GCP: 3 jobs x 5 attempts
         print(mock_pipeline_job.get.call_args_list)
-        assert len(mock_pipeline_job.get.call_args_list) == 18
+        assert len(mock_pipeline_job.get.call_args_list) == 15
 
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"

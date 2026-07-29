@@ -186,7 +186,12 @@ class BaseExpertiseService:
         data = {**job.data, 'status': new_status, 'description': description}
         if error is not None:
             data['error'] = error
-        await job.updateData(data)
+        job.data = data
+        future = asyncio.run_coroutine_threadsafe(
+            self.queue.scripts.updateData(job.id, data),
+            self.queue_loop
+        )
+        await asyncio.wrap_future(future)
 
     def _get_job_status_from_queue(self, job_id):
         """
@@ -677,6 +682,8 @@ class ExpertiseService(BaseExpertiseService):
             jobs = []
 
         for job in jobs:
+            if job.data.get('status') == JobStatus.COMPLETED:
+                continue
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
@@ -1024,6 +1031,8 @@ class ExpertiseCloudService(BaseExpertiseService):
             jobs = []
 
         for job in jobs:
+            if job.data.get('status') == JobStatus.COMPLETED:
+                continue
             if job.data.get('request_key') == request_key:
                 raise openreview.OpenReviewException("Request already in queue")
 
