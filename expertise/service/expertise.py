@@ -213,23 +213,23 @@ class BaseExpertiseService:
 
         descriptions = JobDescription.VALS.value
 
+        job = None
         try:
             future = asyncio.run_coroutine_threadsafe(
                 Job.fromId(self.queue, job_id),
                 self.queue_loop
             )
             job = future.result(timeout=0.1)
-            data = job.data if job else {}
-            status = data.get('status')
-            description = data.get('description')
-            if status is not None:
-                return status, (description or descriptions.get(status, ''))
         except concurrent.futures.TimeoutError:
             self.logger.warning(f"Timeout fetching job {job_id} from queue")
-            return None, None
         except Exception as e:
             self.logger.warning(f"Failed to fetch job {job_id} from queue: {e}")
-            return None, None
+
+        data = job.data if job else {}
+        status = data.get('status')
+        description = data.get('description')
+        if status is not None:
+            return status, (description or descriptions.get(status, ''))
 
         if state == 'completed':
             return JobStatus.COMPLETED, descriptions[JobStatus.COMPLETED]
