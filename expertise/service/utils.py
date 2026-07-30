@@ -1497,8 +1497,14 @@ class GCPInterface(object):
 
         return _get_scores_and_metadata_streaming(job_blobs, job_id, group_group_matching, paper_paper_matching)
 
-    def _select_score_blob(self, job_blobs, sparse=False):
-        """Return the single results blob for a job in the requested format."""
+    def _select_score_blob(self, job_blobs, sparse=False, group_group_matching=False):
+        """Return the single results blob for a job in the requested format.
+
+        For group-group jobs requesting the full matrix, prefer the aggregated
+        profile-profile `_group.pt` matrix over the raw per-paper `.pt` matrix,
+        because the latter has paper IDs on one axis and is not the result
+        users expect for a group-group job.
+        """
         if sparse:
             suffix = 'scores_sparse'
             score_files = [
@@ -1506,13 +1512,26 @@ class GCPInterface(object):
                 if blob.name.endswith(f'{suffix}.csv') or blob.name.endswith(f'{suffix}.jsonl')
             ]
         else:
-            # Full matrix: prefer dense CSV/JSONL if present, otherwise fall back
-            # to the binary PyTorch matrix file produced by specter2/scincl models.
+            # Full matrix: prefer dense CSV/JSONL if present.
             score_files = [
                 blob for blob in job_blobs
                 if blob.name.endswith('scores.csv') or blob.name.endswith('scores.jsonl')
             ]
             if not score_files:
+                # For group-group jobs, the aggregated profile-profile matrix is
+                # the meaningful full result. Fall back to the raw per-paper
+                # matrix only when the aggregated one is not present.
+                if group_group_matching:
+                    group_matrix_files = [
+                        blob for blob in job_blobs
+                        if blob.name.endswith('_group.pt')
+                    ]
+                    if len(group_matrix_files) == 1:
+                        return group_matrix_files[0]
+                    if len(group_matrix_files) > 1:
+                        raise openreview.OpenReviewException(
+                            f'Internal Error: multiple group matrix files found expected [1] found {len(group_matrix_files)}'
+                        )
                 matrix_files = [
                     blob for blob in job_blobs
                     if blob.name.endswith('.pt')
@@ -1582,7 +1601,13 @@ class GCPInterface(object):
         if len(authenticated_requests) > 1:
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
-        target_blob = self._select_score_blob(job_blobs, sparse=sparse)
+        # Matching type drives which full matrix blob is meaningful for the user.
+        api_request = authenticated_requests[0]
+        entityA_type = api_request.get('entityA', {}).get('type', '')
+        entityB_type = api_request.get('entityB', {}).get('type', '')
+        group_group_matching = entityA_type == 'Group' and entityB_type == 'Group'
+
+        target_blob = self._select_score_blob(job_blobs, sparse=sparse, group_group_matching=group_group_matching)
         return self.sign_url(self.bucket_name, target_blob.name)
 
     def get_job_metadata(self, user_id, job_id):
