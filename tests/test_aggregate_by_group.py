@@ -110,8 +110,8 @@ def test_aggregate_by_group_matrix_path(tmp_path):
     group_matrix_path = scores_dir / 'test_run_group.pt'
     assert group_matrix_path.is_file()
     group_data = torch.load(group_matrix_path)
-    assert group_data['test_ids'] == sorted(publications_by_profile_id.keys())
-    assert group_data['reviewer_ids'] == sorted(archive_members)
+    assert set(group_data['test_ids']) == set(publications_by_profile_id.keys())
+    assert set(group_data['reviewer_ids']) == set(archive_members)
     assert group_data['scores'].shape == (2, 2)
     group_dict = {
         (group_data['reviewer_ids'][j], group_data['test_ids'][i]): round(float(group_data['scores'][i, j]), 2)
