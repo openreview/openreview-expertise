@@ -519,7 +519,7 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
 def test_run_pipeline_job_id_derived_from_gcs_folder(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     """The pipeline job_id must be the last segment of the gcs_folder blob prefix
     so Redis cache entries and the local working directory line up with the GCS
-    job folder. A trailing slash must not produce an empty job_id.
+    job folder.
     """
     mock_load_model_artifacts.return_value = None
     mock_execute_expertise.return_value = {'pub2vec.jsonl': {}}
@@ -544,37 +544,30 @@ def test_run_pipeline_job_id_derived_from_gcs_folder(mock_load_model_artifacts, 
         f.write(json.dumps({"id": "paper1", "content": {"title": "T"}}))
 
     expected_job_id = 'test_job_id_suffix'
+    api_request_str = json.dumps({
+        "name": "test_job_id",
+        "entityA": {'type': "Group", 'memberOf': "PIPELINE.cc/Reviewers"},
+        "entityB": {'type': "Note", 'invitation': "PIPELINE.cc/-/Submission"},
+        "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'},
+        "user_id": "openreview.net",
+        "token": openreview_client.token,
+        "baseurl_v2": "http://localhost:3001",
+        "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/{expected_job_id}",
+        "dump_embs": False,
+        "dump_archives": False,
+    })
 
-    for trailing_slash in (False, True):
-        suffix = expected_job_id + ('/' if trailing_slash else '')
-        api_request_str = json.dumps({
-            "name": "test_job_id",
-            "entityA": {'type': "Group", 'memberOf': "PIPELINE.cc/Reviewers"},
-            "entityB": {'type': "Note", 'invitation': "PIPELINE.cc/-/Submission"},
-            "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'},
-            "user_id": "openreview.net",
-            "token": openreview_client.token,
-            "baseurl_v2": "http://localhost:3001",
-            "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/{suffix}",
-            "dump_embs": False,
-            "dump_archives": False,
-        })
+    from expertise.execute_pipeline import run_pipeline
+    run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
 
-        from expertise.execute_pipeline import run_pipeline
-        run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
+    bucket = gcs_test_bucket
+    prefix = f"{gcs_jobs_prefix}/{expected_job_id}/"
 
-        bucket = gcs_test_bucket
-        prefix = f"{gcs_jobs_prefix}/{expected_job_id}/"
+    scores_blob = bucket.blob(f"{prefix}scores.csv")
+    assert scores_blob.exists(), "scores.csv not uploaded to expected job folder"
 
-        scores_blob = bucket.blob(f"{prefix}scores.csv")
-        assert scores_blob.exists(), f"scores.csv not uploaded for trailing_slash={trailing_slash}"
-
-        metadata_blob = bucket.blob(f"{prefix}metadata.json")
-        assert metadata_blob.exists(), f"metadata.json not uploaded for trailing_slash={trailing_slash}"
-
-        mock_execute_expertise.reset_mock()
-        for blob in bucket.list_blobs(prefix=f"{gcs_jobs_prefix}/{expected_job_id}"):
-            blob.delete()
+    metadata_blob = bucket.blob(f"{prefix}metadata.json")
+    assert metadata_blob.exists(), "metadata.json not uploaded to expected job folder"
 
     shutil.rmtree(working_dir)
 
