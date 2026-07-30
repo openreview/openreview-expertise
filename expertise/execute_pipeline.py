@@ -298,7 +298,9 @@ def run_pipeline(
             blob.upload_from_filename(src)
         print("Finished uploading score CSV(s)", flush=True)
 
-        # Upload the full scores matrix (.pt) directly.
+        # Upload the full scores matrix (.pt) directly. This includes both the
+        # raw per-paper matrix from matrix-based models and the aggregated
+        # profile-profile matrix produced for group-group jobs.
         print("Dumping scores matrix(es)", flush=True)
         for pt_file in [d for d in os.listdir(config.job_dir) if d.endswith('.pt')]:
             destination_blob = f"{blob_prefix}/{pt_file}"
