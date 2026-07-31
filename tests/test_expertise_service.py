@@ -12,7 +12,7 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
-from expertise.service.utils import JobConfig, RedisDatabase, JobStatus, JobDescription
+from expertise.service.utils import JobConfig, RedisDatabase, JobStatus, JobDescription, APIRequest
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -435,6 +435,77 @@ class TestExpertiseService():
             status, desc = service._get_job_status_from_queue('job-123')
         assert status is None
         assert desc is None
+
+    def _legacy_config(self, tmp_path=None, status=JobStatus.COMPLETED):
+        job_dir = str(tmp_path) if tmp_path else None
+        config = JobConfig(
+            job_id='legacy-job',
+            user_id='user@test.com',
+            name='legacy',
+            job_dir=job_dir
+        )
+        config.status = status
+        config.description = JobDescription.VALS.value[status]
+        config.api_request = APIRequest({
+            'name': 'legacy',
+            'entityA': {'type': 'Group', 'memberOf': 'Test.cc/2025/Conference/Reviewers'},
+            'entityB': {'type': 'Note', 'invitation': 'Test.cc/2025/Conference/-/Submission'}
+        })
+        return config
+
+    def test_legacy_status_all_status(self):
+        service = self._make_service_for_queue_tests()
+        config = self._legacy_config()
+        service.redis.load_all_jobs.return_value = [config]
+        with patch.object(service, '_get_job_status_from_queue', return_value=(None, None)):
+            result = service.get_expertise_all_status('user@test.com', {})
+        assert len(result['results']) == 1
+        assert result['results'][0]['status'] == JobStatus.COMPLETED
+
+    def test_legacy_status_single_status(self):
+        service = self._make_service_for_queue_tests()
+        config = self._legacy_config()
+        service.redis.load_job.return_value = config
+        with patch.object(service, '_get_job_status_from_queue', return_value=(None, None)):
+            result = service.get_expertise_status('user@test.com', 'legacy-job')
+        assert result['status'] == JobStatus.COMPLETED
+
+    def test_legacy_status_results(self, tmp_path):
+        service = self._make_service_for_queue_tests()
+        config = self._legacy_config(tmp_path)
+        (tmp_path / 'config.json').write_text(json.dumps(config.to_json()))
+        (tmp_path / 'legacy_sparse.csv').write_text('paper1,reviewer1,0.5\n')
+        (tmp_path / 'metadata.json').write_text('{"submission_count": 1}')
+        service.redis.load_job.return_value = config
+        with patch.object(service, '_get_job_status_from_queue', return_value=(None, None)):
+            result = service.get_expertise_results('user@test.com', 'legacy-job')
+        assert len(result['results']) == 1
+        assert result['metadata']['submission_count'] == 1
+
+    def test_legacy_status_metadata(self, tmp_path):
+        service = self._make_service_for_queue_tests()
+        config = self._legacy_config(tmp_path)
+        (tmp_path / 'metadata.json').write_text('{"submission_count": 1}')
+        service.redis.load_job.return_value = config
+        with patch.object(service, '_get_job_status_from_queue', return_value=(None, None)):
+            result = service.get_expertise_metadata('user@test.com', 'legacy-job')
+        assert result['submission_count'] == 1
+
+    def test_legacy_status_delete_blocked(self, tmp_path):
+        service = self._make_service_for_queue_tests()
+        config = self._legacy_config(tmp_path, status=JobStatus.RUN_EXPERTISE)
+        service.redis.load_job.return_value = config
+        with patch.object(service, '_get_job_status_from_queue', return_value=(None, None)):
+            with pytest.raises(openreview.OpenReviewException):
+                service.del_expertise_job('user@test.com', 'legacy-job')
+
+    def test_legacy_status_delete_allowed(self, tmp_path):
+        service = self._make_service_for_queue_tests()
+        config = self._legacy_config(tmp_path)
+        service.redis.load_job.return_value = config
+        with patch.object(service, '_get_job_status_from_queue', return_value=(None, None)):
+            result = service.del_expertise_job('user@test.com', 'legacy-job')
+        assert result['job_id'] == 'legacy-job'
 
     def test_manual_ttl_override(self):
         """Test manual TTL override in save_job"""

@@ -247,6 +247,13 @@ class BaseExpertiseService:
 
         return None, None
 
+    def _resolve_job_status(self, config, job_id):
+        status, description = self._get_job_status_from_queue(job_id)
+        if status is None:
+            status = getattr(config, 'status', None)
+            description = getattr(config, 'description', None)
+        return status, description
+
     def get_expertise_all_status(self, user_id, query_params):
         """
         Searches the server for all jobs submitted by a user that satisfies
@@ -335,7 +342,7 @@ class BaseExpertiseService:
         self.logger.info(f"Searching for jobs with query: {query_obj}")
         for config in self.redis.load_all_jobs(user_id):
             self.logger.info(f"{config.job_id} - {config.to_json()}")
-            status, description = self._get_job_status_from_queue(config.job_id)
+            status, description = self._resolve_job_status(config, config.job_id)
             if status is None:
                 continue
 
@@ -374,7 +381,7 @@ class BaseExpertiseService:
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
         config = self.redis.load_job(job_id, user_id)
-        status, description = self._get_job_status_from_queue(job_id)
+        status, description = self._resolve_job_status(config, job_id)
         if status is None:
             raise openreview.OpenReviewException(f"Job {job_id} not found in queue")
 
@@ -504,7 +511,7 @@ class BaseExpertiseService:
         allowed_states = {
             JobStatus.COMPLETED, JobStatus.DATA_ERROR, JobStatus.ERROR
         }
-        status, _ = self._get_job_status_from_queue(job_id)
+        status, _ = self._resolve_job_status(config, job_id)
         if status is not None and status not in allowed_states:
             raise openreview.OpenReviewException(
                 f"Bad request: cannot delete job in status {status}"
@@ -760,8 +767,7 @@ class ExpertiseService(BaseExpertiseService):
         # Get and validate profile ID
         config = self.redis.load_job(job_id, user_id)
 
-        # Fetch status from queue (source of truth)
-        status, description = self._get_job_status_from_queue(job_id)
+        status, description = self._resolve_job_status(config, job_id)
         if status is None:
             raise openreview.OpenReviewException(f"Job {job_id} not found in queue")
 
@@ -838,7 +844,7 @@ class ExpertiseService(BaseExpertiseService):
         since it doesn't read the score file.
         """
         config = self.redis.load_job(job_id, user_id)
-        status, description = self._get_job_status_from_queue(job_id)
+        status, description = self._resolve_job_status(config, job_id)
         if status is None:
             raise openreview.OpenReviewException(f"Job {job_id} not found in queue")
 
