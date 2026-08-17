@@ -20,7 +20,7 @@ import asyncio
 import threading
 import traceback
 
-from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, RedisDatabase, get_user_id, ExpectedDataError
+from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, get_user_id, ExpectedDataError
 
 user_index_file_lock = Lock()
 
@@ -41,7 +41,7 @@ class BaseExpertiseService:
         :param config:         Your server configuration dictionary
         :param logger:         Logger instance for logging
         :param containerized:  Whether your service is running in containerized mode
-        :param sync_on_disk:   Whether RedisDatabase writes files to disk or purely memory
+        :param sync_on_disk:   Whether to write job files to disk
         :param worker_attempts: (Optional) number of attempts for the BullMQ worker
         :param worker_backoff_delay: (Optional) backoff delay 2 ^ attempts * delay (ms) for the BullMQ worker
         :param worker_concurrency: (Optional) concurrency for the BullMQ worker
@@ -51,8 +51,10 @@ class BaseExpertiseService:
         self.logger = logger
         self.server_config = config
         self.containerized = containerized
-        self.sync_on_disk = sync_on_disk  # Whether to actually save jobs on disk (for Redis usage)
+        self.sync_on_disk = sync_on_disk  # Whether to actually save jobs on disk
         self.default_expertise_config = config.get('DEFAULT_CONFIG')
+        self._submit_lock = threading.Lock()
+        self._pending_request_keys = set()
         self.worker_attempts = worker_attempts
         self.worker_backoff_delay = worker_backoff_delay
         self.bullmq_remove_on_complete_age = config.get('BULLMQ_REMOVE_ON_COMPLETE_AGE', 1209600)
@@ -61,16 +63,6 @@ class BaseExpertiseService:
         self.specter_dir = config.get('SPECTER_DIR')
         self.mfr_feature_vocab_file = config.get('MFR_VOCAB_DIR')
         self.mfr_checkpoint_dir = config.get('MFR_CHECKPOINT_DIR')
-
-        # If using Redis to store job configs, initialize it (unless containerized means "no local Redis")
-        if not containerized:
-            self.redis = RedisDatabase(
-                host=config['REDIS_ADDR'],
-                port=config['REDIS_PORT'],
-                db=config['REDIS_CONFIG_DB'],
-                sync_on_disk=self.sync_on_disk,
-                job_ttl=config['JOB_CONFIG_TTL']
-            )
 
         # Create the BullMQ queue
         self.queue = Queue(
@@ -222,52 +214,75 @@ class BaseExpertiseService:
 
         return None, None
 
-    def _resolve_job_status(self, config, job_id):
-        status, description = self._get_job_status_from_queue(job_id)
-        if status is None:
-            status = getattr(config, 'status', None)
-            description = getattr(config, 'description', None)
-        return status, description
+    def _get_job_from_queue(self, job_id):
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                Job.fromId(self.queue, job_id),
+                self.queue_loop
+            )
+            return future.result()
+        except Exception as e:
+            self.logger.warning(f"Failed to fetch job {job_id} from queue: {e}")
+            return None
 
-    def get_expertise_all_status(self, user_id, query_params):
-        """
-        Searches the server for all jobs submitted by a user that satisfies
-        the HTTP GET query parameters
-        """
+    def _config_from_job_data(self, data):
+        config = JobConfig.from_json(deepcopy(data.get('config', {})))
+        api_request_data = data.get('api_request')
+        if api_request_data is not None:
+            config.api_request = APIRequest(deepcopy(api_request_data))
+        return config
+
+    def _load_job_from_queue(self, user_id, job_id):
+        job = self._get_job_from_queue(job_id)
+        if job is None:
+            raise openreview.OpenReviewException(f'Job {job_id} not found in queue')
+        job_user_id = job.data.get('user_id')
+        if job_user_id != user_id and user_id not in SUPERUSER_IDS:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
+        return job
+
+    def _record_for_config(self, config, status, description):
+        self._filter_config(config)
+        return {
+            'name': config.name,
+            'tauthor': config.user_id,
+            'jobId': config.job_id,
+            'status': status,
+            'description': description,
+            'cdate': config.cdate,
+            'mdate': config.mdate,
+            'request': config.api_request.to_json() if config.api_request else {}
+        }
+
+    def _job_matches_query(self, config, status, query_obj):
         def check_status():
             search_status = query_obj.get('status', '')
             return not search_status or status.lower().startswith(search_status.lower())
-        
+
         def check_member():
             search_member, memberOf = '', ''
             if 'memberOf' in query_obj.keys():
                 memberOf = config.api_request.entityA.get('memberOf', '') or config.api_request.entityB.get('memberOf', '')
                 search_member = query_obj['memberOf']
-
             elif 'memberOf' in query_obj.get('entityA', {}).keys():
                 memberOf = config.api_request.entityA.get('memberOf', '')
                 search_member = query_obj['entityA']['memberOf']
-
             elif 'memberOf' in query_obj.get('entityB', {}).keys():
                 memberOf = config.api_request.entityB.get('memberOf', '')
                 search_member = query_obj['entityB']['memberOf']
-            
             return not search_member or memberOf.lower().startswith(search_member.lower())
-        
+
         def check_invitation():
             search_invitation, inv = '', ''
             if 'invitation' in query_obj.keys():
                 inv = config.api_request.entityA.get('invitation', '') or config.api_request.entityB.get('invitation', '')
                 search_invitation = query_obj['invitation']
-
             elif 'invitation' in query_obj.get('entityA', {}).keys():
                 inv = config.api_request.entityA.get('invitation', '')
                 search_invitation = query_obj['entityA']['invitation']
-
             elif 'invitation' in query_obj.get('entityB', {}).keys():
                 inv = config.api_request.entityB.get('invitation', '')
                 search_invitation = query_obj['entityB']['invitation']
-
             return not search_invitation or inv.lower().startswith(search_invitation.lower())
 
         def check_paper_id():
@@ -275,67 +290,75 @@ class BaseExpertiseService:
             if 'id' in query_obj.keys():
                 paper_id = config.api_request.entityA.get('id', '') or config.api_request.entityB.get('id', '')
                 search_paper_id = query_obj['id']
-
             elif 'id' in query_obj.get('entityA', {}).keys():
                 paper_id = config.api_request.entityA.get('id', '')
                 search_paper_id = query_obj['entityA']['id']
-
             elif 'id' in query_obj.get('entityB', {}).keys():
                 paper_id = config.api_request.entityB.get('id', '')
                 search_paper_id = query_obj['entityB']['id']
-
             return not search_paper_id or paper_id.lower().startswith(search_paper_id.lower())
 
-        def check_result():
-            return False not in [
-                check_status(),
-                check_member(),
-                check_invitation(),
-                check_paper_id()
-            ]
+        return False not in [
+            check_status(),
+            check_member(),
+            check_invitation(),
+            check_paper_id()
+        ]
 
+    def get_expertise_all_status(self, user_id, query_params):
+        """
+        Searches the server for all jobs submitted by a user that satisfies
+        the HTTP GET query parameters. Jobs are read from the BullMQ queue.
+        """
         result = {'results': []}
         query_obj = {}
-        '''
-        {
-            'paperId': value,
-            'entityA': {
-                'id': value
-            }
-        }
-        '''
 
         for query, value in query_params.items():
-            if query.find('.') < 0: ## If no entity, store value
+            if query.find('.') < 0:
                 query_obj[query] = value
             else:
-                entity, query_by = query.split('.') ## If entity, store value in entity obj
+                entity, query_by = query.split('.')
                 if entity not in query_obj.keys():
                     query_obj[entity] = {}
                 query_obj[entity][query_by] = value
 
         self.logger.info(f"Searching for jobs with query: {query_obj}")
-        for config in self.redis.load_all_jobs(user_id):
-            self.logger.info(f"{config.job_id} - {config.to_json()}")
-            status, description = self._resolve_job_status(config, config.job_id)
+
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self.queue.getJobs([
+                    'completed',
+                    'failed',
+                    'active',
+                    'delayed',
+                    'paused',
+                    'waiting',
+                    'waiting-children',
+                    'prioritized',
+                ]),
+                self.queue_loop,
+            )
+            jobs = future.result()
+        except Exception as e:
+            self.logger.warning(f"Failed to list jobs from queue: {e}")
+            jobs = []
+
+        for job in jobs:
+            job_user_id = job.data.get('user_id')
+            if job_user_id != user_id and user_id not in SUPERUSER_IDS:
+                continue
+
+            config = self._config_from_job_data(job.data)
+            if config.job_dir is None or not os.path.isdir(config.job_dir):
+                continue
+
+            status = job.data.get('status')
+            description = job.data.get('description')
             if status is None:
                 continue
 
-            if check_result():
-                # Append filtered config to the status
-                self._filter_config(config)
-                result['results'].append(
-                    {
-                        'name': config.name,
-                        'tauthor': config.user_id,
-                        'jobId': config.job_id,
-                        'status': status,
-                        'description': description,
-                        'cdate': config.cdate,
-                        'mdate': config.mdate,
-                        'request': config.api_request.to_json()
-                    }
-                )
+            if self._job_matches_query(config, status, query_obj):
+                result['results'].append(self._record_for_config(config, status, description))
 
         # Sort results by cdate
         result['results'] = sorted(result['results'], key=lambda x: x['cdate'], reverse=True)
@@ -355,23 +378,14 @@ class BaseExpertiseService:
 
         :returns: A dictionary with the key 'results' containing a list of job statuses
         """
-        config = self.redis.load_job(job_id, user_id)
-        status, description = self._resolve_job_status(config, job_id)
+        job = self._load_job_from_queue(user_id, job_id)
+        config = self._config_from_job_data(job.data)
+        status = job.data.get('status')
+        description = job.data.get('description')
         if status is None:
             raise openreview.OpenReviewException(f"Job {job_id} not found in queue")
 
-        # Append filtered config to the status
-        self._filter_config(config)
-        return {
-            'name': config.name,
-            'tauthor': config.user_id,
-            'jobId': config.job_id,
-            'status': status,
-            'description': description,
-            'cdate': config.cdate,
-            'mdate': config.mdate,
-            'request': config.api_request.to_json()
-        }
+        return self._record_for_config(config, status, description)
 
     def _filter_config(self, running_config):
         """
@@ -415,35 +429,16 @@ class BaseExpertiseService:
         return config
 
     def _save_config(self, config: JobConfig):
-        """Create job directory, write config.json, and save to Redis."""
+        """Create job directory and write config.json and request.json to disk."""
         if not os.path.isdir(config.dataset['directory']):
             os.makedirs(config.dataset['directory'])
         with open(os.path.join(config.job_dir, 'config.json'), 'w+') as f:
             json.dump(config.to_json(), f, ensure_ascii=False, indent=4)
-        if not self.containerized:
-            self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
-            self.redis.save_job(config)
+        if config.api_request is not None:
+            with open(os.path.join(config.job_dir, 'request.json'), 'w+') as f:
+                json.dump(config.api_request.to_json(), f, ensure_ascii=False, indent=4)
+        self.logger.info(f"Saving processed config to {os.path.join(config.job_dir, 'config.json')}")
         return config
-
-    def _get_subdirs(self, user_id):
-        """
-        Returns the direct children directories of the given root directory
-
-        :returns: A list of subdirectories not prefixed by the given root directory
-        """
-        subdirs = [name for name in os.listdir(self.working_dir) if os.path.isdir(os.path.join(self.working_dir, name))]
-        if user_id.lower() in SUPERUSER_IDS:
-            return subdirs
-
-        # Search all directories for matching user ID
-        filtered_dirs = []
-        for job_dir in subdirs:
-            with open(os.path.join(self.working_dir, job_dir, 'config.json')) as f:
-                config = JobConfig.from_json(json.load(f))
-            if config.user_id == user_id:
-                filtered_dirs.append(job_dir)
-
-        return filtered_dirs
 
     def _get_score_and_metadata_dir(self, search_dir):
         """
@@ -478,15 +473,16 @@ class BaseExpertiseService:
         return file_dir, metadata_dir
 
     def del_expertise_job(self, user_id, job_id):
-        """Remove job artifacts from disk and Redis, returning a sanitized config."""
-        config = self.redis.load_job(job_id, user_id)
+        """Remove job artifacts from disk and the BullMQ queue, returning a sanitized config."""
+        job = self._load_job_from_queue(user_id, job_id)
+        config = self._config_from_job_data(job.data)
 
         # Only allow deletion when job has completed, errored out, or been
         # archived from BullMQ (no longer trackable).
         allowed_states = {
             JobStatus.COMPLETED, JobStatus.DATA_ERROR, JobStatus.ERROR
         }
-        status, _ = self._resolve_job_status(config, job_id)
+        status = job.data.get('status')
         if status is not None and status not in allowed_states:
             raise openreview.OpenReviewException(
                 f"Bad request: cannot delete job in status {status}"
@@ -496,9 +492,7 @@ class BaseExpertiseService:
         if os.path.isdir(config.job_dir):
             shutil.rmtree(config.job_dir)
         else:
-            self.logger.info("No files found - only removing Redis entry")
-
-        self.redis.remove_job(user_id, job_id)
+            self.logger.info("No files found - only removing queue entry")
 
         self._filter_config(config)
         return config.to_json()
@@ -599,9 +593,8 @@ class ExpertiseService(BaseExpertiseService):
         )
 
     async def worker_process(self, job, token):
-        job_id = job.data['job_id']
-        user_id = job.data['user_id']
-        config = self.redis.load_job(job_id, user_id)
+        config = self._config_from_job_data(job.data)
+        config.baseurl_v2 = job.data.get('baseurl_v2')
         or_token = job.data['token']
         openreview_client_v2 = openreview.api.OpenReviewClient(
             token=or_token,
@@ -647,79 +640,86 @@ class ExpertiseService(BaseExpertiseService):
 
         request_key = self.get_key_from_request(request)
 
+        with self._submit_lock:
+            if request_key in self._pending_request_keys:
+                raise openreview.OpenReviewException("Request already in process")
+            self._pending_request_keys.add(request_key)
+
         try:
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    self.queue.getJobs([
+                        'active',
+                        'delayed',
+                        'paused',
+                        'waiting',
+                        'waiting-children',
+                        'prioritized',
+                    ]),
+                    self.queue_loop,
+                )
+                jobs = future.result()
+            except Exception as e:
+                jobs = []
+
+            for job in jobs:
+                if job.data.get('status') == JobStatus.COMPLETED:
+                    continue
+                if job.data.get('request_key') == request_key:
+                    raise openreview.OpenReviewException("Request already in queue")
+
+            config = self._validate_request(client, request)
+            self._save_config(config)
+            job_id = config.job_id
+
+            config_log = self._get_log_from_config(config)
+
+            self.logger.info('just before submitting')
+            self.logger.info(f"\nconf: {config.to_json()}\n")
+
             future = asyncio.run_coroutine_threadsafe(
-                self.queue.getJobs([
-                    'active',
-                    'delayed',
-                    'paused',
-                    'waiting',
-                    'waiting-children',
-                    'prioritized',
-                ]),
-                self.queue_loop,
+                self.queue.add(
+                    job_name,
+                    {
+                        "job_id": job_id,
+                        "request_key": request_key,
+                        "user_id": config.user_id,
+                        "token": client.token,
+                        "status": JobStatus.QUEUED,
+                        "description": descriptions[JobStatus.QUEUED],
+                        "config": config.to_json(),
+                        "api_request": config.api_request.to_json(),
+                        "baseurl_v2": config.baseurl_v2,
+                    },
+                    {
+                        'jobId': job_id,
+                        'attempts': self.worker_attempts,
+                        'backoff': {
+                            'delay': self.worker_backoff_delay,
+                            'type': 'exponential',
+                        },
+                        'removeOnComplete': {
+                            'age': self.bullmq_remove_on_complete_age
+                        },
+                        'removeOnFail': {
+                            'age': self.bullmq_remove_on_fail_age
+                        },
+                    }
+                ),
+                self.queue_loop
             )
-            jobs = future.result()
-        except Exception as e:
-            jobs = []
+            job = future.result()
 
-        for job in jobs:
-            if job.data.get('status') == JobStatus.COMPLETED:
-                continue
-            if job.data.get('request_key') == request_key:
-                raise openreview.OpenReviewException("Request already in queue")
+            future = asyncio.run_coroutine_threadsafe(job.log(request_log), self.queue_loop)
+            future.result()
 
-        config = self._validate_request(
-            client,
-            request
-        )
-        self._save_config(config) # Save initialized
-        job_id = config.job_id
+            future = asyncio.run_coroutine_threadsafe(job.log(config_log), self.queue_loop)
+            future.result()
 
-        config_log = self._get_log_from_config(config)
-
-        # Config has passed validation - add it to the user index
-        self.logger.info('just before submitting')
-
-        self.logger.info(f"\nconf: {config.to_json()}\n")
-
-        future = asyncio.run_coroutine_threadsafe(
-            self.queue.add(
-                job_name,
-                {
-                    "job_id": job_id,
-                    "request_key": request_key,
-                    "user_id": config.user_id,
-                    "token": client.token,
-                    "status": JobStatus.QUEUED,
-                    "description": JobDescription.VALS.value[JobStatus.QUEUED]
-                },
-                {
-                    'jobId': job_id,
-                    'attempts': self.worker_attempts,
-                    'backoff': {
-                        'delay': self.worker_backoff_delay,
-                        'type': 'exponential', # Exponential backoff: 2 ^ attempts * delay milliseconds
-                    },
-                    'removeOnComplete': {
-                        'age': self.bullmq_remove_on_complete_age
-                    },
-                    'removeOnFail': {
-                        'age': self.bullmq_remove_on_fail_age
-                    },
-                }
-            ),
-            self.queue_loop
-        )
-        job = future.result()
-
-        future = asyncio.run_coroutine_threadsafe(job.log(request_log), self.queue_loop)
-        future.result()
-
-        future = asyncio.run_coroutine_threadsafe(job.log(config_log), self.queue_loop)
-        future.result()
-
-        return job_id
+            return job_id
+        finally:
+            with self._submit_lock:
+                self._pending_request_keys.discard(request_key)
 
     def get_expertise_results(self, user_id, job_id, delete_on_get=False):
         """
@@ -739,10 +739,10 @@ class ExpertiseService(BaseExpertiseService):
         """
         result = {'results': []}
 
-        # Get and validate profile ID
-        config = self.redis.load_job(job_id, user_id)
-
-        status, description = self._resolve_job_status(config, job_id)
+        job = self._load_job_from_queue(user_id, job_id)
+        config = self._config_from_job_data(job.data)
+        status = job.data.get('status')
+        description = job.data.get('description')
         if status is None:
             raise openreview.OpenReviewException(f"Job {job_id} not found in queue")
 
@@ -750,65 +750,36 @@ class ExpertiseService(BaseExpertiseService):
         # Assemble scores
         if status != JobStatus.COMPLETED:
             raise openreview.OpenReviewException(f"Scores not found - status: {status} | description: {description}")
-        else:
-            # Search for scores files (if sparse scores exist, retrieve by default)
-            ret_list = []
 
-            # Check for output format
-            group_group_matching = config.alternate_match_group is not None
-            paper_paper_matching = config.api_request.entityA.get('type') == 'Note' and config.api_request.entityB.get('type') == 'Note'
+        # Search for scores files (if sparse scores exist, retrieve by default)
+        ret_list = []
 
-            self.logger.info(f"Retrieving scores from {config.job_dir}")
-            if group_group_matching:
-                # If group-group matching, report results using "*_member" keys
-                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
-                with open(file_dir, 'r') as csv_file:
-                    data_reader = reader(csv_file)
-                    for row in data_reader:
-                        ret_list.append({
-                            'entityA': row[0],
-                            'entityB': row[1],
-                            'score': float(row[2])
-                        })
-                result['results'] = ret_list
-            elif paper_paper_matching:
-                # If paper-paper matching, report results using submission keywords
-                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
-                with open(file_dir, 'r') as csv_file:
-                    data_reader = reader(csv_file)
-                    for row in data_reader:
-                        ret_list.append({
-                            'entityA': row[0],
-                            'entityB': row[1],
-                            'score': float(row[2])
-                        })
-                result['results'] = ret_list
-            else:
-                # If reviewer-paper matching, use standard 'user' and 'score' keys
-                file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
-                with open(file_dir, 'r') as csv_file:
-                    data_reader = reader(csv_file)
-                    for row in data_reader:
-                        # For single paper retrieval, filter out scores against the dummy submission
-                        if row[0] == 'dummy':
-                            continue
+        # Check for output format
+        group_group_matching = config.alternate_match_group is not None
+        paper_paper_matching = config.api_request.entityA.get('type') == 'Note' and config.api_request.entityB.get('type') == 'Note'
 
-                        ret_list.append({
-                            'entityB': row[0],
-                            'entityA': row[1],
-                            'score': float(row[2])
-                        })
-                result['results'] = ret_list
+        self.logger.info(f"Retrieving scores from {config.job_dir}")
+        file_dir, metadata_dir = self._get_score_and_metadata_dir(config.job_dir)
+        with open(file_dir, 'r') as csv_file:
+            data_reader = reader(csv_file)
+            for row in data_reader:
+                if not group_group_matching and not paper_paper_matching and row[0] == 'dummy':
+                    continue
+                ret_list.append({
+                    'entityA': row[0] if group_group_matching or paper_paper_matching else row[1],
+                    'entityB': row[1] if group_group_matching or paper_paper_matching else row[0],
+                    'score': float(row[2])
+                })
+        result['results'] = ret_list
 
-            # Gather metadata
-            with open(metadata_dir, 'r') as metadata:
-                result['metadata'] = json.load(metadata)
+        # Gather metadata
+        with open(metadata_dir, 'r') as metadata:
+            result['metadata'] = json.load(metadata)
 
         # Clear directory
         if delete_on_get:
             self.logger.info(f'Deleting {config.job_dir}')
             shutil.rmtree(config.job_dir)
-            self.redis.remove_job(user_id, job_id)
 
         return result
 
@@ -818,8 +789,10 @@ class ExpertiseService(BaseExpertiseService):
         missing profiles and publications). Lighter than get_expertise_results
         since it doesn't read the score file.
         """
-        config = self.redis.load_job(job_id, user_id)
-        status, description = self._resolve_job_status(config, job_id)
+        job = self._load_job_from_queue(user_id, job_id)
+        config = self._config_from_job_data(job.data)
+        status = job.data.get('status')
+        description = job.data.get('description')
         if status is None:
             raise openreview.OpenReviewException(f"Job {job_id} not found in queue")
 
@@ -881,10 +854,10 @@ class ExpertiseCloudService(BaseExpertiseService):
         descriptions = JobDescription.VALS.value
         user_id = job.data['user_id']
         request = job.data['request']
-        redis_id = job.data['redis_id']
         or_token = job.data['token']
 
-        config = self.redis.load_job(redis_id, user_id)
+        config = self._config_from_job_data(job.data)
+        config.baseurl_v2 = job.data.get('baseurl_v2')
         openreview_client_v2 = openreview.api.OpenReviewClient(token=or_token, baseurl=config.baseurl_v2)
 
         asyncio.run_coroutine_threadsafe(job.log('Task 1: fetching data from OpenReview and building dataset'), self.queue_loop)
@@ -896,16 +869,18 @@ class ExpertiseCloudService(BaseExpertiseService):
             await self._update_job_status(job, JobStatus.DATA_ERROR, str(e), error=str(e))
             return
         except Exception as e:
-            self.logger.error(f"Error creating dataset for {redis_id}: {e}")
+            self.logger.error(f"Error creating dataset for {job.id}: {e}")
             self.logger.error(f"Error details: {traceback.format_exc()}")
             if job.data.get('status') != JobStatus.ERROR:
                 await self._update_job_status(job, JobStatus.ERROR, str(e), error=str(e))
             raise e.with_traceback(e.__traceback__)
 
-        config = self.redis.load_job(redis_id, user_id)
         config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
         machine_type = self.compute_machine_type_from_dataset(config)
-        self.logger.info(f"Machine type for {redis_id}: {machine_type}")
+        self.logger.info(f"Machine type for {job.id}: {machine_type}")
+
+        # Persist cloud_id back into the BullMQ job data so endpoints can locate the GCS artifact.
+        job.data = {**job.data, 'config': config.to_json()}
 
         asyncio.run_coroutine_threadsafe(job.log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset'), self.queue_loop)
         try:
@@ -927,7 +902,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             )
             self._save_config(config)
         except Exception as e:
-            self.logger.error(f"Error creating cloud job for {redis_id}: {e} tr={e.__traceback__}")
+            self.logger.error(f"Error creating cloud job for {job.id}: {e} tr={e.__traceback__}")
             self.logger.error(f"Error details: {traceback.format_exc()}")
             if job.data.get('status') != JobStatus.ERROR:
                 await self._update_job_status(job, JobStatus.ERROR, f"Error creating cloud job: {e}", error=str(e))
@@ -936,10 +911,9 @@ class ExpertiseCloudService(BaseExpertiseService):
         try:
             self.logger.info(f"In polling worker...")
             for attempt in range(self.max_attempts):
-                self.logger.info(f"{redis_id} - attempt {attempt + 1} of {self.max_attempts}...")
-                config = self.redis.load_job(redis_id, user_id)
+                self.logger.info(f"{job.id} - attempt {attempt + 1} of {self.max_attempts}...")
                 status = self.cloud.get_job_status_by_job_id(user_id, config)
-                self.logger.info(f"Invoked get_job_status_by_job_id for {redis_id} - status: {status}")
+                self.logger.info(f"Invoked get_job_status_by_job_id for {job.id} - status: {status}")
 
                 # Check status validity
                 self.logger.info(f"INFO: before status check")
@@ -965,24 +939,24 @@ class ExpertiseCloudService(BaseExpertiseService):
                         break
 
                     elif status['status'] == JobStatus.ERROR:
-                        self.logger.error(f"Job {redis_id} encountered an error: {status['description']}")
-                        raise Exception(f"Job {redis_id} failed: {status['description']}")
-                    self.logger.info(f"Job {redis_id} status: {status['status']}. Waiting {self.poll_interval} seconds before next poll...")
+                        self.logger.error(f"Job {job.id} encountered an error: {status['description']}")
+                        raise Exception(f"Job {job.id} failed: {status['description']}")
+                    self.logger.info(f"Job {job.id} status: {status['status']}. Waiting {self.poll_interval} seconds before next poll...")
 
                 else:
-                    self.logger.warning(f"Invalid or missing status received for job {redis_id}. Retrying...")
+                    self.logger.warning(f"Invalid or missing status received for job {job.id}. Retrying...")
 
                 self.logger.info(f"INFO: before sleep")
                 await asyncio.sleep(self.poll_interval)
                 self.logger.info(f"INFO: after sleep")
 
             else:
-                self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {redis_id}.")
+                self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {job.id}.")
                 if job.data.get('status') != JobStatus.ERROR:
                     await self._update_job_status(job, JobStatus.ERROR, f"Polling timed out after {self.max_attempts} attempts.", error=f"Polling timed out after {self.max_attempts} attempts.")
-                raise TimeoutError(f"Polling timed out for job {redis_id} after {self.max_attempts} attempts.")
+                raise TimeoutError(f"Polling timed out for job {job.id} after {self.max_attempts} attempts.")
 
-            self.logger.info(f"Polling loop finished for job {redis_id}.")
+            self.logger.info(f"Polling loop finished for job {job.id}.")
 
         except Exception as e:
             raise e.with_traceback(e.__traceback__)
@@ -995,77 +969,85 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         request_key = self.get_key_from_request(request)
 
+        with self._submit_lock:
+            if request_key in self._pending_request_keys:
+                raise openreview.OpenReviewException("Request already in process")
+            self._pending_request_keys.add(request_key)
+
         try:
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    self.queue.getJobs([
+                        'active',
+                        'delayed',
+                        'paused',
+                        'waiting',
+                        'waiting-children',
+                        'prioritized',
+                    ]),
+                    self.queue_loop,
+                )
+                jobs = future.result()
+            except Exception as e:
+                jobs = []
+
+            for job in jobs:
+                if job.data.get('status') == JobStatus.COMPLETED:
+                    continue
+                if job.data.get('request_key') == request_key:
+                    raise openreview.OpenReviewException("Request already in queue")
+
+            config = self._validate_request(client, deepcopy(request))
+            config.mdate = int(time.time() * 1000)
+            self._save_config(config)
+
+            config_log = self._get_log_from_config(config)
+            self.logger.info(f"Adding job {config.job_id} to queue")
+
             future = asyncio.run_coroutine_threadsafe(
-                self.queue.getJobs([
-                    'active',
-                    'delayed',
-                    'paused',
-                    'waiting',
-                    'waiting-children',
-                    'prioritized',
-                ]),
-                self.queue_loop,
+                self.queue.add(
+                    job_name,
+                    {
+                        "request": request,
+                        "request_key": request_key,
+                        "user_id": config.user_id,
+                        "token": client.token,
+                        "status": JobStatus.QUEUED,
+                        "description": descriptions[JobStatus.QUEUED],
+                        "config": config.to_json(),
+                        "api_request": config.api_request.to_json(),
+                        "baseurl_v2": config.baseurl_v2,
+                    },
+                    {
+                        'jobId': config.job_id,
+                        'attempts': self.worker_attempts,
+                        'backoff': {
+                            'delay': self.worker_backoff_delay,
+                            'type': 'exponential',
+                        },
+                        'removeOnComplete': {
+                            'age': self.bullmq_remove_on_complete_age
+                        },
+                        'removeOnFail': {
+                            'age': self.bullmq_remove_on_fail_age
+                        },
+                    }
+                ),
+                self.queue_loop
             )
-            jobs = future.result()
-        except Exception as e:
-            jobs = []
+            self.logger.info(f"Job {job_name} queued")
+            job = future.result()
 
-        for job in jobs:
-            if job.data.get('status') == JobStatus.COMPLETED:
-                continue
-            if job.data.get('request_key') == request_key:
-                raise openreview.OpenReviewException("Request already in queue")
+            future = asyncio.run_coroutine_threadsafe(job.log(request_log), self.queue_loop)
+            future.result()
 
-        config = self._validate_request(
-            client,
-            deepcopy(request)
-        )
-        config.mdate = int(time.time() * 1000)
-        self._save_config(config)
+            future = asyncio.run_coroutine_threadsafe(job.log(config_log), self.queue_loop)
+            future.result()
 
-        config_log = self._get_log_from_config(config)
-        self.logger.info(f"Adding job {config.job_id} to queue")
-
-        future = asyncio.run_coroutine_threadsafe(
-            self.queue.add(
-                job_name,
-                {
-                    "request": request,
-                    "request_key": request_key,
-                    "user_id": config.user_id,
-                    "redis_id": config.job_id,
-                    "token": client.token,
-                    "status": JobStatus.QUEUED,
-                    "description": descriptions[JobStatus.QUEUED]
-                },
-                {
-                    'jobId': config.job_id,
-                    'attempts': self.worker_attempts,
-                    'backoff': {
-                        'delay': self.worker_backoff_delay,
-                        'type': 'exponential', # Exponential backoff: 2 ^ attempts * delay milliseconds
-                    },
-                    'removeOnComplete': {
-                        'age': self.bullmq_remove_on_complete_age
-                    },
-                    'removeOnFail': {
-                        'age': self.bullmq_remove_on_fail_age
-                    },
-                }
-            ),
-            self.queue_loop
-        )
-        self.logger.info(f"Job {job_name} queued")
-        job = future.result()
-
-        future = asyncio.run_coroutine_threadsafe(job.log(request_log), self.queue_loop)
-        future.result()
-
-        future = asyncio.run_coroutine_threadsafe(job.log(config_log), self.queue_loop)
-        future.result()
-
-        return config.job_id
+            return config.job_id
+        finally:
+            with self._submit_lock:
+                self._pending_request_keys.discard(request_key)
 
     def get_expertise_results(self, user_id, job_id, delete_on_get=False):
         """
@@ -1083,28 +1065,27 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         :returns: A dictionary that contains the calculated scores and metadata
         """
-        redis_job = self.redis.load_job(job_id, user_id)
-        return self.cloud.get_job_results(user_id, redis_job.cloud_id, delete_on_get)
+        job = self._load_job_from_queue(user_id, job_id)
+        cloud_id = job.data.get('config', {}).get('cloud_id')
+        if not cloud_id:
+            raise openreview.OpenReviewException(f"Cloud ID not found for job {job_id}")
+        return self.cloud.get_job_results(user_id, cloud_id, delete_on_get)
 
     def get_expertise_metadata(self, user_id, job_id):
         """
         Gets the dataset metadata for a given job (submission/archive counts,
         missing profiles and publications) by reading metadata.json from GCS.
         """
-        # Read metadata.json straight from GCS, mirroring get_expertise_results.
-        # We deliberately do not gate on job status: the client polls
-        # get_expertise_status to 'Completed' before calling this, and the
-        # Redis-cached status is stale in the cloud flow anyway (never updated
-        # to COMPLETED once the pipeline finishes). If the artifact isn't there
-        # yet, get_job_metadata raises.
-        redis_job = self.redis.load_job(job_id, user_id)
-        return self.cloud.get_job_metadata(user_id, redis_job.cloud_id)
+        job = self._load_job_from_queue(user_id, job_id)
+        cloud_id = job.data.get('config', {}).get('cloud_id')
+        if not cloud_id:
+            raise openreview.OpenReviewException(f"Cloud ID not found for job {job_id}")
+        return self.cloud.get_job_metadata(user_id, cloud_id)
 
     def get_expertise_signed_url(self, user_id, job_id, sparse=False):
-        """Return a signed URL for the results file of a cloud job.
-
-        Loading the job from Redis validates the caller. The cloud-side
-        request.json check is applied again inside get_job_results_signed_url.
-        """
-        redis_job = self.redis.load_job(job_id, user_id)
-        return self.cloud.get_job_results_signed_url(user_id, redis_job.cloud_id, sparse=sparse)
+        """Return a signed URL for the results file of a cloud job."""
+        job = self._load_job_from_queue(user_id, job_id)
+        cloud_id = job.data.get('config', {}).get('cloud_id')
+        if not cloud_id:
+            raise openreview.OpenReviewException(f"Cloud ID not found for job {job_id}")
+        return self.cloud.get_job_results_signed_url(user_id, cloud_id, sparse=sparse)

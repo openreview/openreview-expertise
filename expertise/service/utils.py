@@ -9,7 +9,6 @@ import json
 import csv
 import re
 import datetime
-import redis, pickle
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from unittest.mock import MagicMock
@@ -377,91 +376,6 @@ class APIRequest(object):
                 
         return all_values
         
-
-class RedisDatabase(object):
-    """
-    Communicates with the local Redis instance to store and load jobs
-    """
-    def __init__(self,
-        host=None,
-        port=None,
-        db=None,
-        connection_pool=None,
-        sync_on_disk=True,
-        job_ttl=None) -> None:
-        if not connection_pool:
-            self.db = redis.Redis(
-                host = host,
-                port = port,
-                db = db
-            )
-        else:
-            self.db = redis.Redis(connection_pool=connection_pool)
-
-        self.sync_on_disk = sync_on_disk
-        self.job_ttl = job_ttl
-
-    def save_job(self, job_config, ttl=None):
-        key = f"job:{job_config.job_id}"
-        job_ttl = ttl if ttl is not None else self.job_ttl
-        self.db.set(key, pickle.dumps(job_config), ex=job_ttl)
-    
-    def load_all_jobs(self, user_id):
-        """
-        Searches all keys for configs with matching user id
-        If a Redis entry exists but the files do not, remove the entry from Redis and do not return this job
-        Returns empty list if no jobs found
-        """
-        configs = []
-
-        for job_key in self.db.scan_iter("job:*"):
-            pickled_config = self.db.get(job_key)
-            if not pickled_config:  # Key expired between scan and get
-                continue
-            current_config = pickle.loads(pickled_config)
-
-            if self.sync_on_disk and not os.path.isdir(current_config.job_dir):
-                print(f"No files found {job_key} - skipping")
-                continue
-
-            if current_config.user_id == user_id or user_id in SUPERUSER_IDS:
-                configs.append(current_config)
-
-        return configs
-
-    def load_job(self, job_id, user_id):
-        """
-        Retrieves a config based on job id
-        """
-        job_key = f"job:{job_id}"
-        
-        pickled_config = self.db.get(job_key)
-        if not pickled_config:
-            raise openreview.OpenReviewException('Job not found')
-        
-        config = pickle.loads(pickled_config)
-        
-        if self.sync_on_disk and not os.path.isdir(config.job_dir):
-            self.remove_job(user_id, job_id)
-            raise openreview.OpenReviewException('Job not found')
-
-        if config.user_id != user_id and user_id not in SUPERUSER_IDS:
-            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
-
-        return config
-    
-    def remove_job(self, user_id, job_id):
-        job_key = f"job:{job_id}"
-
-        pickled_config = self.db.get(job_key)
-        if not pickled_config:
-            raise openreview.OpenReviewException('Job not found')
-        config = pickle.loads(pickled_config)
-        if config.user_id != user_id and user_id not in SUPERUSER_IDS:
-            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to modify job')
-
-        self.db.delete(job_key)
-        return config
 
 class JobConfig(object):
     """

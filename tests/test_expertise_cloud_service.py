@@ -11,10 +11,9 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
-from expertise.service.utils import JobConfig, RedisDatabase
 from google.cloud.aiplatform_v1.types import PipelineState
 from conftest import GCSTestHelper
-from expertise.service.utils import RedisDatabase, JobConfig, JobStatus, JobDescription, APIRequest
+from expertise.service.utils import JobConfig, JobStatus, JobDescription, APIRequest
 
 GCS_TEST_BUCKET = GCSTestHelper.GCS_TEST_BUCKET
 GCS_PROJECT = GCSTestHelper.GCS_PROJECT
@@ -65,6 +64,11 @@ def reset_run_once_state():
     yield
     rts.get_expertise_service.has_run = False
     rts.get_expertise_service.to_return = None
+
+
+def _load_job_config(working_dir, job_id):
+    with open(os.path.join(working_dir, job_id, 'config.json'), 'r') as f:
+        return JobConfig.from_json(json.load(f))
 
 
 class TestExpertiseCloudService():
@@ -187,12 +191,6 @@ class TestExpertiseCloudService():
             return mock_pipeline_instance
 
         MAX_TIMEOUT = 300
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
 
         # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
@@ -264,7 +262,7 @@ class TestExpertiseCloudService():
 
         # Check proper user ID
         ## Checking live GCS
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
@@ -327,7 +325,7 @@ class TestExpertiseCloudService():
 
         # Check proper user ID
         ## Checking live GCS
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
@@ -420,7 +418,7 @@ class TestExpertiseCloudService():
 
         # Fetch the job config
         ## Convert current mocking to using file system
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         
         # Check proper user ID
         ## Checking and writing to live GCS
@@ -506,12 +504,6 @@ class TestExpertiseCloudService():
 
         mock_sign_url.return_value = 'https://signed.url/test-scores'
 
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
 
         abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
         abc_client.impersonate('CLD.cc')
@@ -541,7 +533,7 @@ class TestExpertiseCloudService():
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
 
         # Upload mock results
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
@@ -613,12 +605,6 @@ class TestExpertiseCloudService():
             return mock_pipeline_instance
 
         MAX_TIMEOUT = 300
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
 
         # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
@@ -696,7 +682,7 @@ class TestExpertiseCloudService():
 
         # Fetch the job config
         ## Convert current mocking to using file system
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         
         # Check proper user ID
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
@@ -746,12 +732,6 @@ class TestExpertiseCloudService():
             return mock_pipeline_instance
 
         MAX_TIMEOUT = 300
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
 
         # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
@@ -829,7 +809,7 @@ class TestExpertiseCloudService():
 
         # Fetch the job config
         ## Convert current mocking to using file system
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         
         # Check proper user ID
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
@@ -879,12 +859,6 @@ class TestExpertiseCloudService():
             return mock_pipeline_instance
 
         MAX_TIMEOUT = 300
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
 
         # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
@@ -966,7 +940,7 @@ class TestExpertiseCloudService():
 
         # Fetch the job config
         ## Convert current mocking to using file system
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         
         # Check proper user ID
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
@@ -1072,14 +1046,8 @@ class TestExpertiseCloudService():
             time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] * 2 + LATENCY_OFFSET)
             
             # Get User A's job from Redis
-            redis = RedisDatabase(
-                host=openreview_context_cloud['config']['REDIS_ADDR'],
-                port=openreview_context_cloud['config']['REDIS_PORT'],
-                db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-                sync_on_disk=False
-            )
             
-            job_a = redis.load_job(job_id_a, "CLD.cc")
+            job_a = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id_a)
             assert job_a.cloud_id is not None, "Job A cloud_id is None"
             
             # Check what was stored in GCP for job A
@@ -1118,12 +1086,6 @@ class TestExpertiseCloudService():
             return mock_pipeline_instance
 
         MAX_TIMEOUT = 300
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
         # Use TMLR client to test permissions
         tmlr_client = openreview.api.OpenReviewClient(
             token=openreview_client.token
@@ -1182,7 +1144,7 @@ class TestExpertiseCloudService():
         timeout *= NUM_RETRIES
         
         while time.time() - start_time < timeout:
-            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+            config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
             current_cloud_id = config.cloud_id
             
             # If we see a new cloud ID (due to retry), write the error blob to it
@@ -1205,12 +1167,6 @@ class TestExpertiseCloudService():
         test_client = openreview_context_cloud["test_client"]
 
         # Use the same Redis config as the service
-        redis = RedisDatabase(
-            host=cfg["REDIS_ADDR"],
-            port=cfg["REDIS_PORT"],
-            db=cfg["REDIS_CONFIG_DB"],
-            sync_on_disk=False,
-        )
 
         # Prepare a job config and ensure job_dir exists so load_job passes
         job_id = f"job_no_cloud_{int(time.time())}"
@@ -1241,7 +1197,10 @@ class TestExpertiseCloudService():
             mdate=1234567890000,
         )
         config.api_request = api_req
-        redis.save_job(config)
+        with open(os.path.join(job_dir, 'config.json'), 'w') as f:
+            json.dump(config.to_json(), f)
+        with open(os.path.join(job_dir, 'request.json'), 'w') as f:
+            json.dump(api_req.to_json(), f)
 
         # Use a client with the default token (openreview.net)
         user_client = openreview.api.OpenReviewClient(token=openreview_client.token)

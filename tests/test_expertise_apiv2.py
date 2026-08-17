@@ -15,7 +15,7 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
-from expertise.service.utils import JobConfig, RedisDatabase
+from expertise.service.utils import JobConfig
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -166,13 +166,6 @@ class TestExpertiseV2():
     def test_journal_request_v2(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID
 
-        redis = RedisDatabase(
-            host=openreview_context['config']['REDIS_ADDR'],
-            port=openreview_context['config']['REDIS_PORT'],
-            db=openreview_context['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
-
         MAX_TIMEOUT = 600 # Timeout after 10 minutes
         test_client = openreview_context['test_client']
 
@@ -289,12 +282,6 @@ class TestExpertiseV2():
         assert response['status'] == 'Completed'
         assert response['name'] == 'test_run'
         assert response['description'] == 'Job is complete and the computed scores are ready'
-
-        # Load RedisJob and delete match_paper_invitation
-        ## simulates legacy configs
-        job = redis.load_job(job_id, 'openreview.net')
-        delattr(job, 'match_paper_invitation')
-        redis.save_job(job)
 
         # Test for paper id query
         response = test_client.get('/expertise/status', headers=openreview_client.headers, query_string={'id': target_id}).json['results']
