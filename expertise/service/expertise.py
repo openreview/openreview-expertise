@@ -349,8 +349,6 @@ class BaseExpertiseService:
                 continue
 
             config = self._config_from_job_data(job.data)
-            if config.job_dir is None or not os.path.isdir(config.job_dir):
-                continue
 
             status = job.data.get('status')
             description = job.data.get('description')
