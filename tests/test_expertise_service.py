@@ -1622,7 +1622,7 @@ class TestExpertiseService():
         assert response.status_code == 404
         assert 'Error' in response.json['name']
         assert 'not found' in response.json['message'].lower()
-        assert response.json['message'] == 'Job not found'
+        assert response.json['message'] == 'Job nonexistent_job_id_xyz not found in queue'
 
     def _make_mock_job(self, job_id, user_id, job_dir, status):
         config = JobConfig(
