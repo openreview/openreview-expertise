@@ -55,6 +55,8 @@ class BaseExpertiseService:
         self.default_expertise_config = config.get('DEFAULT_CONFIG')
         self.worker_attempts = worker_attempts
         self.worker_backoff_delay = worker_backoff_delay
+        self.bullmq_remove_on_complete_age = config.get('BULLMQ_REMOVE_ON_COMPLETE_AGE', 1209600)
+        self.bullmq_remove_on_fail_age = config.get('BULLMQ_REMOVE_ON_FAIL_AGE', 1209600)
         self.working_dir = config.get('WORKING_DIR')
         self.specter_dir = config.get('SPECTER_DIR')
         self.mfr_feature_vocab_file = config.get('MFR_VOCAB_DIR')
@@ -197,53 +199,26 @@ class BaseExpertiseService:
         """
         Query BullMQ for the canonical status of a job.
         Returns (status, description) or (None, None) if the job
-        is no longer in the queue (archived) or the query times out.
+        is no longer in the queue (archived).
         """
-        import concurrent.futures
-
-        try:
-            future = asyncio.run_coroutine_threadsafe(
-                self.queue.getJobState(job_id),
-                self.queue_loop
-            )
-            state = future.result(timeout=0.1)
-        except concurrent.futures.TimeoutError:
-            return None, None
-        except Exception as e:
-            self.logger.warning(f"Failed to get queue state for {job_id}: {e}")
-            return None, None
-
-        if state is None:
-            return None, None
-
         descriptions = JobDescription.VALS.value
 
-        job = None
         try:
             future = asyncio.run_coroutine_threadsafe(
                 Job.fromId(self.queue, job_id),
                 self.queue_loop
             )
-            job = future.result(timeout=0.1)
-        except concurrent.futures.TimeoutError:
-            self.logger.warning(f"Timeout fetching job {job_id} from queue")
+            job = future.result()
         except Exception as e:
             self.logger.warning(f"Failed to fetch job {job_id} from queue: {e}")
+            return None, None
 
-        data = job.data if job else {}
-        status = data.get('status')
-        description = data.get('description')
-        if status is not None:
-            return status, (description or descriptions.get(status, ''))
-
-        if state == 'completed':
-            return JobStatus.COMPLETED, descriptions[JobStatus.COMPLETED]
-        if state == 'failed':
-            return JobStatus.ERROR, descriptions[JobStatus.ERROR]
-        if state == 'active':
-            return JobStatus.RUN_EXPERTISE, descriptions[JobStatus.RUN_EXPERTISE]
-        if state in ('waiting', 'delayed', 'paused', 'waiting-children', 'prioritized'):
-            return JobStatus.QUEUED, descriptions[JobStatus.QUEUED]
+        if job is not None:
+            data = job.data
+            status = data.get('status')
+            description = data.get('description')
+            if status is not None:
+                return status, (description or descriptions.get(status, ''))
 
         return None, None
 
@@ -727,10 +702,10 @@ class ExpertiseService(BaseExpertiseService):
                         'type': 'exponential', # Exponential backoff: 2 ^ attempts * delay milliseconds
                     },
                     'removeOnComplete': {
-                        'age': 2592000
+                        'age': self.bullmq_remove_on_complete_age
                     },
                     'removeOnFail': {
-                        'age': 2592000
+                        'age': self.bullmq_remove_on_fail_age
                     },
                 }
             ),
@@ -1072,10 +1047,10 @@ class ExpertiseCloudService(BaseExpertiseService):
                         'type': 'exponential', # Exponential backoff: 2 ^ attempts * delay milliseconds
                     },
                     'removeOnComplete': {
-                        'age': 2592000
+                        'age': self.bullmq_remove_on_complete_age
                     },
                     'removeOnFail': {
-                        'age': 2592000
+                        'age': self.bullmq_remove_on_fail_age
                     },
                 }
             ),

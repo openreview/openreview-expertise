@@ -1,4 +1,3 @@
-import concurrent.futures
 from unittest.mock import patch, MagicMock, AsyncMock
 import random
 from pathlib import Path
@@ -267,171 +266,70 @@ class TestExpertiseService():
         return service
 
     def test_queue_status_completed(self):
-        """BullMQ 'completed' with status in job data -> COMPLETED."""
+        """BullMQ job data with status -> COMPLETED."""
         service = self._make_service_for_queue_tests()
-        state_future = MagicMock()
-        state_future.result.return_value = 'completed'
         mock_job = MagicMock()
         mock_job.data = {'status': JobStatus.COMPLETED, 'description': JobDescription.VALS.value[JobStatus.COMPLETED]}
         job_future = MagicMock()
         job_future.result.return_value = mock_job
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
             status, desc = service._get_job_status_from_queue('job-123')
         assert status == JobStatus.COMPLETED
         assert desc == JobDescription.VALS.value[JobStatus.COMPLETED]
 
     def test_queue_status_completed_data_error(self):
-        """Completed job with status='DATA_ERROR' in job data -> DATA_ERROR."""
+        """BullMQ job data with status='DATA_ERROR' -> DATA_ERROR."""
         service = self._make_service_for_queue_tests()
-        state_future = MagicMock()
-        state_future.result.return_value = 'completed'
         mock_job = MagicMock()
         mock_job.data = {'status': JobStatus.DATA_ERROR, 'description': 'No papers found', 'error': 'No papers found'}
         job_future = MagicMock()
         job_future.result.return_value = mock_job
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
             status, desc = service._get_job_status_from_queue('job-123')
         assert status == JobStatus.DATA_ERROR
         assert desc == 'No papers found'
 
-    def test_queue_status_completed_job_data_timeout(self):
-        """Timeout fetching job data -> fall back to queue state."""
+    def test_queue_status_job_data_exception(self):
+        """Exception fetching job data -> (None, None)."""
         service = self._make_service_for_queue_tests()
-        state_future = MagicMock()
-        state_future.result.return_value = 'completed'
-        job_future = MagicMock()
-        job_future.result.side_effect = concurrent.futures.TimeoutError
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
-            status, desc = service._get_job_status_from_queue('job-123')
-        assert status == JobStatus.COMPLETED
-        assert desc == JobDescription.VALS.value[JobStatus.COMPLETED]
-        service.logger.warning.assert_called_once()
-
-    def test_queue_status_completed_job_data_exception(self):
-        """Exception fetching job data -> fall back to queue state."""
-        service = self._make_service_for_queue_tests()
-        state_future = MagicMock()
-        state_future.result.return_value = 'completed'
         job_future = MagicMock()
         job_future.result.side_effect = RuntimeError('BullMQ down')
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
             status, desc = service._get_job_status_from_queue('job-123')
-        assert status == JobStatus.COMPLETED
-        assert desc == JobDescription.VALS.value[JobStatus.COMPLETED]
+        assert status is None
+        assert desc is None
         service.logger.warning.assert_called_once()
 
-    def test_queue_status_failed(self):
-        """BullMQ 'failed' -> ERROR."""
-        service = self._make_service_for_queue_tests()
-        state_future = MagicMock()
-        state_future.result.return_value = 'failed'
-        mock_job = MagicMock()
-        mock_job.data = {}
-        job_future = MagicMock()
-        job_future.result.return_value = mock_job
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
-            status, desc = service._get_job_status_from_queue('job-123')
-        assert status == JobStatus.ERROR
-        assert desc == JobDescription.VALS.value[JobStatus.ERROR]
-
-    def test_queue_status_active_no_status(self):
-        """BullMQ 'active' without status -> RUN_EXPERTISE."""
-        service = self._make_service_for_queue_tests()
-        state_future = MagicMock()
-        state_future.result.return_value = 'active'
-        mock_job = MagicMock()
-        mock_job.data = {}
-        job_future = MagicMock()
-        job_future.result.return_value = mock_job
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
-            status, desc = service._get_job_status_from_queue('job-123')
-        assert status == JobStatus.RUN_EXPERTISE
-        assert desc == JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
-
     def test_queue_status_active_with_status(self):
-        """BullMQ 'active' with status='FETCHING_DATA' -> FETCHING_DATA."""
+        """BullMQ job data with status='FETCHING_DATA' -> FETCHING_DATA."""
         service = self._make_service_for_queue_tests()
-        state_future = MagicMock()
-        state_future.result.return_value = 'active'
         mock_job = MagicMock()
         mock_job.data = {'status': JobStatus.FETCHING_DATA, 'description': JobDescription.VALS.value[JobStatus.FETCHING_DATA]}
         job_future = MagicMock()
         job_future.result.return_value = mock_job
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
             status, desc = service._get_job_status_from_queue('job-123')
         assert status == JobStatus.FETCHING_DATA
         assert desc == JobDescription.VALS.value[JobStatus.FETCHING_DATA]
 
-    def test_queue_status_active_job_data_timeout(self):
-        """Timeout fetching active job data -> fall back to queue state."""
+    def test_queue_status_no_status_in_job_data(self):
+        """BullMQ job present but no status in job data -> fall back to Redis."""
         service = self._make_service_for_queue_tests()
-        state_future = MagicMock()
-        state_future.result.return_value = 'active'
-        job_future = MagicMock()
-        job_future.result.side_effect = concurrent.futures.TimeoutError
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
-            status, desc = service._get_job_status_from_queue('job-123')
-        assert status == JobStatus.RUN_EXPERTISE
-        assert desc == JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
-        service.logger.warning.assert_called_once()
-
-    def test_queue_status_active_job_data_exception(self):
-        """Exception fetching active job data -> fall back to queue state."""
-        service = self._make_service_for_queue_tests()
-        state_future = MagicMock()
-        state_future.result.return_value = 'active'
-        job_future = MagicMock()
-        job_future.result.side_effect = RuntimeError('BullMQ down')
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
-            status, desc = service._get_job_status_from_queue('job-123')
-        assert status == JobStatus.RUN_EXPERTISE
-        assert desc == JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
-        service.logger.warning.assert_called_once()
-
-    @pytest.mark.parametrize("queue_state", [
-        'waiting', 'delayed', 'paused', 'waiting-children', 'prioritized'
-    ])
-    def test_queue_status_queued_variants(self, queue_state):
-        """All BullMQ waiting-like states -> QUEUED."""
-        service = self._make_service_for_queue_tests()
-        state_future = MagicMock()
-        state_future.result.return_value = queue_state
         mock_job = MagicMock()
         mock_job.data = {}
         job_future = MagicMock()
         job_future.result.return_value = mock_job
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', side_effect=[state_future, job_future]):
-            status, desc = service._get_job_status_from_queue('job-123')
-        assert status == JobStatus.QUEUED
-        assert desc == JobDescription.VALS.value[JobStatus.QUEUED]
-
-    def test_queue_status_timeout(self):
-        """TimeoutError from BullMQ returns (None, None)."""
-        service = self._make_service_for_queue_tests()
-        mock_future = MagicMock()
-        mock_future.result.side_effect = concurrent.futures.TimeoutError
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
             status, desc = service._get_job_status_from_queue('job-123')
         assert status is None
         assert desc is None
 
-    def test_queue_status_exception(self):
-        """Exception from BullMQ returns (None, None)."""
+    def test_queue_status_job_not_in_queue(self):
+        """BullMQ job not found -> (None, None)."""
         service = self._make_service_for_queue_tests()
-        mock_future = MagicMock()
-        mock_future.result.side_effect = RuntimeError('BullMQ down')
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
-            status, desc = service._get_job_status_from_queue('job-123')
-        assert status is None
-        assert desc is None
-        service.logger.warning.assert_called_once()
-
-    def test_queue_status_none_state(self):
-        """BullMQ returns None state (job archived / not in queue) -> (None, None)."""
-        service = self._make_service_for_queue_tests()
-        mock_future = MagicMock()
-        mock_future.result.return_value = None
-        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=mock_future):
+        job_future = MagicMock()
+        job_future.result.return_value = None
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
             status, desc = service._get_job_status_from_queue('job-123')
         assert status is None
         assert desc is None
