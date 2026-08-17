@@ -708,6 +708,7 @@ class JobConfig(object):
             name = job_config.get('name'),
             user_id = job_config.get('user_id'),
             job_id = job_config.get('job_id'),
+            cloud_id = job_config.get('cloud_id'),
             job_dir = job_config.get('job_dir'),
             cdate = job_config.get('cdate'),
             mdate = job_config.get('mdate'),
