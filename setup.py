@@ -13,7 +13,7 @@ setup(
     ],
     install_requires=[
         'setuptools>=75.6.0',
-        'openreview-py>=2.5.0',
+        'openreview-py>=2.4.2',
         'numpy>=2.0,<2.3',
         'scipy',
         'adapter-transformers',
