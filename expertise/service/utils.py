@@ -719,6 +719,7 @@ class JobConfig(object):
             match_paper_content = job_config.get('match_paper_content'),
             alternate_match_group=job_config.get('alternate_match_group'),
             reviewer_ids=job_config.get('reviewer_ids'),
+            match_provided_submissions=job_config.get('match_provided_submissions'),
             dataset = job_config.get('dataset'),
             model = job_config.get('model'),
             exclusion_inv = job_config.get('exclusion_inv'),
