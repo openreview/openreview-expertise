@@ -143,7 +143,7 @@ def run_pipeline(
         if gcs_client is None:
             gcs_client = storage.Client()
         _, bucket = load_gcs(destination_prefix, client=gcs_client)
-        blob_prefix = '/'.join(destination_prefix.split('/')[3:])
+        blob_prefix = '/'.join(destination_prefix.split('/')[3:]).rstrip('/')
 
         # Download only the artifacts required for this model — a pipeline worker
         # handles a single job and pulling unused models wastes startup time.
