@@ -17,6 +17,8 @@ from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
 from google.cloud.aiplatform_v1.types import PipelineState
+from google.auth import default as google_auth_default
+from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 from copy import deepcopy
 from expertise.config import ModelConfig
 from expertise.utils.utils import generate_job_id
@@ -872,6 +874,7 @@ class GCPInterface(object):
             self.jobs_folder = config['GCP_JOBS_FOLDER']
             self.service_label = config['GCP_SERVICE_LABEL']
             self.service_account = config.get('GCP_SERVICE_ACCOUNT')
+            self.url_signer_service_account = config.get('GCP_URL_SIGNER_SERVICE_ACCOUNT')
             # Per-tier pipeline names derived from base name + machine tier suffix
             self.pipeline_name_by_tier = {
                 config.get('SMALL_NAME', 'small'):  f"{self.pipeline_name}-{config.get('SMALL_NAME', 'small')}",
@@ -890,6 +893,7 @@ class GCPInterface(object):
             self.jobs_folder = jobs_folder
             self.service_label = service_label
             self.service_account = service_account
+            self.url_signer_service_account = None
 
         required_fields = [
             self.project_id,
@@ -999,11 +1003,6 @@ class GCPInterface(object):
     def upload_dataset(self, config, vertex_id=None):
         """Package dataset files from config.job_dir into a single tarball and upload to GCS.
 
-        Cached publication embeddings (cached_pub2vec_*.jsonl) are uploaded directly
-        to the job's GCS root, not packed into the tarball. They're large and gzip
-        poorly (embeddings are near-random floats), so single-threaded gzip becomes
-        the bottleneck; uncompressed upload over the same network is faster.
-
         Returns the full GCS path to the uploaded tarball.
         """
         job_dir = config.job_dir
@@ -1014,11 +1013,6 @@ class GCPInterface(object):
         dataset_gcs_path = f"gs://{self.bucket_name}/{blob_name}"
 
         dataset_items = ['archives', 'submissions', 'submissions.json', 'metadata.json', 'publications_by_profile_id.json']
-        cached_jsonls = sorted(
-            f for f in os.listdir(job_dir)
-            if f.startswith('cached_pub2vec_') and f.endswith('.jsonl')
-            and os.path.isfile(os.path.join(job_dir, f))
-        ) if os.path.isdir(job_dir) else []
         items_to_pack = [
             item for item in dataset_items
             if os.path.exists(os.path.join(job_dir, item))
@@ -1036,16 +1030,7 @@ class GCPInterface(object):
             self.bucket.blob(blob_name).upload_from_filename(tarball_path)
             self.logger.info(f"Uploaded dataset tarball to {dataset_gcs_path}")
 
-            for cached_name in cached_jsonls:
-                cached_blob_name = f"{job_root_path}/{cached_name}"
-                self.bucket.blob(cached_blob_name).upload_from_filename(
-                    os.path.join(job_dir, cached_name)
-                )
-                self.logger.info(
-                    f"Uploaded cached embeddings to gs://{self.bucket_name}/{cached_blob_name}"
-                )
-
-            for item in items_to_pack + cached_jsonls:
+            for item in items_to_pack:
                 path = os.path.join(job_dir, item)
                 if os.path.isdir(path):
                     shutil.rmtree(path)
@@ -1110,48 +1095,6 @@ class GCPInterface(object):
                     matches.append((ts, cid))
         matches.sort(key=lambda item: item[0], reverse=True)
         return [cid for _, cid in matches[:limit]]
-
-    def merge_cached_publication_embeddings(self, cloud_ids, model_name, dest_path):
-        """Download pub2vec_{model_name}.jsonl from each cloud_id and merge into dest_path.
-
-        Returns the number of unique paper_ids written. Most-recent-wins on
-        duplicate paper_ids (cloud_ids should be passed newest-first).
-        Falls back to legacy 'pub2vec.jsonl' when the per-model name is absent.
-        """
-        if not cloud_ids:
-            return 0
-
-        prefix = f"{self.jobs_folder}/"
-        # Walk newest -> oldest; first occurrence wins so newer embeddings stick.
-        merged = {}
-        candidate_names = [f"pub2vec_{model_name}.jsonl", "pub2vec.jsonl"]
-        for cloud_id in cloud_ids:
-            for blob_name in candidate_names:
-                blob = self.bucket.blob(f"{prefix}{cloud_id}/{blob_name}")
-                try:
-                    raw = blob.download_as_text()
-                except Exception:
-                    continue
-                for line in raw.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    pid = entry.get('paper_id')
-                    if pid and pid not in merged:
-                        merged[pid] = {'paper_id': pid, 'embedding': entry['embedding']}
-                break
-
-        if not merged:
-            return 0
-
-        with open(dest_path, 'w') as f:
-            for entry in merged.values():
-                f.write(json.dumps(entry) + '\n')
-        return len(merged)
 
     def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
         def create_folder(bucket_name, folder_path):
@@ -1565,20 +1508,6 @@ class GCPInterface(object):
         if len(authenticated_requests) > 1:
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
-        # Validate score and metadata files exist before returning the streaming generator.
-        # If validation is deferred into the generator, exceptions fire after the HTTP
-        # response has already started — causing a broken chunked response on the client.
-        score_files = [
-            blob for blob in job_blobs
-            if blob.name.endswith('scores.csv') or blob.name.endswith('scores_sparse.csv')
-            or blob.name.endswith('scores.jsonl') or blob.name.endswith('scores_sparse.jsonl')
-        ]
-        metadata_files = [blob for blob in job_blobs if 'metadata.json' in blob.name and 'dataset/' not in blob.name]
-        if len(metadata_files) != 1:
-            raise openreview.OpenReviewException(f'Internal Error: incorrect metadata files found expected [1] found {len(metadata_files)}')
-        if len(score_files) < 1 or len(score_files) > 2:
-            raise openreview.OpenReviewException(f'Internal Error: incorrect score files found expected [1, 2] found {len(score_files)}')
-
         # Matching type drives the entityA/entityB column mapping for new CSV
         # blobs (legacy JSONL blobs already have it baked in).
         api_request = authenticated_requests[0]
@@ -1588,6 +1517,119 @@ class GCPInterface(object):
         paper_paper_matching = entityA_type == 'Note' and entityB_type == 'Note'
 
         return _get_scores_and_metadata_streaming(job_blobs, job_id, group_group_matching, paper_paper_matching)
+
+    def _select_score_blob(self, job_blobs, sparse=False, group_group_matching=False):
+        """Return the single results blob for a job in the requested format.
+
+        For group-group jobs requesting the full matrix, prefer the aggregated
+        profile-profile `_group.pt` matrix over the raw per-paper `.pt` matrix,
+        because the latter has paper IDs on one axis and is not the result
+        users expect for a group-group job.
+        """
+        if sparse:
+            suffix = 'scores_sparse'
+            score_files = [
+                blob for blob in job_blobs
+                if blob.name.endswith(f'{suffix}.csv') or blob.name.endswith(f'{suffix}.jsonl')
+            ]
+        else:
+            # Full matrix: prefer dense CSV/JSONL if present.
+            score_files = [
+                blob for blob in job_blobs
+                if blob.name.endswith('scores.csv') or blob.name.endswith('scores.jsonl')
+            ]
+            if not score_files:
+                # For group-group jobs, the aggregated profile-profile matrix is
+                # the meaningful full result. Fall back to the raw per-paper
+                # matrix only when the aggregated one is not present.
+                if group_group_matching:
+                    group_matrix_files = [
+                        blob for blob in job_blobs
+                        if blob.name.endswith('_group.pt')
+                    ]
+                    if len(group_matrix_files) == 1:
+                        return group_matrix_files[0]
+                    if len(group_matrix_files) > 1:
+                        raise openreview.OpenReviewException(
+                            f'Internal Error: multiple group matrix files found expected [1] found {len(group_matrix_files)}'
+                        )
+                matrix_files = [
+                    blob for blob in job_blobs
+                    if blob.name.endswith('.pt')
+                ]
+                if len(matrix_files) == 1:
+                    return matrix_files[0]
+                if len(matrix_files) > 1:
+                    raise openreview.OpenReviewException(
+                        f'Internal Error: multiple matrix files found expected [1] found {len(matrix_files)}'
+                    )
+
+        if len(score_files) != 1:
+            target = 'sparse' if sparse else 'full'
+            raise openreview.OpenReviewException(
+                f'Internal Error: incorrect {target} score files found expected [1] found {len(score_files)}'
+            )
+        return score_files[0]
+
+    def sign_url(self, bucket_name, blob_name):
+        """Generate a V4 signed URL for a GCS blob.
+
+        Uses service account impersonation so the URL is signed by
+        GCP_URL_SIGNER_SERVICE_ACCOUNT rather than the runtime identity,
+        which on GCE only carries a token and cannot sign directly.
+        """
+        if not self.url_signer_service_account:
+            raise openreview.OpenReviewException(
+                'Signed URLs are not configured: GCP_URL_SIGNER_SERVICE_ACCOUNT is not set'
+            )
+
+        source_credentials, project = google_auth_default()
+        # The impersonation token only needs to live long enough to sign the URL;
+        # it is independent of the signed URL's expiration.
+        target_credentials = ImpersonatedCredentials(
+            source_credentials=source_credentials,
+            target_principal=self.url_signer_service_account,
+            target_scopes=['https://www.googleapis.com/auth/cloud-platform'],
+            lifetime=300,
+        )
+        client = storage.Client(credentials=target_credentials, project=project)
+        blob = client.bucket(bucket_name).blob(blob_name)
+        return blob.generate_signed_url(
+            version='v4',
+            expiration=datetime.timedelta(minutes=5),
+            method='GET',
+        )
+
+    def get_job_results_signed_url(self, user_id, job_id, sparse=False):
+        """Return a signed URL for the results file of a cloud job.
+
+        The caller must be the job owner or a superuser. The URL is signed
+        for the full results (`scores.csv` or the `.pt` matrix) by default;
+        pass sparse=True for `scores_sparse.csv`.
+        """
+        job_blobs = list(self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}/"))
+        self.logger.info(f"Searching for signed URL job {job_id} | prefix={self.jobs_folder}/{job_id}/")
+        all_requests = [
+            json.loads(blob.download_as_string()) for blob in job_blobs if self.request_fname in blob.name
+        ]
+        authenticated_requests = [
+            req for req in all_requests if user_id == req['user_id'] or user_id in SUPERUSER_IDS
+        ]
+        if len(all_requests) == 0:
+            raise openreview.OpenReviewException('Job not found')
+        if len(authenticated_requests) == 0:
+            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
+        if len(authenticated_requests) > 1:
+            raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
+
+        # Matching type drives which full matrix blob is meaningful for the user.
+        api_request = authenticated_requests[0]
+        entityA_type = api_request.get('entityA', {}).get('type', '')
+        entityB_type = api_request.get('entityB', {}).get('type', '')
+        group_group_matching = entityA_type == 'Group' and entityB_type == 'Group'
+
+        target_blob = self._select_score_blob(job_blobs, sparse=sparse, group_group_matching=group_group_matching)
+        return self.sign_url(self.bucket_name, target_blob.name)
 
     def get_job_metadata(self, user_id, job_id):
         """

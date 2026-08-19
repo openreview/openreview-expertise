@@ -103,9 +103,22 @@ def test_aggregate_by_group_matrix_path(tmp_path):
     actual = {(rev, sub): score for rev, sub, score in preliminary_scores}
     assert actual == expected
 
-    # No side-file CSV is written — preliminary_scores is in-memory only.
+    # The aggregated profile-profile matrix is written as a .pt side file.
     csv_path = scores_dir / 'test_run.csv'
     assert not csv_path.exists()
+
+    group_matrix_path = scores_dir / 'test_run_group.pt'
+    assert group_matrix_path.is_file()
+    group_data = torch.load(group_matrix_path)
+    assert set(group_data['test_ids']) == set(publications_by_profile_id.keys())
+    assert set(group_data['reviewer_ids']) == set(archive_members)
+    assert group_data['scores'].shape == (2, 2)
+    group_dict = {
+        (group_data['reviewer_ids'][j], group_data['test_ids'][i]): round(float(group_data['scores'][i, j]), 2)
+        for i in range(len(group_data['test_ids']))
+        for j in range(len(group_data['reviewer_ids']))
+    }
+    assert group_dict == expected
 
 
 def test_aggregate_by_group_csv_path_unchanged(tmp_path):

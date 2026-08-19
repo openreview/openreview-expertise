@@ -576,99 +576,6 @@ def test_upload_download_roundtrip(mock_upload_client, mock_download_client, ope
             assert json.loads(f.readline())['id'] == 'p1'
 
 
-@patch("expertise.execute_pipeline.storage.Client")
-@patch("expertise.service.utils.storage.Client")
-def test_upload_download_roundtrip_with_cached_embeddings(
-    mock_upload_client, mock_download_client
-):
-    """upload + download together preserve cached_pub2vec_*.jsonl files alongside
-    the dataset tarball, even though they live outside the tarball at the job root."""
-    storage_dir = tempfile.mkdtemp()
-
-    def _blob_path(blob_name):
-        return os.path.join(storage_dir, blob_name.replace('/', '__'))
-
-    shared_bucket = MagicMock()
-
-    def _make_blob(blob_name):
-        blob_obj = MagicMock()
-        blob_obj.name = blob_name
-        def _upload(path):
-            import shutil
-            shutil.copy2(path, _blob_path(blob_name))
-        def _download(path):
-            import shutil
-            shutil.copy2(_blob_path(blob_name), path)
-        blob_obj.upload_from_filename.side_effect = _upload
-        blob_obj.download_to_filename.side_effect = _download
-        return blob_obj
-    shared_bucket.blob.side_effect = _make_blob
-
-    def _list_blobs(prefix=None, delimiter=None, **kwargs):
-        results = []
-        for filename in os.listdir(storage_dir):
-            blob_name = filename.replace('__', '/')
-            if prefix and not blob_name.startswith(prefix):
-                continue
-            if delimiter:
-                rest = blob_name[len(prefix):]
-                if delimiter in rest:
-                    continue
-            results.append(_make_blob(blob_name))
-        return results
-    shared_bucket.list_blobs.side_effect = _list_blobs
-
-    mock_upload_client.return_value.bucket.return_value = shared_bucket
-    mock_download_client.return_value.bucket.return_value = shared_bucket
-
-    gcp_interface = GCPInterface(
-        project_id="test_project",
-        project_number="123456",
-        region="us-central1",
-        pipeline_root="pipeline-root",
-        pipeline_name="test-pipeline",
-        pipeline_repo="test-repo",
-        bucket_name="test-bucket",
-        jobs_folder="jobs",
-        service_label={'test': 'label'}
-    )
-
-    try:
-        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as dst_dir:
-            archives_dir = os.path.join(src_dir, 'archives')
-            os.makedirs(archives_dir)
-            with open(os.path.join(archives_dir, '~User_One1.jsonl'), 'w') as f:
-                f.write(json.dumps({'id': 'p1'}) + '\n')
-            with open(os.path.join(src_dir, 'submissions.json'), 'w') as f:
-                json.dump({'count': 1}, f)
-            with open(os.path.join(src_dir, 'metadata.json'), 'w') as f:
-                json.dump({'submission_count': 1, 'archives_count': 1}, f)
-            with open(os.path.join(src_dir, 'cached_pub2vec_specter.jsonl'), 'w') as f:
-                f.write('{"paper_id": "p1", "embedding": [0.1]}\n')
-            with open(os.path.join(src_dir, 'cached_pub2vec_scincl.jsonl'), 'w') as f:
-                f.write('{"paper_id": "p1", "embedding": [0.2]}\n')
-
-            config = JobConfig(job_id='cached-roundtrip-job', job_dir=src_dir)
-            gcs_path = gcp_interface.upload_dataset(config)
-
-            from expertise.execute_pipeline import download_dataset_from_gcs
-            download_dataset_from_gcs(gcs_path, dst_dir)
-
-            assert os.path.isfile(os.path.join(dst_dir, 'archives', '~User_One1.jsonl'))
-            assert os.path.isfile(os.path.join(dst_dir, 'submissions.json'))
-            cached_specter = os.path.join(dst_dir, 'cached_pub2vec_specter.jsonl')
-            cached_scincl = os.path.join(dst_dir, 'cached_pub2vec_scincl.jsonl')
-            assert os.path.isfile(cached_specter)
-            assert os.path.isfile(cached_scincl)
-            with open(cached_specter) as f:
-                assert json.loads(f.readline())['embedding'] == [0.1]
-            with open(cached_scincl) as f:
-                assert json.loads(f.readline())['embedding'] == [0.2]
-    finally:
-        import shutil
-        shutil.rmtree(storage_dir, ignore_errors=True)
-
-
 # Test case for the `get_job_status_by_job_id` method
 @patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
@@ -1392,7 +1299,7 @@ def test_get_job_status_by_job_id_returns_redis_when_no_cloud_id(mock_storage_cl
 
 
 # ---------------------------------------------------------------------------
-# find_recent_venue_jobs / merge_cached_publication_embeddings
+# find_recent_venue_jobs
 # ---------------------------------------------------------------------------
 
 class _FakeBlobIterator:
@@ -1508,31 +1415,7 @@ def test_find_recent_venue_jobs_respects_limit_and_exclusion(mock_storage_client
 
 
 @patch("expertise.service.utils.storage.Client")
-def test_merge_cached_publication_embeddings(mock_storage_client, tmp_path):
-    """Downloads and merges embeddings; most-recent-wins on duplicate paper_ids."""
-    mock_bucket = MagicMock()
-    mock_storage_client.return_value.bucket.return_value = mock_bucket
-
-    def _make_blob(text):
-        blob = MagicMock()
-        blob.download_as_text.return_value = text
-        return blob
-
-    def _blob_for_path(path):
-        if path == "jobs/job-a/pub2vec_specter.jsonl":
-            return _make_blob(
-                '{"paper_id": "p1", "embedding": [0.1, 0.2]}\n'
-                '{"paper_id": "p2", "embedding": [0.3, 0.4]}\n'
-            )
-        if path == "jobs/job-b/pub2vec_specter.jsonl":
-            return _make_blob(
-                '{"paper_id": "p2", "embedding": [0.5, 0.6]}\n'  # newer override
-                '{"paper_id": "p3", "embedding": [0.7, 0.8]}\n'
-            )
-        return MagicMock()
-
-    mock_bucket.blob.side_effect = _blob_for_path
-
+def test_sign_url_not_configured(mock_storage_client, openreview_client):
     gcp_interface = GCPInterface(
         project_id="test_project",
         project_number="123456",
@@ -1545,44 +1428,222 @@ def test_merge_cached_publication_embeddings(mock_storage_client, tmp_path):
         service_label={'test': 'label'},
     )
 
-    dest_path = tmp_path / "merged.jsonl"
-    count = gcp_interface.merge_cached_publication_embeddings(
-        cloud_ids=["job-b", "job-a"],  # newest first; first occurrence wins
-        model_name="specter",
-        dest_path=str(dest_path),
+    with pytest.raises(openreview.OpenReviewException, match="Signed URLs are not configured"):
+        gcp_interface.sign_url("test-bucket", "jobs/job-1/scores.csv")
+
+
+@patch("expertise.service.utils.google_auth_default")
+@patch("expertise.service.utils.ImpersonatedCredentials")
+@patch("expertise.service.utils.storage.Client")
+def test_sign_url_with_impersonation(mock_storage_client, mock_credentials_cls, mock_auth_default, openreview_client):
+    mock_source_credentials = MagicMock()
+    mock_target_credentials = MagicMock()
+    mock_auth_default.return_value = (mock_source_credentials, 'test_project')
+    mock_credentials_cls.return_value = mock_target_credentials
+
+    mock_blob = MagicMock()
+    mock_blob.generate_signed_url.return_value = 'https://signed.url/test'
+    mock_bucket = MagicMock()
+    mock_bucket.blob.return_value = mock_blob
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+    gcp_interface.url_signer_service_account = 'url-signer@test-project.iam.gserviceaccount.com'
+
+    result = gcp_interface.sign_url("test-bucket", "jobs/job-1/scores.csv")
+
+    assert result == 'https://signed.url/test'
+    mock_credentials_cls.assert_called_once_with(
+        source_credentials=mock_source_credentials,
+        target_principal='url-signer@test-project.iam.gserviceaccount.com',
+        target_scopes=['https://www.googleapis.com/auth/cloud-platform'],
+        lifetime=300,
+    )
+    mock_blob.generate_signed_url.assert_called_once_with(
+        version='v4',
+        expiration=datetime.timedelta(minutes=5),
+        method='GET',
     )
 
-    assert count == 3
-    lines = dest_path.read_text().strip().split('\n')
-    assert len(lines) == 3
-    data = {json.loads(l)['paper_id']: json.loads(l)['embedding'] for l in lines}
-    assert data['p1'] == [0.1, 0.2]  # from job-a (only occurrence)
-    assert data['p2'] == [0.5, 0.6]  # from job-b (newer, first in list)
-    assert data['p3'] == [0.7, 0.8]  # from job-b
+
+@patch("expertise.service.utils.google_auth_default")
+@patch("expertise.service.utils.ImpersonatedCredentials")
+@patch("expertise.service.utils.storage.Client")
+def test_get_job_results_signed_url_full(mock_storage_client, mock_credentials_cls, mock_auth_default, openreview_client):
+    mock_auth_default.return_value = (MagicMock(), 'test_project')
+    mock_credentials_cls.return_value = MagicMock()
+
+    mock_request_blob = MagicMock()
+    mock_request_blob.name = "jobs/job-1/request.json"
+    mock_request_blob.download_as_string.return_value = json.dumps({"user_id": "test_user"})
+
+    mock_metadata_blob = MagicMock()
+    mock_metadata_blob.name = "jobs/job-1/metadata.json"
+
+    mock_matrix_blob = MagicMock()
+    mock_matrix_blob.name = "jobs/job-1/unt7kb2ux4-1784734761747.pt"
+
+    mock_signed_blob = MagicMock()
+    mock_signed_blob.generate_signed_url.return_value = 'https://signed.url/full'
+
+    mock_bucket = MagicMock()
+    mock_bucket.list_blobs.return_value = [
+        mock_request_blob,
+        mock_metadata_blob,
+        mock_matrix_blob,
+    ]
+    mock_bucket.blob.return_value = mock_signed_blob
+
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+    gcp_interface.url_signer_service_account = 'url-signer@test-project.iam.gserviceaccount.com'
+
+    result = gcp_interface.get_job_results_signed_url("test_user", "job-1")
+
+    assert result == 'https://signed.url/full'
+    mock_bucket.blob.assert_called_once_with("jobs/job-1/unt7kb2ux4-1784734761747.pt")
+
+
+@patch("expertise.service.utils.google_auth_default")
+@patch("expertise.service.utils.ImpersonatedCredentials")
+@patch("expertise.service.utils.storage.Client")
+def test_get_job_results_signed_url_sparse(mock_storage_client, mock_credentials_cls, mock_auth_default, openreview_client):
+    mock_auth_default.return_value = (MagicMock(), 'test_project')
+    mock_credentials_cls.return_value = MagicMock()
+
+    mock_request_blob = MagicMock()
+    mock_request_blob.name = "jobs/job-1/request.json"
+    mock_request_blob.download_as_string.return_value = json.dumps({"user_id": "test_user"})
+
+    mock_metadata_blob = MagicMock()
+    mock_metadata_blob.name = "jobs/job-1/metadata.json"
+
+    mock_score_blob = MagicMock()
+    mock_score_blob.name = "jobs/job-1/scores.csv"
+
+    mock_sparse_blob = MagicMock()
+    mock_sparse_blob.name = "jobs/job-1/scores_sparse.csv"
+
+    mock_signed_blob = MagicMock()
+    mock_signed_blob.generate_signed_url.return_value = 'https://signed.url/sparse'
+
+    mock_bucket = MagicMock()
+    mock_bucket.list_blobs.return_value = [
+        mock_request_blob,
+        mock_metadata_blob,
+        mock_score_blob,
+        mock_sparse_blob,
+    ]
+    mock_bucket.blob.return_value = mock_signed_blob
+
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+    gcp_interface.url_signer_service_account = 'url-signer@test-project.iam.gserviceaccount.com'
+
+    result = gcp_interface.get_job_results_signed_url("test_user", "job-1", sparse=True)
+
+    assert result == 'https://signed.url/sparse'
+    mock_bucket.blob.assert_called_once_with("jobs/job-1/scores_sparse.csv")
+
+
+@patch("expertise.service.utils.google_auth_default")
+@patch("expertise.service.utils.ImpersonatedCredentials")
+@patch("expertise.service.utils.storage.Client")
+def test_get_job_results_signed_url_group_group_full(mock_storage_client, mock_credentials_cls, mock_auth_default, openreview_client):
+    mock_auth_default.return_value = (MagicMock(), 'test_project')
+    mock_credentials_cls.return_value = MagicMock()
+
+    mock_request_blob = MagicMock()
+    mock_request_blob.name = "jobs/job-1/request.json"
+    mock_request_blob.download_as_string.return_value = json.dumps({
+        "user_id": "test_user",
+        "entityA": {"type": "Group", "memberOf": "ABC.cc/Reviewers"},
+        "entityB": {"type": "Group", "memberOf": "ABC.cc/Senior_Program_Committee"},
+    })
+
+    mock_metadata_blob = MagicMock()
+    mock_metadata_blob.name = "jobs/job-1/metadata.json"
+
+    mock_raw_matrix_blob = MagicMock()
+    mock_raw_matrix_blob.name = "jobs/job-1/unt7kb2ux4-1784734761747.pt"
+
+    mock_group_matrix_blob = MagicMock()
+    mock_group_matrix_blob.name = "jobs/job-1/unt7kb2ux4-1784734761747_group.pt"
+
+    mock_signed_blob = MagicMock()
+    mock_signed_blob.generate_signed_url.return_value = 'https://signed.url/group'
+
+    mock_bucket = MagicMock()
+    mock_bucket.list_blobs.return_value = [
+        mock_request_blob,
+        mock_metadata_blob,
+        mock_raw_matrix_blob,
+        mock_group_matrix_blob,
+    ]
+    mock_bucket.blob.return_value = mock_signed_blob
+
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+    gcp_interface.url_signer_service_account = 'url-signer@test-project.iam.gserviceaccount.com'
+
+    result = gcp_interface.get_job_results_signed_url("test_user", "job-1")
+
+    assert result == 'https://signed.url/group'
+    mock_bucket.blob.assert_called_once_with("jobs/job-1/unt7kb2ux4-1784734761747_group.pt")
 
 
 @patch("expertise.service.utils.storage.Client")
-def test_merge_cached_publication_embeddings_fallback_to_legacy_name(mock_storage_client, tmp_path):
-    """When pub2vec_{model}.jsonl is absent, falls back to pub2vec.jsonl."""
+def test_get_job_results_signed_url_forbidden(mock_storage_client, openreview_client):
+    mock_request_blob = MagicMock()
+    mock_request_blob.name = "jobs/job-1/request.json"
+    mock_request_blob.download_as_string.return_value = json.dumps({"user_id": "other_user"})
+
     mock_bucket = MagicMock()
+    mock_bucket.list_blobs.return_value = [mock_request_blob]
     mock_storage_client.return_value.bucket.return_value = mock_bucket
-
-    def _make_blob(text):
-        blob = MagicMock()
-        blob.download_as_text.return_value = text
-        return blob
-
-    def _blob_for_path(path):
-        if path == "jobs/job-a/pub2vec_scincl.jsonl":
-            # First candidate fails
-            blob = MagicMock()
-            blob.download_as_text.side_effect = Exception("not found")
-            return blob
-        if path == "jobs/job-a/pub2vec.jsonl":
-            return _make_blob('{"paper_id": "p1", "embedding": [0.9]}\n')
-        return MagicMock()
-
-    mock_bucket.blob.side_effect = _blob_for_path
 
     gcp_interface = GCPInterface(
         project_id="test_project",
@@ -1596,85 +1657,6 @@ def test_merge_cached_publication_embeddings_fallback_to_legacy_name(mock_storag
         service_label={'test': 'label'},
     )
 
-    dest_path = tmp_path / "merged.jsonl"
-    count = gcp_interface.merge_cached_publication_embeddings(
-        cloud_ids=["job-a"],
-        model_name="scincl",
-        dest_path=str(dest_path),
-    )
+    with pytest.raises(openreview.OpenReviewException, match="Forbidden: Insufficient permissions to access job"):
+        gcp_interface.get_job_results_signed_url("test_user", "job-1")
 
-    assert count == 1
-    lines = dest_path.read_text().strip().split('\n')
-    assert json.loads(lines[0])['paper_id'] == 'p1'
-
-
-@patch("expertise.service.utils.storage.Client")
-def test_upload_dataset_uploads_cached_embeddings_separately(mock_storage_client):
-    """Cached pub2vec files are uploaded individually to the job root, not packed
-    into the tarball. They're deleted locally after upload."""
-    import shutil
-
-    mock_bucket = MagicMock()
-    mock_storage_client.return_value.bucket.return_value = mock_bucket
-
-    uploads = {}
-    def _make_blob(name):
-        blob = MagicMock()
-        def _capture(path):
-            if name.endswith('.tar.gz'):
-                uploads[name] = shutil.copy(path, tempfile.mktemp(suffix='.tar.gz'))
-            else:
-                with open(path, 'r') as f:
-                    uploads[name] = f.read()
-        blob.upload_from_filename.side_effect = _capture
-        return blob
-    mock_bucket.blob.side_effect = _make_blob
-
-    gcp_interface = GCPInterface(
-        project_id="test_project",
-        project_number="123456",
-        region="us-central1",
-        pipeline_root="pipeline-root",
-        pipeline_name="test-pipeline",
-        pipeline_repo="test-repo",
-        bucket_name="test-bucket",
-        jobs_folder="jobs",
-        service_label={'test': 'label'},
-    )
-
-    with tempfile.TemporaryDirectory() as job_dir:
-        archives_dir = os.path.join(job_dir, 'archives')
-        os.makedirs(archives_dir)
-        with open(os.path.join(archives_dir, '~User_One1.jsonl'), 'w') as f:
-            f.write(json.dumps({'id': 'paper1'}) + '\n')
-
-        with open(os.path.join(job_dir, 'submissions.json'), 'w') as f:
-            json.dump({}, f)
-        with open(os.path.join(job_dir, 'metadata.json'), 'w') as f:
-            json.dump({'count': 1}, f)
-
-        with open(os.path.join(job_dir, 'cached_pub2vec_specter.jsonl'), 'w') as f:
-            f.write('{"paper_id": "p1", "embedding": [0.1]}\n')
-        with open(os.path.join(job_dir, 'cached_pub2vec_scincl.jsonl'), 'w') as f:
-            f.write('{"paper_id": "p1", "embedding": [0.2]}\n')
-
-        config = JobConfig(job_id='cache-test-job', job_dir=job_dir)
-        result = gcp_interface.upload_dataset(config)
-
-        assert result == "gs://test-bucket/jobs/cache-test-job/dataset/dataset.tar.gz"
-
-        tarball_path = uploads['jobs/cache-test-job/dataset/dataset.tar.gz']
-        import tarfile as _tarfile
-        with _tarfile.open(tarball_path, 'r:gz') as tar:
-            names = sorted(tar.getnames())
-
-        assert 'archives/~User_One1.jsonl' in names
-        assert not any(n.startswith('cached_pub2vec_') for n in names)
-
-        assert uploads['jobs/cache-test-job/cached_pub2vec_specter.jsonl'] == \
-            '{"paper_id": "p1", "embedding": [0.1]}\n'
-        assert uploads['jobs/cache-test-job/cached_pub2vec_scincl.jsonl'] == \
-            '{"paper_id": "p1", "embedding": [0.2]}\n'
-
-        assert not os.path.exists(os.path.join(job_dir, 'cached_pub2vec_specter.jsonl'))
-        assert not os.path.exists(os.path.join(job_dir, 'cached_pub2vec_scincl.jsonl'))
