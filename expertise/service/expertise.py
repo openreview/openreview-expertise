@@ -187,33 +187,6 @@ class BaseExpertiseService:
         )
         await asyncio.wrap_future(future)
 
-    def _get_job_status_from_queue(self, job_id):
-        """
-        Query BullMQ for the canonical status of a job.
-        Returns (status, description) or (None, None) if the job
-        is no longer in the queue (archived).
-        """
-        descriptions = JobDescription.VALS.value
-
-        try:
-            future = asyncio.run_coroutine_threadsafe(
-                Job.fromId(self.queue, job_id),
-                self.queue_loop
-            )
-            job = future.result()
-        except Exception as e:
-            self.logger.warning(f"Failed to fetch job {job_id} from queue: {e}")
-            return None, None
-
-        if job is not None:
-            data = job.data
-            status = data.get('status')
-            description = data.get('description')
-            if status is not None:
-                return status, (description or descriptions.get(status, ''))
-
-        return None, None
-
     def _get_job_from_queue(self, job_id):
         try:
             future = asyncio.run_coroutine_threadsafe(
@@ -224,6 +197,25 @@ class BaseExpertiseService:
         except Exception as e:
             self.logger.warning(f"Failed to fetch job {job_id} from queue: {e}")
             return None
+
+    def _get_job_status_from_queue(self, job_id):
+        """
+        Query BullMQ for the canonical status of a job.
+        Returns (status, description) or (None, None) if the job
+        is no longer in the queue (archived).
+        """
+        job = self._get_job_from_queue(job_id)
+        if job is None:
+            return None, None
+
+        descriptions = JobDescription.VALS.value
+        data = job.data
+        status = data.get('status')
+        description = data.get('description')
+        if status is not None:
+            return status, (description or descriptions.get(status, ''))
+
+        return None, None
 
     def _config_from_job_data(self, data):
         config = JobConfig.from_json(deepcopy(data.get('config', {})))
