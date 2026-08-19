@@ -1,4 +1,4 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 import random
 from pathlib import Path
 import openreview
@@ -11,7 +11,7 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
-from expertise.service.utils import JobConfig, RedisDatabase, JobStatus, JobDescription
+from expertise.service.utils import JobConfig, JobStatus, JobDescription, APIRequest
 
 # Default parameters for the module's common setup
 DEFAULT_JOURNAL_ID = 'TMLR'
@@ -165,100 +165,186 @@ class TestExpertiseService():
                 "config": config
             }
 
-    def test_on_redis_not_disk(self):
-        # Load an example config and store it in Redis with no files
-        redis = RedisDatabase(
-            host='localhost',
-            port=6379,
-            db=10
+    @staticmethod
+    def _make_service_for_queue_tests():
+        mock_logger = MagicMock()
+        config = {
+            'WORKER_ATTEMPTS': 1,
+            'WORKER_BACKOFF_DELAY': 60000,
+            'ACTIVE_JOBS': 1,
+            'LOCK_DURATION': 300000,
+            'REDIS_ADDR': 'localhost',
+            'REDIS_PORT': 6379,
+            'REDIS_CONFIG_DB': 10,
+            'REDIS_EMBEDDINGS_DB': 11,
+            'JOB_CONFIG_TTL': 3600,
+            'DEFAULT_CONFIG': {},
+        }
+        mock_worker_cls = MagicMock()
+        mock_worker_instance = MagicMock()
+        mock_worker_instance.run = AsyncMock()
+        mock_worker_cls.return_value = mock_worker_instance
+        with patch('expertise.service.expertise.Queue'), \
+             patch('expertise.service.expertise.Worker', mock_worker_cls), \
+             patch('expertise.service.expertise.threading.Thread'):
+            service = expertise.service.expertise.ExpertiseService(config, mock_logger)
+        return service
+
+    def test_queue_status_completed(self):
+        """BullMQ job data with status -> COMPLETED."""
+        service = self._make_service_for_queue_tests()
+        mock_job = MagicMock()
+        mock_job.data = {'status': JobStatus.COMPLETED, 'description': JobDescription.VALS.value[JobStatus.COMPLETED]}
+        job_future = MagicMock()
+        job_future.result.return_value = mock_job
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status == JobStatus.COMPLETED
+        assert desc == JobDescription.VALS.value[JobStatus.COMPLETED]
+
+    def test_queue_status_completed_data_error(self):
+        """BullMQ job data with status='DATA_ERROR' -> DATA_ERROR."""
+        service = self._make_service_for_queue_tests()
+        mock_job = MagicMock()
+        mock_job.data = {'status': JobStatus.DATA_ERROR, 'description': 'No papers found', 'error': 'No papers found'}
+        job_future = MagicMock()
+        job_future.result.return_value = mock_job
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status == JobStatus.DATA_ERROR
+        assert desc == 'No papers found'
+
+    def test_queue_status_job_data_exception(self):
+        """Exception fetching job data -> (None, None)."""
+        service = self._make_service_for_queue_tests()
+        job_future = MagicMock()
+        job_future.result.side_effect = RuntimeError('BullMQ down')
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status is None
+        assert desc is None
+        service.logger.warning.assert_called_once()
+
+    def test_queue_status_active_with_status(self):
+        """BullMQ job data with status='FETCHING_DATA' -> FETCHING_DATA."""
+        service = self._make_service_for_queue_tests()
+        mock_job = MagicMock()
+        mock_job.data = {'status': JobStatus.FETCHING_DATA, 'description': JobDescription.VALS.value[JobStatus.FETCHING_DATA]}
+        job_future = MagicMock()
+        job_future.result.return_value = mock_job
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status == JobStatus.FETCHING_DATA
+        assert desc == JobDescription.VALS.value[JobStatus.FETCHING_DATA]
+
+    def test_queue_status_no_status_in_job_data(self):
+        """BullMQ job present but no status in job data -> fall back to Redis."""
+        service = self._make_service_for_queue_tests()
+        mock_job = MagicMock()
+        mock_job.data = {}
+        job_future = MagicMock()
+        job_future.result.return_value = mock_job
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status is None
+        assert desc is None
+
+    def test_queue_status_job_not_in_queue(self):
+        """BullMQ job not found -> (None, None)."""
+        service = self._make_service_for_queue_tests()
+        job_future = MagicMock()
+        job_future.result.return_value = None
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=job_future):
+            status, desc = service._get_job_status_from_queue('job-123')
+        assert status is None
+        assert desc is None
+
+    def _queue_job(self, config, status=JobStatus.COMPLETED, description=None):
+        if description is None:
+            description = JobDescription.VALS.value[status]
+        job = MagicMock()
+        job.id = config.job_id
+        job.data = {
+            'user_id': config.user_id,
+            'status': status,
+            'description': description,
+            'config': config.to_json(),
+            'api_request': config.api_request.to_json(),
+        }
+        return job
+
+    def _sample_config(self, tmp_path=None, status=JobStatus.COMPLETED):
+        job_dir = str(tmp_path) if tmp_path else None
+        config = JobConfig(
+            job_id='queue-job',
+            user_id='user@test.com',
+            name='queue',
+            job_dir=job_dir
         )
+        config.status = status
+        config.description = JobDescription.VALS.value[status]
+        config.api_request = APIRequest({
+            'name': 'queue',
+            'entityA': {'type': 'Group', 'memberOf': 'Test.cc/2025/Conference/Reviewers'},
+            'entityB': {'type': 'Note', 'invitation': 'Test.cc/2025/Conference/-/Submission'}
+        })
+        return config
 
-        # Find job using all jobs
-        test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com')
-        redis.save_job(test_config)
-        returned_configs = redis.load_all_jobs('test_user1@mail.com')
-        assert returned_configs == []
+    def test_queue_status_all_status(self):
+        service = self._make_service_for_queue_tests()
+        config = self._sample_config()
+        job = self._queue_job(config)
+        jobs_future = MagicMock()
+        jobs_future.result.return_value = [job]
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=jobs_future):
+            result = service.get_expertise_all_status('user@test.com', {})
+        assert len(result['results']) == 1
+        assert result['results'][0]['status'] == JobStatus.COMPLETED
 
-        # Find job using job id
-        test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com')
-        redis.save_job(test_config)
-        with pytest.raises(openreview.OpenReviewException, match="Job not found"):
-            returned_configs = redis.load_job(test_config.job_id, 'test_user1@mail.com')
+    def test_queue_status_single_status(self):
+        service = self._make_service_for_queue_tests()
+        config = self._sample_config()
+        job = self._queue_job(config)
+        with patch.object(service, '_load_job_from_queue', return_value=job):
+            result = service.get_expertise_status('user@test.com', 'queue-job')
+        assert result['status'] == JobStatus.COMPLETED
 
-    def test_on_redis_on_disk(self):
-        # Load an example config and store it in Redis with no files
-        redis = RedisDatabase(
-            host='localhost',
-            port=6379,
-            db=10
-        )
+    def test_queue_status_results(self, tmp_path):
+        service = self._make_service_for_queue_tests()
+        config = self._sample_config(tmp_path)
+        (tmp_path / 'config.json').write_text(json.dumps(config.to_json()))
+        (tmp_path / 'queue_sparse.csv').write_text('paper1,reviewer1,0.5\n')
+        (tmp_path / 'metadata.json').write_text('{"submission_count": 1}')
+        job = self._queue_job(config)
+        with patch.object(service, '_load_job_from_queue', return_value=job):
+            result = service.get_expertise_results('user@test.com', 'queue-job')
+        assert len(result['results']) == 1
+        assert result['metadata']['submission_count'] == 1
 
-        # Find job using all jobs
-        #with open('./tests/data/example_config.json') as f:
-        test_config = JobConfig(job_dir='./tests/jobs/abcde', job_id='abcde', user_id='test_user1@mail.com')
-        redis.save_job(test_config)
-        os.makedirs('./tests/jobs/abcde')
-        returned_configs = redis.load_all_jobs('test_user1@mail.com')
-        assert len(returned_configs) == 1
-        assert returned_configs[0].user_id == 'test_user1@mail.com'
-        assert returned_configs[0].job_id == 'abcde'
+    def test_queue_status_metadata(self, tmp_path):
+        service = self._make_service_for_queue_tests()
+        config = self._sample_config(tmp_path)
+        (tmp_path / 'metadata.json').write_text('{"submission_count": 1}')
+        job = self._queue_job(config)
+        with patch.object(service, '_load_job_from_queue', return_value=job):
+            result = service.get_expertise_metadata('user@test.com', 'queue-job')
+        assert result['submission_count'] == 1
 
-        # Find job using job id
-        returned_config = redis.load_job(test_config.job_id, 'test_user1@mail.com')
-        assert returned_config.user_id == 'test_user1@mail.com'
-        assert returned_config.job_id == 'abcde'
+    def test_queue_status_delete_blocked(self, tmp_path):
+        service = self._make_service_for_queue_tests()
+        config = self._sample_config(tmp_path, status=JobStatus.RUN_EXPERTISE)
+        job = self._queue_job(config, status=JobStatus.RUN_EXPERTISE)
+        with patch.object(service, '_load_job_from_queue', return_value=job):
+            with pytest.raises(openreview.OpenReviewException):
+                service.del_expertise_job('user@test.com', 'queue-job')
 
-        shutil.rmtree(f"./tests/jobs/")
-
-        # Clean up Redis job
-        redis.remove_job(
-            'test_user1@mail.com', test_config.job_id
-        )
-
-    def test_job_ttl_expiration(self):
-        """Test that jobs expire after TTL"""
-        redis = RedisDatabase(
-            host='localhost',
-            port=6379,
-            db=10,
-            job_ttl=1
-        )
-        redis.db.flushdb()
-        config = JobConfig(job_id='test_ttl', user_id='user@test.com')
-        redis.save_job(config)
-        
-        # Verify TTL is set
-        ttl = redis.db.ttl('job:test_ttl')
-        assert 0 < ttl <= 1
-        
-        # Wait for expiration
-        time.sleep(1.5)
-        
-        # Verify job is expired
-        with pytest.raises(openreview.OpenReviewException) as excinfo:
-            redis.load_job('test_ttl', 'user@test.com')
-        assert 'Job not found' in str(excinfo.value)
-    
-    def test_manual_ttl_override(self):
-        """Test manual TTL override in save_job"""
-        redis = RedisDatabase(
-            host='localhost',
-            port=6379,
-            db=10,
-            job_ttl=10
-        )
-        redis.db.flushdb()
-        config = JobConfig(job_id='manual_ttl', user_id='user@test.com')
-        
-        # Save with manual TTL override
-        redis.save_job(config, ttl=3)
-        
-        # Check TTL is the overridden value
-        ttl = redis.db.ttl('job:manual_ttl')
-        assert 0 < ttl <= 3
-        
-        # Clean up
-        redis.remove_job('user@test.com', 'manual_ttl')
+    def test_queue_status_delete_allowed(self, tmp_path):
+        service = self._make_service_for_queue_tests()
+        config = self._sample_config(tmp_path)
+        job = self._queue_job(config)
+        with patch.object(service, '_load_job_from_queue', return_value=job):
+            result = service.del_expertise_job('user@test.com', 'queue-job')
+        assert result['job_id'] == 'queue-job'
 
     def test_request_expertise_with_no_config(self, openreview_client, openreview_context):
         test_client = openreview_context['test_client']
@@ -659,16 +745,6 @@ class TestExpertiseService():
                 assert pub['weight'] == expected_weight, f"{model_name} publication {paper_id} has weight {pub['weight']}, expected {expected_weight}"
 
         assert upweighted_note_id not in all_publication_ids
-
-        # Check that all configs are completed
-        redis = RedisDatabase(
-            host='localhost',
-            port=6379,
-            db=10
-        )
-        returned_configs = redis.load_all_jobs('openreview.net')
-        for config in returned_configs:
-            assert config.status == 'Completed', f"Found job with status {config.status}: {config.job_id}"
 
         # Make a request with weight specification, use articleSubmittedToOpenReview
         response = test_client.post(
@@ -1546,131 +1622,104 @@ class TestExpertiseService():
         assert response.status_code == 404
         assert 'Error' in response.json['name']
         assert 'not found' in response.json['message'].lower()
-        assert response.json['message'] == 'Job not found'
+        assert response.json['message'] == 'Job nonexistent_job_id_xyz not found in queue'
+
+    def _make_mock_job(self, job_id, user_id, job_dir, status):
+        config = JobConfig(
+            name='test_delete',
+            user_id=user_id,
+            job_id=job_id,
+            job_dir=job_dir
+        )
+        config.api_request = APIRequest({
+            'name': 'test_delete',
+            'entityA': {'type': 'Group', 'memberOf': 'Test.cc/2025/Conference/Reviewers'},
+            'entityB': {'type': 'Note', 'invitation': 'Test.cc/2025/Conference/-/Submission'}
+        })
+        job = MagicMock()
+        job.id = job_id
+        job.data = {
+            'user_id': user_id,
+            'status': status,
+            'config': config.to_json(),
+            'api_request': config.api_request.to_json(),
+        }
+        return job
 
     def test_delete_job_already_running(self, openreview_client, openreview_context):
         """Try to delete a job that is already running."""
         config = openreview_context['config']
-        redis = RedisDatabase(
-            host=config['REDIS_ADDR'],
-            port=config['REDIS_PORT'],
-            db=config['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
+        test_client = openreview_context['test_client']
 
         job_id = 'running_job_' + str(random.randint(10000, 99999))
         job_dir = f"./tests/jobs/{job_id}"
         os.makedirs(job_dir, exist_ok=True)
+        job = self._make_mock_job(job_id, config['OPENREVIEW_USERNAME'], job_dir, JobStatus.RUN_EXPERTISE)
 
-        running_config = JobConfig(
-            name='test_running_delete',
-            user_id=config['OPENREVIEW_USERNAME'],
-            job_id=job_id,
-            job_dir=job_dir,
-            status=JobStatus.RUN_EXPERTISE,
-            description=JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
-        )
-        redis.save_job(running_config)
+        with patch.object(expertise.service.expertise.ExpertiseService, '_get_job_from_queue', return_value=job):
+            response = test_client.delete(f'/expertise/{job_id}', headers=openreview_client.headers)
+            # Deletion should be prevented while running
+            assert response.status_code == 400
+            assert 'Error' in response.json['name']
+            assert 'bad request' in response.json['message'].lower()
+            assert 'cannot delete job' in response.json['message'].lower()
 
-        test_client = openreview_context['test_client']
-        response = test_client.delete(f'/expertise/{job_id}', headers=openreview_client.headers)
-        # Deletion should be prevented while running
-        assert response.status_code == 400
-        assert 'Error' in response.json['name']
-        assert 'bad request' in response.json['message'].lower()
-        assert 'cannot delete job' in response.json['message'].lower()
+            # Directory should still exist
+            assert os.path.isdir(job_dir)
 
-        # Directory and Redis entry should still exist
-        assert os.path.isdir(job_dir)
-        loaded = redis.load_job(job_id, config['OPENREVIEW_USERNAME'])
-        assert loaded.job_id == job_id
+            # Delete on job completed
+            completed_job_id = 'completed_job_' + str(random.randint(10000, 99999))
+            completed_dir = f"./tests/jobs/{completed_job_id}"
+            os.makedirs(completed_dir, exist_ok=True)
+            completed_job = self._make_mock_job(completed_job_id, config['OPENREVIEW_USERNAME'], completed_dir, JobStatus.COMPLETED)
 
-        redis.remove_job(config['OPENREVIEW_USERNAME'], job_id)
+            with patch.object(expertise.service.expertise.ExpertiseService, '_get_job_from_queue', return_value=completed_job):
+                response = test_client.delete(f'/expertise/{completed_job_id}', headers=openreview_client.headers)
+            assert response.status_code == 200, response.json
+            assert not os.path.isdir(completed_dir)
+
+            # Delete on job error
+            error_job_id = 'error_job_' + str(random.randint(10000, 99999))
+            error_dir = f"./tests/jobs/{error_job_id}"
+            os.makedirs(error_dir, exist_ok=True)
+            error_job = self._make_mock_job(error_job_id, config['OPENREVIEW_USERNAME'], error_dir, JobStatus.ERROR)
+
+            with patch.object(expertise.service.expertise.ExpertiseService, '_get_job_from_queue', return_value=error_job):
+                response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
+            assert response.status_code == 200, response.json
+            assert not os.path.isdir(error_dir)
+
         shutil.rmtree(job_dir, ignore_errors=True)
-
-        # Delete on job completed
-        completed_job_id = 'completed_job_' + str(random.randint(10000, 99999))
-        completed_dir = f"./tests/jobs/{completed_job_id}"
-        os.makedirs(completed_dir, exist_ok=True)
-        completed_config = JobConfig(
-            name='test_completed_delete',
-            user_id=config['OPENREVIEW_USERNAME'],
-            job_id=completed_job_id,
-            job_dir=completed_dir,
-            status=JobStatus.COMPLETED,
-            description=JobDescription.VALS.value[JobStatus.COMPLETED]
-        )
-        redis.save_job(completed_config)
-
-        response = test_client.delete(f'/expertise/{completed_job_id}', headers=openreview_client.headers)
-        assert response.status_code == 200, response.json
-        assert not os.path.isdir(completed_dir)
-        with pytest.raises(openreview.OpenReviewException, match='Job not found'):
-            redis.load_job(completed_job_id, config['OPENREVIEW_USERNAME'])
-
-        # Delete on job error
-        error_job_id = 'error_job_' + str(random.randint(10000, 99999))
-        error_dir = f"./tests/jobs/{error_job_id}"
-        os.makedirs(error_dir, exist_ok=True)
-        error_config = JobConfig(
-            name='test_error_delete',
-            user_id=config['OPENREVIEW_USERNAME'],
-            job_id=error_job_id,
-            job_dir=error_dir,
-            status=JobStatus.ERROR,
-            description=JobDescription.VALS.value[JobStatus.ERROR]
-        )
-        redis.save_job(error_config)
-
-        response = test_client.delete(f'/expertise/{error_job_id}', headers=openreview_client.headers)
-        assert response.status_code == 200, response.json
-        assert not os.path.isdir(error_dir)
-        with pytest.raises(openreview.OpenReviewException, match='Job not found'):
-            redis.load_job(error_job_id, config['OPENREVIEW_USERNAME'])
 
     def test_delete_job_with_different_user(self, openreview_client, openreview_context):
         """Try to delete a job with a different user than the job owner."""
         config = openreview_context['config']
-        redis = RedisDatabase(
-            host=config['REDIS_ADDR'],
-            port=config['REDIS_PORT'],
-            db=config['REDIS_CONFIG_DB']
-        )
 
         job_id = 'owned_job_' + str(random.randint(10000, 99999))
         job_dir = f"./tests/jobs/{job_id}"
         os.makedirs(job_dir, exist_ok=True)
 
-        owned_config = JobConfig(
-            name='test_owned_delete',
-            user_id=config['OPENREVIEW_USERNAME'],
-            job_id=job_id,
-            job_dir=job_dir,
-            status=JobStatus.QUEUED,
-            description=JobDescription.VALS.value[JobStatus.QUEUED]
-        )
-        redis.save_job(owned_config)
+        owned_job = self._make_mock_job(job_id, config['OPENREVIEW_USERNAME'], job_dir, JobStatus.COMPLETED)
 
         with open(os.path.join(job_dir, 'config.json'), 'w') as f:
-            json.dump(owned_config.to_json(), f)
+            json.dump(owned_job.data['config'], f)
 
         other_client = openreview.api.OpenReviewClient(token=openreview_client.token)
         other_client.impersonate('ABC.cc')
 
         test_client = openreview_context['test_client']
-        response = test_client.delete(f'/expertise/{job_id}', headers=other_client.headers)
+        with patch.object(expertise.service.expertise.ExpertiseService, '_get_job_from_queue', return_value=owned_job):
+            response = test_client.delete(f'/expertise/{job_id}', headers=other_client.headers)
         assert response.status_code == 403
         assert 'Error' in response.json['name']
         assert 'forbidden' in response.json['message'].lower()
         assert response.json['message'] == 'Forbidden: Insufficient permissions to access job'
 
-        # Job should still exist on disk and in Redis
+        # Job directory should still exist
         assert os.path.isdir(job_dir)
-        loaded = redis.load_job(job_id, config['OPENREVIEW_USERNAME'])
-        assert loaded.job_id == job_id
 
-        redis.remove_job(config['OPENREVIEW_USERNAME'], job_id)
         shutil.rmtree(job_dir, ignore_errors=True)
+
     def test_request_journal(self, openreview_client, openreview_context):
         # Submit a working job and return the job ID
         MAX_TIMEOUT = 600 # Timeout after 10 minutes

@@ -78,17 +78,7 @@ def expertise():
 
         expertise_service = get_expertise_service(flask.current_app.config, flask.current_app.logger)
 
-        request_key = expertise_service.get_key_from_request(user_request)
-
-        if expertise_service.redis.db.incr(request_key) > 1:
-            raise openreview.OpenReviewException("Request already in process")
-
-        try:
-            job_id = expertise_service.start_expertise(user_request, openreview_client_v2)
-            expertise_service.redis.db.delete(request_key)
-        except Exception as error_handle:
-            expertise_service.redis.db.delete(request_key)
-            raise error_handle
+        job_id = expertise_service.start_expertise(user_request, openreview_client_v2)
 
         result = {'jobId': job_id }
         flask.current_app.logger.info('Returning from request')
