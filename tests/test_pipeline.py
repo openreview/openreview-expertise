@@ -516,6 +516,64 @@ def test_run_pipeline_paper_paper(mock_load_model_artifacts, mock_execute_expert
 
 @patch("expertise.execute_pipeline.execute_expertise")
 @patch("expertise.execute_pipeline.load_model_artifacts")
+def test_run_pipeline_job_id_derived_from_gcs_folder(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
+    """The pipeline job_id must be the last segment of the gcs_folder blob prefix
+    so Redis cache entries and the local working directory line up with the GCS
+    job folder.
+    """
+    mock_load_model_artifacts.return_value = None
+    mock_execute_expertise.return_value = {'pub2vec.jsonl': {}}
+
+    os.environ["SPECTER_DIR"] = "/path/to/specter"
+    os.environ["MFR_VOCAB_DIR"] = "/path/to/mfr_vocab"
+    os.environ["MFR_CHECKPOINT_DIR"] = "/path/to/mfr_checkpoint"
+
+    working_dir = './test_pipeline_job_id'
+    os.makedirs(working_dir, exist_ok=True)
+
+    with open(os.path.join(working_dir, 'scores.csv'), 'w') as f:
+        f.write("n1,u1,0.5")
+    with open(os.path.join(working_dir, 'scores_sparse.csv'), 'w') as f:
+        f.write("n1,u1,0.5")
+    with open(os.path.join(working_dir, 'metadata.json'), 'w') as f:
+        f.write(json.dumps({"submission_count": 1, "archives_count": 1, "no_publications_count": 0}))
+
+    archives_dir = os.path.join(working_dir, 'archives')
+    os.makedirs(archives_dir, exist_ok=True)
+    with open(os.path.join(archives_dir, 'author.jsonl'), 'w') as f:
+        f.write(json.dumps({"id": "paper1", "content": {"title": "T"}}))
+
+    expected_job_id = 'test_job_id_suffix'
+    api_request_str = json.dumps({
+        "name": "test_job_id",
+        "entityA": {'type': "Group", 'memberOf': "PIPELINE.cc/Reviewers"},
+        "entityB": {'type': "Note", 'invitation': "PIPELINE.cc/-/Submission"},
+        "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'},
+        "user_id": "openreview.net",
+        "token": openreview_client.token,
+        "baseurl_v2": "http://localhost:3001",
+        "gcs_folder": f"gs://{GCS_TEST_BUCKET}/{gcs_jobs_prefix}/{expected_job_id}",
+        "dump_embs": False,
+        "dump_archives": False,
+    })
+
+    from expertise.execute_pipeline import run_pipeline
+    run_pipeline(api_request_str=api_request_str, working_dir=working_dir)
+
+    bucket = gcs_test_bucket
+    prefix = f"{gcs_jobs_prefix}/{expected_job_id}/"
+
+    scores_blob = bucket.blob(f"{prefix}scores.csv")
+    assert scores_blob.exists(), "scores.csv not uploaded to expected job folder"
+
+    metadata_blob = bucket.blob(f"{prefix}metadata.json")
+    assert metadata_blob.exists(), "metadata.json not uploaded to expected job folder"
+
+    shutil.rmtree(working_dir)
+
+
+@patch("expertise.execute_pipeline.execute_expertise")
+@patch("expertise.execute_pipeline.load_model_artifacts")
 def test_run_pipeline_stale_cache_triggers_recompute(mock_load_model_artifacts, mock_execute_expertise, openreview_client, gcs_test_bucket, gcs_jobs_prefix):
     """If a paper's mdate is newer than the cached embedding_date, the cache entry
     is treated as stale and execute_expertise receives empty cached embeddings,
