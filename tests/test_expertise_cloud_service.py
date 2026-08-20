@@ -1335,3 +1335,75 @@ class TestExpertiseCloudService():
         time.sleep(LATENCY_OFFSET)
         final = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
         assert final['status'] == JobStatus.DATA_ERROR, final
+
+    @patch("expertise.service.utils.aip.PipelineJob")
+    def test_region_fallback_on_capacity_error(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
+        """When the primary region fails, the worker retries in fallback regions."""
+        def setup_job_mocks_with_failure():
+            mock_pipeline_instance = MagicMock()
+            mock_pipeline_job.return_value = mock_pipeline_instance
+
+            # First call fails, second call succeeds
+            def side_effect(*args, **kwargs):
+                if mock_pipeline_job.call_count <= 1:
+                    raise Exception("Resources are insufficient in region: us-central1")
+                return mock_pipeline_instance
+            mock_pipeline_job.side_effect = side_effect
+
+            mock_pipeline_running = MagicMock()
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
+            mock_pipeline_running.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_succeeded = MagicMock()
+            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
+            mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
+
+            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+
+            return mock_pipeline_instance
+
+        # Configure fallback regions in the test config
+        cfg = openreview_context_cloud['config']
+        cfg['GCP_REGIONS'] = ['us-central1', 'us-east4']
+        # Re-create service with updated config
+        redis = RedisDatabase(
+            host=cfg['REDIS_ADDR'],
+            port=cfg['REDIS_PORT'],
+            db=cfg['REDIS_CONFIG_DB'],
+            sync_on_disk=False,
+        )
+
+        abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
+        abc_client.impersonate('CLD.cc')
+        test_client = openreview_context_cloud['test_client']
+
+        setup_job_mocks_with_failure()
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                "name": "test_region_fallback",
+                "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
+                "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
+                "model": {"name": "specter+mfr"},
+                "dataset": {'minimumPubDate': 0},
+            }),
+            content_type='application/json',
+            headers=abc_client.headers,
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+
+        # Wait for the worker to process
+        time.sleep(cfg['POLL_INTERVAL'] * cfg['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
+
+        # Verify the job completed (fallback region succeeded)
+        status_resp = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
+        assert status_resp['status'] == 'Completed', f"Job status: {status_resp['status']}"
+
+        # Verify create_job was called twice (primary failed, fallback succeeded)
+        assert mock_pipeline_job.call_count >= 2, f"Expected at least 2 create_job calls, got {mock_pipeline_job.call_count}"
+
+        # Verify the config was saved with the fallback region
+        config = redis.load_job(job_id, cfg['OPENREVIEW_USERNAME'])
+        # cloud_region should be set to the fallback region that succeeded
+        assert config.cloud_region in ['us-central1', 'us-east4'], f"Unexpected cloud_region: {config.cloud_region}"

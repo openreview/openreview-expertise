@@ -499,7 +499,8 @@ class JobConfig(object):
         paper_id=None,
         provided_submissions=None,
         model_params=None,
-        machine_type=None):
+        machine_type=None,
+        cloud_region=None):
         
         self.name = name
         self.user_id = user_id
@@ -533,6 +534,7 @@ class JobConfig(object):
         self.provided_submissions = provided_submissions
         self.model_params = model_params
         self.machine_type = machine_type
+        self.cloud_region = cloud_region
 
         self.api_request = None
 
@@ -570,7 +572,8 @@ class JobConfig(object):
             'paper_content',
             'paper_id',
             'model_params',
-            'machine_type'
+            'machine_type',
+            'cloud_region'
         ]
 
 
@@ -827,7 +830,8 @@ class JobConfig(object):
             paper_id = job_config.get('paper_id'),
             provided_submissions = job_config.get('provided_submissions'),
             model_params = job_config.get('model_params'),
-            machine_type=job_config.get('machine_type')
+            machine_type=job_config.get('machine_type'),
+            cloud_region=job_config.get('cloud_region')
         )
         return config
 
@@ -1096,7 +1100,11 @@ class GCPInterface(object):
         matches.sort(key=lambda item: item[0], reverse=True)
         return [cid for _, cid in matches[:limit]]
 
-    def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
+    def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None, region: str = None):
+        """Create a Vertex AI pipeline job.
+
+        :param region: Optional region override.
+        """
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -1165,6 +1173,12 @@ class GCPInterface(object):
         # Select the per-tier pipeline; fall back to base name if tier mapping unavailable
         tier_pipeline_name = getattr(self, 'pipeline_name_by_tier', {}).get(machine_type, self.pipeline_name)
 
+        # Use passed region or fall back to primary region
+        job_region = region or self.region
+
+        # Pass location as runtime parameter so the compiled pipeline knows where to run
+        parameter_values['location'] = job_region
+
         # Build PipelineJob kwargs and parameters
         job = aip.PipelineJob(
             display_name = valid_vertex_id,
@@ -1180,7 +1194,7 @@ class GCPInterface(object):
 
         return valid_vertex_id
 
-    def get_job_status_by_job_id(self, user_id, config):
+    def get_job_status_by_job_id(self, user_id, config, region=None):
         job_id = config.cloud_id
 
         if job_id is None:
@@ -1212,7 +1226,9 @@ class GCPInterface(object):
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
         request = authenticated_requests[0]
-        job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{job_id}")
+        # Use passed region, or the region stored on the job config, or fall back to primary
+        job_region = region or getattr(config, 'cloud_region', None) or self.region
+        job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{job_region}/pipelineJobs/{job_id}")
 
         status, description = self._resolve_job_status(job_id, job)
 
@@ -1369,7 +1385,9 @@ class GCPInterface(object):
         for request in shortlist:
             request_name = request['name']
             try:
-                job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{request_name}")
+                # Use cloud_region from request if available, else primary region
+                job_region = request.get('cloud_region') or self.region
+                job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{job_region}/pipelineJobs/{request_name}")
             except Exception as e:
                 if '404' in str(e):
                     self.logger.info(f"No pipeline for job {request_name}")

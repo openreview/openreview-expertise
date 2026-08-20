@@ -872,23 +872,40 @@ class ExpertiseCloudService(BaseExpertiseService):
             return
 
         asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})'), self.queue_loop)
-        try:
-            self.cloud.create_job(
-                deepcopy(request),
-                job_id=job.id,
-                user_id=user_id,
-                machine_type=machine_type,
-                dataset_gcs_path=dataset_gcs_path,
-                vertex_id=config.cloud_id
-            )
-            self._save_config(config)
-        except Exception as e:
-            self.logger.error(f"Error creating cloud job for {redis_id}: {e} tr={e.__traceback__}")
-            self.logger.error(f"Error details: {traceback.format_exc()}")
+
+        # Determine ordered list of regions to try
+        gcp_regions = self.server_config.get('GCP_REGIONS', [self.cloud.region])
+        last_error = None
+
+        for region in gcp_regions:
+            self.logger.info(f"Trying region {region} for job {redis_id}")
+            try:
+                self.cloud.create_job(
+                    deepcopy(request),
+                    job_id=job.id,
+                    user_id=user_id,
+                    machine_type=machine_type,
+                    dataset_gcs_path=dataset_gcs_path,
+                    vertex_id=config.cloud_id,
+                    region=region
+                )
+                # Save the region so status checks know where the job ran
+                config.cloud_region = region
+                self._save_config(config)
+                last_error = None
+                break
+            except Exception as e:
+                self.logger.error(f"Error creating cloud job for {redis_id} in region {region}: {e}")
+                self.logger.error(f"Error details: {traceback.format_exc()}")
+                last_error = e
+                # Continue to next region
+                continue
+
+        if last_error is not None:
             config = self.redis.load_job(redis_id, user_id)
             if config.status != JobStatus.ERROR:
-                self.update_status(config, JobStatus.ERROR, f"Error creating cloud job: {e}")
-            raise e.with_traceback(e.__traceback__)
+                self.update_status(config, JobStatus.ERROR, f"Error creating cloud job: {last_error}")
+            raise last_error.with_traceback(last_error.__traceback__)
 
         try:
             self.logger.info(f"In polling worker...")

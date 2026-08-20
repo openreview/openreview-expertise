@@ -177,7 +177,10 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time):
         ),
         job_id=result,
         pipeline_root="gs://test-bucket/pipeline-root",
-        parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json"},
+        parameter_values={
+            "gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json",
+            "location": "us-central1"
+        },
         labels={"test": "label"}
     )
     mock_pipeline_instance.submit.assert_called_once_with(service_account=None)
@@ -238,6 +241,7 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     assert kwargs['pipeline_root'] == "gs://test-bucket/pipeline-root"
     params = kwargs['parameter_values']
     assert params["gcs_request_path"] == f"gs://test-bucket/{expected_folder_path}/request.json"
+    assert params["location"] == "us-central1"
     
     # Verify submit() is called with the service account
     mock_pipeline_instance.submit.assert_called_once_with(
@@ -287,6 +291,8 @@ def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock
         "machine_type must not be passed as a pipeline parameter — it is used only "
         "for tier-based pipeline selection and is not defined in any pipeline's input definitions"
     )
+    # location is always passed as a runtime parameter
+    assert params.get('location') == 'us-central1' 
 
 # Race-condition regression: a single shared GCPInterface (the production singleton)
 # must not leak one caller's identity into another caller's request.json. The original
@@ -371,7 +377,117 @@ def test_create_job_isolates_user_across_concurrent_calls(mock_storage_client, m
         assert 'token' not in payload
         assert 'baseurl_v2' not in payload
 
-# Test case for `upload_dataset` — verifies the dataset is packaged into a single tarball
+
+
+# ---------------------------------------------------------------------------
+# Region override tests
+# ---------------------------------------------------------------------------
+
+@patch("expertise.service.utils.time.time")
+@patch("expertise.service.utils.aip.PipelineJob")
+@patch("expertise.service.utils.storage.Client")
+def test_create_job_with_region_override(mock_storage_client, mock_pipeline_job, mock_time):
+    """Region override is passed through to PipelineJob and parameter_values."""
+    mock_time.return_value = 1234567890.123
+    mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+    mock_bucket.blob.return_value = mock_blob
+    mock_blob.upload_from_string.return_value = None
+    mock_pipeline_job.return_value = MagicMock()
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    json_request = {
+        "name": "test_run_region",
+        "entityA": {'type': "Group", 'memberOf': "GCP.cc/Reviewers"},
+        "entityB": {'type': "Note", 'invitation': "GCP.cc/-/Submission"},
+        "model": {"name": "specter+mfr"},
+    }
+    test_job_id = generate_job_id()
+    gcp_interface.create_job(
+        deepcopy(json_request),
+        job_id=test_job_id,
+        user_id='openreview.net',
+        machine_type='small',
+        region='us-east4'
+    )
+
+    _, kwargs = mock_pipeline_job.call_args
+    params = kwargs['parameter_values']
+    # location runtime parameter must match the override region
+    assert params['location'] == 'us-east4', f"Expected location='us-east4', got {params.get('location')!r}"
+    # template_path still uses the primary/registry region (self.region)
+    assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/")
+
+
+@patch("expertise.service.utils.time.time")
+@patch("expertise.service.utils.aip.PipelineJob")
+@patch("expertise.service.utils.storage.Client")
+def test_get_job_status_by_job_id_with_region_override(mock_storage_client, mock_pipeline_job, mock_time):
+    """Region override in get_job_status_by_job_id hits the correct region."""
+    mock_time.return_value = 1234567890.123
+    mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_blob.name = 'test_job/request.json'
+    mock_blob.download_as_string.return_value = json.dumps({
+        "user_id": "openreview.net",
+        "cdate": int(time.time() * 1000)
+    })
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+    mock_bucket.list_blobs.return_value = [mock_blob]
+
+    mock_pipeline_instance = MagicMock()
+    mock_pipeline_instance.state = PipelineState.PIPELINE_STATE_RUNNING
+    mock_pipeline_instance.update_time.timestamp.return_value = time.time()
+    mock_pipeline_job.get.return_value = mock_pipeline_instance
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    config = JobConfig(cloud_id='test_job')
+    config.cloud_region = 'us-east4'
+    config.api_request = APIRequest({
+        "name": "test_run",
+        "entityA": {'type': "Group", 'memberOf': "ABC.cc/Area_Chairs"},
+        "entityB": {'type': "Note", 'invitation': "ABC.cc/-/Submission"},
+        "model": {"name": "specter+mfr"},
+    })
+
+    # Call without explicit region override — should use config.cloud_region
+    gcp_interface.get_job_status_by_job_id("openreview.net", config)
+    mock_pipeline_job.get.assert_called_once()
+    call_arg = mock_pipeline_job.get.call_args[0][0]
+    assert 'us-east4' in call_arg, f"Expected region from config, got {call_arg!r}"
+
+    # Now call with explicit region override
+    mock_pipeline_job.get.reset_mock()
+    gcp_interface.get_job_status_by_job_id("openreview.net", config, region='us-west1')
+    call_arg = mock_pipeline_job.get.call_args[0][0]
+    assert 'us-west1' in call_arg, f"Expected explicit region, got {call_arg!r}"
+
+
+# Test case for `upload_dataset`
+# — verifies the dataset is packaged into a single tarball
 # and uploaded as one GCS blob.
 @patch("expertise.service.utils.storage.Client")
 def test_upload_dataset(mock_storage_client, openreview_client):
