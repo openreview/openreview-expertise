@@ -9,7 +9,6 @@ import json
 import csv
 import re
 import datetime
-import redis, pickle
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from unittest.mock import MagicMock
@@ -378,91 +377,6 @@ class APIRequest(object):
         return all_values
         
 
-class RedisDatabase(object):
-    """
-    Communicates with the local Redis instance to store and load jobs
-    """
-    def __init__(self,
-        host=None,
-        port=None,
-        db=None,
-        connection_pool=None,
-        sync_on_disk=True,
-        job_ttl=None) -> None:
-        if not connection_pool:
-            self.db = redis.Redis(
-                host = host,
-                port = port,
-                db = db
-            )
-        else:
-            self.db = redis.Redis(connection_pool=connection_pool)
-
-        self.sync_on_disk = sync_on_disk
-        self.job_ttl = job_ttl
-
-    def save_job(self, job_config, ttl=None):
-        key = f"job:{job_config.job_id}"
-        job_ttl = ttl if ttl is not None else self.job_ttl
-        self.db.set(key, pickle.dumps(job_config), ex=job_ttl)
-    
-    def load_all_jobs(self, user_id):
-        """
-        Searches all keys for configs with matching user id
-        If a Redis entry exists but the files do not, remove the entry from Redis and do not return this job
-        Returns empty list if no jobs found
-        """
-        configs = []
-
-        for job_key in self.db.scan_iter("job:*"):
-            pickled_config = self.db.get(job_key)
-            if not pickled_config:  # Key expired between scan and get
-                continue
-            current_config = pickle.loads(pickled_config)
-
-            if self.sync_on_disk and not os.path.isdir(current_config.job_dir):
-                print(f"No files found {job_key} - skipping")
-                continue
-
-            if current_config.user_id == user_id or user_id in SUPERUSER_IDS:
-                configs.append(current_config)
-
-        return configs
-
-    def load_job(self, job_id, user_id):
-        """
-        Retrieves a config based on job id
-        """
-        job_key = f"job:{job_id}"
-        
-        pickled_config = self.db.get(job_key)
-        if not pickled_config:
-            raise openreview.OpenReviewException('Job not found')
-        
-        config = pickle.loads(pickled_config)
-        
-        if self.sync_on_disk and not os.path.isdir(config.job_dir):
-            self.remove_job(user_id, job_id)
-            raise openreview.OpenReviewException('Job not found')
-
-        if config.user_id != user_id and user_id not in SUPERUSER_IDS:
-            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to access job')
-
-        return config
-    
-    def remove_job(self, user_id, job_id):
-        job_key = f"job:{job_id}"
-
-        pickled_config = self.db.get(job_key)
-        if not pickled_config:
-            raise openreview.OpenReviewException('Job not found')
-        config = pickle.loads(pickled_config)
-        if config.user_id != user_id and user_id not in SUPERUSER_IDS:
-            raise openreview.OpenReviewException('Forbidden: Insufficient permissions to modify job')
-
-        self.db.delete(job_key)
-        return config
-
 class JobConfig(object):
     """
     Helps translate fields from API requests to fields usable by the expertise system
@@ -477,8 +391,6 @@ class JobConfig(object):
         job_dir=None,
         cdate=None,
         mdate=None,
-        status=None,
-        description=None,
         match_group=None,
         match_paper_invitation=None,
         match_paper_venueid=None,
@@ -511,8 +423,6 @@ class JobConfig(object):
         self.job_dir = job_dir
         self.cdate = cdate
         self.mdate = mdate
-        self.status = status
-        self.description = description
         self.match_group = match_group
         self.match_paper_invitation = match_paper_invitation
         self.match_paper_venueid = match_paper_venueid
@@ -550,8 +460,6 @@ class JobConfig(object):
             'job_dir',
             'cdate',
             'mdate',
-            'status',
-            'description',
             'match_group',
             'match_paper_invitation',
             'match_paper_venueid',
@@ -624,7 +532,6 @@ class JobConfig(object):
                 if submissions:
                     config.provided_submissions = submissions
 
-        descriptions = JobDescription.VALS.value
         config = JobConfig()
 
         # Set metadata fields from request
@@ -643,8 +550,6 @@ class JobConfig(object):
         config.job_dir = root_dir
         config.cdate = int(time.time() * 1000)
         config.mdate = config.cdate
-        config.status = JobStatus.INITIALIZED.value
-        config.description = descriptions[JobStatus.INITIALIZED]
 
         # Handle Group cases
         config.match_group = starting_config.get('match_group', None)
@@ -806,11 +711,10 @@ class JobConfig(object):
             name = job_config.get('name'),
             user_id = job_config.get('user_id'),
             job_id = job_config.get('job_id'),
+            cloud_id = job_config.get('cloud_id'),
             job_dir = job_config.get('job_dir'),
             cdate = job_config.get('cdate'),
             mdate = job_config.get('mdate'),
-            status = job_config.get('status'),
-            description = job_config.get('description'),
             match_group = job_config.get('match_group'),
             match_paper_invitation = job_config.get('match_paper_invitation'),
             match_paper_venueid = job_config.get('match_paper_venueid'),
@@ -818,6 +722,7 @@ class JobConfig(object):
             match_paper_content = job_config.get('match_paper_content'),
             alternate_match_group=job_config.get('alternate_match_group'),
             reviewer_ids=job_config.get('reviewer_ids'),
+            match_provided_submissions=job_config.get('match_provided_submissions'),
             dataset = job_config.get('dataset'),
             model = job_config.get('model'),
             exclusion_inv = job_config.get('exclusion_inv'),
@@ -1198,17 +1103,7 @@ class GCPInterface(object):
         job_id = config.cloud_id
 
         if job_id is None:
-            # Return just information in Redis
-            return {
-                'name': config.name,
-                'tauthor': config.user_id,
-                'jobId': config.job_id,
-                'status': config.status,
-                'description': config.description,
-                'cdate': config.cdate,
-                'mdate': config.mdate,
-                'request': config.api_request.to_json()
-            }
+            raise openreview.OpenReviewException('Cloud job id not found')
 
         job_blobs = self.bucket.list_blobs(prefix=f"{self.jobs_folder}/{job_id}")
         self.logger.info(f"Searching for job {job_id} | prefix={self.jobs_folder}/{job_id}")

@@ -1354,64 +1354,6 @@ def test_get_job_results_group_scoring(mock_storage_client):
     mock_metadata_blob.download_as_string.assert_called_once()
     mock_group_score_blob.open.assert_called_once_with('r')
 
-@patch("expertise.service.utils.aip.PipelineJob.get")
-@patch("expertise.service.utils.storage.Client")
-def test_get_job_status_by_job_id_returns_redis_when_no_cloud_id(mock_storage_client, mock_pipeline_job_get, openreview_client):
-    from expertise.service.utils import APIRequest, JobConfig, GCPInterface, JobStatus, JobDescription
-    # Minimal request and config with no cloud_id
-    api_req = APIRequest(
-        {
-            "name": "test_job",
-            "entityA": {
-                'type': "Group",
-                'memberOf': "Some.Venue/Reviewers",
-            },
-            "entityB": {
-                'type': "Note",
-                'invitation': "Some.Venue/-/Submission"
-            }
-        }
-    )
-    cfg = JobConfig(
-        name="test",
-        user_id="openreview.net",
-        job_id="job_no_cloud",
-        cloud_id=None,
-        cdate=1234567890000,
-        mdate=1234567890000,
-        status=JobStatus.QUEUED,
-        description=JobDescription.VALS.value[JobStatus.QUEUED],
-    )
-    cfg.api_request = api_req
-
-    gcp = GCPInterface(
-        project_id="test_project",
-        project_number="123456",
-        region="us-central1",
-        pipeline_root="pipeline-root",
-        pipeline_name="test-pipeline",
-        pipeline_repo="test-repo",
-        bucket_name="test-bucket",
-        jobs_folder="jobs",
-        service_label={"test": "label"},
-    )
-
-    # Early return
-    result = gcp.get_job_status_by_job_id("openreview.net", cfg)
-
-    # Assert
-    assert result["name"] == "test"
-    assert result["tauthor"] == "openreview.net"
-    assert result["jobId"] == "job_no_cloud"
-    assert result["status"] == JobStatus.QUEUED
-    assert result["description"] == JobDescription.VALS.value[JobStatus.QUEUED]
-    assert result["cdate"] == 1234567890000
-    assert result["mdate"] == 1234567890000
-    assert result["request"] == api_req.to_json()
-
-    # No cloud lookups
-    mock_storage_client.return_value.bucket.return_value.list_blobs.assert_not_called()
-    mock_pipeline_job_get.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

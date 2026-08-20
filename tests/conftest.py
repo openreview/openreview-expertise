@@ -243,8 +243,6 @@ class Helpers:
                     )
                     note = test_user_client.post_note(note)
         elif api_version == 2:
-            test_client_v2 = openreview.api.OpenReviewClient(username='test@mail.com', password=Helpers.strong_password)
-
             for note_json in data['notes'][datasource_invitation]:
                 content = note_json['content']
                 cdate = note_json.get('cdate')
@@ -267,7 +265,7 @@ class Helpers:
                     else:
                         content['keywords'] = { 'value': ['keyword1', 'keyword2'] }
 
-                    submission_note = test_client_v2.post_note_edit(
+                    submission_note = openreview_client.post_note_edit(
                         invitation = invitation,
                         signatures = ['~SomeFirstName_User1'],
                         note = Note(
