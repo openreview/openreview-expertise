@@ -14,6 +14,7 @@ from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from google.cloud.aiplatform_v1.types import PipelineState
 from conftest import GCSTestHelper
 from expertise.service.utils import JobConfig, JobStatus, JobDescription, APIRequest
+import redis
 
 GCS_TEST_BUCKET = GCSTestHelper.GCS_TEST_BUCKET
 GCS_PROJECT = GCSTestHelper.GCS_PROJECT
@@ -75,11 +76,11 @@ class TestExpertiseCloudService():
 
     job_id = None
 
-    @pytest.fixture(scope='class')
+    @pytest.fixture(scope='function')
     def openreview_context_cloud(self, gcs_jobs_prefix):
         """
-        A pytest fixture for setting up a clean expertise-api test instance:
-        `scope` argument is set to 'function', so each function will get a clean test instance.
+        A pytest fixture for setting up a clean expertise-api test instance.
+        Function-scoped so each test gets a fresh BullMQ queue and worker.
         """
         config = {
             "LOG_FILE": "pytest.log",
@@ -118,16 +119,29 @@ class TestExpertiseCloudService():
                 "use_redis": True
             }
         }
+        # Flush the BullMQ Redis DB so no stale jobs from previous tests collide
+        # with the duplicate-request check in start_expertise.
+        redis_client = redis.Redis(host=config['REDIS_ADDR'], port=config['REDIS_PORT'], db=config['REDIS_CONFIG_DB'])
+        redis_client.flushdb()
+        redis_client.close()
+
         app = expertise.service.create_app(
             config=config
         )
 
         with app.app_context():
-            yield {
+            ctx = {
                 "app": app,
                 "test_client": app.test_client(),
-                "config": config
+                "config": config,
             }
+            yield ctx
+            try:
+                import asyncio
+                service = expertise.service.routes.get_expertise_service(flask.current_app.config, flask.current_app.logger)
+                asyncio.run(service.close())
+            except Exception:
+                pass
 
     def test_insufficient_perm_machine_type(self, openreview_client, openreview_context_cloud):
         # Submitting a request with machineType outside of Super User
@@ -1330,10 +1344,11 @@ class TestExpertiseCloudService():
         job_id = response.json['jobId']
 
         # Wait for the worker to process
-        time.sleep(cfg['POLL_INTERVAL'] * cfg['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
-
-        # Verify the job completed (fallback region succeeded)
+        deadline = time.time() + 60
         status_resp = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
+        while status_resp['status'] not in ('Completed', 'Error', 'Data Error') and time.time() < deadline:
+            time.sleep(cfg['POLL_INTERVAL'])
+            status_resp = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
         assert status_resp['status'] == 'Completed', f"Job status: {status_resp['status']}"
 
         # Verify create_job was called twice (primary failed, fallback succeeded)
