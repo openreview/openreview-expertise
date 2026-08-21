@@ -184,7 +184,7 @@ def test_create_job(mock_storage_client, mock_custom_job, mock_time):
 
     # 3. Verify CustomJob submission
     mock_custom_job.assert_called_once_with(
-        display_name=result,
+        display_name=f"{result}-small",
         worker_pool_specs=[{
             'machine_spec': {
                 'machine_type': 'n1-standard-16',
