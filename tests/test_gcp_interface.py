@@ -272,7 +272,7 @@ def test_create_job_with_service_account(mock_storage_client, mock_custom_job, m
 
     # 3. Verify CustomJob submission includes worker pool spec
     _, kwargs = mock_custom_job.call_args
-    assert kwargs['display_name'] == expected_valid_vertex_id
+    assert kwargs['display_name'] == f"{expected_valid_vertex_id}-small"
     assert kwargs['base_output_dir'] == "gs://test-bucket/pipeline-root"
     assert kwargs['project'] == 'test_project'
     assert kwargs['location'] == 'us-central1'
