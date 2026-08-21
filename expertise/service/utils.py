@@ -1132,8 +1132,10 @@ class GCPInterface(object):
             },
         }]
 
+        display_name = f"{valid_vertex_id}-{machine_type}" if machine_type else valid_vertex_id
+
         job = aip.CustomJob(
-            display_name=valid_vertex_id,
+            display_name=display_name,
             worker_pool_specs=worker_pool_specs,
             base_output_dir=f"gs://{self.bucket_name}/{self.pipeline_root}",
             labels=self.service_label,
