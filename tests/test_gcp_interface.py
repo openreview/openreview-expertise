@@ -11,7 +11,8 @@ import openreview
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from expertise.service.utils import GCPInterface, JobDescription, JobStatus, JobConfig, APIRequest, ExpectedDataError
-from google.cloud.aiplatform_v1.types import PipelineState
+from google.cloud.aiplatform_v1.types import JobState
+from google.cloud.aiplatform_v1.types import Scheduling as GcaScheduling
 from expertise.utils.utils import generate_job_id
 
 # Default parameters for the module's common setup
@@ -80,12 +81,12 @@ def _setup_abc_cc(clean_start_conference, client, openreview_client):
 
 # Test case for the `create_job` method
 @patch("expertise.service.utils.time.time")  # Mock time.time()
-@patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob
+@patch("expertise.service.utils.aip.CustomJob")  # Mock CustomJob
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
-def test_create_job(mock_storage_client, mock_pipeline_job, mock_time):
+def test_create_job(mock_storage_client, mock_custom_job, mock_time):
     # Mock time.time() to return a fixed value
     mock_time.return_value = 1234567890.123  # Fixed timestamp for testing
-    
+
     # Setup mock storage client
     mock_bucket = MagicMock()
     mock_blob = MagicMock()
@@ -95,22 +96,35 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time):
     # Mock `upload_from_string` to simulate folder and file creation
     mock_blob.upload_from_string.return_value = None
 
-    # Setup mock PipelineJob
-    mock_pipeline_instance = MagicMock()
-    mock_pipeline_job.return_value = mock_pipeline_instance
+    # Setup mock CustomJob
+    mock_custom_instance = MagicMock()
+    mock_custom_job.return_value = mock_custom_instance
 
-    # Initialize the GCPInterface with test parameters
-    gcp_interface = GCPInterface(
-        project_id="test_project",
-        project_number="123456",
-        region="us-central1",
-        pipeline_root="pipeline-root",
-        pipeline_name="test-pipeline",
-        pipeline_repo="test-repo",
-        bucket_name="test-bucket",
-        jobs_folder="jobs",
-        service_label={'test': 'label'}
-    )
+    # Initialize the GCPInterface with a config dict (mirrors production)
+    config = {
+        'GCP_PROJECT_ID': 'test_project',
+        'GCP_PROJECT_NUMBER': '123456',
+        'GCP_REGION': 'us-central1',
+        'GCP_PIPELINE_ROOT': 'pipeline-root',
+        'GCP_BUCKET_NAME': 'test-bucket',
+        'GCP_JOBS_FOLDER': 'jobs',
+        'GCP_SERVICE_LABEL': {'test': 'label'},
+        'GCP_CONTAINER_IMAGE': 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
+        'DWS_MAX_WAIT_DURATION': 3600,
+        'PIPELINE_MACHINE_SMALL': 'n1-standard-16',
+        'PIPELINE_MACHINE_MEDIUM': 'n1-standard-32',
+        'PIPELINE_MACHINE_LARGE': 'n1-highmem-96',
+        'PIPELINE_GPU_SMALL': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_MEDIUM': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_LARGE': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_COUNT_SMALL': 1,
+        'PIPELINE_GPU_COUNT_MEDIUM': 2,
+        'PIPELINE_GPU_COUNT_LARGE': 4,
+        'PIPELINE_DISK_SIZE_SMALL': 200,
+        'PIPELINE_DISK_SIZE_MEDIUM': 200,
+        'PIPELINE_DISK_SIZE_LARGE': 200,
+    }
+    gcp_interface = GCPInterface(config=config)
 
     # Prepare input request
     json_request = {
@@ -168,28 +182,42 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time):
     assert 'token' not in submitted_json
     assert 'baseurl_v2' not in submitted_json
 
-    # 3. Verify PipelineJob submission
-    mock_pipeline_job.assert_called_once_with(
+    # 3. Verify CustomJob submission
+    mock_custom_job.assert_called_once_with(
         display_name=result,
-        template_path=(
-            "https://us-central1-kfp.pkg.dev/test_project/"
-            "test-repo/test-pipeline/latest"
-        ),
-        job_id=result,
-        pipeline_root="gs://test-bucket/pipeline-root",
-        parameter_values={
-            "gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json",
-            "location": "us-central1"
-        },
-        labels={"test": "label"}
+        worker_pool_specs=[{
+            'machine_spec': {
+                'machine_type': 'n1-standard-16',
+                'accelerator_type': 'NVIDIA_TESLA_T4',
+                'accelerator_count': 1,
+            },
+            'replica_count': 1,
+            'disk_spec': {'boot_disk_type': 'pd-ssd', 'boot_disk_size_gb': 200},
+            'container_spec': {
+                'image_uri': 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
+                'command': ['python', '-m', 'expertise.execute_pipeline'],
+                'args': [
+                    '--gcs_dir', f"gs://test-bucket/{expected_folder_path}",
+                    '--dataset_gcs_path', '',
+                ],
+            },
+        }],
+        base_output_dir="gs://test-bucket/pipeline-root",
+        labels={"test": "label"},
+        project="test_project",
+        location="us-central1",
     )
-    mock_pipeline_instance.submit.assert_called_once_with(service_account=None)
+    mock_custom_instance.submit.assert_called_once_with(
+        service_account=None,
+        scheduling_strategy=GcaScheduling.Strategy.FLEX_START,
+        max_wait_duration=3600
+    )
 
-# Test service account is passed to pipeline when provided in config
+# Test service account is passed to CustomJob when provided in config
 @patch("expertise.service.utils.time.time")  # Mock time.time()
-@patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob
+@patch("expertise.service.utils.aip.CustomJob")  # Mock CustomJob
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
-def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job, mock_time):
+def test_create_job_with_service_account(mock_storage_client, mock_custom_job, mock_time):
     mock_time.return_value = 1234567890.123
 
     # Setup mock storage client
@@ -199,26 +227,35 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     mock_bucket.blob.return_value = mock_blob
     mock_blob.upload_from_string.return_value = None
 
-    # Setup mock PipelineJob
-    mock_pipeline_instance = MagicMock()
-    mock_pipeline_job.return_value = mock_pipeline_instance
+    # Setup mock CustomJob
+    mock_custom_instance = MagicMock()
+    mock_custom_job.return_value = mock_custom_instance
 
     config = {
         'GCP_PROJECT_ID': 'test_project',
         'GCP_PROJECT_NUMBER': '123456',
         'GCP_REGION': 'us-central1',
         'GCP_PIPELINE_ROOT': 'pipeline-root',
-        'GCP_PIPELINE_NAME': 'test-pipeline',
-        'GCP_PIPELINE_REPO': 'test-repo',
-        'GCP_PIPELINE_TAG': 'latest',
         'GCP_BUCKET_NAME': 'test-bucket',
         'GCP_JOBS_FOLDER': 'jobs',
         'GCP_SERVICE_LABEL': {'test': 'label'},
         'GCP_SERVICE_ACCOUNT': 'sa-under-test@test-project.iam.gserviceaccount.com',
+        'GCP_CONTAINER_IMAGE': 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
+        'DWS_MAX_WAIT_DURATION': 3600,
+        'PIPELINE_MACHINE_SMALL': 'n1-standard-16',
+        'PIPELINE_MACHINE_MEDIUM': 'n1-standard-32',
+        'PIPELINE_MACHINE_LARGE': 'n1-highmem-96',
+        'PIPELINE_GPU_SMALL': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_MEDIUM': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_LARGE': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_COUNT_SMALL': 1,
+        'PIPELINE_GPU_COUNT_MEDIUM': 2,
+        'PIPELINE_GPU_COUNT_LARGE': 4,
+        'PIPELINE_DISK_SIZE_SMALL': 200,
+        'PIPELINE_DISK_SIZE_MEDIUM': 200,
+        'PIPELINE_DISK_SIZE_LARGE': 200,
     }
-    gcp_interface = GCPInterface(
-        config=config
-    )
+    gcp_interface = GCPInterface(config=config)
 
     json_request = {
         "name": "test_run2",
@@ -233,47 +270,63 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     expected_valid_vertex_id = f"{test_job_id}-{expected_timestamp_ms}"
     expected_folder_path = f"jobs/{expected_valid_vertex_id}"
 
-    # 3. Verify PipelineJob submission includes new params
-    _, kwargs = mock_pipeline_job.call_args
+    # 3. Verify CustomJob submission includes worker pool spec
+    _, kwargs = mock_custom_job.call_args
     assert kwargs['display_name'] == expected_valid_vertex_id
-    assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/test_project/")
-    assert kwargs['job_id'] == expected_valid_vertex_id
-    assert kwargs['pipeline_root'] == "gs://test-bucket/pipeline-root"
-    params = kwargs['parameter_values']
-    assert params["gcs_request_path"] == f"gs://test-bucket/{expected_folder_path}/request.json"
-    assert params["location"] == "us-central1"
-    
-    # Verify submit() is called with the service account
-    mock_pipeline_instance.submit.assert_called_once_with(
-        service_account='sa-under-test@test-project.iam.gserviceaccount.com'
+    assert kwargs['base_output_dir'] == "gs://test-bucket/pipeline-root"
+    assert kwargs['project'] == 'test_project'
+    assert kwargs['location'] == 'us-central1'
+    assert kwargs['labels'] == {'test': 'label'}
+    worker_pool = kwargs['worker_pool_specs'][0]
+    assert worker_pool['machine_spec']['machine_type'] == 'n1-standard-16'
+    assert worker_pool['container_spec']['image_uri'] == 'us-docker.pkg.dev/test_project/test-repo/test-image:latest'
+    assert worker_pool['container_spec']['args'] == [
+        '--gcs_dir', f"gs://test-bucket/{expected_folder_path}",
+        '--dataset_gcs_path', '',
+    ]
+
+    # Verify submit() is called with the service account and Flex Start
+    mock_custom_instance.submit.assert_called_once_with(
+        service_account='sa-under-test@test-project.iam.gserviceaccount.com',
+        scheduling_strategy=GcaScheduling.Strategy.FLEX_START,
+        max_wait_duration=3600,
     )
 
-# machine_type must not appear in pipeline parameter_values — it is used only to
-# select the per-tier pipeline and must not be forwarded into the job definition,
-# otherwise Vertex AI rejects the job with "parameter not found in input definitions".
+# machine_type selects the per-tier worker pool spec and is not forwarded into
+# the Vertex job as a free-form parameter.
 @patch("expertise.service.utils.time.time")
-@patch("expertise.service.utils.aip.PipelineJob")
+@patch("expertise.service.utils.aip.CustomJob")
 @patch("expertise.service.utils.storage.Client")
-def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock_pipeline_job, mock_time):
+def test_machine_type_selects_worker_pool_spec(mock_storage_client, mock_custom_job, mock_time):
     mock_time.return_value = 1234567890.123
     mock_bucket = MagicMock()
     mock_blob = MagicMock()
     mock_storage_client.return_value.bucket.return_value = mock_bucket
     mock_bucket.blob.return_value = mock_blob
     mock_blob.upload_from_string.return_value = None
-    mock_pipeline_job.return_value = MagicMock()
+    mock_custom_job.return_value = MagicMock()
 
     config = {
         'GCP_PROJECT_ID': 'test_project',
         'GCP_PROJECT_NUMBER': '123456',
         'GCP_REGION': 'us-central1',
         'GCP_PIPELINE_ROOT': 'pipeline-root',
-        'GCP_PIPELINE_NAME': 'test-pipeline',
-        'GCP_PIPELINE_REPO': 'test-repo',
-        'GCP_PIPELINE_TAG': 'latest',
         'GCP_BUCKET_NAME': 'test-bucket',
         'GCP_JOBS_FOLDER': 'jobs',
         'GCP_SERVICE_LABEL': {'test': 'label'},
+        'GCP_CONTAINER_IMAGE': 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
+        'PIPELINE_MACHINE_SMALL': 'n1-standard-16',
+        'PIPELINE_MACHINE_MEDIUM': 'n1-standard-32',
+        'PIPELINE_MACHINE_LARGE': 'n1-highmem-96',
+        'PIPELINE_GPU_SMALL': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_MEDIUM': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_LARGE': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_COUNT_SMALL': 1,
+        'PIPELINE_GPU_COUNT_MEDIUM': 2,
+        'PIPELINE_GPU_COUNT_LARGE': 4,
+        'PIPELINE_DISK_SIZE_SMALL': 200,
+        'PIPELINE_DISK_SIZE_MEDIUM': 200,
+        'PIPELINE_DISK_SIZE_LARGE': 200,
     }
     gcp_interface = GCPInterface(config=config)
 
@@ -285,23 +338,21 @@ def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock
     }
     gcp_interface.create_job(deepcopy(json_request), job_id=generate_job_id(), user_id='openreview.net', machine_type='small')
 
-    _, kwargs = mock_pipeline_job.call_args
-    params = kwargs['parameter_values']
-    assert 'machine_type' not in params, (
-        "machine_type must not be passed as a pipeline parameter — it is used only "
-        "for tier-based pipeline selection and is not defined in any pipeline's input definitions"
-    )
-    # location is always passed as a runtime parameter
-    assert params.get('location') == 'us-central1' 
+    _, kwargs = mock_custom_job.call_args
+    worker_pool = kwargs['worker_pool_specs'][0]
+    assert worker_pool['machine_spec']['machine_type'] == 'n1-standard-16'
+    assert worker_pool['machine_spec']['accelerator_count'] == 1
+    # CustomJob has no parameter_values field; machine_type is only used for tier selection
+    assert 'parameter_values' not in kwargs
 
 # Race-condition regression: a single shared GCPInterface (the production singleton)
 # must not leak one caller's identity into another caller's request.json. The original
 # bug was a shared self.client attribute that concurrent requests overwrote; today
 # create_job takes user_id per call and does not retain a client, so there's no
 # shared mutable state to leak. This test pins that property.
-@patch("expertise.service.utils.aip.PipelineJob")
+@patch("expertise.service.utils.aip.CustomJob")
 @patch("expertise.service.utils.storage.Client")
-def test_create_job_isolates_user_across_concurrent_calls(mock_storage_client, mock_pipeline_job):
+def test_create_job_isolates_user_across_concurrent_calls(mock_storage_client, mock_custom_job):
     captured_payloads = []
     captured_lock = threading.Lock()
 
@@ -322,20 +373,32 @@ def test_create_job_isolates_user_across_concurrent_calls(mock_storage_client, m
     fake_bucket.list_blobs.return_value = []
     mock_storage_client.return_value.bucket.return_value = fake_bucket
     mock_storage_client.return_value.get_bucket.return_value = fake_bucket
-    mock_pipeline_job.return_value = MagicMock()
+    mock_custom_job.return_value = MagicMock()
 
     # ONE shared GCPInterface — mirrors the production singleton in ExpertiseCloudService.
-    gcp_interface = GCPInterface(
-        project_id="test_project",
-        project_number="123456",
-        region="us-central1",
-        pipeline_root="pipeline-root",
-        pipeline_name="test-pipeline",
-        pipeline_repo="test-repo",
-        bucket_name="test-bucket",
-        jobs_folder="jobs",
-        service_label={'test': 'label'},
-    )
+    config = {
+        'GCP_PROJECT_ID': 'test_project',
+        'GCP_PROJECT_NUMBER': '123456',
+        'GCP_REGION': 'us-central1',
+        'GCP_PIPELINE_ROOT': 'pipeline-root',
+        'GCP_BUCKET_NAME': 'test-bucket',
+        'GCP_JOBS_FOLDER': 'jobs',
+        'GCP_SERVICE_LABEL': {'test': 'label'},
+        'GCP_CONTAINER_IMAGE': 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
+        'PIPELINE_MACHINE_SMALL': 'n1-standard-16',
+        'PIPELINE_MACHINE_MEDIUM': 'n1-standard-32',
+        'PIPELINE_MACHINE_LARGE': 'n1-highmem-96',
+        'PIPELINE_GPU_SMALL': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_MEDIUM': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_LARGE': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_COUNT_SMALL': 1,
+        'PIPELINE_GPU_COUNT_MEDIUM': 2,
+        'PIPELINE_GPU_COUNT_LARGE': 4,
+        'PIPELINE_DISK_SIZE_SMALL': 200,
+        'PIPELINE_DISK_SIZE_MEDIUM': 200,
+        'PIPELINE_DISK_SIZE_LARGE': 200,
+    }
+    gcp_interface = GCPInterface(config=config)
 
     NUM_USERS = 16
     barrier = threading.Barrier(NUM_USERS)
@@ -384,29 +447,41 @@ def test_create_job_isolates_user_across_concurrent_calls(mock_storage_client, m
 # ---------------------------------------------------------------------------
 
 @patch("expertise.service.utils.time.time")
-@patch("expertise.service.utils.aip.PipelineJob")
+@patch("expertise.service.utils.aip.CustomJob")
 @patch("expertise.service.utils.storage.Client")
-def test_create_job_with_region_override(mock_storage_client, mock_pipeline_job, mock_time):
-    """Region override is passed through to PipelineJob and parameter_values."""
+def test_create_job_with_region_override(mock_storage_client, mock_custom_job, mock_time):
+    """Region override is passed through to CustomJob location."""
     mock_time.return_value = 1234567890.123
     mock_bucket = MagicMock()
     mock_blob = MagicMock()
     mock_storage_client.return_value.bucket.return_value = mock_bucket
     mock_bucket.blob.return_value = mock_blob
     mock_blob.upload_from_string.return_value = None
-    mock_pipeline_job.return_value = MagicMock()
+    mock_custom_job.return_value = MagicMock()
 
-    gcp_interface = GCPInterface(
-        project_id="test_project",
-        project_number="123456",
-        region="us-central1",
-        pipeline_root="pipeline-root",
-        pipeline_name="test-pipeline",
-        pipeline_repo="test-repo",
-        bucket_name="test-bucket",
-        jobs_folder="jobs",
-        service_label={'test': 'label'},
-    )
+    config = {
+        'GCP_PROJECT_ID': 'test_project',
+        'GCP_PROJECT_NUMBER': '123456',
+        'GCP_REGION': 'us-central1',
+        'GCP_PIPELINE_ROOT': 'pipeline-root',
+        'GCP_BUCKET_NAME': 'test-bucket',
+        'GCP_JOBS_FOLDER': 'jobs',
+        'GCP_SERVICE_LABEL': {'test': 'label'},
+        'GCP_CONTAINER_IMAGE': 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
+        'PIPELINE_MACHINE_SMALL': 'n1-standard-16',
+        'PIPELINE_MACHINE_MEDIUM': 'n1-standard-32',
+        'PIPELINE_MACHINE_LARGE': 'n1-highmem-96',
+        'PIPELINE_GPU_SMALL': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_MEDIUM': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_LARGE': 'NVIDIA_TESLA_T4',
+        'PIPELINE_GPU_COUNT_SMALL': 1,
+        'PIPELINE_GPU_COUNT_MEDIUM': 2,
+        'PIPELINE_GPU_COUNT_LARGE': 4,
+        'PIPELINE_DISK_SIZE_SMALL': 200,
+        'PIPELINE_DISK_SIZE_MEDIUM': 200,
+        'PIPELINE_DISK_SIZE_LARGE': 200,
+    }
+    gcp_interface = GCPInterface(config=config)
 
     json_request = {
         "name": "test_run_region",
@@ -423,18 +498,14 @@ def test_create_job_with_region_override(mock_storage_client, mock_pipeline_job,
         region='us-east4'
     )
 
-    _, kwargs = mock_pipeline_job.call_args
-    params = kwargs['parameter_values']
-    # location runtime parameter must match the override region
-    assert params['location'] == 'us-east4', f"Expected location='us-east4', got {params.get('location')!r}"
-    # template_path still uses the primary/registry region (self.region)
-    assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/")
+    _, kwargs = mock_custom_job.call_args
+    assert kwargs['location'] == 'us-east4', f"Expected location='us-east4', got {kwargs.get('location')!r}"
 
 
 @patch("expertise.service.utils.time.time")
-@patch("expertise.service.utils.aip.PipelineJob")
+@patch("expertise.service.utils.aip.CustomJob")
 @patch("expertise.service.utils.storage.Client")
-def test_get_job_status_by_job_id_with_region_override(mock_storage_client, mock_pipeline_job, mock_time):
+def test_get_job_status_by_job_id_with_region_override(mock_storage_client, mock_custom_job, mock_time):
     """Region override in get_job_status_by_job_id hits the correct region."""
     mock_time.return_value = 1234567890.123
     mock_bucket = MagicMock()
@@ -447,18 +518,16 @@ def test_get_job_status_by_job_id_with_region_override(mock_storage_client, mock
     mock_storage_client.return_value.bucket.return_value = mock_bucket
     mock_bucket.list_blobs.return_value = [mock_blob]
 
-    mock_pipeline_instance = MagicMock()
-    mock_pipeline_instance.state = PipelineState.PIPELINE_STATE_RUNNING
-    mock_pipeline_instance.update_time.timestamp.return_value = time.time()
-    mock_pipeline_job.get.return_value = mock_pipeline_instance
+    mock_custom_instance = MagicMock()
+    mock_custom_instance.state = JobState.JOB_STATE_RUNNING
+    mock_custom_instance.update_time.timestamp.return_value = time.time()
+    mock_custom_job.get.return_value = mock_custom_instance
 
     gcp_interface = GCPInterface(
         project_id="test_project",
         project_number="123456",
         region="us-central1",
         pipeline_root="pipeline-root",
-        pipeline_name="test-pipeline",
-        pipeline_repo="test-repo",
         bucket_name="test-bucket",
         jobs_folder="jobs",
         service_label={'test': 'label'},
@@ -475,14 +544,14 @@ def test_get_job_status_by_job_id_with_region_override(mock_storage_client, mock
 
     # Call without explicit region override — should use config.cloud_region
     gcp_interface.get_job_status_by_job_id("openreview.net", config)
-    mock_pipeline_job.get.assert_called_once()
-    call_arg = mock_pipeline_job.get.call_args[0][0]
+    mock_custom_job.get.assert_called_once()
+    call_arg = mock_custom_job.get.call_args[0][0]
     assert 'us-east4' in call_arg, f"Expected region from config, got {call_arg!r}"
 
     # Now call with explicit region override
-    mock_pipeline_job.get.reset_mock()
+    mock_custom_job.get.reset_mock()
     gcp_interface.get_job_status_by_job_id("openreview.net", config, region='us-west1')
-    call_arg = mock_pipeline_job.get.call_args[0][0]
+    call_arg = mock_custom_job.get.call_args[0][0]
     assert 'us-west1' in call_arg, f"Expected explicit region, got {call_arg!r}"
 
 
@@ -693,7 +762,7 @@ def test_upload_download_roundtrip(mock_upload_client, mock_download_client, ope
 
 
 # Test case for the `get_job_status_by_job_id` method
-@patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
+@patch("expertise.service.utils.aip.CustomJob.get")  # Mock CustomJob.get
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
 def test_get_job_status_by_job_id(mock_storage_client, mock_pipeline_job_get, openreview_client):
     # Mock storage client
@@ -708,11 +777,11 @@ def test_get_job_status_by_job_id(mock_storage_client, mock_pipeline_job_get, op
     mock_storage_client.return_value.bucket.return_value = mock_bucket
     mock_bucket.list_blobs.return_value = [mock_blob]
 
-    # Mock PipelineJob.get()
-    mock_pipeline_job = MagicMock()
-    mock_pipeline_job.state = PipelineState.PIPELINE_STATE_RUNNING
-    mock_pipeline_job.update_time.timestamp.return_value = time.time()
-    mock_pipeline_job_get.return_value = mock_pipeline_job
+    # Mock CustomJob.get()
+    mock_custom_job = MagicMock()
+    mock_custom_job.state = JobState.JOB_STATE_RUNNING
+    mock_custom_job.update_time.timestamp.return_value = time.time()
+    mock_pipeline_job_get.return_value = mock_custom_job
 
     # Initialize GCPInterface with test parameters
     gcp_interface = GCPInterface(
@@ -770,9 +839,9 @@ def test_get_job_status_by_job_id(mock_storage_client, mock_pipeline_job_get, op
     mock_bucket.list_blobs.assert_called_once_with(prefix=f"jobs/{job_id}")
     mock_blob.download_as_string.assert_called_once()
 
-    # Verify Vertex AI Pipeline interaction
+    # Verify Vertex AI CustomJob interaction
     mock_pipeline_job_get.assert_called_once_with(
-        f"projects/123456/locations/us-central1/pipelineJobs/{job_id}"
+        f"projects/123456/locations/us-central1/customJobs/{job_id}"
     )
 
 # Test case for job not found
@@ -882,7 +951,7 @@ def test_get_job_status_by_job_id_insufficient_permissions(mock_storage_client, 
         gcp_interface.get_job_status_by_job_id("test_user", config)
 
 # Test case for multiple requests found
-@patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
+@patch("expertise.service.utils.aip.CustomJob.get")  # Mock CustomJob.get
 @patch("expertise.service.utils.storage.Client")
 def test_get_job_status_by_job_id_multiple_requests(mock_storage_client, mock_pipeline_job_get, openreview_client):
     # Mock storage client with multiple blobs matching the user ID
@@ -945,7 +1014,7 @@ def test_get_job_status_by_job_id_multiple_requests(mock_storage_client, mock_pi
         gcp_interface.get_job_status_by_job_id("openreview.net", config)
 
 # Test case for the `get_job_status` method
-@patch("expertise.service.utils.aip.PipelineJob.get")  # Mock PipelineJob.get
+@patch("expertise.service.utils.aip.CustomJob.get")  # Mock CustomJob.get
 @patch("expertise.service.utils.storage.Client")  # Mock GCS Client
 def test_get_job_status(mock_storage_client, mock_pipeline_job_get, openreview_client):
     # Mock storage client
@@ -982,11 +1051,11 @@ def test_get_job_status(mock_storage_client, mock_pipeline_job_get, openreview_c
     mock_storage_client.return_value.bucket.return_value = mock_bucket
     mock_bucket.list_blobs.return_value = [mock_blob_inv, mock_blob_id, mock_blob_grp]
 
-    # Mock PipelineJob.get()
-    mock_pipeline_job = MagicMock()
-    mock_pipeline_job.state = PipelineState.PIPELINE_STATE_SUCCEEDED
-    mock_pipeline_job.update_time.timestamp.return_value = time.time()
-    mock_pipeline_job_get.return_value = mock_pipeline_job
+    # Mock CustomJob.get()
+    mock_custom_job = MagicMock()
+    mock_custom_job.state = JobState.JOB_STATE_SUCCEEDED
+    mock_custom_job.update_time.timestamp.return_value = time.time()
+    mock_pipeline_job_get.return_value = mock_custom_job
 
     # Initialize GCPInterface with test parameters
     gcp_interface = GCPInterface(
@@ -1038,20 +1107,20 @@ def test_get_job_status(mock_storage_client, mock_pipeline_job_get, openreview_c
     mock_blob_id.download_as_string.assert_called()
     mock_blob_grp.download_as_string.assert_called()
 
-    # Verify Vertex AI Pipeline interaction
+    # Verify Vertex AI CustomJob interaction
     assert len(
-        [call for call in mock_pipeline_job_get.call_args_list if call.args[0] == "projects/123456/locations/us-central1/pipelineJobs/job_1"]
+        [call for call in mock_pipeline_job_get.call_args_list if call.args[0] == "projects/123456/locations/us-central1/customJobs/job_1"]
     ) == 1
     assert len(
-        [call for call in mock_pipeline_job_get.call_args_list if call.args[0] == "projects/123456/locations/us-central1/pipelineJobs/job_2"]
+        [call for call in mock_pipeline_job_get.call_args_list if call.args[0] == "projects/123456/locations/us-central1/customJobs/job_2"]
     ) == 1
     assert len(
-        [call for call in mock_pipeline_job_get.call_args_list if call.args[0] == "projects/123456/locations/us-central1/pipelineJobs/job_3"]
+        [call for call in mock_pipeline_job_get.call_args_list if call.args[0] == "projects/123456/locations/us-central1/customJobs/job_3"]
     ) == 1
 
 
 # Test case for multiple filters
-@patch("expertise.service.utils.aip.PipelineJob.get")
+@patch("expertise.service.utils.aip.CustomJob.get")
 @patch("expertise.service.utils.storage.Client")
 def test_get_job_status_multiple_filters(mock_storage_client, mock_pipeline_job_get, openreview_client):
     # Mock storage client
@@ -1069,11 +1138,11 @@ def test_get_job_status_multiple_filters(mock_storage_client, mock_pipeline_job_
     mock_storage_client.return_value.bucket.return_value = mock_bucket
     mock_bucket.list_blobs.return_value = [mock_blob]
 
-    # Mock PipelineJob.get()
-    mock_pipeline_job = MagicMock()
-    mock_pipeline_job.state = PipelineState.PIPELINE_STATE_FAILED
-    mock_pipeline_job.update_time.timestamp.return_value = time.time()
-    mock_pipeline_job_get.return_value = mock_pipeline_job
+    # Mock CustomJob.get()
+    mock_custom_job = MagicMock()
+    mock_custom_job.state = JobState.JOB_STATE_FAILED
+    mock_custom_job.update_time.timestamp.return_value = time.time()
+    mock_pipeline_job_get.return_value = mock_custom_job
 
     # Initialize GCPInterface
     gcp_interface = GCPInterface(

@@ -15,7 +15,8 @@ from unittest.mock import MagicMock
 from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
-from google.cloud.aiplatform_v1.types import PipelineState
+from google.cloud.aiplatform_v1.types import JobState
+from google.cloud.aiplatform_v1.types import Scheduling as GcaScheduling
 from google.auth import default as google_auth_default
 from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 from copy import deepcopy
@@ -746,11 +747,13 @@ class GCPInterface(object):
     """
 
     GCS_STATE_TO_JOB_STATE = {
-        PipelineState.PIPELINE_STATE_PENDING: JobStatus.INITIALIZED,
-        PipelineState.PIPELINE_STATE_QUEUED: JobStatus.QUEUED,
-        PipelineState.PIPELINE_STATE_RUNNING: JobStatus.RUN_EXPERTISE,
-        PipelineState.PIPELINE_STATE_SUCCEEDED: JobStatus.COMPLETED,
-        PipelineState.PIPELINE_STATE_FAILED: JobStatus.ERROR,
+        JobState.JOB_STATE_PENDING: JobStatus.INITIALIZED,
+        JobState.JOB_STATE_QUEUED: JobStatus.QUEUED,
+        JobState.JOB_STATE_RUNNING: JobStatus.RUN_EXPERTISE,
+        JobState.JOB_STATE_SUCCEEDED: JobStatus.COMPLETED,
+        JobState.JOB_STATE_FAILED: JobStatus.ERROR,
+        JobState.JOB_STATE_CANCELLED: JobStatus.ERROR,
+        JobState.JOB_STATE_EXPIRED: JobStatus.ERROR,
     }
 
     def __init__(
@@ -768,7 +771,9 @@ class GCPInterface(object):
         pipeline_tag='latest',
         logger=None,
         gcs_client=None,
-        service_account=None
+        service_account=None,
+        container_image=None,
+        dws_max_wait_duration=None
     ):
 
         if config is not None:
@@ -776,19 +781,42 @@ class GCPInterface(object):
             self.project_number = config['GCP_PROJECT_NUMBER']
             self.region = config['GCP_REGION']
             self.pipeline_root = config['GCP_PIPELINE_ROOT']
-            self.pipeline_name = config['GCP_PIPELINE_NAME']
-            self.pipeline_repo = config['GCP_PIPELINE_REPO']
-            self.pipeline_tag = config['GCP_PIPELINE_TAG']
+            self.pipeline_name = config.get('GCP_PIPELINE_NAME')
+            self.pipeline_repo = config.get('GCP_PIPELINE_REPO')
+            self.pipeline_tag = config.get('GCP_PIPELINE_TAG', 'latest')
             self.bucket_name = config['GCP_BUCKET_NAME']
             self.jobs_folder = config['GCP_JOBS_FOLDER']
             self.service_label = config['GCP_SERVICE_LABEL']
             self.service_account = config.get('GCP_SERVICE_ACCOUNT')
             self.url_signer_service_account = config.get('GCP_URL_SIGNER_SERVICE_ACCOUNT')
+            self.container_image = config.get('GCP_CONTAINER_IMAGE') or container_image
+            self.dws_max_wait_duration = config.get('DWS_MAX_WAIT_DURATION', 86400) if dws_max_wait_duration is None else dws_max_wait_duration
+            # Per-tier worker pool machine specs
+            self.machine_by_tier = {
+                config.get('SMALL_NAME', 'small'): config['PIPELINE_MACHINE_SMALL'],
+                config.get('MEDIUM_NAME', 'medium'): config['PIPELINE_MACHINE_MEDIUM'],
+                config.get('LARGE_NAME', 'large'): config['PIPELINE_MACHINE_LARGE'],
+            }
+            self.accelerator_by_tier = {
+                config.get('SMALL_NAME', 'small'): config['PIPELINE_GPU_SMALL'],
+                config.get('MEDIUM_NAME', 'medium'): config['PIPELINE_GPU_MEDIUM'],
+                config.get('LARGE_NAME', 'large'): config['PIPELINE_GPU_LARGE'],
+            }
+            self.accelerator_count_by_tier = {
+                config.get('SMALL_NAME', 'small'): config['PIPELINE_GPU_COUNT_SMALL'],
+                config.get('MEDIUM_NAME', 'medium'): config['PIPELINE_GPU_COUNT_MEDIUM'],
+                config.get('LARGE_NAME', 'large'): config['PIPELINE_GPU_COUNT_LARGE'],
+            }
+            self.disk_by_tier = {
+                config.get('SMALL_NAME', 'small'): config['PIPELINE_DISK_SIZE_SMALL'],
+                config.get('MEDIUM_NAME', 'medium'): config['PIPELINE_DISK_SIZE_MEDIUM'],
+                config.get('LARGE_NAME', 'large'): config['PIPELINE_DISK_SIZE_LARGE'],
+            }
             # Per-tier pipeline names derived from base name + machine tier suffix
             self.pipeline_name_by_tier = {
-                config.get('SMALL_NAME', 'small'):  f"{self.pipeline_name}-{config.get('SMALL_NAME', 'small')}",
-                config.get('MEDIUM_NAME', 'medium'): f"{self.pipeline_name}-{config.get('MEDIUM_NAME', 'medium')}",
-                config.get('LARGE_NAME', 'large'):  f"{self.pipeline_name}-{config.get('LARGE_NAME', 'large')}",
+                config.get('SMALL_NAME', 'small'):  f"{self.pipeline_name}-{config.get('SMALL_NAME', 'small')}" if self.pipeline_name else None,
+                config.get('MEDIUM_NAME', 'medium'): f"{self.pipeline_name}-{config.get('MEDIUM_NAME', 'medium')}" if self.pipeline_name else None,
+                config.get('LARGE_NAME', 'large'):  f"{self.pipeline_name}-{config.get('LARGE_NAME', 'large')}" if self.pipeline_name else None,
             }
         else:
             self.project_id = project_id
@@ -803,20 +831,24 @@ class GCPInterface(object):
             self.service_label = service_label
             self.service_account = service_account
             self.url_signer_service_account = None
+            self.container_image = container_image
+            self.dws_max_wait_duration = dws_max_wait_duration if dws_max_wait_duration is not None else 86400
+            self.machine_by_tier = {}
+            self.accelerator_by_tier = {}
+            self.accelerator_count_by_tier = {}
+            self.disk_by_tier = {}
+            self.pipeline_name_by_tier = {}
 
         required_fields = [
             self.project_id,
             self.project_number,
             self.region,
             self.pipeline_root,
-            self.pipeline_name,
-            self.pipeline_repo,
-            self.pipeline_tag,
             self.bucket_name,
             self.jobs_folder,
             self.service_label
         ]
-        
+
         self.request_fname = "request.json"
         if logger is None:
             logger = logging.getLogger(__name__)
@@ -827,25 +859,25 @@ class GCPInterface(object):
             handler.setFormatter(formatter)
             logger.addHandler(handler)
         self.logger = logger
-        
+
         if not any(field is None for field in required_fields):
             # Only init AIP if all fields are present to access the project
             self.logger.info(f"Init AIPlatform with project {self.project_id} and region {self.region}")
             aip.init(
-                project=project_id,
-                location=region
+                project=self.project_id,
+                location=self.region
             )
 
         self.logger.info(f"Init GCS client with project {self.project_id}")
         self.gcs_client = gcs_client or storage.Client(
-            project=project_id
+            project=self.project_id
         )
         self.logger.info(f"Get bucket {self.bucket_name}")
         self.bucket = self.gcs_client.bucket(self.bucket_name)
 
     def _resolve_job_status(self, job_id, job):
         descriptions = JobDescription.VALS.value
-        status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
+        status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, JobStatus.ERROR)
         description = descriptions[status]
 
         if status != JobStatus.ERROR:
@@ -1006,7 +1038,7 @@ class GCPInterface(object):
         return [cid for _, cid in matches[:limit]]
 
     def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None, region: str = None):
-        """Create a Vertex AI pipeline job.
+        """Create a Vertex AI CustomJob with Flex Start scheduling.
 
         :param region: Optional region override.
         """
@@ -1069,32 +1101,50 @@ class GCPInterface(object):
         # Pass GCS path instead of JSON data to avoid parameter size limits
         gcs_request_path = f"gs://{self.bucket_name}/{folder_path}/{self.request_fname}"
 
-        parameter_values = {
-            'gcs_request_path': gcs_request_path,
-        }
-        if dataset_gcs_path:
-            parameter_values['dataset_gcs_path'] = dataset_gcs_path
-
-        # Select the per-tier pipeline; fall back to base name if tier mapping unavailable
-        tier_pipeline_name = getattr(self, 'pipeline_name_by_tier', {}).get(machine_type, self.pipeline_name)
-
         # Use passed region or fall back to primary region
         job_region = region or self.region
 
-        # Pass location as runtime parameter so the compiled pipeline knows where to run
-        parameter_values['location'] = job_region
+        # Build worker pool spec from per-tier machine/GPU/disk config.
+        # The container runs the same execute_pipeline entrypoint the KFP
+        # pipeline component used, but now invoked directly by CustomJob.
+        machine_spec = {
+            'machine_type': self.machine_by_tier.get(machine_type, self.machine_by_tier.get('small')),
+            'accelerator_type': self.accelerator_by_tier.get(machine_type, self.accelerator_by_tier.get('small')),
+            'accelerator_count': self.accelerator_count_by_tier.get(machine_type, self.accelerator_count_by_tier.get('small')),
+        }
+        # Drop empty accelerator fields if the tier has no GPU
+        machine_spec = {k: v for k, v in machine_spec.items() if v is not None}
 
-        # Build PipelineJob kwargs and parameters
-        job = aip.PipelineJob(
-            display_name = valid_vertex_id,
-            template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{tier_pipeline_name}/{self.pipeline_tag}",
-            job_id = valid_vertex_id,
-            pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
-            parameter_values = parameter_values,
-            labels = self.service_label)
+        worker_pool_specs = [{
+            'machine_spec': machine_spec,
+            'replica_count': 1,
+            'disk_spec': {
+                'boot_disk_type': 'pd-ssd',
+                'boot_disk_size_gb': self.disk_by_tier.get(machine_type, self.disk_by_tier.get('small', 200)),
+            },
+            'container_spec': {
+                'image_uri': self.container_image,
+                'command': ['python', '-m', 'expertise.execute_pipeline'],
+                'args': [
+                    '--gcs_dir', f"gs://{self.bucket_name}/{folder_path}",
+                    '--dataset_gcs_path', dataset_gcs_path or '',
+                ],
+            },
+        }]
+
+        job = aip.CustomJob(
+            display_name=valid_vertex_id,
+            worker_pool_specs=worker_pool_specs,
+            base_output_dir=f"gs://{self.bucket_name}/{self.pipeline_root}",
+            labels=self.service_label,
+            project=self.project_id,
+            location=job_region,
+        )
 
         job.submit(
-            service_account=self.service_account
+            service_account=self.service_account,
+            scheduling_strategy=GcaScheduling.Strategy.FLEX_START,
+            max_wait_duration=self.dws_max_wait_duration
         )
 
         return valid_vertex_id
@@ -1123,7 +1173,7 @@ class GCPInterface(object):
         request = authenticated_requests[0]
         # Use passed region, or the region stored on the job config, or fall back to primary
         job_region = region or getattr(config, 'cloud_region', None) or self.region
-        job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{job_region}/pipelineJobs/{job_id}")
+        job = aip.CustomJob.get(f"projects/{self.project_number}/locations/{job_region}/customJobs/{job_id}")
 
         status, description = self._resolve_job_status(job_id, job)
 
@@ -1282,7 +1332,7 @@ class GCPInterface(object):
             try:
                 # Use cloud_region from request if available, else primary region
                 job_region = request.get('cloud_region') or self.region
-                job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{job_region}/pipelineJobs/{request_name}")
+                job = aip.CustomJob.get(f"projects/{self.project_number}/locations/{job_region}/customJobs/{request_name}")
             except Exception as e:
                 if '404' in str(e):
                     self.logger.info(f"No pipeline for job {request_name}")

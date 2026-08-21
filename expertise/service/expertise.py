@@ -880,7 +880,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             await self._update_job_status(job, JobStatus.DATA_ERROR, str(e), error=str(e))
             return
 
-        asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})'), self.queue_loop)
+        asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI CustomJob (tier={machine_type})'), self.queue_loop)
 
         # Determine ordered list of regions to try
         gcp_regions = self.server_config.get('GCP_REGIONS', [self.cloud.region])
