@@ -33,7 +33,7 @@ class Helpers:
         client = openreview.api.OpenReviewClient(baseurl = 'http://localhost:3001')
 
         fullname = f'{first} {last}'
-        res = client.register_user(email=email, fullname=fullname, password=Helpers.strong_password, dob='1980-01-01')
+        res = client.register_user(email=email, fullname=fullname, password=Helpers.strong_password, dob=315532800)
         username = res.get('id')
         assert res, "Res i none"
         profile_content={
