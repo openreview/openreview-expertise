@@ -76,6 +76,13 @@ class TestExpertiseCloudService():
 
     job_id = None
 
+    @pytest.fixture(autouse=True)
+    def _set_test_container_image(self, monkeypatch):
+        monkeypatch.setenv(
+            'GCP_CONTAINER_IMAGE',
+            'us-docker.pkg.dev/test_project/test-repo/test-image:latest'
+        )
+
     @pytest.fixture(scope='function')
     def openreview_context_cloud(self, gcs_jobs_prefix):
         """
@@ -110,7 +117,6 @@ class TestExpertiseCloudService():
             "GCP_JOBS_FOLDER" : gcs_jobs_prefix,
             "GCP_SERVICE_LABEL":{'dev': 'expertise'},
             "GCP_URL_SIGNER_SERVICE_ACCOUNT": 'url-signer@test-project.iam.gserviceaccount.com',
-            "GCP_CONTAINER_IMAGE": 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
             "DWS_MAX_WAIT_DURATION": 3600,
             "PIPELINE_MACHINE_SMALL": 'n1-standard-16',
             "PIPELINE_MACHINE_MEDIUM": 'n1-standard-32',
@@ -343,9 +349,13 @@ class TestExpertiseCloudService():
         assert response['name'] == 'test_run', f"Job name: {response['name']}, status: {response}"
         assert response['status'] != 'Error', response
 
-        # Let request process
-        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
-        response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
+        # Wait for the cloud worker to poll the mocked Vertex job to completion
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'])
+            response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
+            try_time = time.time() - start_time
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         # Check proper user ID

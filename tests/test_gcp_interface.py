@@ -109,7 +109,6 @@ def test_create_job(mock_storage_client, mock_custom_job, mock_time):
         'GCP_BUCKET_NAME': 'test-bucket',
         'GCP_JOBS_FOLDER': 'jobs',
         'GCP_SERVICE_LABEL': {'test': 'label'},
-        'GCP_CONTAINER_IMAGE': 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
         'DWS_MAX_WAIT_DURATION': 3600,
         'PIPELINE_MACHINE_SMALL': 'n1-standard-16',
         'PIPELINE_MACHINE_MEDIUM': 'n1-standard-32',
@@ -124,7 +123,10 @@ def test_create_job(mock_storage_client, mock_custom_job, mock_time):
         'PIPELINE_DISK_SIZE_MEDIUM': 200,
         'PIPELINE_DISK_SIZE_LARGE': 200,
     }
-    gcp_interface = GCPInterface(config=config)
+    gcp_interface = GCPInterface(
+        config=config,
+        container_image='us-docker.pkg.dev/test_project/test-repo/test-image:latest'
+    )
 
     # Prepare input request
     json_request = {
@@ -240,7 +242,6 @@ def test_create_job_with_service_account(mock_storage_client, mock_custom_job, m
         'GCP_JOBS_FOLDER': 'jobs',
         'GCP_SERVICE_LABEL': {'test': 'label'},
         'GCP_SERVICE_ACCOUNT': 'sa-under-test@test-project.iam.gserviceaccount.com',
-        'GCP_CONTAINER_IMAGE': 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
         'DWS_MAX_WAIT_DURATION': 3600,
         'PIPELINE_MACHINE_SMALL': 'n1-standard-16',
         'PIPELINE_MACHINE_MEDIUM': 'n1-standard-32',
@@ -255,7 +256,7 @@ def test_create_job_with_service_account(mock_storage_client, mock_custom_job, m
         'PIPELINE_DISK_SIZE_MEDIUM': 200,
         'PIPELINE_DISK_SIZE_LARGE': 200,
     }
-    gcp_interface = GCPInterface(config=config)
+    gcp_interface = GCPInterface(config=config, container_image="us-docker.pkg.dev/test_project/test-repo/test-image:latest")
 
     json_request = {
         "name": "test_run2",
@@ -314,7 +315,6 @@ def test_machine_type_selects_worker_pool_spec(mock_storage_client, mock_custom_
         'GCP_BUCKET_NAME': 'test-bucket',
         'GCP_JOBS_FOLDER': 'jobs',
         'GCP_SERVICE_LABEL': {'test': 'label'},
-        'GCP_CONTAINER_IMAGE': 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
         'PIPELINE_MACHINE_SMALL': 'n1-standard-16',
         'PIPELINE_MACHINE_MEDIUM': 'n1-standard-32',
         'PIPELINE_MACHINE_LARGE': 'n1-highmem-96',
@@ -328,7 +328,7 @@ def test_machine_type_selects_worker_pool_spec(mock_storage_client, mock_custom_
         'PIPELINE_DISK_SIZE_MEDIUM': 200,
         'PIPELINE_DISK_SIZE_LARGE': 200,
     }
-    gcp_interface = GCPInterface(config=config)
+    gcp_interface = GCPInterface(config=config, container_image="us-docker.pkg.dev/test_project/test-repo/test-image:latest")
 
     json_request = {
         "name": "test_run_machine_type",
@@ -384,7 +384,6 @@ def test_create_job_isolates_user_across_concurrent_calls(mock_storage_client, m
         'GCP_BUCKET_NAME': 'test-bucket',
         'GCP_JOBS_FOLDER': 'jobs',
         'GCP_SERVICE_LABEL': {'test': 'label'},
-        'GCP_CONTAINER_IMAGE': 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
         'PIPELINE_MACHINE_SMALL': 'n1-standard-16',
         'PIPELINE_MACHINE_MEDIUM': 'n1-standard-32',
         'PIPELINE_MACHINE_LARGE': 'n1-highmem-96',
@@ -398,7 +397,7 @@ def test_create_job_isolates_user_across_concurrent_calls(mock_storage_client, m
         'PIPELINE_DISK_SIZE_MEDIUM': 200,
         'PIPELINE_DISK_SIZE_LARGE': 200,
     }
-    gcp_interface = GCPInterface(config=config)
+    gcp_interface = GCPInterface(config=config, container_image="us-docker.pkg.dev/test_project/test-repo/test-image:latest")
 
     NUM_USERS = 16
     barrier = threading.Barrier(NUM_USERS)
@@ -467,7 +466,6 @@ def test_create_job_with_region_override(mock_storage_client, mock_custom_job, m
         'GCP_BUCKET_NAME': 'test-bucket',
         'GCP_JOBS_FOLDER': 'jobs',
         'GCP_SERVICE_LABEL': {'test': 'label'},
-        'GCP_CONTAINER_IMAGE': 'us-docker.pkg.dev/test_project/test-repo/test-image:latest',
         'PIPELINE_MACHINE_SMALL': 'n1-standard-16',
         'PIPELINE_MACHINE_MEDIUM': 'n1-standard-32',
         'PIPELINE_MACHINE_LARGE': 'n1-highmem-96',
@@ -481,7 +479,7 @@ def test_create_job_with_region_override(mock_storage_client, mock_custom_job, m
         'PIPELINE_DISK_SIZE_MEDIUM': 200,
         'PIPELINE_DISK_SIZE_LARGE': 200,
     }
-    gcp_interface = GCPInterface(config=config)
+    gcp_interface = GCPInterface(config=config, container_image="us-docker.pkg.dev/test_project/test-repo/test-image:latest")
 
     json_request = {
         "name": "test_run_region",

@@ -789,7 +789,7 @@ class GCPInterface(object):
             self.service_label = config['GCP_SERVICE_LABEL']
             self.service_account = config.get('GCP_SERVICE_ACCOUNT')
             self.url_signer_service_account = config.get('GCP_URL_SIGNER_SERVICE_ACCOUNT')
-            self.container_image = config.get('GCP_CONTAINER_IMAGE') or container_image
+            self.container_image = container_image or os.environ.get('GCP_CONTAINER_IMAGE')
             self.dws_max_wait_duration = config.get('DWS_MAX_WAIT_DURATION', 86400) if dws_max_wait_duration is None else dws_max_wait_duration
             # Per-tier worker pool machine specs
             self.machine_by_tier = {
@@ -831,7 +831,7 @@ class GCPInterface(object):
             self.service_label = service_label
             self.service_account = service_account
             self.url_signer_service_account = None
-            self.container_image = container_image
+            self.container_image = container_image or os.environ.get('GCP_CONTAINER_IMAGE')
             self.dws_max_wait_duration = dws_max_wait_duration if dws_max_wait_duration is not None else 86400
             self.machine_by_tier = {}
             self.accelerator_by_tier = {}
