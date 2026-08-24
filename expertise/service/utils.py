@@ -779,7 +779,7 @@ class GCPInterface(object):
         if config is not None:
             self.project_id = config['GCP_PROJECT_ID']
             self.project_number = config['GCP_PROJECT_NUMBER']
-            self.region = config['GCP_REGION']
+            self.region = config.get('GCP_REGION') or next(iter(config.get('GCP_REGIONS') or []), None)
             self.pipeline_root = config['GCP_PIPELINE_ROOT']
             self.pipeline_name = config.get('GCP_PIPELINE_NAME')
             self.pipeline_repo = config.get('GCP_PIPELINE_REPO')
@@ -1104,6 +1104,9 @@ class GCPInterface(object):
 
         # Pass GCS path instead of JSON data to avoid parameter size limits
         gcs_request_path = f"gs://{self.bucket_name}/{folder_path}/{self.request_fname}"
+
+        if not self.container_image:
+            raise ValueError("GCP_CONTAINER_IMAGE is not set; cannot create Vertex CustomJob without a container image URI")
 
         # Use passed region or fall back to primary region
         job_region = region or self.region
