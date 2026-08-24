@@ -1142,6 +1142,7 @@ class GCPInterface(object):
             display_name=display_name,
             worker_pool_specs=worker_pool_specs,
             base_output_dir=f"gs://{self.bucket_name}/{self.pipeline_root}",
+            staging_bucket=f"gs://{self.bucket_name}/{self.pipeline_root}",
             labels=self.service_label,
             project=self.project_id,
             location=job_region,

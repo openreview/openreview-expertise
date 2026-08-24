@@ -206,6 +206,7 @@ def test_create_job(mock_storage_client, mock_custom_job, mock_time):
             },
         }],
         base_output_dir="gs://test-bucket/pipeline-root",
+        staging_bucket="gs://test-bucket/pipeline-root",
         labels={"test": "label"},
         project="test_project",
         location="us-central1",
