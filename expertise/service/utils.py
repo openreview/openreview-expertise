@@ -1068,6 +1068,10 @@ class GCPInterface(object):
 
             blob = bucket.blob(f"{folder_path}/{file_name}")
 
+            if blob.exists():
+                self.logger.info(f"JSON file '{file_name}' already exists at '{folder_path}' in bucket '{bucket_name}'; skipping upload.")
+                return
+
             blob.upload_from_string(
                 data=json.dumps(data),
                 content_type="application/json"

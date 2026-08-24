@@ -95,6 +95,7 @@ def test_create_job(mock_storage_client, mock_custom_job, mock_time):
 
     # Mock `upload_from_string` to simulate folder and file creation
     mock_blob.upload_from_string.return_value = None
+    mock_blob.exists.return_value = False
 
     # Setup mock CustomJob
     mock_custom_instance = MagicMock()
@@ -358,6 +359,7 @@ def test_create_job_isolates_user_across_concurrent_calls(mock_storage_client, m
 
     def make_blob(*args, **kwargs):
         blob = MagicMock()
+        blob.exists.return_value = False
         def upload_from_string(*args, **kwargs):
             data = kwargs.get('data')
             if data is None and args:
