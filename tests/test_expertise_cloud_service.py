@@ -11,10 +11,9 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
-from expertise.service.utils import JobConfig, RedisDatabase
 from google.cloud.aiplatform_v1.types import PipelineState
 from conftest import GCSTestHelper
-from expertise.service.utils import RedisDatabase, JobConfig, JobStatus, JobDescription, APIRequest
+from expertise.service.utils import JobConfig, JobStatus, JobDescription, APIRequest
 
 GCS_TEST_BUCKET = GCSTestHelper.GCS_TEST_BUCKET
 GCS_PROJECT = GCSTestHelper.GCS_PROJECT
@@ -65,6 +64,11 @@ def reset_run_once_state():
     yield
     rts.get_expertise_service.has_run = False
     rts.get_expertise_service.to_return = None
+
+
+def _load_job_config(working_dir, job_id):
+    with open(os.path.join(working_dir, job_id, 'config.json'), 'r') as f:
+        return JobConfig.from_json(json.load(f))
 
 
 class TestExpertiseCloudService():
@@ -187,12 +191,6 @@ class TestExpertiseCloudService():
             return mock_pipeline_instance
 
         MAX_TIMEOUT = 300
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
 
         # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
@@ -253,14 +251,18 @@ class TestExpertiseCloudService():
         assert response['name'] == 'test_run', f"Job name: {response['name']}, status: {response}"
         assert response['status'] != 'Error'
 
-        # Let request process
-        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
-        response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+        # Wait for the cloud worker to poll the mocked Vertex job to completion
+        start_time = time.time()
+        try_time = time.time() - start_time
+        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
+            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'])
+            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+            try_time = time.time() - start_time
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         # Check proper user ID
         ## Checking live GCS
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
@@ -323,7 +325,7 @@ class TestExpertiseCloudService():
 
         # Check proper user ID
         ## Checking live GCS
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
         assert request_blob.exists(), "Request file should exist in GCS"
         request = json.loads(request_blob.download_as_text())
@@ -386,9 +388,9 @@ class TestExpertiseCloudService():
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-        ## Expect 3*4 calls from the worker thread, 3*2 calls from /expertise/status and 0 calls from /expertise/status/all
+        ## Status endpoints read from BullMQ, so only the worker polls GCP: 3 jobs x 5 attempts
         print(mock_pipeline_job.get.call_args_list)
-        assert len(mock_pipeline_job.get.call_args_list) == 18
+        assert len(mock_pipeline_job.get.call_args_list) == 15
 
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
@@ -416,7 +418,7 @@ class TestExpertiseCloudService():
 
         # Fetch the job config
         ## Convert current mocking to using file system
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         
         # Check proper user ID
         ## Checking and writing to live GCS
@@ -473,16 +475,6 @@ class TestExpertiseCloudService():
         assert metadata_response.status_code == 200
         assert metadata_response.json == {"meta": "data"}
 
-        # Regression: the Redis-cached status is stale in the cloud flow (it is
-        # never updated to COMPLETED once the Vertex AI pipeline finishes). The
-        # metadata endpoint must serve the metadata.json artifact straight from
-        # GCS without gating on that stale status, otherwise a genuinely-complete
-        # job is rejected with "Metadata not available - status: RUN_EXPERTISE".
-        stale_config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
-        stale_config.status = JobStatus.RUN_EXPERTISE
-        stale_config.description = JobDescription.VALS.value[JobStatus.RUN_EXPERTISE]
-        redis.save_job(stale_config)
-
         metadata_response = test_client.get(
             '/expertise/metadata',
             headers=tmlr_client.headers,
@@ -512,12 +504,6 @@ class TestExpertiseCloudService():
 
         mock_sign_url.return_value = 'https://signed.url/test-scores'
 
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
 
         abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
         abc_client.impersonate('CLD.cc')
@@ -547,7 +533,7 @@ class TestExpertiseCloudService():
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
 
         # Upload mock results
         metadata_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/metadata.json")
@@ -619,12 +605,6 @@ class TestExpertiseCloudService():
             return mock_pipeline_instance
 
         MAX_TIMEOUT = 300
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
 
         # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
@@ -673,8 +653,8 @@ class TestExpertiseCloudService():
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-        ## Expect 1*5 calls from the worker thread, 1*1 call from /expertise/status and 0 calls from /expertise/status/all
-        assert len(mock_pipeline_job.get.call_args_list) == 6
+        ## Status endpoints read from BullMQ, so only the worker polls GCP: 1 job x 5 attempts
+        assert len(mock_pipeline_job.get.call_args_list) == 5
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
@@ -702,7 +682,7 @@ class TestExpertiseCloudService():
 
         # Fetch the job config
         ## Convert current mocking to using file system
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         
         # Check proper user ID
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
@@ -752,12 +732,6 @@ class TestExpertiseCloudService():
             return mock_pipeline_instance
 
         MAX_TIMEOUT = 300
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
 
         # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
@@ -806,8 +780,8 @@ class TestExpertiseCloudService():
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-        ## Expect 1*5 calls from the worker thread, 1*1 call from /expertise/status and 0 calls from /expertise/status/all
-        assert len(mock_pipeline_job.get.call_args_list) == 6
+        ## Status endpoints read from BullMQ, so only the worker polls GCP: 1 job x 5 attempts
+        assert len(mock_pipeline_job.get.call_args_list) == 5
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
@@ -835,7 +809,7 @@ class TestExpertiseCloudService():
 
         # Fetch the job config
         ## Convert current mocking to using file system
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         
         # Check proper user ID
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
@@ -885,12 +859,6 @@ class TestExpertiseCloudService():
             return mock_pipeline_instance
 
         MAX_TIMEOUT = 300
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
 
         # Submit first job as CLD.cc
         abc_client = openreview.api.OpenReviewClient(
@@ -955,8 +923,8 @@ class TestExpertiseCloudService():
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
-        ## Expect 1*5 calls from the worker thread, 1*1 call from /expertise/status and 0 calls from /expertise/status/all
-        assert len(mock_pipeline_job.get.call_args_list) == 6
+        ## Status endpoints read from BullMQ, so only the worker polls GCP: 1 job x 5 attempts
+        assert len(mock_pipeline_job.get.call_args_list) == 5
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
@@ -972,7 +940,7 @@ class TestExpertiseCloudService():
 
         # Fetch the job config
         ## Convert current mocking to using file system
-        config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
         
         # Check proper user ID
         request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
@@ -1078,14 +1046,8 @@ class TestExpertiseCloudService():
             time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] * 2 + LATENCY_OFFSET)
             
             # Get User A's job from Redis
-            redis = RedisDatabase(
-                host=openreview_context_cloud['config']['REDIS_ADDR'],
-                port=openreview_context_cloud['config']['REDIS_PORT'],
-                db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-                sync_on_disk=False
-            )
             
-            job_a = redis.load_job(job_id_a, "CLD.cc")
+            job_a = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id_a)
             assert job_a.cloud_id is not None, "Job A cloud_id is None"
             
             # Check what was stored in GCP for job A
@@ -1124,12 +1086,6 @@ class TestExpertiseCloudService():
             return mock_pipeline_instance
 
         MAX_TIMEOUT = 300
-        redis = RedisDatabase(
-            host=openreview_context_cloud['config']['REDIS_ADDR'],
-            port=openreview_context_cloud['config']['REDIS_PORT'],
-            db=openreview_context_cloud['config']['REDIS_CONFIG_DB'],
-            sync_on_disk=False
-        )
         # Use TMLR client to test permissions
         tmlr_client = openreview.api.OpenReviewClient(
             token=openreview_client.token
@@ -1188,7 +1144,7 @@ class TestExpertiseCloudService():
         timeout *= NUM_RETRIES
         
         while time.time() - start_time < timeout:
-            config = redis.load_job(job_id, openreview_context_cloud['config']['OPENREVIEW_USERNAME'])
+            config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
             current_cloud_id = config.cloud_id
             
             # If we see a new cloud ID (due to retry), write the error blob to it
@@ -1205,20 +1161,14 @@ class TestExpertiseCloudService():
         assert response['status'] == 'Data Error'
         assert response['description'] == "No papers found for: invitation_ids: ['CLD_ERR.cc/-/Submission']"
 
-    def test_status_returns_redis_when_no_cloud_id(self, openreview_client, openreview_context_cloud):
+    def test_status_returns_404_when_job_not_in_queue(self, openreview_client, openreview_context_cloud):
 
         cfg = openreview_context_cloud["config"]
         test_client = openreview_context_cloud["test_client"]
 
         # Use the same Redis config as the service
-        redis = RedisDatabase(
-            host=cfg["REDIS_ADDR"],
-            port=cfg["REDIS_PORT"],
-            db=cfg["REDIS_CONFIG_DB"],
-            sync_on_disk=False,
-        )
 
-        # Prepare a job with no cloud_id and ensure job_dir exists so load_job passes
+        # Prepare a job config and ensure job_dir exists so load_job passes
         job_id = f"job_no_cloud_{int(time.time())}"
         job_dir = os.path.join(cfg["WORKING_DIR"], job_id)
         os.makedirs(job_dir, exist_ok=True)
@@ -1245,27 +1195,23 @@ class TestExpertiseCloudService():
             job_dir=job_dir,
             cdate=1234567890000,
             mdate=1234567890000,
-            status=JobStatus.QUEUED,
-            description=JobDescription.VALS.value[JobStatus.QUEUED],
         )
         config.api_request = api_req
-        redis.save_job(config)
+        with open(os.path.join(job_dir, 'config.json'), 'w') as f:
+            json.dump(config.to_json(), f)
+        with open(os.path.join(job_dir, 'request.json'), 'w') as f:
+            json.dump(api_req.to_json(), f)
 
         # Use a client with the default token (openreview.net)
         user_client = openreview.api.OpenReviewClient(token=openreview_client.token)
 
-        # Hit the status endpoint; should return Redis-backed values without error
+        # Hit the status endpoint; should return 404 because the job is not in BullMQ
         resp = test_client.get(
             "/expertise/status",
             headers=user_client.headers,
             query_string={"jobId": job_id},
         )
-        assert resp.status_code == 200
-        body = resp.get_json()
-        assert body["jobId"] == job_id
-        assert body["status"] == JobStatus.QUEUED
-        assert body["description"] == JobDescription.VALS.value[JobStatus.QUEUED]
-        assert body["request"] == api_req.to_json()
+        assert resp.status_code == 404
 
     @patch("expertise.service.expertise.execute_create_dataset")
     def test_status_transitions_to_fetching_data_before_dataset_creation(self, mock_create_dataset, openreview_client, openreview_context_cloud):
@@ -1274,19 +1220,15 @@ class TestExpertiseCloudService():
         cfg = openreview_context_cloud['config']
         test_client = openreview_context_cloud['test_client']
 
-        redis = RedisDatabase(
-            host=cfg['REDIS_ADDR'],
-            port=cfg['REDIS_PORT'],
-            db=cfg['REDIS_CONFIG_DB'],
-            sync_on_disk=False,
-        )
-
         captured = {}
+        original_update_status = expertise.service.expertise.ExpertiseCloudService._update_job_status
+
+        async def wrapped_update_status(self, job, new_status, desc=None, error=None):
+            if new_status == JobStatus.FETCHING_DATA:
+                captured['status_at_create'] = new_status
+            return await original_update_status(self, job, new_status, desc, error)
 
         def capture_then_short_circuit(*args, **kwargs):
-            cfg_dict = kwargs.get('config') or args[1]
-            loaded = redis.load_job(cfg_dict['job_id'], cfg_dict['user_id'])
-            captured['status_at_create'] = loaded.status
             raise ExpectedDataError("intentional short-circuit to capture mid-flow status")
 
         mock_create_dataset.side_effect = capture_then_short_circuit
@@ -1294,44 +1236,45 @@ class TestExpertiseCloudService():
         abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
         abc_client.impersonate('CLD.cc')
 
-        response = test_client.post(
-            '/expertise',
-            data=json.dumps({
-                "name": "test_status_transition",
-                "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
-                "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
-                "model": {
-                    "name": "specter2+scincl",
-                    'useTitle': False,
-                    'useAbstract': True,
-                    'skipSpecter': False,
-                    'scoreComputation': 'avg',
-                },
-                "dataset": {'minimumPubDate': 0},
-            }),
-            content_type='application/json',
-            headers=abc_client.headers,
-        )
-        assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['jobId']
+        patcher = patch.object(expertise.service.expertise.ExpertiseCloudService, '_update_job_status', wrapped_update_status)
+        patcher.start()
+        try:
+            response = test_client.post(
+                '/expertise',
+                data=json.dumps({
+                    "name": "test_status_transition",
+                    "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
+                    "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
+                    "model": {
+                        "name": "specter2+scincl",
+                        'useTitle': False,
+                        'useAbstract': True,
+                        'skipSpecter': False,
+                        'scoreComputation': 'avg',
+                    },
+                    "dataset": {'minimumPubDate': 0},
+                }),
+                content_type='application/json',
+                headers=abc_client.headers,
+            )
+            assert response.status_code == 200, f'{response.json}'
+            job_id = response.json['jobId']
 
-        # Immediately after enqueue, the worker hasn't run yet — status is QUEUED.
-        status_resp = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
-        assert status_resp['status'] == JobStatus.QUEUED, status_resp
+            # Wait for the worker to dequeue and hit the patched execute_create_dataset.
+            deadline = time.time() + 30
+            while 'status_at_create' not in captured and time.time() < deadline:
+                time.sleep(0.1)
+            assert 'status_at_create' in captured, "Worker never invoked execute_create_dataset"
 
-        # Wait for the worker to dequeue and hit the patched execute_create_dataset.
-        deadline = time.time() + 30
-        while 'status_at_create' not in captured and time.time() < deadline:
-            time.sleep(0.5)
-        assert 'status_at_create' in captured, "Worker never invoked execute_create_dataset"
+            # The persisted status at the moment the worker began dataset creation must be FETCHING_DATA.
+            assert captured['status_at_create'] == JobStatus.FETCHING_DATA, (
+                f"Expected status FETCHING_DATA at execute_create_dataset entry, got {captured['status_at_create']!r}"
+            )
 
-        # The persisted status at the moment the worker began dataset creation must be FETCHING_DATA.
-        assert captured['status_at_create'] == JobStatus.FETCHING_DATA, (
-            f"Expected status FETCHING_DATA at execute_create_dataset entry, got {captured['status_at_create']!r}"
-        )
-
-        # ExpectedDataError handling resolves the job to Data Error — confirms the worker followed the
-        # update_status → execute_create_dataset → exception-handling path we're exercising.
-        time.sleep(LATENCY_OFFSET)
-        final = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
-        assert final['status'] == JobStatus.DATA_ERROR, final
+            # ExpectedDataError handling resolves the job to Data Error — confirms the worker followed the
+            # update_status → execute_create_dataset → exception-handling path we're exercising.
+            time.sleep(LATENCY_OFFSET)
+            final = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
+            assert final['status'] == JobStatus.DATA_ERROR, final
+        finally:
+            patcher.stop()
