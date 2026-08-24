@@ -19,6 +19,7 @@ from copy import deepcopy
 import asyncio
 import threading
 import traceback
+from google.api_core import exceptions as google_exceptions
 
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, get_user_id, ExpectedDataError
 
@@ -903,12 +904,29 @@ class ExpertiseCloudService(BaseExpertiseService):
                 self._save_config(config)
                 last_error = None
                 break
-            except Exception as e:
-                self.logger.error(f"Error creating cloud job for {job.id} in region {region}: {e}")
+            except google_exceptions.PermissionDenied as e:
+                self.logger.error(f"Permission denied creating cloud job for {job.id} in region {region}: {e}")
+                raise e.with_traceback(e.__traceback__)
+            except google_exceptions.ResourceExhausted as e:
+                self.logger.error(f"Resources exhausted in region {region} for job {job.id}: {e}")
                 self.logger.error(f"Error details: {traceback.format_exc()}")
                 last_error = e
-                # Continue to next region
                 continue
+            except google_exceptions.ServiceUnavailable as e:
+                self.logger.error(f"Service unavailable in region {region} for job {job.id}: {e}")
+                self.logger.error(f"Error details: {traceback.format_exc()}")
+                last_error = e
+                continue
+            except Exception as e:
+                error_msg = str(e).lower()
+                if any(k in error_msg for k in ('capacity', 'insufficient', 'unavailable', 'resources')):
+                    self.logger.error(f"Capacity/service error in region {region} for job {job.id}: {e}")
+                    self.logger.error(f"Error details: {traceback.format_exc()}")
+                    last_error = e
+                    continue
+                self.logger.error(f"Error creating cloud job for {job.id} in region {region}: {e}")
+                self.logger.error(f"Error details: {traceback.format_exc()}")
+                raise e.with_traceback(e.__traceback__)
 
         if last_error is not None:
             if job.data.get('status') != JobStatus.ERROR:
