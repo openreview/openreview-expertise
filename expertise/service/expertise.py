@@ -881,7 +881,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             await self._update_job_status(job, JobStatus.DATA_ERROR, str(e), error=str(e))
             return
 
-        asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI CustomJob (tier={machine_type})'), self.queue_loop)
+        asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI PipelineJob (tier={machine_type})'), self.queue_loop)
 
         # Determine ordered list of regions to try
         gcp_regions = self.server_config.get('GCP_REGIONS', [self.cloud.region])
@@ -905,32 +905,47 @@ class ExpertiseCloudService(BaseExpertiseService):
                 last_error = None
                 break
             except google_exceptions.PermissionDenied as e:
-                self.logger.error(f"Permission denied creating cloud job for {job.id} in region {region}: {e}")
+                msg = f"Permission denied creating cloud job for {job.id} in region {region}: {e}"
+                self.logger.error(msg)
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
                 raise e.with_traceback(e.__traceback__)
             except google_exceptions.ResourceExhausted as e:
-                self.logger.error(f"Resources exhausted in region {region} for job {job.id}: {e}")
-                self.logger.error(f"Error details: {traceback.format_exc()}")
+                msg = f"Resources exhausted in region {region} for job {job.id}: {e}"
+                self.logger.error(msg)
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
                 last_error = e
                 continue
             except google_exceptions.ServiceUnavailable as e:
-                self.logger.error(f"Service unavailable in region {region} for job {job.id}: {e}")
-                self.logger.error(f"Error details: {traceback.format_exc()}")
+                msg = f"Service unavailable in region {region} for job {job.id}: {e}"
+                self.logger.error(msg)
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+                last_error = e
+                continue
+            except google_exceptions.InvalidArgument as e:
+                msg = f"Invalid argument creating cloud job for {job.id} in region {region}: {e}"
+                self.logger.error(msg)
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
                 last_error = e
                 continue
             except Exception as e:
                 error_msg = str(e).lower()
                 if any(k in error_msg for k in ('capacity', 'insufficient', 'unavailable', 'resources')):
-                    self.logger.error(f"Capacity/service error in region {region} for job {job.id}: {e}")
-                    self.logger.error(f"Error details: {traceback.format_exc()}")
+                    msg = f"Capacity/service error in region {region} for job {job.id}: {e}"
+                    self.logger.error(msg)
+                    asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
                     last_error = e
                     continue
-                self.logger.error(f"Error creating cloud job for {job.id} in region {region}: {e}")
+                msg = f"Error creating cloud job for {job.id} in region {region}: {e}"
+                self.logger.error(msg)
                 self.logger.error(f"Error details: {traceback.format_exc()}")
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
                 raise e.with_traceback(e.__traceback__)
 
         if last_error is not None:
+            msg = f"Error creating cloud job: {last_error}"
+            asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
             if job.data.get('status') != JobStatus.ERROR:
-                await self._update_job_status(job, JobStatus.ERROR, f"Error creating cloud job: {last_error}", error=str(last_error))
+                await self._update_job_status(job, JobStatus.ERROR, msg, error=str(last_error))
             raise last_error.with_traceback(last_error.__traceback__)
 
         try:

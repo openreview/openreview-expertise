@@ -11,7 +11,7 @@ import numpy as np
 import shutil
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
-from google.cloud.aiplatform_v1.types import JobState
+from google.cloud.aiplatform_v1.types import PipelineState
 from conftest import GCSTestHelper
 from expertise.service.utils import JobConfig, JobStatus, JobDescription, APIRequest
 import redis
@@ -76,13 +76,6 @@ class TestExpertiseCloudService():
 
     job_id = None
 
-    @pytest.fixture(autouse=True)
-    def _set_test_container_image(self, monkeypatch):
-        monkeypatch.setenv(
-            'GCP_CONTAINER_IMAGE',
-            'us-docker.pkg.dev/test_project/test-repo/test-image:latest'
-        )
-
     @pytest.fixture(scope='function')
     def openreview_context_cloud(self, gcs_jobs_prefix):
         """
@@ -113,12 +106,13 @@ class TestExpertiseCloudService():
             "GCP_PROJECT_NUMBER" : GCS_PROJECT_NUMBER,
             "GCP_REGION":'us-central1',
             "GCP_PIPELINE_ROOT":'pipeline-root',
+            "GCP_PIPELINE_NAME": 'openreview-expertise',
+            "GCP_PIPELINE_REPO": 'expertise-pipelines',
             "GCP_BUCKET_NAME" : GCS_TEST_BUCKET,
             "GCP_JOBS_FOLDER" : gcs_jobs_prefix,
             "GCP_SERVICE_LABEL":{'dev': 'expertise'},
             "GCP_URL_SIGNER_SERVICE_ACCOUNT": 'url-signer@test-project.iam.gserviceaccount.com',
             "GCP_PIPELINE_TAG": 'test-pipeline-tag',
-            "DWS_MAX_WAIT_DURATION": 3600,
             "PIPELINE_MACHINE_SMALL": 'n1-standard-16',
             "PIPELINE_MACHINE_MEDIUM": 'n1-standard-32',
             "PIPELINE_MACHINE_LARGE": 'n1-highmem-96',
@@ -202,20 +196,20 @@ class TestExpertiseCloudService():
         assert 'forbidden' in response.json['message'].lower()
         assert response.json['message'] == "Forbidden: Insufficient permissions to set machine type"
 
-    @patch("expertise.service.utils.aip.CustomJob")  # Mock CustomJob to avoid calling AI Platform
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_create_job_filesystem(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
-            # Setup mock CustomJob
+            # Setup mock PipelineJob
             mock_pipeline_instance = MagicMock()
             mock_pipeline_job.return_value = mock_pipeline_instance
 
-            # Mock CustomJob.get()
+            # Mock PipelineJob.get()
             mock_pipeline_running = MagicMock()
-            mock_pipeline_running.state = JobState.JOB_STATE_RUNNING
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
             mock_pipeline_running.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_succeeded = MagicMock()
-            mock_pipeline_succeeded.state = JobState.JOB_STATE_SUCCEEDED
+            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
@@ -520,18 +514,18 @@ class TestExpertiseCloudService():
         assert metadata_response.json == {"meta": "data"}
 
     @patch("expertise.service.utils.GCPInterface.sign_url")
-    @patch("expertise.service.utils.aip.CustomJob")  # Mock CustomJob to avoid calling AI Platform
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_signed_url_endpoint(self, mock_pipeline_job, mock_sign_url, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
             mock_pipeline_instance = MagicMock()
             mock_pipeline_job.return_value = mock_pipeline_instance
 
             mock_pipeline_running = MagicMock()
-            mock_pipeline_running.state = JobState.JOB_STATE_RUNNING
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
             mock_pipeline_running.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_succeeded = MagicMock()
-            mock_pipeline_succeeded.state = JobState.JOB_STATE_SUCCEEDED
+            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
@@ -620,20 +614,20 @@ class TestExpertiseCloudService():
         assert forbidden_response.status_code == 403, forbidden_response.json
         assert 'forbidden' in forbidden_response.json['message'].lower()
 
-    @patch("expertise.service.utils.aip.CustomJob")  # Mock CustomJob to avoid calling AI Platform
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_group_group_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
-            # Setup mock CustomJob
+            # Setup mock PipelineJob
             mock_pipeline_instance = MagicMock()
             mock_pipeline_job.return_value = mock_pipeline_instance
 
-            # Mock CustomJob.get()
+            # Mock PipelineJob.get()
             mock_pipeline_running = MagicMock()
-            mock_pipeline_running.state = JobState.JOB_STATE_RUNNING
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
             mock_pipeline_running.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_succeeded = MagicMock()
-            mock_pipeline_succeeded.state = JobState.JOB_STATE_SUCCEEDED
+            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
@@ -747,20 +741,20 @@ class TestExpertiseCloudService():
             {"entityA": "user_user3","entityB": "user_user2","score": 0.987}
         ]
 
-    @patch("expertise.service.utils.aip.CustomJob")  # Mock CustomJob to avoid calling AI Platform
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_paper_paper_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
-            # Setup mock CustomJob
+            # Setup mock PipelineJob
             mock_pipeline_instance = MagicMock()
             mock_pipeline_job.return_value = mock_pipeline_instance
 
-            # Mock CustomJob.get()
+            # Mock PipelineJob.get()
             mock_pipeline_running = MagicMock()
-            mock_pipeline_running.state = JobState.JOB_STATE_RUNNING
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
             mock_pipeline_running.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_succeeded = MagicMock()
-            mock_pipeline_succeeded.state = JobState.JOB_STATE_SUCCEEDED
+            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
@@ -874,20 +868,20 @@ class TestExpertiseCloudService():
             {"entityA": "hijk","entityB": "lmno","score": 0.987}
         ]
 
-    @patch("expertise.service.utils.aip.CustomJob")  # Mock CustomJob to avoid calling AI Platform
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_submissions_scores(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
-            # Setup mock CustomJob
+            # Setup mock PipelineJob
             mock_pipeline_instance = MagicMock()
             mock_pipeline_job.return_value = mock_pipeline_instance
 
-            # Mock CustomJob.get()
+            # Mock PipelineJob.get()
             mock_pipeline_running = MagicMock()
-            mock_pipeline_running.state = JobState.JOB_STATE_RUNNING
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
             mock_pipeline_running.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_succeeded = MagicMock()
-            mock_pipeline_succeeded.state = JobState.JOB_STATE_SUCCEEDED
+            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
@@ -1006,7 +1000,7 @@ class TestExpertiseCloudService():
             {"entityB": "ASDFASDF","entityA": "~Zonia_Willms1","score": 0.987}
         ]
 
-    @patch("expertise.service.utils.aip.CustomJob")  # Mock CustomJob to avoid calling AI Platform
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_client_isolation(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         """
         This test ensures that the user_id polling the job and the user_id written to GCP storage are the same
@@ -1028,7 +1022,7 @@ class TestExpertiseCloudService():
         # Mock the pipeline to stay in RUNNING state so we can 
         # submit another job before it completes
         mock_pipeline_running = MagicMock()
-        mock_pipeline_running.state = JobState.JOB_STATE_RUNNING
+        mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
         mock_pipeline_running.update_time.timestamp.return_value = time.time()
         
         mock_pipeline_job.get.return_value = mock_pipeline_running
@@ -1101,20 +1095,20 @@ class TestExpertiseCloudService():
             # Clean up
             pass
 
-    @patch("expertise.service.utils.aip.CustomJob")  # Mock CustomJob to avoid calling AI Platform
+    @patch("expertise.service.utils.aip.PipelineJob")  # Mock PipelineJob to avoid calling AI Platform
     def test_read_error_json(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
         def setup_job_mocks():
-            # Setup mock CustomJob
+            # Setup mock PipelineJob
             mock_pipeline_instance = MagicMock()
             mock_pipeline_job.return_value = mock_pipeline_instance
 
-            # Mock CustomJob.get()
+            # Mock PipelineJob.get()
             mock_pipeline_running = MagicMock()
-            mock_pipeline_running.state = JobState.JOB_STATE_RUNNING
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
             mock_pipeline_running.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_failed = MagicMock()
-            mock_pipeline_failed.state = JobState.JOB_STATE_FAILED
+            mock_pipeline_failed.state = PipelineState.PIPELINE_STATE_FAILED
             mock_pipeline_failed.update_time.timestamp.return_value = time.time()
 
             mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_failed] * 10
@@ -1315,31 +1309,31 @@ class TestExpertiseCloudService():
         finally:
             patcher.stop()
 
-    @patch("expertise.service.utils.aip.CustomJob")
-    def test_region_fallback_on_capacity_error(self, mock_custom_job, openreview_client, openreview_context_cloud):
+    @patch("expertise.service.utils.aip.PipelineJob")
+    def test_region_fallback_on_capacity_error(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
         """When the primary region fails, the worker retries in fallback regions."""
         def setup_job_mocks_with_failure():
-            mock_custom_instance = MagicMock()
-            mock_custom_job.return_value = mock_custom_instance
+            mock_pipeline_instance = MagicMock()
+            mock_pipeline_job.return_value = mock_pipeline_instance
 
-            # First CustomJob constructor fails, second succeeds
+            # First PipelineJob constructor fails, second succeeds
             def side_effect(*args, **kwargs):
-                if mock_custom_job.call_count <= 1:
+                if mock_pipeline_job.call_count <= 1:
                     raise Exception("Resources are insufficient in region: us-central1")
-                return mock_custom_instance
-            mock_custom_job.side_effect = side_effect
+                return mock_pipeline_instance
+            mock_pipeline_job.side_effect = side_effect
 
-            mock_custom_running = MagicMock()
-            mock_custom_running.state = JobState.JOB_STATE_RUNNING
-            mock_custom_running.update_time.timestamp.return_value = time.time()
+            mock_pipeline_running = MagicMock()
+            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
+            mock_pipeline_running.update_time.timestamp.return_value = time.time()
 
-            mock_custom_succeeded = MagicMock()
-            mock_custom_succeeded.state = JobState.JOB_STATE_SUCCEEDED
-            mock_custom_succeeded.update_time.timestamp.return_value = time.time()
+            mock_pipeline_succeeded = MagicMock()
+            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
+            mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_custom_job.get.side_effect = [mock_custom_running] * 4 + [mock_custom_succeeded] * 10
+            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
 
-            return mock_custom_instance
+            return mock_pipeline_instance
 
         # Configure fallback regions in the test config
         cfg = openreview_context_cloud['config']
@@ -1373,8 +1367,8 @@ class TestExpertiseCloudService():
             status_resp = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
         assert status_resp['status'] == 'Completed', f"Job status: {status_resp['status']}"
 
-        # Verify create_job was called twice (primary failed, fallback succeeded)
-        assert mock_custom_job.call_count >= 2, f"Expected at least 2 create_job calls, got {mock_custom_job.call_count}"
+        # Verify PipelineJob was constructed at least twice (primary failed, fallback succeeded)
+        assert mock_pipeline_job.call_count >= 2, f"Expected at least 2 PipelineJob calls, got {mock_pipeline_job.call_count}"
 
         # Verify the config was saved with the fallback region
         config_path = os.path.join(cfg['WORKING_DIR'], job_id, 'config.json')

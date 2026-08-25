@@ -116,8 +116,9 @@ jobs:
             fi
           done
 
-          GCP_CONTAINER_IMAGE="${IMAGE_TAG}:${IMAGE_TAG_VERSION}"
+          IMAGE_URI="${IMAGE_TAG}:${IMAGE_TAG_VERSION}"
+          GCP_PIPELINE_TAG="${IMAGE_TAG_VERSION}"
           for i in ${!instance_names[@]}; do
             echo Deploying to ${instance_names[$i]}
-            gcloud compute ssh --zone ${zones[$i]} --tunnel-through-iap openreview@${instance_names[$i]} --command "export GCP_CONTAINER_IMAGE=${GCP_CONTAINER_IMAGE}; bash /home/openreview/bin/deploy-expertise.sh $BRANCH \"${GCP_CONTAINER_IMAGE}\"" --quiet
+            gcloud compute ssh --zone ${zones[$i]} --tunnel-through-iap openreview@${instance_names[$i]} --command "export GCP_PIPELINE_TAG=${GCP_PIPELINE_TAG}; bash /home/openreview/bin/deploy-expertise.sh $BRANCH \"${IMAGE_URI}\" \"${GCP_PIPELINE_TAG}\"" --quiet
           done
