@@ -9,18 +9,18 @@ import os
 import time
 import numpy as np
 import shutil
+import redis
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from google.cloud.aiplatform_v1.types import PipelineState
 from conftest import GCSTestHelper
 from expertise.service.utils import JobConfig, JobStatus, JobDescription, APIRequest
-import redis
 
 GCS_TEST_BUCKET = GCSTestHelper.GCS_TEST_BUCKET
 GCS_PROJECT = GCSTestHelper.GCS_PROJECT
 GCS_PROJECT_NUMBER = GCSTestHelper.GCS_NUMBER
 GCS_JOBS_FOLDER = GCSTestHelper.GCS_TEST_ROOT
-LATENCY_OFFSET = 5
+LATENCY_OFFSET = 3
 NUM_RETRIES = 3
 
 # Default parameters for the module's common setup
@@ -106,34 +106,21 @@ class TestExpertiseCloudService():
             "GCP_PROJECT_NUMBER" : GCS_PROJECT_NUMBER,
             "GCP_REGION":'us-central1',
             "GCP_PIPELINE_ROOT":'pipeline-root',
-            "GCP_PIPELINE_NAME": 'openreview-expertise',
-            "GCP_PIPELINE_REPO": 'expertise-pipelines',
+            "GCP_PIPELINE_NAME":'test-pipeline',
+            "GCP_PIPELINE_REPO":'test-repo',
+            "GCP_PIPELINE_TAG":'dev',
             "GCP_KFP_REGION": 'us',
+            "GCP_REGIONS": ['us-central1', 'us-east4', 'us-west1'],
             "GCP_BUCKET_NAME" : GCS_TEST_BUCKET,
             "GCP_JOBS_FOLDER" : gcs_jobs_prefix,
             "GCP_SERVICE_LABEL":{'dev': 'expertise'},
             "GCP_URL_SIGNER_SERVICE_ACCOUNT": 'url-signer@test-project.iam.gserviceaccount.com',
-            "GCP_PIPELINE_TAG": 'test-pipeline-tag',
-            "PIPELINE_MACHINE_SMALL": 'n1-standard-16',
-            "PIPELINE_MACHINE_MEDIUM": 'n1-standard-32',
-            "PIPELINE_MACHINE_LARGE": 'n1-highmem-96',
-            "PIPELINE_GPU_SMALL": 'NVIDIA_TESLA_T4',
-            "PIPELINE_GPU_MEDIUM": 'NVIDIA_TESLA_T4',
-            "PIPELINE_GPU_LARGE": 'NVIDIA_TESLA_T4',
-            "PIPELINE_GPU_COUNT_SMALL": 1,
-            "PIPELINE_GPU_COUNT_MEDIUM": 2,
-            "PIPELINE_GPU_COUNT_LARGE": 4,
-            "PIPELINE_DISK_SIZE_SMALL": 200,
-            "PIPELINE_DISK_SIZE_MEDIUM": 200,
-            "PIPELINE_DISK_SIZE_LARGE": 200,
             "POLL_INTERVAL": 1,
             "POLL_MAX_ATTEMPTS": 5,
             "model_params": {
                 "use_redis": True
             }
         }
-        # Flush the BullMQ Redis DB so no stale jobs from previous tests collide
-        # with the duplicate-request check in start_expertise.
         redis_client = redis.Redis(host=config['REDIS_ADDR'], port=config['REDIS_PORT'], db=config['REDIS_CONFIG_DB'])
         redis_client.flushdb()
         redis_client.close()
@@ -345,13 +332,9 @@ class TestExpertiseCloudService():
         assert response['name'] == 'test_run', f"Job name: {response['name']}, status: {response}"
         assert response['status'] != 'Error', response
 
-        # Wait for the cloud worker to poll the mocked Vertex job to completion
-        start_time = time.time()
-        try_time = time.time() - start_time
-        while response['status'] != 'Completed' and try_time <= MAX_TIMEOUT:
-            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'])
-            response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
-            try_time = time.time() - start_time
+        # Let request process
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
+        response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         # Check proper user ID
@@ -1315,9 +1298,7 @@ class TestExpertiseCloudService():
         """When the primary region fails, the worker retries in fallback regions."""
         def setup_job_mocks_with_failure():
             mock_pipeline_instance = MagicMock()
-            mock_pipeline_job.return_value = mock_pipeline_instance
 
-            # First PipelineJob constructor fails, second succeeds
             def side_effect(*args, **kwargs):
                 if mock_pipeline_job.call_count <= 1:
                     raise Exception("Resources are insufficient in region: us-central1")
@@ -1336,7 +1317,6 @@ class TestExpertiseCloudService():
 
             return mock_pipeline_instance
 
-        # Configure fallback regions in the test config
         cfg = openreview_context_cloud['config']
         cfg['GCP_REGIONS'] = ['us-central1', 'us-east4']
 
@@ -1349,9 +1329,23 @@ class TestExpertiseCloudService():
             '/expertise',
             data=json.dumps({
                 "name": "test_region_fallback",
-                "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
-                "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
-                "model": {"name": "specter+mfr"},
+                "entityA": {
+                    'type': "Group",
+                    'reviewerIds': [
+                        "~Harold_Rice1",
+                        "~Zonia_Willms1",
+                        "~Royal_Toy1",
+                        "~C.V._Lastname1",
+                    ]
+                },
+                "entityB": {
+                    'type': "Note",
+                    'submissions': [
+                        {"id": "ASDFASDF", "title": "Test Submission", "abstract": "Test Abstract"},
+                        {"id": "SFGSDFGSDFG", "title": "Test Submission 2", "abstract": "Test Abstract 2"},
+                    ]
+                },
+                "model": {"name": "specter2+scincl", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'max'},
                 "dataset": {'minimumPubDate': 0},
             }),
             content_type='application/json',
@@ -1360,7 +1354,6 @@ class TestExpertiseCloudService():
         assert response.status_code == 200, f'{response.json}'
         job_id = response.json['jobId']
 
-        # Wait for the worker to process
         deadline = time.time() + 60
         status_resp = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
         while status_resp['status'] not in ('Completed', 'Error', 'Data Error') and time.time() < deadline:
@@ -1368,11 +1361,9 @@ class TestExpertiseCloudService():
             status_resp = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
         assert status_resp['status'] == 'Completed', f"Job status: {status_resp['status']}"
 
-        # Verify PipelineJob was constructed at least twice (primary failed, fallback succeeded)
         assert mock_pipeline_job.call_count >= 2, f"Expected at least 2 PipelineJob calls, got {mock_pipeline_job.call_count}"
 
-        # Verify the config was saved with the fallback region
         config_path = os.path.join(cfg['WORKING_DIR'], job_id, 'config.json')
         with open(config_path, 'r') as f:
             saved_config = json.load(f)
-        assert saved_config['cloud_region'] in ['us-central1', 'us-east4'], f"Unexpected cloud_region: {saved_config.get('cloud_region')}"
+        assert saved_config['cloud_region'] == 'us-east4', f"Unexpected cloud_region: {saved_config.get('cloud_region')}"
