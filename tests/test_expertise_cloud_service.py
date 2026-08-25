@@ -117,6 +117,7 @@ class TestExpertiseCloudService():
             "GCP_JOBS_FOLDER" : gcs_jobs_prefix,
             "GCP_SERVICE_LABEL":{'dev': 'expertise'},
             "GCP_URL_SIGNER_SERVICE_ACCOUNT": 'url-signer@test-project.iam.gserviceaccount.com',
+            "GCP_PIPELINE_TAG": 'test-pipeline-tag',
             "DWS_MAX_WAIT_DURATION": 3600,
             "PIPELINE_MACHINE_SMALL": 'n1-standard-16',
             "PIPELINE_MACHINE_MEDIUM": 'n1-standard-32',
