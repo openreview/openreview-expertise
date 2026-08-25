@@ -109,10 +109,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     config = parse_config_file(CONFIG_FILE_PATH)
 
-    small_name = config.get('SMALL_NAME', 'small')
-    medium_name = config.get('MEDIUM_NAME', 'medium')
-    large_name = config.get('LARGE_NAME', 'large')
-
     @component(
         base_image=f"{args.region}-docker.pkg.dev/{args.project}/{args.repo}/{args.image}:{args.tag}"
     )
@@ -128,7 +124,7 @@ if __name__ == '__main__':
 
     small_expertise_job = create_custom_training_job_from_component(
         execute_expertise_pipeline_op,
-        display_name=f"{args.kfp_name}-{small_name}",
+        display_name=config['PIPELINE_NAME_SMALL'],
         machine_type=config['PIPELINE_MACHINE_SMALL'],
         accelerator_type=config['PIPELINE_GPU_SMALL'],
         accelerator_count=config['PIPELINE_GPU_COUNT_SMALL'],
@@ -138,7 +134,7 @@ if __name__ == '__main__':
 
     medium_expertise_job = create_custom_training_job_from_component(
         execute_expertise_pipeline_op,
-        display_name=f"{args.kfp_name}-{medium_name}",
+        display_name=config['PIPELINE_NAME_MEDIUM'],
         machine_type=config['PIPELINE_MACHINE_MEDIUM'],
         accelerator_type=config['PIPELINE_GPU_MEDIUM'],
         accelerator_count=config['PIPELINE_GPU_COUNT_MEDIUM'],
@@ -148,7 +144,7 @@ if __name__ == '__main__':
 
     large_expertise_job = create_custom_training_job_from_component(
         execute_expertise_pipeline_op,
-        display_name=f"{args.kfp_name}-{large_name}",
+        display_name=config['PIPELINE_NAME_LARGE'],
         machine_type=config['PIPELINE_MACHINE_LARGE'],
         accelerator_type=config['PIPELINE_GPU_LARGE'],
         accelerator_count=config['PIPELINE_GPU_COUNT_LARGE'],
@@ -159,7 +155,7 @@ if __name__ == '__main__':
     from kfp.dsl import pipeline
 
     @pipeline(
-        name=f"{args.kfp_name}-{small_name}",
+        name=f"{args.kfp_name}-{config['SMALL_NAME']}",
         description='Expertise pipeline for small jobs'
     )
     def small_expertise_pipeline(
@@ -175,7 +171,7 @@ if __name__ == '__main__':
         ).set_display_name("Running Small Expertise Pipeline")
 
     @pipeline(
-        name=f"{args.kfp_name}-{medium_name}",
+        name=f"{args.kfp_name}-{config['MEDIUM_NAME']}",
         description='Expertise pipeline for medium jobs'
     )
     def medium_expertise_pipeline(
@@ -191,7 +187,7 @@ if __name__ == '__main__':
         ).set_display_name("Running Medium Expertise Pipeline")
 
     @pipeline(
-        name=f"{args.kfp_name}-{large_name}",
+        name=f"{args.kfp_name}-{config['LARGE_NAME']}",
         description='Expertise pipeline for large jobs'
     )
     def large_expertise_pipeline(
