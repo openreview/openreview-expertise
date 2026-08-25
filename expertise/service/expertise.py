@@ -928,13 +928,6 @@ class ExpertiseCloudService(BaseExpertiseService):
                 last_error = e
                 continue
             except Exception as e:
-                error_msg = str(e).lower()
-                if any(k in error_msg for k in ('capacity', 'insufficient', 'unavailable', 'resources')):
-                    msg = f"Capacity/service error in region {region} for job {job.id}: {e}"
-                    self.logger.error(msg)
-                    asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-                    last_error = e
-                    continue
                 msg = f"Error creating cloud job for {job.id} in region {region}: {e}"
                 self.logger.error(msg)
                 self.logger.error(f"Error details: {traceback.format_exc()}")
