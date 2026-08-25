@@ -789,7 +789,7 @@ class GCPInterface(object):
             self.service_label = config['GCP_SERVICE_LABEL']
             self.service_account = config.get('GCP_SERVICE_ACCOUNT')
             self.url_signer_service_account = config.get('GCP_URL_SIGNER_SERVICE_ACCOUNT')
-            self.container_image = container_image or os.environ.get('GCP_CONTAINER_IMAGE')
+            self.container_image = container_image or self._resolve_container_image(config)
             self.dws_max_wait_duration = config.get('DWS_MAX_WAIT_DURATION', 86400) if dws_max_wait_duration is None else dws_max_wait_duration
             # Per-tier worker pool machine specs
             self.machine_by_tier = {
@@ -874,6 +874,22 @@ class GCPInterface(object):
         )
         self.logger.info(f"Get bucket {self.bucket_name}")
         self.bucket = self.gcs_client.bucket(self.bucket_name)
+
+    @staticmethod
+    def _resolve_container_image(config):
+        """Build the CustomJob container image URI from deploy-time config.
+
+        The deploy script writes GCP_PIPELINE_TAG (branch-sha or release version).
+        The image is pushed once to the us multi-region Artifact Registry and
+        referenced identically from every compute region in GCP_REGIONS.
+        """
+        project_id = config.get('GCP_PROJECT_ID')
+        pipeline_tag = config.get('GCP_PIPELINE_TAG')
+        if not project_id or not pipeline_tag:
+            return None
+        env = os.environ.get('EXPERTISE_ENV', 'production')
+        image_name = 'expertise-dev' if env == 'development' else 'expertise-production'
+        return f"us-docker.pkg.dev/{project_id}/openreview-docker-images/{image_name}:{pipeline_tag}"
 
     def _resolve_job_status(self, job_id, job):
         descriptions = JobDescription.VALS.value
