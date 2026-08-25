@@ -108,6 +108,7 @@ class TestExpertiseCloudService():
             "GCP_PIPELINE_ROOT":'pipeline-root',
             "GCP_PIPELINE_NAME": 'openreview-expertise',
             "GCP_PIPELINE_REPO": 'expertise-pipelines',
+            "GCP_KFP_REGION": 'us',
             "GCP_BUCKET_NAME" : GCS_TEST_BUCKET,
             "GCP_JOBS_FOLDER" : gcs_jobs_prefix,
             "GCP_SERVICE_LABEL":{'dev': 'expertise'},

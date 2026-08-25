@@ -15,8 +15,12 @@ on:
   push:
     branches: [ master ]
 env:
+  REGION: us
+  KFP_REGION: us
+  KFP_REPO: openreview-kfp
   REPO: openreview-docker-images
   PROJECT: sunlit-realm-131518
+  PIPELINE_NAME: openreview-expertise-dev
   IMAGE_NAME: expertise-dev
 jobs:
   deploy:
@@ -66,6 +70,7 @@ jobs:
           IMAGE_TAG_VERSION="${CLEAN_BRANCH}-${SHORT_SHA}"
 
           echo "IMAGE_TAG_VERSION=$IMAGE_TAG_VERSION" >> $GITHUB_ENV
+          echo "KFP_PIPELINE_NAME=${{ env.PIPELINE_NAME }}" >> $GITHUB_ENV
           echo "IMAGE=${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
           echo "IMAGE_TAG=us-docker.pkg.dev/${{ env.PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
       - name: Check if image exists
@@ -83,6 +88,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install kfp google-cloud-pipeline-components
       - name: Set up Docker Buildx
         if: steps.image_check.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
@@ -97,6 +106,17 @@ jobs:
             ${{ env.IMAGE_TAG }}:${{ env.IMAGE_TAG_VERSION }}
           cache-from: type=registry,ref=${{ env.IMAGE_TAG }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE_TAG }}:buildcache,mode=max
+      - name: Build and push Kubeflow pipeline
+        run: |
+          python expertise/build_pipeline.py \
+            --region "${{ env.REGION }}" \
+            --kfp_region "${{ env.KFP_REGION }}" \
+            --project "${{ env.PROJECT }}" \
+            --repo "${{ env.REPO }}" \
+            --kfp_repo "${{ env.KFP_REPO }}" \
+            --kfp_name "${{ env.KFP_PIPELINE_NAME }}" \
+            --image "${{ env.IMAGE_NAME }}" \
+            --tag "${{ env.IMAGE_TAG_VERSION }}"
       - name: Run deploy script
         run: |
           BRANCH="${{ github.event.inputs.branch || 'master' }}"

@@ -186,7 +186,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time):
     # 3. Verify PipelineJob submission
     mock_pipeline_job.assert_called_once_with(
         display_name=expected_valid_vertex_id,
-        template_path=f"https://us-central1-kfp.pkg.dev/test_project/test-repo/openreview-expertise-small/test-pipeline-tag",
+        template_path="https://us-kfp.pkg.dev/test_project/test-repo/openreview-expertise-small/test-pipeline-tag",
         job_id=expected_valid_vertex_id,
         pipeline_root="gs://test-bucket/pipeline-root",
         parameter_values={
@@ -258,7 +258,7 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     # 3. Verify PipelineJob submission
     _, kwargs = mock_pipeline_job.call_args
     assert kwargs['display_name'] == expected_valid_vertex_id
-    assert kwargs['template_path'] == f"https://us-central1-kfp.pkg.dev/test_project/test-repo/openreview-expertise-small/test-pipeline-tag"
+    assert kwargs['template_path'] == f"https://us-kfp.pkg.dev/test_project/test-repo/openreview-expertise-small/test-pipeline-tag"
     assert kwargs['job_id'] == expected_valid_vertex_id
     assert kwargs['pipeline_root'] == "gs://test-bucket/pipeline-root"
     assert kwargs['parameter_values'] == {
@@ -321,7 +321,7 @@ def test_machine_type_selects_worker_pool_spec(mock_storage_client, mock_pipelin
     gcp_interface.create_job(deepcopy(json_request), job_id=generate_job_id(), user_id='openreview.net', machine_type='small')
 
     _, kwargs = mock_pipeline_job.call_args
-    assert kwargs['template_path'] == "https://us-central1-kfp.pkg.dev/test_project/test-repo/openreview-expertise-small/test-pipeline-tag"
+    assert kwargs['template_path'] == "https://us-kfp.pkg.dev/test_project/test-repo/openreview-expertise-small/test-pipeline-tag"
     assert 'parameter_values' in kwargs
     assert kwargs['labels'] == {'test': 'label'}
 
@@ -485,7 +485,7 @@ def test_create_job_with_region_override(mock_storage_client, mock_pipeline_job,
 
     _, kwargs = mock_pipeline_job.call_args
     assert kwargs['location'] == 'us-east4', f"Expected location='us-east4', got {kwargs.get('location')!r}"
-    assert 'us-east4' in kwargs['template_path'], f"Expected region in template path, got {kwargs.get('template_path')!r}"
+    assert kwargs['template_path'] == "https://us-kfp.pkg.dev/test_project/test-repo/openreview-expertise-small/test-pipeline-tag"
 
 
 @patch("expertise.service.utils.time.time")
