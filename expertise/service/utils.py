@@ -1077,14 +1077,15 @@ class GCPInterface(object):
         # Pass GCS path instead of JSON data to avoid parameter size limits
         gcs_request_path = f"gs://{self.bucket_name}/{folder_path}/{self.request_fname}"
 
+        # Use passed region or fall back to primary region
+        job_region = region or self.region
+
         parameter_values = {
             'gcs_request_path': gcs_request_path,
+            'location': job_region,
         }
         if dataset_gcs_path:
             parameter_values['dataset_gcs_path'] = dataset_gcs_path
-
-        # Use passed region or fall back to primary region
-        job_region = region or self.region
 
         # Select the per-tier pipeline; fall back to base name if tier mapping unavailable
         tier_pipeline_name = getattr(self, 'pipeline_name_by_tier', {}).get(machine_type, self.pipeline_name)

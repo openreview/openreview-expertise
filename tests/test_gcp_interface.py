@@ -178,7 +178,10 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time):
         ),
         job_id=result,
         pipeline_root="gs://test-bucket/pipeline-root",
-        parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json"},
+        parameter_values={
+            "gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json",
+            "location": "us-central1",
+        },
         labels={"test": "label"},
         location="us-central1"
     )
@@ -242,6 +245,7 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     assert kwargs['location'] == 'us-central1'
     params = kwargs['parameter_values']
     assert params["gcs_request_path"] == f"gs://test-bucket/{expected_folder_path}/request.json"
+    assert params["location"] == 'us-central1'
 
     # Verify submit() is called with the service account
     mock_pipeline_instance.submit.assert_called_once_with(
@@ -291,6 +295,7 @@ def test_create_job_region_override(mock_storage_client, mock_pipeline_job, mock
     _, kwargs = mock_pipeline_job.call_args
     assert kwargs['location'] == 'us-east4'
     assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/test_project/")
+    assert kwargs['parameter_values']['location'] == 'us-east4'
 
 # machine_type must not appear in pipeline parameter_values — it is used only to
 # select the per-tier pipeline and must not be forwarded into the job definition,
@@ -333,6 +338,7 @@ def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock
     _, kwargs = mock_pipeline_job.call_args
     assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/test_project/")
     assert kwargs['location'] == 'us-central1'
+    assert kwargs['parameter_values']['location'] == 'us-central1'
     params = kwargs['parameter_values']
     assert 'machine_type' not in params, (
         "machine_type must not be passed as a pipeline parameter — it is used only "
