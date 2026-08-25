@@ -1667,6 +1667,7 @@ def test_api_request_accepts_regions_override():
         'name': 'test_run',
         'entityA': {'type': 'Group', 'memberOf': 'ABC.cc/Reviewers'},
         'entityB': {'type': 'Note', 'invitation': 'ABC.cc/-/Submission'},
+        'model': {'name': 'bm25'},
         'regions': ['us-fake-1', 'us-central1'],
     })
     assert req.regions == ['us-fake-1', 'us-central1']

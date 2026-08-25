@@ -815,8 +815,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             worker_lock_duration=config['LOCK_DURATION'],
             worker_autorun=False         # If that is what you originally had
         )
-        self.poll_interval = config['POLL_INTERVAL']
-        self.max_attempts = config['POLL_MAX_ATTEMPTS']
+        self.poll_interval = config.get('POLL_INTERVAL', 10)
         self.cloud = GCPInterface(
             config=config,
             logger=logger
@@ -883,12 +882,15 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI PipelineJob (tier={machine_type})'), self.queue_loop)
 
-        # Determine ordered list of regions to try
         gcp_regions = config.regions or self.server_config.get('GCP_REGIONS', [self.cloud.region])
-        last_error = None
 
-        for region in gcp_regions:
-            self.logger.info(f"Trying region {region} for job {job.id}")
+        for region_index, region in enumerate(gcp_regions):
+            config.cloud_region = region
+            self._save_config(config)
+            self.logger.info(f"Trying region {region} for job {job.id} with cloud_id {config.cloud_id}")
+            asyncio.run_coroutine_threadsafe(job.log(f'Trying region {region} with cloud_id {config.cloud_id}'), self.queue_loop)
+
+            create_error = None
             try:
                 self.cloud.create_job(
                     deepcopy(request),
@@ -899,34 +901,15 @@ class ExpertiseCloudService(BaseExpertiseService):
                     vertex_id=config.cloud_id,
                     region=region
                 )
-                # Save the region so status checks know where the job ran
-                config.cloud_region = region
-                self._save_config(config)
-                last_error = None
-                break
+                asyncio.run_coroutine_threadsafe(job.log(f'Submitted PipelineJob {config.cloud_id} in region {region}'), self.queue_loop)
             except google_exceptions.PermissionDenied as e:
-                msg = f"Permission denied creating cloud job for {job.id} in region {region}: {e}"
-                self.logger.error(msg)
-                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+                asyncio.run_coroutine_threadsafe(job.log(f'Permission denied creating cloud job in region {region}: {e}'), self.queue_loop)
                 raise e.with_traceback(e.__traceback__)
-            except google_exceptions.ResourceExhausted as e:
-                msg = f"Resources exhausted in region {region} for job {job.id}: {e}"
+            except (google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable, google_exceptions.InvalidArgument) as e:
+                create_error = e
+                msg = f"{type(e).__name__} creating cloud job for {job.id} in region {region}: {e}"
                 self.logger.error(msg)
                 asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-                last_error = e
-                continue
-            except google_exceptions.ServiceUnavailable as e:
-                msg = f"Service unavailable in region {region} for job {job.id}: {e}"
-                self.logger.error(msg)
-                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-                last_error = e
-                continue
-            except google_exceptions.InvalidArgument as e:
-                msg = f"Invalid argument creating cloud job for {job.id} in region {region}: {e}"
-                self.logger.error(msg)
-                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-                last_error = e
-                continue
             except Exception as e:
                 msg = f"Error creating cloud job for {job.id} in region {region}: {e}"
                 self.logger.error(msg)
@@ -934,65 +917,70 @@ class ExpertiseCloudService(BaseExpertiseService):
                 asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
                 raise e.with_traceback(e.__traceback__)
 
-        if last_error is not None:
-            msg = f"Error creating cloud job: {last_error}"
-            asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-            if job.data.get('status') != JobStatus.ERROR:
-                await self._update_job_status(job, JobStatus.ERROR, msg, error=str(last_error))
-            raise last_error.with_traceback(last_error.__traceback__)
+            if create_error is not None:
+                if region_index + 1 < len(gcp_regions):
+                    asyncio.run_coroutine_threadsafe(job.log(f'create_job failed in {region}, falling back to {gcp_regions[region_index + 1]}'), self.queue_loop)
+                    continue
+                msg = f"Error creating cloud job in all regions: {create_error}"
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+                await self._update_job_status(job, JobStatus.ERROR, msg, error=str(create_error))
+                raise Exception(msg)
 
-        try:
-            self.logger.info(f"In polling worker...")
-            for attempt in range(self.max_attempts):
-                self.logger.info(f"{job.id} - attempt {attempt + 1} of {self.max_attempts}...")
+            self.logger.info(f"In polling worker for {config.cloud_id} in region {region}...")
+            asyncio.run_coroutine_threadsafe(job.log(f'Polling PipelineJob {config.cloud_id} in region {region}'), self.queue_loop)
+            region_failed = False
+            while True:
                 status = self.cloud.get_job_status_by_job_id(user_id, config)
-                self.logger.info(f"Invoked get_job_status_by_job_id for {job.id} - status: {status}")
+                self.logger.info(f"Status for {job.id} in region {region}: {status}")
 
-                # Check status validity
-                self.logger.info(f"INFO: before status check")
-                if status and isinstance(status, dict) and 'status' in status and 'description' in status:
-                    self.logger.info(f"INFO: after status check")
+                if not (status and isinstance(status, dict) and 'status' in status and 'description' in status):
+                    asyncio.run_coroutine_threadsafe(job.log('Invalid status received, retrying'), self.queue_loop)
+                    await asyncio.sleep(self.poll_interval)
+                    continue
 
-                    # Only update non-stale status
-                    current_status = job.data.get('status')
-                    current_description = job.data.get('description')
-                    if current_status != status['status'] or current_description != status['description']:
-                        # Vertex reports QUEUED/INITIALIZED while we're still fetching data — skip regression
-                        if current_status == JobStatus.FETCHING_DATA and status['status'] in (JobStatus.QUEUED, JobStatus.INITIALIZED):
-                            await asyncio.sleep(self.poll_interval)
-                            continue
-                        self.logger.info(f"INFO: before update status")
-                        await self._update_job_status(job, status['status'], status['description'])
-                        self.logger.info(f"INFO: after update status")
+                current_status = job.data.get('status')
+                current_description = job.data.get('description')
+                if current_status != status['status'] or current_description != status['description']:
+                    if current_status == JobStatus.FETCHING_DATA and status['status'] in (JobStatus.QUEUED, JobStatus.INITIALIZED):
+                        await asyncio.sleep(self.poll_interval)
+                        continue
+                    await self._update_job_status(job, status['status'], status['description'])
+                    asyncio.run_coroutine_threadsafe(job.log(f'Status updated to {status["status"]}: {status["description"]}'), self.queue_loop)
 
-                    if status['status'] == JobStatus.COMPLETED:
+                if status['status'] == JobStatus.RUN_EXPERTISE:
+                    asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} is running in region {region}'), self.queue_loop)
+
+                if status['status'] == JobStatus.COMPLETED:
+                    asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} completed in region {region}'), self.queue_loop)
+                    return
+
+                if status['status'] == JobStatus.DATA_ERROR:
+                    asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} data error in region {region}'), self.queue_loop)
+                    return
+
+                if status['status'] == JobStatus.ERROR:
+                    description = status.get('description', '')
+                    if 'RESOURCE_EXHAUSTED' in description or 'quota' in description.lower():
+                        msg = f"Pipeline {config.cloud_id} failed with resource exhaustion in region {region}: {description}"
+                        self.logger.error(msg)
+                        asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+                        region_failed = True
                         break
+                    asyncio.run_coroutine_threadsafe(job.log(f'Job failed in region {region}: {description}'), self.queue_loop)
+                    raise Exception(f"Job {job.id} failed in region {region}: {description}")
 
-                    elif status['status'] == JobStatus.DATA_ERROR:
-                        break
-
-                    elif status['status'] == JobStatus.ERROR:
-                        self.logger.error(f"Job {job.id} encountered an error: {status['description']}")
-                        raise Exception(f"Job {job.id} failed: {status['description']}")
-                    self.logger.info(f"Job {job.id} status: {status['status']}. Waiting {self.poll_interval} seconds before next poll...")
-
-                else:
-                    self.logger.warning(f"Invalid or missing status received for job {job.id}. Retrying...")
-
-                self.logger.info(f"INFO: before sleep")
+                asyncio.run_coroutine_threadsafe(job.log(f'Job status {status["status"]} in region {region}, waiting {self.poll_interval}s'), self.queue_loop)
                 await asyncio.sleep(self.poll_interval)
-                self.logger.info(f"INFO: after sleep")
 
-            else:
-                self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {job.id}.")
-                if job.data.get('status') != JobStatus.ERROR:
-                    await self._update_job_status(job, JobStatus.ERROR, f"Polling timed out after {self.max_attempts} attempts.", error=f"Polling timed out after {self.max_attempts} attempts.")
-                raise TimeoutError(f"Polling timed out for job {job.id} after {self.max_attempts} attempts.")
-
-            self.logger.info(f"Polling loop finished for job {job.id}.")
-
-        except Exception as e:
-            raise e.with_traceback(e.__traceback__)
+            if region_failed:
+                if region_index + 1 < len(gcp_regions):
+                    next_region = gcp_regions[region_index + 1]
+                    asyncio.run_coroutine_threadsafe(job.log(f'Falling back from {region} to {next_region}'), self.queue_loop)
+                    continue
+                msg = f"Resource exhaustion in all regions for job {job.id}"
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+                await self._update_job_status(job, JobStatus.ERROR, msg, error=msg)
+                raise Exception(msg)
 
     def start_expertise(self, request, client):
         descriptions = JobDescription.VALS.value

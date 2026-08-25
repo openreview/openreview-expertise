@@ -864,6 +864,16 @@ class GCPInterface(object):
             return status, description
 
         try:
+            for task in getattr(job, 'task_details', []) or []:
+                if task.state == PipelineState.PIPELINE_STATE_FAILED:
+                    task_error = getattr(task, 'error', None)
+                    if task_error and task_error.message:
+                        description = task_error.message
+                        break
+        except Exception:
+            pass
+
+        try:
             error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
             if error_message:
                 error_data = json.loads(error_message)
