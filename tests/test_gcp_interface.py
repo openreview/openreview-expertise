@@ -173,7 +173,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time):
     mock_pipeline_job.assert_called_once_with(
         display_name=result,
         template_path=(
-            "https://us-kfp.pkg.dev/test_project/"
+            "https://us-central1-kfp.pkg.dev/test_project/"
             "test-repo/test-pipeline/latest"
         ),
         job_id=result,
@@ -236,7 +236,7 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     # 3. Verify PipelineJob submission includes new params
     _, kwargs = mock_pipeline_job.call_args
     assert kwargs['display_name'] == expected_valid_vertex_id
-    assert kwargs['template_path'].startswith("https://us-kfp.pkg.dev/test_project/")
+    assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/test_project/")
     assert kwargs['job_id'] == expected_valid_vertex_id
     assert kwargs['pipeline_root'] == "gs://test-bucket/pipeline-root"
     assert kwargs['location'] == 'us-central1'
@@ -290,7 +290,7 @@ def test_create_job_region_override(mock_storage_client, mock_pipeline_job, mock
 
     _, kwargs = mock_pipeline_job.call_args
     assert kwargs['location'] == 'us-east4'
-    assert kwargs['template_path'].startswith("https://us-kfp.pkg.dev/test_project/")
+    assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/test_project/")
 
 # machine_type must not appear in pipeline parameter_values — it is used only to
 # select the per-tier pipeline and must not be forwarded into the job definition,
@@ -331,7 +331,7 @@ def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock
     gcp_interface.create_job(deepcopy(json_request), job_id=generate_job_id(), user_id='openreview.net', machine_type='small')
 
     _, kwargs = mock_pipeline_job.call_args
-    assert kwargs['template_path'].startswith("https://us-kfp.pkg.dev/test_project/")
+    assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/test_project/")
     assert kwargs['location'] == 'us-central1'
     params = kwargs['parameter_values']
     assert 'machine_type' not in params, (
