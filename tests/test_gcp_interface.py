@@ -1660,3 +1660,22 @@ def test_get_job_results_signed_url_forbidden(mock_storage_client, openreview_cl
     with pytest.raises(openreview.OpenReviewException, match="Forbidden: Insufficient permissions to access job"):
         gcp_interface.get_job_results_signed_url("test_user", "job-1")
 
+
+def test_api_request_accepts_regions_override():
+    """A request may supply an ordered region list to control fallback behavior."""
+    req = APIRequest({
+        'name': 'test_run',
+        'entityA': {'type': 'Group', 'memberOf': 'ABC.cc/Reviewers'},
+        'entityB': {'type': 'Note', 'invitation': 'ABC.cc/-/Submission'},
+        'regions': ['us-fake-1', 'us-central1'],
+    })
+    assert req.regions == ['us-fake-1', 'us-central1']
+
+    config = JobConfig.from_request(
+        req,
+        server_config={'OPENREVIEW_BASEURL_V2': 'http://localhost:3001'},
+        working_dir='./tests/jobs'
+    )
+    assert config.regions == ['us-fake-1', 'us-central1']
+    assert 'regions' in config.to_json()
+

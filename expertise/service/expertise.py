@@ -884,7 +884,7 @@ class ExpertiseCloudService(BaseExpertiseService):
         asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI PipelineJob (tier={machine_type})'), self.queue_loop)
 
         # Determine ordered list of regions to try
-        gcp_regions = self.server_config.get('GCP_REGIONS', [self.cloud.region])
+        gcp_regions = config.regions or self.server_config.get('GCP_REGIONS', [self.cloud.region])
         last_error = None
 
         for region in gcp_regions:

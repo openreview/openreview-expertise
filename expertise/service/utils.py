@@ -156,6 +156,9 @@ class APIRequest(object):
         # Optionally check for machine type
         self.machine_type = request.pop('machineType', None)
 
+        # Optionally override the ordered list of GCP regions to try
+        self.regions = request.pop('regions', None)
+
         # Check for empty request
         if len(request.keys()) > 0:
             raise openreview.OpenReviewException(f"Bad request: unexpected fields in {root_key}: {list(request.keys())}")
@@ -412,7 +415,8 @@ class JobConfig(object):
         provided_submissions=None,
         model_params=None,
         machine_type=None,
-        cloud_region=None):
+        cloud_region=None,
+        regions=None):
         
         self.name = name
         self.user_id = user_id
@@ -445,6 +449,7 @@ class JobConfig(object):
         self.model_params = model_params
         self.machine_type = machine_type
         self.cloud_region = cloud_region
+        self.regions = regions
 
         self.api_request = None
 
@@ -481,7 +486,8 @@ class JobConfig(object):
             'paper_id',
             'model_params',
             'machine_type',
-            'cloud_region'
+            'cloud_region',
+            'regions'
         ]
 
 
@@ -545,6 +551,7 @@ class JobConfig(object):
         # Permission check (machine_type only for superusers) lives in
         # APIRequest.validate(client) — from_request is pure transformation.
         config.machine_type = api_request.machine_type
+        config.regions = api_request.regions
 
         root_dir = os.path.join(working_dir, config.job_id)
         config.job_dir = root_dir
@@ -736,7 +743,8 @@ class JobConfig(object):
             provided_submissions = job_config.get('provided_submissions'),
             model_params = job_config.get('model_params'),
             machine_type=job_config.get('machine_type'),
-            cloud_region=job_config.get('cloud_region')
+            cloud_region=job_config.get('cloud_region'),
+            regions=job_config.get('regions')
         )
         return config
 
