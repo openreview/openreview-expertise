@@ -113,6 +113,7 @@ class TestExpertiseCloudService():
             "GCP_SERVICE_LABEL":{'dev': 'expertise'},
             "GCP_URL_SIGNER_SERVICE_ACCOUNT": 'url-signer@test-project.iam.gserviceaccount.com',
             "POLL_INTERVAL": 1,
+            "POLL_MAX_ATTEMPTS": 5,
             "model_params": {
                 "use_redis": True
             }
@@ -318,10 +319,8 @@ class TestExpertiseCloudService():
         assert response['status'] != 'Error', response
 
         # Let request process
-        start_time = time.time()
-        while response['status'] != 'Completed' and time.time() - start_time <= MAX_TIMEOUT:
-            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'])
-            response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
+        response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         # Check proper user ID
@@ -385,14 +384,13 @@ class TestExpertiseCloudService():
         assert not any([r['jobId'] == job_id for r in responses])
 
         # Perform single query after waiting max time
-        start_time = time.time()
-        while response['status'] != 'Completed' and time.time() - start_time <= MAX_TIMEOUT:
-            time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'])
-            response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
+        time.sleep(openreview_context_cloud['config']['POLL_INTERVAL'] * openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + LATENCY_OFFSET)
+        response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
+        ## Status endpoints read from BullMQ, so only the worker polls GCP: 3 jobs x 5 attempts
         print(mock_pipeline_job.get.call_args_list)
-        assert len(mock_pipeline_job.get.call_args_list) >= 15
+        assert len(mock_pipeline_job.get.call_args_list) == 15
 
         response = test_client.get('/expertise/status', headers=tmlr_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
