@@ -780,7 +780,7 @@ class GCPInterface(object):
             self.pipeline_name = config['GCP_PIPELINE_NAME']
             self.pipeline_repo = config['GCP_PIPELINE_REPO']
             self.pipeline_tag = config['GCP_PIPELINE_TAG']
-            self.kfp_region = config.get('GCP_KFP_REGION', 'us')
+            self.kfp_region = config.get('GCP_KFP_REGION', 'us-central1')
             self.bucket_name = config['GCP_BUCKET_NAME']
             self.jobs_folder = config['GCP_JOBS_FOLDER']
             self.service_label = config['GCP_SERVICE_LABEL']
@@ -800,7 +800,7 @@ class GCPInterface(object):
             self.pipeline_name = pipeline_name
             self.pipeline_repo = pipeline_repo
             self.pipeline_tag = pipeline_tag
-            self.kfp_region = 'us'
+            self.kfp_region = 'us-central1'
             self.bucket_name = bucket_name
             self.jobs_folder = jobs_folder
             self.service_label = service_label
