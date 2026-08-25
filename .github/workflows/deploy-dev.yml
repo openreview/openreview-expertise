@@ -16,7 +16,7 @@ on:
     branches: [ master ]
 env:
   REGION: us
-  KFP_REGION: us
+  KFP_REGION: us-central1
   KFP_REPO: openreview-kfp
   REPO: openreview-docker-images
   PROJECT: sunlit-realm-131518
