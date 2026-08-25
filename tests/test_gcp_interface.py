@@ -248,6 +248,50 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
         service_account='sa-under-test@test-project.iam.gserviceaccount.com'
     )
 
+# create_job accepts an optional region override that is passed as PipelineJob location.
+@patch("expertise.service.utils.time.time")
+@patch("expertise.service.utils.aip.PipelineJob")
+@patch("expertise.service.utils.storage.Client")
+def test_create_job_region_override(mock_storage_client, mock_pipeline_job, mock_time):
+    mock_time.return_value = 1234567890.123
+    mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+    mock_bucket.blob.return_value = mock_blob
+    mock_blob.upload_from_string.return_value = None
+    mock_blob.exists.return_value = False
+    mock_pipeline_job.return_value = MagicMock()
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    json_request = {
+        "name": "test_run2",
+        "entityA": {'type': "Group", 'memberOf': "GCP.cc/Reviewers"},
+        "entityB": {'type': "Note", 'invitation': "GCP.cc/-/Submission"},
+        "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'}
+    }
+    gcp_interface.create_job(
+        deepcopy(json_request),
+        job_id=generate_job_id(),
+        user_id='openreview.net',
+        machine_type='small',
+        region='us-east4'
+    )
+
+    _, kwargs = mock_pipeline_job.call_args
+    assert kwargs['location'] == 'us-east4'
+    assert kwargs['template_path'].startswith("https://us-kfp.pkg.dev/test_project/")
+
 # machine_type must not appear in pipeline parameter_values — it is used only to
 # select the per-tier pipeline and must not be forwarded into the job definition,
 # otherwise Vertex AI rejects the job with "parameter not found in input definitions".

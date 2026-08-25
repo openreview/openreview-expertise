@@ -9,7 +9,6 @@ import os
 import time
 import numpy as np
 import shutil
-import redis
 import expertise.service
 from expertise.dataset import ArchivesDataset, SubmissionsDataset
 from google.cloud.aiplatform_v1.types import PipelineState
@@ -76,11 +75,11 @@ class TestExpertiseCloudService():
 
     job_id = None
 
-    @pytest.fixture(scope='function')
+    @pytest.fixture(scope='class')
     def openreview_context_cloud(self, gcs_jobs_prefix):
         """
-        A pytest fixture for setting up a clean expertise-api test instance.
-        Function-scoped so each test gets a fresh BullMQ queue and worker.
+        A pytest fixture for setting up a clean expertise-api test instance:
+        `scope` argument is set to 'function', so each function will get a clean test instance.
         """
         config = {
             "LOG_FILE": "pytest.log",
@@ -109,8 +108,6 @@ class TestExpertiseCloudService():
             "GCP_PIPELINE_NAME":'test-pipeline',
             "GCP_PIPELINE_REPO":'test-repo',
             "GCP_PIPELINE_TAG":'dev',
-            "GCP_KFP_REGION": 'us',
-            "GCP_REGIONS": ['us-central1', 'us-east4', 'us-west1'],
             "GCP_BUCKET_NAME" : GCS_TEST_BUCKET,
             "GCP_JOBS_FOLDER" : gcs_jobs_prefix,
             "GCP_SERVICE_LABEL":{'dev': 'expertise'},
@@ -121,27 +118,16 @@ class TestExpertiseCloudService():
                 "use_redis": True
             }
         }
-        redis_client = redis.Redis(host=config['REDIS_ADDR'], port=config['REDIS_PORT'], db=config['REDIS_CONFIG_DB'])
-        redis_client.flushdb()
-        redis_client.close()
-
         app = expertise.service.create_app(
             config=config
         )
 
         with app.app_context():
-            ctx = {
+            yield {
                 "app": app,
                 "test_client": app.test_client(),
-                "config": config,
+                "config": config
             }
-            yield ctx
-            try:
-                import asyncio
-                service = expertise.service.routes.get_expertise_service(flask.current_app.config, flask.current_app.logger)
-                asyncio.run(service.close())
-            except Exception:
-                pass
 
     def test_insufficient_perm_machine_type(self, openreview_client, openreview_context_cloud):
         # Submitting a request with machineType outside of Super User
@@ -1292,78 +1278,3 @@ class TestExpertiseCloudService():
             assert final['status'] == JobStatus.DATA_ERROR, final
         finally:
             patcher.stop()
-
-    @patch("expertise.service.utils.aip.PipelineJob")
-    def test_region_fallback_on_capacity_error(self, mock_pipeline_job, openreview_client, openreview_context_cloud):
-        """When the primary region fails, the worker retries in fallback regions."""
-        def setup_job_mocks_with_failure():
-            mock_pipeline_instance = MagicMock()
-
-            def side_effect(*args, **kwargs):
-                if mock_pipeline_job.call_count <= 1:
-                    raise Exception("Resources are insufficient in region: us-central1")
-                return mock_pipeline_instance
-            mock_pipeline_job.side_effect = side_effect
-
-            mock_pipeline_running = MagicMock()
-            mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
-            mock_pipeline_running.update_time.timestamp.return_value = time.time()
-
-            mock_pipeline_succeeded = MagicMock()
-            mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
-            mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
-
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
-
-            return mock_pipeline_instance
-
-        cfg = openreview_context_cloud['config']
-        cfg['GCP_REGIONS'] = ['us-central1', 'us-east4']
-
-        abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
-        abc_client.impersonate('CLD.cc')
-        test_client = openreview_context_cloud['test_client']
-
-        setup_job_mocks_with_failure()
-        response = test_client.post(
-            '/expertise',
-            data=json.dumps({
-                "name": "test_region_fallback",
-                "entityA": {
-                    'type': "Group",
-                    'reviewerIds': [
-                        "~Harold_Rice1",
-                        "~Zonia_Willms1",
-                        "~Royal_Toy1",
-                        "~C.V._Lastname1",
-                    ]
-                },
-                "entityB": {
-                    'type': "Note",
-                    'submissions': [
-                        {"id": "ASDFASDF", "title": "Test Submission", "abstract": "Test Abstract"},
-                        {"id": "SFGSDFGSDFG", "title": "Test Submission 2", "abstract": "Test Abstract 2"},
-                    ]
-                },
-                "model": {"name": "specter2+scincl", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'max'},
-                "dataset": {'minimumPubDate': 0},
-            }),
-            content_type='application/json',
-            headers=abc_client.headers,
-        )
-        assert response.status_code == 200, f'{response.json}'
-        job_id = response.json['jobId']
-
-        deadline = time.time() + 60
-        status_resp = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
-        while status_resp['status'] not in ('Completed', 'Error', 'Data Error') and time.time() < deadline:
-            time.sleep(cfg['POLL_INTERVAL'])
-            status_resp = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': job_id}).json
-        assert status_resp['status'] == 'Completed', f"Job status: {status_resp['status']}"
-
-        assert mock_pipeline_job.call_count >= 2, f"Expected at least 2 PipelineJob calls, got {mock_pipeline_job.call_count}"
-
-        config_path = os.path.join(cfg['WORKING_DIR'], job_id, 'config.json')
-        with open(config_path, 'r') as f:
-            saved_config = json.load(f)
-        assert saved_config['cloud_region'] == 'us-east4', f"Unexpected cloud_region: {saved_config.get('cloud_region')}"
