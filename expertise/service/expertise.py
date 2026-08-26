@@ -20,6 +20,7 @@ import asyncio
 import threading
 import traceback
 from google.api_core import exceptions as google_exceptions
+from google.rpc import code_pb2
 
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, get_user_id, ExpectedDataError
 
@@ -865,7 +866,8 @@ class ExpertiseCloudService(BaseExpertiseService):
                 await self._update_job_status(job, JobStatus.ERROR, str(e), error=str(e))
             raise e.with_traceback(e.__traceback__)
 
-        config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
+        if not config.cloud_id:
+            config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
         machine_type = self.compute_machine_type_from_dataset(config)
         self.logger.info(f"Machine type for {job.id}: {machine_type}")
 
@@ -890,7 +892,7 @@ class ExpertiseCloudService(BaseExpertiseService):
             self.logger.info(f"Trying region {region} for job {job.id} with cloud_id {config.cloud_id}")
             asyncio.run_coroutine_threadsafe(job.log(f'Trying region {region} with cloud_id {config.cloud_id}'), self.queue_loop)
 
-            create_error = None
+            submit_error = None
             try:
                 self.cloud.create_job(
                     deepcopy(request),
@@ -902,14 +904,29 @@ class ExpertiseCloudService(BaseExpertiseService):
                     region=region
                 )
                 asyncio.run_coroutine_threadsafe(job.log(f'Submitted PipelineJob {config.cloud_id} in region {region}'), self.queue_loop)
+            except google_exceptions.ResourceExhausted as e:
+                submit_error = e
+                msg = f"ResourceExhausted creating cloud job for {job.id} in region {region}: {e}"
+                self.logger.error(msg)
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+            except google_exceptions.ServiceUnavailable as e:
+                submit_error = e
+                msg = f"ServiceUnavailable creating cloud job for {job.id} in region {region}: {e}"
+                self.logger.error(msg)
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+            except google_exceptions.InvalidArgument as e:
+                submit_error = e
+                msg = f"InvalidArgument creating cloud job for {job.id} in region {region}: {e}"
+                self.logger.error(msg)
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+            except ValueError as e:
+                submit_error = e
+                msg = f"ValueError creating cloud job for {job.id} in region {region}: {e}"
+                self.logger.error(msg)
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
             except google_exceptions.PermissionDenied as e:
                 asyncio.run_coroutine_threadsafe(job.log(f'Permission denied creating cloud job in region {region}: {e}'), self.queue_loop)
                 raise e.with_traceback(e.__traceback__)
-            except (google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable, google_exceptions.InvalidArgument) as e:
-                create_error = e
-                msg = f"{type(e).__name__} creating cloud job for {job.id} in region {region}: {e}"
-                self.logger.error(msg)
-                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
             except Exception as e:
                 msg = f"Error creating cloud job for {job.id} in region {region}: {e}"
                 self.logger.error(msg)
@@ -917,16 +934,15 @@ class ExpertiseCloudService(BaseExpertiseService):
                 asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
                 raise e.with_traceback(e.__traceback__)
 
-            if create_error is not None:
+            if submit_error is not None:
                 if region_index + 1 < len(gcp_regions):
                     asyncio.run_coroutine_threadsafe(job.log(f'create_job failed in {region}, falling back to {gcp_regions[region_index + 1]}'), self.queue_loop)
                     continue
-                msg = f"Error creating cloud job in all regions: {create_error}"
+                msg = f"Error creating cloud job in all regions: {submit_error}"
                 asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-                await self._update_job_status(job, JobStatus.ERROR, msg, error=str(create_error))
+                await self._update_job_status(job, JobStatus.ERROR, msg, error=str(submit_error))
                 raise Exception(msg)
 
-            self.logger.info(f"In polling worker for {config.cloud_id} in region {region}...")
             asyncio.run_coroutine_threadsafe(job.log(f'Polling PipelineJob {config.cloud_id} in region {region}'), self.queue_loop)
             region_failed = False
             while True:
@@ -960,7 +976,8 @@ class ExpertiseCloudService(BaseExpertiseService):
 
                 if status['status'] == JobStatus.ERROR:
                     description = status.get('description', '')
-                    if 'RESOURCE_EXHAUSTED' in description or 'quota' in description.lower():
+                    is_resource_error = status.get('errorCode') == code_pb2.RESOURCE_EXHAUSTED
+                    if is_resource_error:
                         msg = f"Pipeline {config.cloud_id} failed with resource exhaustion in region {region}: {description}"
                         self.logger.error(msg)
                         asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
@@ -1020,10 +1037,11 @@ class ExpertiseCloudService(BaseExpertiseService):
 
             config = self._validate_request(client, deepcopy(request))
             config.mdate = int(time.time() * 1000)
+            config.cloud_id = f"{config.job_id}-{int(time.time() * 1000)}"
             self._save_config(config)
 
             config_log = self._get_log_from_config(config)
-            self.logger.info(f"Adding job {config.job_id} to queue")
+            self.logger.info(f"Adding job {config.job_id} to queue with cloud_id {config.cloud_id}")
 
             future = asyncio.run_coroutine_threadsafe(
                 self.queue.add(

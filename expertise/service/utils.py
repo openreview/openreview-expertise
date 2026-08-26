@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
-from google.cloud.aiplatform_v1.types import PipelineState
+from google.cloud.aiplatform_v1.types import PipelineState, PipelineTaskDetail
 from google.auth import default as google_auth_default
 from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 from copy import deepcopy
@@ -24,6 +24,7 @@ from expertise.utils.utils import generate_job_id
 
 import re
 SUPERUSER_IDS = ['openreview.net', 'OpenReview.net', '~Super_User1']
+
 
 def get_user_id(openreview_client):
     """
@@ -861,15 +862,23 @@ class GCPInterface(object):
         description = descriptions[status]
 
         if status != JobStatus.ERROR:
-            return status, description
+            return status, description, None
 
+        top_error = getattr(job, 'error', None)
+        if top_error and top_error.message:
+            description = top_error.message
+
+        error_code = None
         try:
             for task in getattr(job, 'task_details', []) or []:
-                if task.state == PipelineState.PIPELINE_STATE_FAILED:
+                if task.state == PipelineTaskDetail.State.FAILED:
                     task_error = getattr(task, 'error', None)
                     if task_error and task_error.message:
-                        description = task_error.message
-                        break
+                        error_code = task_error.code
+                        if description == descriptions[status]:
+                            description = task_error.message
+                        else:
+                            description = f"{description} | {task_error.message}"
         except Exception:
             pass
 
@@ -877,13 +886,13 @@ class GCPInterface(object):
             error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
             if error_message:
                 error_data = json.loads(error_message)
-                description = error_data.get('error', descriptions[status])
                 if error_data.get('expected', False):
                     status = JobStatus.DATA_ERROR
+                description = error_data.get('error', description)
         except Exception:
             pass
 
-        return status, description
+        return status, description, error_code
 
     def _generate_vertex_prefix(api_request):
         group_entity = None
@@ -1149,7 +1158,7 @@ class GCPInterface(object):
         job_region = region or getattr(config, 'cloud_region', None) or self.region
         job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{job_region}/pipelineJobs/{job_id}")
 
-        status, description = self._resolve_job_status(job_id, job)
+        status, description, error_code = self._resolve_job_status(job_id, job)
 
         return {
                 'name': job_id,
@@ -1157,6 +1166,7 @@ class GCPInterface(object):
                 'jobId': job_id,
                 'status': status,
                 'description': description,
+                'errorCode': error_code,
                 'cdate': request['cdate'],
                 'mdate': int(job.update_time.timestamp() * 1000),
                 'request': request
@@ -1314,7 +1324,7 @@ class GCPInterface(object):
                 else:
                     raise e
 
-            status, description = self._resolve_job_status(request_name, job)
+            status, description, error_code = self._resolve_job_status(request_name, job)
 
             if check_result(request, status):
                 result['results'].append(
@@ -1324,6 +1334,7 @@ class GCPInterface(object):
                         'jobId': request_name,
                         'status': status,
                         'description': description,
+                        'errorCode': error_code,
                         'cdate': request['cdate'],
                         'mdate': int(job.update_time.timestamp() * 1000),
                         'request': request
