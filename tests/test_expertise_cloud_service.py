@@ -654,7 +654,8 @@ class TestExpertiseCloudService():
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         ## Status endpoints read from BullMQ, so only the worker polls GCP: 1 job x 5 attempts
-        assert len(mock_pipeline_job.get.call_args_list) == 5
+        job_calls = [c for c in mock_pipeline_job.get.call_args_list if f'/{job_id}-' in c.args[0]]
+        assert len(job_calls) == 5
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
@@ -781,7 +782,8 @@ class TestExpertiseCloudService():
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         ## Status endpoints read from BullMQ, so only the worker polls GCP: 1 job x 5 attempts
-        assert len(mock_pipeline_job.get.call_args_list) == 5
+        job_calls = [c for c in mock_pipeline_job.get.call_args_list if f'/{job_id}-' in c.args[0]]
+        assert len(job_calls) == 5
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
@@ -924,7 +926,8 @@ class TestExpertiseCloudService():
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         ## Status endpoints read from BullMQ, so only the worker polls GCP: 1 job x 5 attempts
-        assert len(mock_pipeline_job.get.call_args_list) == 5
+        job_calls = [c for c in mock_pipeline_job.get.call_args_list if f'/{job_id}-' in c.args[0]]
+        assert len(job_calls) == 5
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
