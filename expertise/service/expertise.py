@@ -993,6 +993,11 @@ class ExpertiseCloudService(BaseExpertiseService):
 
                 asyncio.run_coroutine_threadsafe(job.log(f'Job status {status["status"]} in region {region}, waiting {self.poll_interval}s'), self.queue_loop)
                 await asyncio.sleep(self.poll_interval)
+            else:
+                self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {job.id}.")
+                if job.data.get('status') != JobStatus.ERROR:
+                    await self._update_job_status(job, JobStatus.ERROR, f"Polling timed out after {self.max_attempts} attempts.", error=f"Polling timed out after {self.max_attempts} attempts.")
+                raise TimeoutError(f"Polling timed out for job {job.id} after {self.max_attempts} attempts.")
 
             if region_failed:
                 if region_index + 1 < len(gcp_regions):

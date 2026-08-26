@@ -202,14 +202,10 @@ if __name__ == '__main__':
             dataset_gcs_path=dataset_gcs_path
         ).set_display_name("Running Large Expertise Pipeline")
 
-    small_name = config['SMALL_NAME']
-    medium_name = config['MEDIUM_NAME']
-    large_name = config['LARGE_NAME']
-
     pipelines = [
-        (small_expertise_pipeline,  f"{args.kfp_name}-{small_name}",  'expertise_pipeline_small.yaml'),
-        (medium_expertise_pipeline, f"{args.kfp_name}-{medium_name}", 'expertise_pipeline_medium.yaml'),
-        (large_expertise_pipeline,  f"{args.kfp_name}-{large_name}",  'expertise_pipeline_large.yaml'),
+        (small_expertise_pipeline,  f"{args.kfp_name}-{config['SMALL_NAME']}",  'expertise_pipeline_small.yaml'),
+        (medium_expertise_pipeline, f"{args.kfp_name}-{config['MEDIUM_NAME']}", 'expertise_pipeline_medium.yaml'),
+        (large_expertise_pipeline,  f"{args.kfp_name}-{config['LARGE_NAME']}",  'expertise_pipeline_large.yaml'),
     ]
 
     registry_client = RegistryClient(host=f"https://{args.kfp_region}-kfp.pkg.dev/{args.project}/{args.kfp_repo}")
