@@ -816,7 +816,8 @@ class ExpertiseCloudService(BaseExpertiseService):
             worker_lock_duration=config['LOCK_DURATION'],
             worker_autorun=False         # If that is what you originally had
         )
-        self.poll_interval = config.get('POLL_INTERVAL', 10)
+        self.poll_interval = config['POLL_INTERVAL']
+        self.max_attempts = config['POLL_MAX_ATTEMPTS']
         self.cloud = GCPInterface(
             config=config,
             logger=logger
@@ -866,8 +867,7 @@ class ExpertiseCloudService(BaseExpertiseService):
                 await self._update_job_status(job, JobStatus.ERROR, str(e), error=str(e))
             raise e.with_traceback(e.__traceback__)
 
-        if not config.cloud_id:
-            config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
+        config.cloud_id = f"{config.job_id}-{int(time.time() * 1000)}"
         machine_type = self.compute_machine_type_from_dataset(config)
         self.logger.info(f"Machine type for {job.id}: {machine_type}")
 
@@ -924,6 +924,10 @@ class ExpertiseCloudService(BaseExpertiseService):
                 msg = f"ValueError creating cloud job for {job.id} in region {region}: {e}"
                 self.logger.error(msg)
                 asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+            except google_exceptions.AlreadyExists as e:
+                msg = f"PipelineJob {config.cloud_id} already exists in {region}, polling existing job: {e}"
+                self.logger.info(msg)
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
             except google_exceptions.PermissionDenied as e:
                 asyncio.run_coroutine_threadsafe(job.log(f'Permission denied creating cloud job in region {region}: {e}'), self.queue_loop)
                 raise e.with_traceback(e.__traceback__)
@@ -945,7 +949,8 @@ class ExpertiseCloudService(BaseExpertiseService):
 
             asyncio.run_coroutine_threadsafe(job.log(f'Polling PipelineJob {config.cloud_id} in region {region}'), self.queue_loop)
             region_failed = False
-            while True:
+            for attempt in range(self.max_attempts):
+                self.logger.info(f"{job.id} - attempt {attempt + 1} of {self.max_attempts}...")
                 status = self.cloud.get_job_status_by_job_id(user_id, config)
                 self.logger.info(f"Status for {job.id} in region {region}: {status}")
 
