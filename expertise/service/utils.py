@@ -158,7 +158,14 @@ class APIRequest(object):
         self.machine_type = request.pop('machineType', None)
 
         # Optionally override the ordered list of GCP regions to try
-        self.regions = request.pop('regions', None)
+        regions = request.pop('regions', None)
+        if regions is not None and (
+            not isinstance(regions, (list, tuple))
+            or not regions
+            or any(not isinstance(region, str) or not region for region in regions)
+        ):
+            raise openreview.OpenReviewException("Bad request: 'regions' must be a non-empty list of region strings")
+        self.regions = regions
 
         # Check for empty request
         if len(request.keys()) > 0:
@@ -1085,6 +1092,9 @@ class GCPInterface(object):
         })
         valid_vertex_id = vertex_id if vertex_id else job_id + '-' + str(int(time.time() * 1000))
 
+        # Use passed region or fall back to primary region
+        job_region = region or self.region
+
         folder_path = f"{self.jobs_folder}/{valid_vertex_id}"
         data = api_request.to_json()
 
@@ -1098,14 +1108,12 @@ class GCPInterface(object):
         data['machine_type'] = machine_type
         data['user_id'] = user_id
         data['cdate'] = int(time.time() * 1000)
+        data['cloud_region'] = job_region
 
         write_json_to_gcs(self.bucket_name, folder_path, self.request_fname, data)
 
         # Pass GCS path instead of JSON data to avoid parameter size limits
         gcs_request_path = f"gs://{self.bucket_name}/{folder_path}/{self.request_fname}"
-
-        # Use passed region or fall back to primary region
-        job_region = region or self.region
 
         parameter_values = {
             'gcs_request_path': gcs_request_path,

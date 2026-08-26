@@ -71,6 +71,19 @@ def _load_job_config(working_dir, job_id):
         return JobConfig.from_json(json.load(f))
 
 
+def make_pipeline_get(running_mock, terminal_mock, running_polls=4):
+    poll_counts = {}
+
+    def fake_get(resource_name):
+        job_id = resource_name.split('/')[-1]
+        poll_counts[job_id] = poll_counts.get(job_id, 0) + 1
+        if poll_counts[job_id] <= running_polls:
+            return running_mock
+        return terminal_mock
+
+    return fake_get
+
+
 class TestExpertiseCloudService():
 
     job_id = None
@@ -186,7 +199,7 @@ class TestExpertiseCloudService():
             mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_succeeded)
 
             return mock_pipeline_instance
 
@@ -498,7 +511,7 @@ class TestExpertiseCloudService():
             mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_succeeded)
 
             return mock_pipeline_instance
 
@@ -600,7 +613,7 @@ class TestExpertiseCloudService():
             mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_succeeded)
 
             return mock_pipeline_instance
 
@@ -728,7 +741,7 @@ class TestExpertiseCloudService():
             mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_succeeded)
 
             return mock_pipeline_instance
 
@@ -856,7 +869,7 @@ class TestExpertiseCloudService():
             mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_succeeded)
 
             return mock_pipeline_instance
 
@@ -1084,7 +1097,7 @@ class TestExpertiseCloudService():
             mock_pipeline_failed.state = PipelineState.PIPELINE_STATE_FAILED
             mock_pipeline_failed.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_failed] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_failed)
 
             return mock_pipeline_instance
 
