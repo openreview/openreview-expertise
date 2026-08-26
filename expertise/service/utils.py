@@ -1075,8 +1075,9 @@ class GCPInterface(object):
             blob = bucket.blob(f"{folder_path}/{file_name}")
 
             if blob.exists():
-                self.logger.info(f"JSON file '{file_name}' already exists at '{folder_path}' in bucket '{bucket_name}'; skipping upload.")
-                return
+                existing = json.loads(blob.download_as_string())
+                data['cdate'] = existing.get('cdate', data['cdate'])
+                self.logger.info(f"JSON file '{file_name}' already exists at '{folder_path}' in bucket '{bucket_name}'; updating while preserving cdate.")
 
             blob.upload_from_string(
                 data=json.dumps(data),
