@@ -25,7 +25,6 @@ from expertise.utils.utils import generate_job_id
 import re
 SUPERUSER_IDS = ['openreview.net', 'OpenReview.net', '~Super_User1']
 
-
 def get_user_id(openreview_client):
     """
     Returns the user id from an OpenReview client for authenticating access
@@ -156,7 +155,6 @@ class APIRequest(object):
 
         # Optionally check for machine type
         self.machine_type = request.pop('machineType', None)
-
         # Optionally override the ordered list of GCP regions to try
         regions = request.pop('regions', None)
         if regions is not None and (
@@ -166,7 +164,6 @@ class APIRequest(object):
         ):
             raise openreview.OpenReviewException("Bad request: 'regions' must be a non-empty list of region strings")
         self.regions = regions
-
         # Check for empty request
         if len(request.keys()) > 0:
             raise openreview.OpenReviewException(f"Bad request: unexpected fields in {root_key}: {list(request.keys())}")
@@ -823,7 +820,6 @@ class GCPInterface(object):
             self.service_account = service_account
             self.url_signer_service_account = None
             self.pipeline_name_by_tier = {}
-
         required_fields = [
             self.project_id,
             self.project_number,
@@ -836,7 +832,7 @@ class GCPInterface(object):
             self.jobs_folder,
             self.service_label
         ]
-
+        
         self.request_fname = "request.json"
         if logger is None:
             logger = logging.getLogger(__name__)
@@ -847,7 +843,7 @@ class GCPInterface(object):
             handler.setFormatter(formatter)
             logger.addHandler(handler)
         self.logger = logger
-
+        
         if not any(field is None for field in required_fields):
             # Only init AIP if all fields are present to access the project
             self.logger.info(f"Init AIPlatform with project {self.project_id} and region {self.region}")
@@ -870,11 +866,9 @@ class GCPInterface(object):
 
         if status != JobStatus.ERROR:
             return status, description, None
-
         top_error = getattr(job, 'error', None)
         if top_error and top_error.message:
             description = top_error.message
-
         error_code = None
         try:
             for task in getattr(job, 'task_details', []) or []:
@@ -888,7 +882,6 @@ class GCPInterface(object):
                             description = f"{description} | {task_error.message}"
         except Exception:
             pass
-
         try:
             error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
             if error_message:
@@ -898,7 +891,6 @@ class GCPInterface(object):
                 description = error_data.get('error', description)
         except Exception:
             pass
-
         return status, description, error_code
 
     def _generate_vertex_prefix(api_request):
@@ -1044,10 +1036,6 @@ class GCPInterface(object):
         return [cid for _, cid in matches[:limit]]
 
     def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None, region: str = None):
-        """Create a Vertex AI PipelineJob, optionally in a fallback region.
-
-        :param region: Optional region override.
-        """
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -1078,7 +1066,6 @@ class GCPInterface(object):
                 existing = json.loads(blob.download_as_string())
                 data['cdate'] = existing.get('cdate', data['cdate'])
                 self.logger.info(f"JSON file '{file_name}' already exists at '{folder_path}' in bucket '{bucket_name}'; updating while preserving cdate.")
-
             blob.upload_from_string(
                 data=json.dumps(data),
                 content_type="application/json"
@@ -1095,7 +1082,6 @@ class GCPInterface(object):
 
         # Use passed region or fall back to primary region
         job_region = region or self.region
-
         folder_path = f"{self.jobs_folder}/{valid_vertex_id}"
         data = api_request.to_json()
 
@@ -1126,6 +1112,7 @@ class GCPInterface(object):
         # Select the per-tier pipeline; fall back to base name if tier mapping unavailable
         tier_pipeline_name = getattr(self, 'pipeline_name_by_tier', {}).get(machine_type, self.pipeline_name)
 
+        # Build PipelineJob kwargs and parameters
         job = aip.PipelineJob(
             display_name = valid_vertex_id,
             template_path = f"https://{self.kfp_region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{tier_pipeline_name}/{self.pipeline_tag}",

@@ -14,7 +14,6 @@ import os
 _BUILD_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE_PATH = os.path.join(_BUILD_DIR, 'service', 'config', 'default.cfg')
 
-
 def parse_config_file(config_path):
     def _coerce_numeric(value):
         """Try to parse value as int, then float, fallback to string."""
@@ -24,21 +23,20 @@ def parse_config_file(config_path):
             except ValueError:
                 pass
         return value
-
     """
     Parse a configuration file line-by-line.
-
+    
     Reads lines containing '=' and splits them into key-value pairs.
     Values are parsed as strings (if quoted), integers, or floats.
-
+    
     Args:
         config_path (str): Path to the configuration file
-
+    
     Returns:
         dict: Configuration dictionary with parsed values
     """
     config = {}
-
+    
     try:
         with open(config_path, 'r') as f:
             for line in f:
@@ -48,7 +46,7 @@ def parse_config_file(config_path):
                     if len(parts) == 2:
                         key = parts[0].strip()
                         value = parts[1].strip()
-
+                        
                         # Parse value based on type
                         if (value.startswith('"') and value.endswith('"')) or \
                            (value.startswith("'") and value.endswith("'")):
@@ -57,14 +55,13 @@ def parse_config_file(config_path):
                         else:
                             # Try to parse as numeric, fallback to string
                             config[key] = _coerce_numeric(value)
-
+                                
     except FileNotFoundError:
         print(f"Config file not found: {config_path}")
     except Exception as e:
         print(f"Error parsing config file: {e}")
-
+        
     return config
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Builds and uploads a Kubeflow Pipeline for the Expertise model")

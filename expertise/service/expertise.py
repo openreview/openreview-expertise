@@ -867,7 +867,7 @@ class ExpertiseCloudService(BaseExpertiseService):
                 await self._update_job_status(job, JobStatus.ERROR, str(e), error=str(e))
             raise e.with_traceback(e.__traceback__)
 
-        config.cloud_id = f"{config.job_id}-{int(time.time() * 1000)}"
+        config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
         machine_type = self.compute_machine_type_from_dataset(config)
         self.logger.info(f"Machine type for {job.id}: {machine_type}")
 
