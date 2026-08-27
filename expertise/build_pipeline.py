@@ -1,14 +1,14 @@
 # pip install kfp google-cloud-pipeline-components
 from kfp import compiler
 from kfp.dsl import (
-    component,
     pipeline,
-)
-from google_cloud_pipeline_components.v1.custom_job import (
-    create_custom_training_job_from_component
+    component,
 )
 from kfp.registry import RegistryClient
 import argparse
+from google_cloud_pipeline_components.v1.custom_job import (
+    create_custom_training_job_from_component
+)
 import os
 
 # Make config path relative to this script's directory
@@ -32,7 +32,7 @@ def parse_config_file(config_path):
     
     Args:
         config_path (str): Path to the configuration file
-    
+        
     Returns:
         dict: Configuration dictionary with parsed values
     """
@@ -65,18 +65,18 @@ def parse_config_file(config_path):
     return config
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Builds and uploads a Kubeflow Pipeline for the Expertise model")
+    parser = argparse.ArgumentParser(description="Builds and Uploads a Kubeflow Pipeline for the Expertise Model")
     parser.add_argument(
         "--region",
         type=str,
         required=True,
-        help="Region for Docker images in Artifact Registry"
+        help="Region for Docker Images in Artifact Registry"
     )
     parser.add_argument(
         "--kfp_region",
         type=str,
         required=True,
-        help="Location for the multi-region Kubeflow Pipelines Artifact Registry (e.g. 'us')"
+        help="Region Kubeflow Pipelines in Artifact Registry"
     )
     parser.add_argument(
         "--project",
@@ -88,39 +88,39 @@ if __name__ == '__main__':
         "--repo",
         type=str,
         required=True,
-        help="Name of the Artifact Registry Docker repository"
+        help="Name of the Artifact Registry Docker Repository"
     )
     parser.add_argument(
         "--kfp_repo",
         type=str,
         required=True,
-        help="Name of the Artifact Registry Kubeflow repository"
+        help="Name of the Artifact Registry Kubeflow Repository"
     )
     parser.add_argument(
         "--kfp_name",
         type=str,
         required=True,
-        help="Base name of the Kubeflow Pipeline; per-tier names are '<kfp_name>-<tier>'"
+        help="Name of the Kubeflow Pipeline"
     )
     parser.add_argument(
         "--image",
         type=str,
         required=True,
-        help="Name of the Docker image"
+        help="Name of the Docker Image"
     )
     parser.add_argument(
         "--tag",
         type=str,
         required=False,
         default='latest',
-        help="Tag of the Docker image and pipeline version"
+        help="Tag of the Docker Image"
     )
     parser.add_argument(
         "--kfp_description",
         type=str,
         required=False,
         default="Latest Kubeflow Pipeline for OpenReview Expertise",
-        help="Description of the Kubeflow Pipeline version"
+        help="Description of the latest Kubeflow Pipeline"
     )
     args = parser.parse_args()
     config = parse_config_file(CONFIG_FILE_PATH)
@@ -170,6 +170,7 @@ if __name__ == '__main__':
 
     # Three separate pipelines — one per tier. Machine type is pre-computed by the
     # BullMQ worker, so no conditional branching is needed inside any pipeline.
+
     @pipeline(
         name=f"{args.kfp_name}-{config['SMALL_NAME']}",
         description='Expertise pipeline for small jobs'
@@ -234,9 +235,9 @@ if __name__ == '__main__':
             existing_tag = registry_client.get_tag(package_name=pipeline_name, tag=args.tag)
             if existing_tag:
                 version_exists = True
-                print(f"Pipeline '{pipeline_name}' with tag '{args.tag}' already exists in {args.kfp_region}")
+                print(f"Pipeline '{pipeline_name}' with tag '{args.tag}' already exists in registry")
         except Exception:
-            print(f"Pipeline tag '{args.tag}' does not exist for '{pipeline_name}' in {args.kfp_region}, uploading new version")
+            print(f"Pipeline tag '{args.tag}' does not exist for '{pipeline_name}', uploading new version")
 
         if version_exists:
             print(f"Skipping upload for '{pipeline_name}'.")
