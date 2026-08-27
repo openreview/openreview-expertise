@@ -102,7 +102,7 @@ jobs:
             --repo "${{ env.REPO }}" \
             --kfp_repo "${{ env.KFP_REPO }}" \
             --kfp_name "${{ env.KFP_PIPELINE_NAME }}" \
-            --image "${{ env.IMAGE_NAME }}" \
+            --image "${{ env.IMAGE }}" \
             --tag "${{ env.IMAGE_TAG_VERSION }}"
       - name: Run deploy scripts
         run: |

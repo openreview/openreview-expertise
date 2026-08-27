@@ -1,3 +1,4 @@
+# pip install kfp google-cloud-pipeline-components
 from kfp import compiler
 from kfp.dsl import (
     component,
@@ -9,12 +10,14 @@ from kfp.registry import RegistryClient
 import argparse
 import os
 
+# Make config path relative to this script's directory
 _BUILD_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE_PATH = os.path.join(_BUILD_DIR, 'service', 'config', 'default.cfg')
 
 
 def parse_config_file(config_path):
     def _coerce_numeric(value):
+        """Try to parse value as int, then float, fallback to string."""
         for parser in (int, float):
             try:
                 return parser(value)
@@ -22,6 +25,18 @@ def parse_config_file(config_path):
                 pass
         return value
 
+    """
+    Parse a configuration file line-by-line.
+
+    Reads lines containing '=' and splits them into key-value pairs.
+    Values are parsed as strings (if quoted), integers, or floats.
+
+    Args:
+        config_path (str): Path to the configuration file
+
+    Returns:
+        dict: Configuration dictionary with parsed values
+    """
     config = {}
 
     try:
@@ -34,10 +49,13 @@ def parse_config_file(config_path):
                         key = parts[0].strip()
                         value = parts[1].strip()
 
+                        # Parse value based on type
                         if (value.startswith('"') and value.endswith('"')) or \
                            (value.startswith("'") and value.endswith("'")):
+                            # Remove quotes and store as string
                             config[key] = value[1:-1]
                         else:
+                            # Try to parse as numeric, fallback to string
                             config[key] = _coerce_numeric(value)
 
     except FileNotFoundError:
@@ -122,7 +140,7 @@ if __name__ == '__main__':
             dataset_gcs_path=dataset_gcs_path if dataset_gcs_path else None
         )
 
-    small_expertise_job = create_custom_training_job_from_component(
+    small_expertise_job_from_file_input = create_custom_training_job_from_component(
         execute_expertise_pipeline_op,
         display_name=config['PIPELINE_NAME_SMALL'],
         machine_type=config['PIPELINE_MACHINE_SMALL'],
@@ -132,7 +150,7 @@ if __name__ == '__main__':
         boot_disk_size_gb=config['PIPELINE_DISK_SIZE_SMALL'],
     )
 
-    medium_expertise_job = create_custom_training_job_from_component(
+    medium_expertise_job_from_file_input = create_custom_training_job_from_component(
         execute_expertise_pipeline_op,
         display_name=config['PIPELINE_NAME_MEDIUM'],
         machine_type=config['PIPELINE_MACHINE_MEDIUM'],
@@ -142,7 +160,7 @@ if __name__ == '__main__':
         boot_disk_size_gb=config['PIPELINE_DISK_SIZE_MEDIUM'],
     )
 
-    large_expertise_job = create_custom_training_job_from_component(
+    large_expertise_job_from_file_input = create_custom_training_job_from_component(
         execute_expertise_pipeline_op,
         display_name=config['PIPELINE_NAME_LARGE'],
         machine_type=config['PIPELINE_MACHINE_LARGE'],
@@ -163,7 +181,7 @@ if __name__ == '__main__':
         dataset_gcs_path: str = '',
         location: str = ''
     ):
-        small_expertise_job(
+        small_expertise_job_from_file_input(
             project=args.project,
             location=location,
             gcs_request_path=gcs_request_path,
@@ -179,7 +197,7 @@ if __name__ == '__main__':
         dataset_gcs_path: str = '',
         location: str = ''
     ):
-        medium_expertise_job(
+        medium_expertise_job_from_file_input(
             project=args.project,
             location=location,
             gcs_request_path=gcs_request_path,
@@ -195,7 +213,7 @@ if __name__ == '__main__':
         dataset_gcs_path: str = '',
         location: str = ''
     ):
-        large_expertise_job(
+        large_expertise_job_from_file_input(
             project=args.project,
             location=location,
             gcs_request_path=gcs_request_path,
