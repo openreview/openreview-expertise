@@ -954,7 +954,7 @@ class ExpertiseCloudService(BaseExpertiseService):
                 self.logger.info(f"{job.id} - attempt {attempt + 1} of {self.max_attempts}...")
                 status = self.cloud.get_job_status_by_job_id(user_id, config)
                 self.logger.info(f"Status for {job.id} in region {region}: {status}")
-                dt = datetime.datetime.now(tz=datetime.timezone.utc)
+                dt = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
                 if not (status and isinstance(status, dict) and 'status' in status and 'description' in status):
                     asyncio.run_coroutine_threadsafe(job.log(f'Invalid status received, retrying at {dt}'), self.queue_loop)
