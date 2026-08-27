@@ -5,6 +5,7 @@ import os
 import json
 import torch
 import gc
+import datetime
 from csv import reader
 import openreview
 from openreview import OpenReviewException
@@ -953,37 +954,42 @@ class ExpertiseCloudService(BaseExpertiseService):
                 self.logger.info(f"{job.id} - attempt {attempt + 1} of {self.max_attempts}...")
                 status = self.cloud.get_job_status_by_job_id(user_id, config)
                 self.logger.info(f"Status for {job.id} in region {region}: {status}")
+                dt = datetime.datetime.now(tz=datetime.timezone.utc)
 
                 if not (status and isinstance(status, dict) and 'status' in status and 'description' in status):
-                    asyncio.run_coroutine_threadsafe(job.log('Invalid status received, retrying'), self.queue_loop)
+                    asyncio.run_coroutine_threadsafe(job.log(f'Invalid status received, retrying at {dt}'), self.queue_loop)
                     await asyncio.sleep(self.poll_interval)
                     continue
 
                 current_status = job.data.get('status')
                 current_description = job.data.get('description')
+                
                 if current_status != status['status'] or current_description != status['description']:
                     if current_status == JobStatus.FETCHING_DATA and status['status'] in (JobStatus.QUEUED, JobStatus.INITIALIZED):
                         await asyncio.sleep(self.poll_interval)
                         continue
                     await self._update_job_status(job, status['status'], status['description'])
-                    asyncio.run_coroutine_threadsafe(job.log(f'Status updated to {status["status"]}: {status["description"]}'), self.queue_loop)
+                    asyncio.run_coroutine_threadsafe(job.log(f'Status updated to {status["status"]}: {status["description"]} at {dt}'), self.queue_loop)
 
                 if status['status'] == JobStatus.RUN_EXPERTISE:
-                    asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} is running in region {region}'), self.queue_loop)
+                    asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} is running in region {region} at {dt}'), self.queue_loop)
 
                 if status['status'] == JobStatus.COMPLETED:
-                    asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} completed in region {region}'), self.queue_loop)
+                    asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} completed in region {region} at {dt}'), self.queue_loop)
                     return
 
                 if status['status'] == JobStatus.DATA_ERROR:
-                    asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} data error in region {region}'), self.queue_loop)
+                    asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} data error in region {region} at {dt}'), self.queue_loop)
                     return
 
                 if status['status'] == JobStatus.ERROR:
                     description = status.get('description', '')
                     is_resource_error = status.get('errorCode') == code_pb2.RESOURCE_EXHAUSTED
-                    if is_resource_error:
-                        msg = f"Pipeline {config.cloud_id} failed with resource exhaustion in region {region}: {description}"
+                    # Also check for resource exhaustion in the error text (e.g., "Resources are insufficient in region:")
+                    is_resource_text = 'insufficient' in description.lower() or \
+                                       'Resources are insufficient in region:' in description
+                    if is_resource_error or is_resource_text:
+                        msg = f"Pipeline {config.cloud_id} failed with resource exhaustion in region {region}: {description} at {dt}"
                         self.logger.error(msg)
                         asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
                         region_failed = True
@@ -991,7 +997,7 @@ class ExpertiseCloudService(BaseExpertiseService):
                     asyncio.run_coroutine_threadsafe(job.log(f'Job failed in region {region}: {description}'), self.queue_loop)
                     raise Exception(f"Job {job.id} failed in region {region}: {description}")
 
-                asyncio.run_coroutine_threadsafe(job.log(f'Job status {status["status"]} in region {region}, waiting {self.poll_interval}s'), self.queue_loop)
+                asyncio.run_coroutine_threadsafe(job.log(f'Job status {status["status"]} in region {region}, waiting {self.poll_interval}s at {dt}'), self.queue_loop)
                 await asyncio.sleep(self.poll_interval)
             else:
                 self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {job.id}.")
