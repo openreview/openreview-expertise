@@ -2,6 +2,7 @@
 from kfp import compiler
 from kfp.dsl import (
     component,
+    pipeline,
 )
 from google_cloud_pipeline_components.v1.custom_job import (
     create_custom_training_job_from_component
@@ -167,8 +168,8 @@ if __name__ == '__main__':
         boot_disk_size_gb=config['PIPELINE_DISK_SIZE_LARGE'],
     )
 
-    from kfp.dsl import pipeline
-
+    # Three separate pipelines — one per tier. Machine type is pre-computed by the
+    # BullMQ worker, so no conditional branching is needed inside any pipeline.
     @pipeline(
         name=f"{args.kfp_name}-{config['SMALL_NAME']}",
         description='Expertise pipeline for small jobs'

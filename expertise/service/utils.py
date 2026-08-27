@@ -886,9 +886,9 @@ class GCPInterface(object):
             error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
             if error_message:
                 error_data = json.loads(error_message)
+                description = error_data.get('error', descriptions[status])
                 if error_data.get('expected', False):
                     status = JobStatus.DATA_ERROR
-                description = error_data.get('error', description)
         except Exception:
             pass
         return status, description, error_code
