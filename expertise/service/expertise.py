@@ -870,72 +870,46 @@ class ExpertiseCloudService(BaseExpertiseService):
             await self._update_job_status(job, JobStatus.DATA_ERROR, str(e), error=str(e))
             return None
 
-    def _create_pipeline_job_step(self, job, request, user_id, machine_type, dataset_gcs_path, config, gcp_regions):
-        submit_error = None
-        for region_index, region in enumerate(gcp_regions):
-            config.cloud_region = region
-            self._save_config(config)
-            self.logger.info(f"Trying region {region} for job {job.id} with cloud_id {config.cloud_id}")
-            asyncio.run_coroutine_threadsafe(job.log(f'Trying region {region} with cloud_id {config.cloud_id}'), self.queue_loop)
+    def _create_pipeline_job_step(self, job, request, user_id, machine_type, dataset_gcs_path, config, region):
+        """Submit the PipelineJob to a single specified region."""
+        config.cloud_region = region
+        self._save_config(config)
+        self.logger.info(f"Trying region {region} for job {job.id} with cloud_id {config.cloud_id}")
+        asyncio.run_coroutine_threadsafe(job.log(f'Trying region {region} with cloud_id {config.cloud_id}'), self.queue_loop)
 
-            try:
-                # Submit the job and return the actual cloud job object
-                cloud_job = self.cloud.create_job(
-                    deepcopy(request),
-                    job_id=job.id,
-                    user_id=user_id,
-                    machine_type=machine_type,
-                    dataset_gcs_path=dataset_gcs_path,
-                    vertex_id=config.cloud_id,
-                    region=region
-                )
-                asyncio.run_coroutine_threadsafe(job.log(f'Submitted PipelineJob {config.cloud_id} in region {region}'), self.queue_loop)
-                return cloud_job
-            except google_exceptions.ResourceExhausted as e:
-                submit_error = e
-                msg = f"ResourceExhausted creating cloud job for {job.id} in region {region}: {e}"
-                self.logger.error(msg)
-                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-            except google_exceptions.ServiceUnavailable as e:
-                submit_error = e
-                msg = f"ServiceUnavailable creating cloud job for {job.id} in region {region}: {e}"
-                self.logger.error(msg)
-                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-            except google_exceptions.InvalidArgument as e:
-                submit_error = e
-                msg = f"InvalidArgument creating cloud job for {job.id} in region {region}: {e}"
-                self.logger.error(msg)
-                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-            except ValueError as e:
-                submit_error = e
-                msg = f"ValueError creating cloud job for {job.id} in region {region}: {e}"
-                self.logger.error(msg)
-                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-            except google_exceptions.AlreadyExists as e:
-                msg = f"PipelineJob {config.cloud_id} already exists in {region}, polling existing job: {e}"
-                self.logger.info(msg)
-                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-                # If it already exists, retrieve and return the existing cloud job
-                return self.cloud.get_pipeline_job(config.cloud_id, region)
-            except google_exceptions.PermissionDenied as e:
-                asyncio.run_coroutine_threadsafe(job.log(f'Permission denied creating cloud job in region {region}: {e}'), self.queue_loop)
-                raise e.with_traceback(e.__traceback__)
-            except Exception as e:
-                msg = f"Error creating cloud job for {job.id} in region {region}: {e}"
-                self.logger.error(msg)
-                self.logger.error(f"Error details: {traceback.format_exc()}")
-                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-                raise e.with_traceback(e.__traceback__)
+        try:
+            self.cloud.create_job(
+                deepcopy(request),
+                job_id=job.id,
+                user_id=user_id,
+                machine_type=machine_type,
+                dataset_gcs_path=dataset_gcs_path,
+                vertex_id=config.cloud_id,
+                region=region
+            )
+            asyncio.run_coroutine_threadsafe(job.log(f'Submitted PipelineJob {config.cloud_id} in region {region}'), self.queue_loop)
+            return True
+        except google_exceptions.AlreadyExists as e:
+            msg = f"PipelineJob {config.cloud_id} already exists in {region}, polling existing job: {e}"
+            self.logger.info(msg)
+            asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+            return True
+        except google_exceptions.PermissionDenied as e:
+            asyncio.run_coroutine_threadsafe(job.log(f'Permission denied creating cloud job in region {region}: {e}'), self.queue_loop)
+            raise e
+        except Exception as e:
+            msg = f"Error creating cloud job for {job.id} in region {region}: {e}"
+            self.logger.error(msg)
+            asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+            raise e
 
-            if submit_error is not None:
-                if region_index + 1 < len(gcp_regions):
-                    asyncio.run_coroutine_threadsafe(job.log(f'create_job failed in {region}, falling back to {gcp_regions[region_index + 1]}'), self.queue_loop)
-                    continue
-                msg = f"Error creating cloud job in all regions: {submit_error}"
-                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
-                raise Exception(msg)
-                
     async def _poll_pipeline_job_step(self, job, user_id, config, region):
+        """
+        Poll the PipelineJob in a single region to completion.
+        Returns True if successful (COMPLETED/DATA_ERROR), 
+        False if failed due to resource exhaustion (retryable),
+        or raises Exception on non-retryable errors.
+        """
         asyncio.run_coroutine_threadsafe(job.log(f'Polling PipelineJob {config.cloud_id} in region {region}'), self.queue_loop)
         for attempt in range(self.max_attempts):
             self.logger.info(f"{job.id} - attempt {attempt + 1} of {self.max_attempts}...")
@@ -972,13 +946,13 @@ class ExpertiseCloudService(BaseExpertiseService):
             if status['status'] == JobStatus.ERROR:
                 description = status.get('description', '')
                 is_resource_error = status.get('errorCode') == code_pb2.RESOURCE_EXHAUSTED
-                is_resource_text = 'insufficient' in description.lower() or \
-                                   'Resources are insufficient in region:' in description
+                is_resource_text = 'Resources are insufficient in region:' in description
                 if is_resource_error or is_resource_text:
                     msg = f"Pipeline {config.cloud_id} failed with resource exhaustion in region {region}: {description} at {dt}"
                     self.logger.error(msg)
                     asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
                     return False
+                
                 asyncio.run_coroutine_threadsafe(job.log(f'Job failed in region {region}: {description}'), self.queue_loop)
                 raise Exception(f"Job {job.id} failed in region {region}: {description}")
 
@@ -986,9 +960,48 @@ class ExpertiseCloudService(BaseExpertiseService):
             await asyncio.sleep(self.poll_interval)
         else:
             self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {job.id}.")
-            if job.data.get('status') != JobStatus.ERROR:
-                await self._update_job_status(job, JobStatus.ERROR, f"Polling timed out after {self.max_attempts} attempts.", error=f"Polling timed out after {self.max_attempts} attempts.")
             raise TimeoutError(f"Polling timed out for job {job.id} after {self.max_attempts} attempts.")
+    async def _submit_and_poll_pipeline_job_step(self, job, request, user_id, machine_type, dataset_gcs_path, config, gcp_regions):
+        """
+        Orchestrate submission and polling steps sequentially across gcp_regions.
+        Falls back to the next region if either submission or execution fails due to resource exhaustion.
+        """
+        submit_error = None
+        for region_index, region in enumerate(gcp_regions):
+            # 1. Attempt Submission
+            try:
+                self._create_pipeline_job_step(job, request, user_id, machine_type, dataset_gcs_path, config, region)
+            except (google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable, 
+                    google_exceptions.InvalidArgument, ValueError) as e:
+                submit_error = e
+                msg = f"Submission failed in region {region}: {e}"
+                self.logger.error(msg)
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+                if region_index + 1 < len(gcp_regions):
+                    asyncio.run_coroutine_threadsafe(job.log(f'Falling back to {gcp_regions[region_index + 1]}'), self.queue_loop)
+                    continue
+                break
+            except Exception as e:
+                # Fail immediately for non-recoverable errors (e.g. PermissionDenied)
+                raise e
+
+            # 2. Attempt Polling
+            success = await self._poll_pipeline_job_step(job, user_id, config, region)
+            if success:
+                return  # Pipeline finished successfully in this region!
+
+            # If polling returned False, it was a resource exhaustion failure during execution
+            if region_index + 1 < len(gcp_regions):
+                asyncio.run_coroutine_threadsafe(job.log(f'Falling back from {region} to {gcp_regions[region_index + 1]}'), self.queue_loop)
+                continue
+            
+            msg = f"Resource exhaustion in all regions for job {job.id}"
+            asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+            raise Exception(msg)
+
+        # If we broke out of the loop because all regions failed to submit
+        msg = f"Error running cloud job in all regions. Last error: {submit_error}"
+        raise Exception(msg)
 
 
     async def worker_process(self, job, token):
@@ -1019,24 +1032,15 @@ class ExpertiseCloudService(BaseExpertiseService):
 
         asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI PipelineJob (tier={machine_type})'), self.queue_loop)
 
+        # Step 3 & 4: Submit and Poll (orchestrated sequentially with fallback)
         gcp_regions = config.regions or self.server_config.get('GCP_REGIONS', [self.cloud.region])
-
-        # Step 3: Submit cloud job (the region loop is fully handled inside this step function)
         try:
-            cloud_job = self._create_pipeline_job_step(
+            await self._submit_and_poll_pipeline_job_step(
                 job, request, user_id, machine_type, dataset_gcs_path, config, gcp_regions
             )
-            active_region = config.cloud_region
         except Exception as e:
             await self._update_job_status(job, JobStatus.ERROR, str(e), error=str(e))
-            raise e
-
-        # Step 4: Poll the cloud job to completion
-        success = await self._poll_pipeline_job_step(job, user_id, config, active_region)
-        if not success:
-            msg = f"Pipeline job {config.cloud_id} failed in region {active_region}"
-            await self._update_job_status(job, JobStatus.ERROR, msg, error=msg)
-            raise Exception(msg)    
+            raise e    
     def start_expertise(self, request, client):
         descriptions = JobDescription.VALS.value
 
