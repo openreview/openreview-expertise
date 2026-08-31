@@ -2,7 +2,7 @@ from expertise.create_dataset import OpenReviewExpertise
 from unittest.mock import patch, MagicMock
 from collections import defaultdict
 import openreview
-import json, re, shutil, os, pytest
+import json, re, shutil, os, pytest, shortuuid
 
 # Default parameters for the module's common setup
 DEFAULT_CONF_ID = 'DEF.cc'
@@ -1096,3 +1096,178 @@ def test_get_profiles_with_email_members_as_pc(client, openreview_client):
     # Program_Chairs cannot search profiles by email — the API rejects the request
     with pytest.raises(openreview.OpenReviewException, match='The field ids cannot be empty or missing'):
         or_expertise_pc.get_profiles(group_ids=[email_group_id])
+
+def test_dblp_public_article_publication_in_archives(client, openreview_client, helpers, tmp_path):
+    """
+    A reviewer in DEF.cc/Reviewers has a publication imported via the new
+    openreview.net/Public_Article/DBLP.org/-/Record invitation, whose schema
+    represents `authors` as a list of {fullname, username} objects rather than
+    a list of strings. After running create_dataset, the publication should be
+    written to the reviewer's archive file.
+    """
+    reviewer_id = '~Stanley_Bogisich1'
+    reviewer_email = 'cchippendale26@smugmug.com'
+
+    reviewer_client_v2 = openreview.api.OpenReviewClient(
+        baseurl='http://localhost:3001',
+        username=reviewer_email,
+        password=helpers.strong_password
+    )
+
+    paper_title = 'Public Article DBLP Record For Stanley'
+    xml = '''<inproceedings key="conf/test/Bogisich25" mdate="2025-04-17">
+<author>Stanley Bogisich</author>
+<title>Public Article DBLP Record For Stanley.</title>
+<pages>1-10</pages>
+<year>2025</year>
+<booktitle>TEST</booktitle>
+<url>db/conf/test/test2025.html#Bogisich25</url>
+</inproceedings>
+'''
+
+    edit = reviewer_client_v2.post_note_edit(
+        invitation='openreview.net/Public_Article/DBLP.org/-/Record',
+        signatures=[reviewer_id],
+        content={'xml': {'value': xml}},
+        note=openreview.api.Note(
+            external_id='dblp:conf/test/Bogisich25',
+            content={
+                'title': {'value': paper_title},
+                'authors': {
+                    'value': [
+                        {'fullname': 'Stanley Bogisich', 'username': ''},
+                    ]
+                },
+                'venue': {'value': 'TEST'},
+            }
+        )
+    )
+
+    helpers.await_queue_edit(openreview_client, edit_id=edit['id'], count=2)
+
+    # Claim authorship so the reviewer's tilde id is associated with the note.
+    reviewer_client_v2.post_note_edit(
+        invitation='openreview.net/Public_Article/-/Authorship_Claim',
+        signatures=[reviewer_id],
+        content={
+            'author_index': {'value': 0},
+            'author_id': {'value': reviewer_id},
+            'author_name': {'value': 'Stanley Bogisich'},
+        },
+        note=openreview.api.Note(id=edit['note']['id'])
+    )
+
+    note = reviewer_client_v2.get_note(edit['note']['id'])
+    assert note.content['authors']['value'] == [
+        {'fullname': 'Stanley Bogisich', 'username': reviewer_id},
+    ]
+
+    dataset_dir = str(tmp_path)
+    config = {
+        'use_email_ids': False,
+        'match_group': 'DEF.cc/Reviewers',
+        'dataset': {'directory': dataset_dir}
+    }
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    or_expertise.run()
+
+    archive_file = os.path.join(dataset_dir, 'archives', f'{reviewer_id}.jsonl')
+    assert os.path.exists(archive_file), f'Archive file for {reviewer_id} not found'
+
+    titles = []
+    with open(archive_file) as f:
+        for line in f:
+            titles.append(json.loads(line)['content']['title'])
+
+    assert paper_title in titles, f"Expected '{paper_title}' in archives, got: {titles}"
+
+def test_dblp_public_article_excluded_with_zero_weight(client, openreview_client, helpers):
+    """
+    With weight_specification of articleSubmittedToOpenReview: False and weight: 0,
+    a publication imported via the Public_Article/DBLP.org/-/Record invitation
+    (whose venue is not in the OpenReview venue_list) resolves to weight 0 and
+    is filtered out of get_publications — entries with weight 0 are skipped.
+    """
+    reviewer_id = '~Stacee_Powlowski1'
+    reviewer_email = 'mdagg5@1und1.de'
+
+    reviewer_client_v2 = openreview.api.OpenReviewClient(
+        baseurl='http://localhost:3001',
+        username=reviewer_email,
+        password=helpers.strong_password
+    )
+
+    unique_key = shortuuid.uuid()[:8]
+    paper_title = f'Public Article DBLP Record For Stacee {unique_key}'
+    xml = f'''<inproceedings key="conf/test/Powlowski{unique_key}" mdate="2025-04-17">
+<author>Stacee Powlowski</author>
+<title>Public Article DBLP Record For Stacee {unique_key}.</title>
+<pages>1-10</pages>
+<year>2025</year>
+<booktitle>TEST</booktitle>
+<url>db/conf/test/test2025.html#Powlowski{unique_key}</url>
+</inproceedings>
+'''
+
+    edit = reviewer_client_v2.post_note_edit(
+        invitation='openreview.net/Public_Article/DBLP.org/-/Record',
+        signatures=[reviewer_id],
+        content={'xml': {'value': xml}},
+        note=openreview.api.Note(
+            external_id=f'dblp:conf/test/Powlowski{unique_key}',
+            content={
+                'title': {'value': paper_title},
+                'authors': {
+                    'value': [
+                        {'fullname': 'Stacee Powlowski', 'username': ''},
+                    ]
+                },
+                'venue': {'value': 'TEST'},
+            }
+        )
+    )
+
+    helpers.await_queue_edit(openreview_client, edit_id=edit['id'], count=2)
+
+    reviewer_client_v2.post_note_edit(
+        invitation='openreview.net/Public_Article/-/Authorship_Claim',
+        signatures=[reviewer_id],
+        content={
+            'author_index': {'value': 0},
+            'author_id': {'value': reviewer_id},
+            'author_name': {'value': 'Stacee Powlowski'},
+        },
+        note=openreview.api.Note(id=edit['note']['id'])
+    )
+
+    dblp_note_id = edit['note']['id']
+
+    profile = openreview.tools.get_profiles(
+        client, [reviewer_id], with_publications=True
+    )[0]
+
+    # Sanity-check: with no weight_specification the DBLP publication is included
+    # with the default weight of 1.
+    or_expertise = OpenReviewExpertise(openreview_client, {})
+    publications = or_expertise.get_publications(profile)
+    assert dblp_note_id in {p['id'] for p in publications}, (
+        f"DBLP publication {dblp_note_id} not picked up from profile"
+    )
+
+    config = {
+        'dataset': {
+            'weight_specification': [
+                {
+                    'articleSubmittedToOpenReview': False,
+                    'weight': 0
+                }
+            ]
+        }
+    }
+    or_expertise = OpenReviewExpertise(openreview_client, config)
+    publications = or_expertise.get_publications(profile)
+    pub_ids = [p['id'] for p in publications]
+    assert dblp_note_id not in pub_ids, (
+        f"DBLP publication {dblp_note_id} should be excluded with weight 0, "
+        f"but appears in get_publications output: {pub_ids}"
+    )
