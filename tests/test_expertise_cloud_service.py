@@ -1,4 +1,5 @@
 from unittest.mock import patch, MagicMock
+from google.api_core.exceptions import ResourceExhausted
 import random
 from pathlib import Path
 import openreview
@@ -69,6 +70,19 @@ def reset_run_once_state():
 def _load_job_config(working_dir, job_id):
     with open(os.path.join(working_dir, job_id, 'config.json'), 'r') as f:
         return JobConfig.from_json(json.load(f))
+
+
+def make_pipeline_get(running_mock, terminal_mock, running_polls=4):
+    poll_counts = {}
+
+    def fake_get(resource_name):
+        job_id = resource_name.split('/')[-1]
+        poll_counts[job_id] = poll_counts.get(job_id, 0) + 1
+        if poll_counts[job_id] <= running_polls:
+            return running_mock
+        return terminal_mock
+
+    return fake_get
 
 
 class TestExpertiseCloudService():
@@ -186,7 +200,7 @@ class TestExpertiseCloudService():
             mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_succeeded)
 
             return mock_pipeline_instance
 
@@ -498,7 +512,7 @@ class TestExpertiseCloudService():
             mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_succeeded)
 
             return mock_pipeline_instance
 
@@ -600,7 +614,7 @@ class TestExpertiseCloudService():
             mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_succeeded)
 
             return mock_pipeline_instance
 
@@ -654,7 +668,8 @@ class TestExpertiseCloudService():
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         ## Status endpoints read from BullMQ, so only the worker polls GCP: 1 job x 5 attempts
-        assert len(mock_pipeline_job.get.call_args_list) == 5
+        job_calls = [c for c in mock_pipeline_job.get.call_args_list if f'/{job_id}-' in c.args[0]]
+        assert len(job_calls) == 5
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
@@ -727,7 +742,7 @@ class TestExpertiseCloudService():
             mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_succeeded)
 
             return mock_pipeline_instance
 
@@ -781,7 +796,8 @@ class TestExpertiseCloudService():
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         ## Status endpoints read from BullMQ, so only the worker polls GCP: 1 job x 5 attempts
-        assert len(mock_pipeline_job.get.call_args_list) == 5
+        job_calls = [c for c in mock_pipeline_job.get.call_args_list if f'/{job_id}-' in c.args[0]]
+        assert len(job_calls) == 5
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
@@ -854,7 +870,7 @@ class TestExpertiseCloudService():
             mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
             mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_succeeded] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_succeeded)
 
             return mock_pipeline_instance
 
@@ -924,7 +940,8 @@ class TestExpertiseCloudService():
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
 
         ## Status endpoints read from BullMQ, so only the worker polls GCP: 1 job x 5 attempts
-        assert len(mock_pipeline_job.get.call_args_list) == 5
+        job_calls = [c for c in mock_pipeline_job.get.call_args_list if f'/{job_id}-' in c.args[0]]
+        assert len(job_calls) == 5
 
         response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
         assert response['status'] == 'Completed', f"Job status: {response['status']}"
@@ -1081,7 +1098,7 @@ class TestExpertiseCloudService():
             mock_pipeline_failed.state = PipelineState.PIPELINE_STATE_FAILED
             mock_pipeline_failed.update_time.timestamp.return_value = time.time()
 
-            mock_pipeline_job.get.side_effect = [mock_pipeline_running] * 4 + [mock_pipeline_failed] * 10
+            mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_failed)
 
             return mock_pipeline_instance
 
@@ -1160,6 +1177,63 @@ class TestExpertiseCloudService():
         assert response['name'] == 'test_run'
         assert response['status'] == 'Data Error'
         assert response['description'] == "No papers found for: invitation_ids: ['CLD_ERR.cc/-/Submission']"
+
+    @patch("expertise.service.utils.aip.PipelineJob")
+    def test_region_fallback_on_resource_exhaustion(self, mock_pipeline_job, openreview_client, openreview_context_cloud, gcs_test_bucket, gcs_jobs_prefix):
+        mock_pipeline_running = MagicMock()
+        mock_pipeline_running.state = PipelineState.PIPELINE_STATE_RUNNING
+        mock_pipeline_running.update_time.timestamp.return_value = time.time()
+        mock_pipeline_succeeded = MagicMock()
+        mock_pipeline_succeeded.state = PipelineState.PIPELINE_STATE_SUCCEEDED
+        mock_pipeline_succeeded.update_time.timestamp.return_value = time.time()
+        mock_pipeline_job.get.side_effect = make_pipeline_get(mock_pipeline_running, mock_pipeline_succeeded)
+
+        mock_pipeline_instance = MagicMock()
+
+        def fake_create(*args, **kwargs):
+            if kwargs['location'] == 'us-east4':
+                raise ResourceExhausted('Quota exceeded in us-east4')
+            return mock_pipeline_instance
+        mock_pipeline_job.side_effect = fake_create
+
+        abc_client = openreview.api.OpenReviewClient(token=openreview_client.token)
+        abc_client.impersonate('CLD.cc')
+
+        test_client = openreview_context_cloud['test_client']
+        response = test_client.post(
+            '/expertise',
+            data=json.dumps({
+                "name": f"test_region_fallback_{random.randint(0, 1_000_000)}",
+                "entityA": {'type': "Group", 'memberOf': "CLD.cc/Reviewers"},
+                "entityB": {'type': "Note", 'invitation': "CLD.cc/-/Submission"},
+                "model": {"name": "specter2+scincl", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'},
+                "dataset": {'minimumPubDate': 0},
+                "regions": ["us-east4", "us-central1"]
+            }),
+            content_type='application/json',
+            headers=abc_client.headers
+        )
+        assert response.status_code == 200, f'{response.json}'
+        job_id = response.json['jobId']
+
+        start_time = time.time()
+        timeout = openreview_context_cloud['config']['POLL_INTERVAL'] * (openreview_context_cloud['config']['POLL_MAX_ATTEMPTS'] + 2) + LATENCY_OFFSET + 15
+        while time.time() - start_time < timeout:
+            response = test_client.get('/expertise/status', headers=abc_client.headers, query_string={'jobId': f'{job_id}'}).json
+            if response['status'] in ('Completed', 'Error', 'Data Error'):
+                break
+            time.sleep(0.5)
+        assert response['status'] == 'Completed', f"Job status: {response['status']}"
+
+        job_creations = [c for c in mock_pipeline_job.call_args_list if c.kwargs.get('job_id', '').startswith(f'{job_id}-')]
+        assert [c.kwargs['location'] for c in job_creations] == ['us-east4', 'us-central1'], f"Expected us-east4 attempt then us-central1 fallback"
+
+        config = _load_job_config(openreview_context_cloud['config']['WORKING_DIR'], job_id)
+        assert config.cloud_region == 'us-central1', f"Expected persisted region us-central1, got {config.cloud_region}"
+
+        request_blob = gcs_test_bucket.blob(f"{gcs_jobs_prefix}/{config.cloud_id}/request.json")
+        stored_request = json.loads(request_blob.download_as_text())
+        assert stored_request.get('cloud_region') == 'us-central1', f"Expected request.json to record us-central1, got {stored_request.get('cloud_region')}"
 
     def test_status_returns_404_when_job_not_in_queue(self, openreview_client, openreview_context_cloud):
 

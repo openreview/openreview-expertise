@@ -53,13 +53,13 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
       - name: Setup Docker authentication
-        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker us-docker.pkg.dev --quiet
       - name: Set Environment Variables
         run: |
           echo "IMAGE_TAG_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
           echo "KFP_PIPELINE_NAME=${{ env.PIPELINE_NAME }}" >> $GITHUB_ENV
           echo "IMAGE=${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
-          echo "IMAGE_TAG=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=us-docker.pkg.dev/${{ env.PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
       - name: Check if image exists
         id: image_check
         run: |
@@ -108,5 +108,7 @@ jobs:
         run: |
           gcloud config set compute/zone us-central1-b
           VERSION="${{ github.event.inputs.version }}"
+          IMAGE_URI="${IMAGE_TAG}:${VERSION}"
+          GCP_PIPELINE_TAG="${VERSION}"
           echo "Deploying version: $VERSION"
-          gcloud compute ssh --tunnel-through-iap openreview@openreview-expertise-instance --command "/bin/expertise_build.sh $VERSION" --quiet
+          gcloud compute ssh --tunnel-through-iap openreview@openreview-expertise-instance --command "export GCP_PIPELINE_TAG=${GCP_PIPELINE_TAG}; /bin/expertise_build.sh $VERSION \"${IMAGE_URI}\" \"${GCP_PIPELINE_TAG}\"" --quiet

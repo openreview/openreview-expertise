@@ -3,10 +3,6 @@ from kfp import compiler
 from kfp.dsl import (
     pipeline,
     component,
-    container_component,
-    InputPath,
-    OutputPath,
-    ContainerSpec,
 )
 from kfp.registry import RegistryClient
 import argparse
@@ -181,11 +177,12 @@ if __name__ == '__main__':
     )
     def small_expertise_pipeline(
         gcs_request_path: str,
-        dataset_gcs_path: str = ''
+        dataset_gcs_path: str = '',
+        location: str = ''
     ):
         small_expertise_job_from_file_input(
             project=args.project,
-            location=args.kfp_region,
+            location=location,
             gcs_request_path=gcs_request_path,
             dataset_gcs_path=dataset_gcs_path
         ).set_display_name("Running Small Expertise Pipeline")
@@ -196,11 +193,12 @@ if __name__ == '__main__':
     )
     def medium_expertise_pipeline(
         gcs_request_path: str,
-        dataset_gcs_path: str = ''
+        dataset_gcs_path: str = '',
+        location: str = ''
     ):
         medium_expertise_job_from_file_input(
             project=args.project,
-            location=args.kfp_region,
+            location=location,
             gcs_request_path=gcs_request_path,
             dataset_gcs_path=dataset_gcs_path
         ).set_display_name("Running Medium Expertise Pipeline")
@@ -211,11 +209,12 @@ if __name__ == '__main__':
     )
     def large_expertise_pipeline(
         gcs_request_path: str,
-        dataset_gcs_path: str = ''
+        dataset_gcs_path: str = '',
+        location: str = ''
     ):
         large_expertise_job_from_file_input(
             project=args.project,
-            location=args.kfp_region,
+            location=location,
             gcs_request_path=gcs_request_path,
             dataset_gcs_path=dataset_gcs_path
         ).set_display_name("Running Large Expertise Pipeline")

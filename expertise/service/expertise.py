@@ -5,6 +5,7 @@ import os
 import json
 import torch
 import gc
+import datetime
 from csv import reader
 import openreview
 from openreview import OpenReviewException
@@ -19,6 +20,8 @@ from copy import deepcopy
 import asyncio
 import threading
 import traceback
+from google.api_core import exceptions as google_exceptions
+from google.rpc import code_pb2
 
 from .utils import JobConfig, APIRequest, JobDescription, JobStatus, SUPERUSER_IDS, get_user_id, ExpectedDataError
 
@@ -840,6 +843,167 @@ class ExpertiseCloudService(BaseExpertiseService):
         else:
             return self.server_config.get('LARGE_NAME')
 
+
+    async def _create_dataset_step(self, job, config, openreview_client_v2):
+        asyncio.run_coroutine_threadsafe(job.log('Task 1: fetching data from OpenReview and building dataset'), self.queue_loop)
+        await self._update_job_status(job, JobStatus.FETCHING_DATA)
+        try:
+            execute_create_dataset(openreview_client_v2, config=config.to_json())
+            return True
+        except ExpectedDataError as e:
+            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
+            await self._update_job_status(job, JobStatus.DATA_ERROR, str(e), error=str(e))
+            return False
+        except Exception as e:
+            self.logger.error(f"Error creating dataset for {job.id}: {e}")
+            self.logger.error(f"Error details: {traceback.format_exc()}")
+            if job.data.get('status') != JobStatus.ERROR:
+                await self._update_job_status(job, JobStatus.ERROR, str(e), error=str(e))
+            raise e.with_traceback(e.__traceback__)
+
+    async def _upload_dataset_step(self, job, config):
+        asyncio.run_coroutine_threadsafe(job.log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset'), self.queue_loop)
+        try:
+            return self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
+        except ExpectedDataError as e:
+            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
+            await self._update_job_status(job, JobStatus.DATA_ERROR, str(e), error=str(e))
+            return None
+
+    def _create_pipeline_job_step(self, job, request, user_id, machine_type, dataset_gcs_path, config, region):
+        """Submit the PipelineJob to a single specified region."""
+        config.cloud_region = region
+        self._save_config(config)
+        self.logger.info(f"Trying region {region} for job {job.id} with cloud_id {config.cloud_id}")
+        asyncio.run_coroutine_threadsafe(job.log(f'Trying region {region} with cloud_id {config.cloud_id}'), self.queue_loop)
+
+        try:
+            self.cloud.create_job(
+                deepcopy(request),
+                job_id=job.id,
+                user_id=user_id,
+                machine_type=machine_type,
+                dataset_gcs_path=dataset_gcs_path,
+                vertex_id=config.cloud_id,
+                region=region
+            )
+            asyncio.run_coroutine_threadsafe(job.log(f'Submitted PipelineJob {config.cloud_id} in region {region}'), self.queue_loop)
+            return True
+        except google_exceptions.AlreadyExists as e:
+            msg = f"PipelineJob {config.cloud_id} already exists in {region}, polling existing job: {e}"
+            self.logger.info(msg)
+            asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+            return True
+        except google_exceptions.PermissionDenied as e:
+            asyncio.run_coroutine_threadsafe(job.log(f'Permission denied creating cloud job in region {region}: {e}'), self.queue_loop)
+            raise e
+        except Exception as e:
+            msg = f"Error creating cloud job for {job.id} in region {region}: {e}"
+            self.logger.error(msg)
+            asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+            raise e
+
+    async def _poll_pipeline_job_step(self, job, user_id, config, region):
+        """
+        Poll the PipelineJob in a single region to completion.
+        Returns True if successful (COMPLETED/DATA_ERROR), 
+        False if failed due to resource exhaustion (retryable),
+        or raises Exception on non-retryable errors.
+        """
+        asyncio.run_coroutine_threadsafe(job.log(f'Polling PipelineJob {config.cloud_id} in region {region}'), self.queue_loop)
+        for attempt in range(self.max_attempts):
+            self.logger.info(f"{job.id} - attempt {attempt + 1} of {self.max_attempts}...")
+            status = self.cloud.get_job_status_by_job_id(user_id, config)
+            self.logger.info(f"Status for {job.id} in region {region}: {status}")
+            dt = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+            if not (status and isinstance(status, dict) and 'status' in status and 'description' in status):
+                asyncio.run_coroutine_threadsafe(job.log(f'Invalid status received, retrying at {dt}'), self.queue_loop)
+                await asyncio.sleep(self.poll_interval)
+                continue
+
+            current_status = job.data.get('status')
+            current_description = job.data.get('description')
+            
+            if current_status != status['status'] or current_description != status['description']:
+                if current_status == JobStatus.FETCHING_DATA and status['status'] in (JobStatus.QUEUED, JobStatus.INITIALIZED):
+                    await asyncio.sleep(self.poll_interval)
+                    continue
+                await self._update_job_status(job, status['status'], status['description'])
+                asyncio.run_coroutine_threadsafe(job.log(f'Status updated to {status["status"]}: {status["description"]} at {dt}'), self.queue_loop)
+
+            if status['status'] == JobStatus.RUN_EXPERTISE:
+                asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} is running in region {region} at {dt}'), self.queue_loop)
+
+            if status['status'] == JobStatus.COMPLETED:
+                asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} completed in region {region} at {dt}'), self.queue_loop)
+                return True
+
+            if status['status'] == JobStatus.DATA_ERROR:
+                asyncio.run_coroutine_threadsafe(job.log(f'Pipeline {config.cloud_id} data error in region {region} at {dt}'), self.queue_loop)
+                return True
+
+            if status['status'] == JobStatus.ERROR:
+                description = status.get('description', '')
+                is_resource_error = status.get('errorCode') == code_pb2.RESOURCE_EXHAUSTED
+                is_resource_text = 'Resources are insufficient in region:' in description
+                if is_resource_error or is_resource_text:
+                    msg = f"Pipeline {config.cloud_id} failed with resource exhaustion in region {region}: {description} at {dt}"
+                    self.logger.error(msg)
+                    asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+                    return False
+                
+                asyncio.run_coroutine_threadsafe(job.log(f'Job failed in region {region}: {description}'), self.queue_loop)
+                raise Exception(f"Job {job.id} failed in region {region}: {description}")
+
+            asyncio.run_coroutine_threadsafe(job.log(f'Job status {status["status"]} in region {region}, waiting {self.poll_interval}s at {dt}'), self.queue_loop)
+            await asyncio.sleep(self.poll_interval)
+        else:
+            self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {job.id}.")
+            raise TimeoutError(f"Polling timed out for job {job.id} after {self.max_attempts} attempts.")
+    async def _submit_and_poll_pipeline_job_step(self, job, request, user_id, machine_type, dataset_gcs_path, config, gcp_regions):
+        """
+        Orchestrate submission and polling steps sequentially across gcp_regions.
+        Falls back to the next region if either submission or execution fails due to resource exhaustion.
+        """
+        submit_error = None
+        for region_index, region in enumerate(gcp_regions):
+            # 1. Attempt Submission
+            try:
+                self._create_pipeline_job_step(job, request, user_id, machine_type, dataset_gcs_path, config, region)
+            except (google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable, 
+                    google_exceptions.InvalidArgument, ValueError) as e:
+                submit_error = e
+                msg = f"Submission failed in region {region}: {e}"
+                self.logger.error(msg)
+                asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+                if region_index + 1 < len(gcp_regions):
+                    asyncio.run_coroutine_threadsafe(job.log(f'Falling back to {gcp_regions[region_index + 1]}'), self.queue_loop)
+                    continue
+                break
+            except Exception as e:
+                # Fail immediately for non-recoverable errors (e.g. PermissionDenied)
+                raise e
+
+            # 2. Attempt Polling
+            success = await self._poll_pipeline_job_step(job, user_id, config, region)
+            if success:
+                return  # Pipeline finished successfully in this region!
+
+            # If polling returned False, it was a resource exhaustion failure during execution
+            if region_index + 1 < len(gcp_regions):
+                asyncio.run_coroutine_threadsafe(job.log(f'Falling back from {region} to {gcp_regions[region_index + 1]}'), self.queue_loop)
+                continue
+            
+            msg = f"Resource exhaustion in all regions for job {job.id}"
+            asyncio.run_coroutine_threadsafe(job.log(msg), self.queue_loop)
+            raise Exception(msg)
+
+        # If we broke out of the loop because all regions failed to submit
+        msg = f"Error running cloud job in all regions. Last error: {submit_error}"
+        raise Exception(msg)
+
+
     async def worker_process(self, job, token):
         descriptions = JobDescription.VALS.value
         user_id = job.data['user_id']
@@ -850,20 +1014,9 @@ class ExpertiseCloudService(BaseExpertiseService):
         config.baseurl_v2 = job.data.get('baseurl_v2')
         openreview_client_v2 = openreview.api.OpenReviewClient(token=or_token, baseurl=config.baseurl_v2)
 
-        asyncio.run_coroutine_threadsafe(job.log('Task 1: fetching data from OpenReview and building dataset'), self.queue_loop)
-        await self._update_job_status(job, JobStatus.FETCHING_DATA)
-        try:
-            execute_create_dataset(openreview_client_v2, config=config.to_json())
-        except ExpectedDataError as e:
-            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
-            await self._update_job_status(job, JobStatus.DATA_ERROR, str(e), error=str(e))
+        # Step 1: Create dataset
+        if not await self._create_dataset_step(job, config, openreview_client_v2):
             return
-        except Exception as e:
-            self.logger.error(f"Error creating dataset for {job.id}: {e}")
-            self.logger.error(f"Error details: {traceback.format_exc()}")
-            if job.data.get('status') != JobStatus.ERROR:
-                await self._update_job_status(job, JobStatus.ERROR, str(e), error=str(e))
-            raise e.with_traceback(e.__traceback__)
 
         config.cloud_id = f"{job.id}-{int(time.time() * 1000)}"
         machine_type = self.compute_machine_type_from_dataset(config)
@@ -872,85 +1025,22 @@ class ExpertiseCloudService(BaseExpertiseService):
         # Persist cloud_id back into the BullMQ job data so endpoints can locate the GCS artifact.
         job.data = {**job.data, 'config': config.to_json()}
 
-        asyncio.run_coroutine_threadsafe(job.log(f'Uploading dataset to gs://{self.cloud.bucket_name}/{self.cloud.jobs_folder}/{config.cloud_id}/dataset'), self.queue_loop)
-        try:
-            dataset_gcs_path = self.cloud.upload_dataset(config, vertex_id=config.cloud_id)
-        except ExpectedDataError as e:
-            asyncio.run_coroutine_threadsafe(job.log(f'Job finished with expected data error: {e}'), self.queue_loop)
-            await self._update_job_status(job, JobStatus.DATA_ERROR, str(e), error=str(e))
+        # Step 2: Upload dataset
+        dataset_gcs_path = await self._upload_dataset_step(job, config)
+        if dataset_gcs_path is None:
             return
 
-        asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI pipeline (tier={machine_type})'), self.queue_loop)
+        asyncio.run_coroutine_threadsafe(job.log(f'Task 2: submitting Vertex AI PipelineJob (tier={machine_type})'), self.queue_loop)
+
+        # Step 3 & 4: Submit and Poll (orchestrated sequentially with fallback)
+        gcp_regions = config.regions or self.server_config.get('GCP_REGIONS', [self.cloud.region])
         try:
-            self.cloud.create_job(
-                deepcopy(request),
-                job_id=job.id,
-                user_id=user_id,
-                machine_type=machine_type,
-                dataset_gcs_path=dataset_gcs_path,
-                vertex_id=config.cloud_id
+            await self._submit_and_poll_pipeline_job_step(
+                job, request, user_id, machine_type, dataset_gcs_path, config, gcp_regions
             )
-            self._save_config(config)
         except Exception as e:
-            self.logger.error(f"Error creating cloud job for {job.id}: {e} tr={e.__traceback__}")
-            self.logger.error(f"Error details: {traceback.format_exc()}")
-            if job.data.get('status') != JobStatus.ERROR:
-                await self._update_job_status(job, JobStatus.ERROR, f"Error creating cloud job: {e}", error=str(e))
-            raise e.with_traceback(e.__traceback__)
-
-        try:
-            self.logger.info(f"In polling worker...")
-            for attempt in range(self.max_attempts):
-                self.logger.info(f"{job.id} - attempt {attempt + 1} of {self.max_attempts}...")
-                status = self.cloud.get_job_status_by_job_id(user_id, config)
-                self.logger.info(f"Invoked get_job_status_by_job_id for {job.id} - status: {status}")
-
-                # Check status validity
-                self.logger.info(f"INFO: before status check")
-                if status and isinstance(status, dict) and 'status' in status and 'description' in status:
-                    self.logger.info(f"INFO: after status check")
-
-                    # Only update non-stale status
-                    current_status = job.data.get('status')
-                    current_description = job.data.get('description')
-                    if current_status != status['status'] or current_description != status['description']:
-                        # Vertex reports QUEUED/INITIALIZED while we're still fetching data — skip regression
-                        if current_status == JobStatus.FETCHING_DATA and status['status'] in (JobStatus.QUEUED, JobStatus.INITIALIZED):
-                            await asyncio.sleep(self.poll_interval)
-                            continue
-                        self.logger.info(f"INFO: before update status")
-                        await self._update_job_status(job, status['status'], status['description'])
-                        self.logger.info(f"INFO: after update status")
-
-                    if status['status'] == JobStatus.COMPLETED:
-                        break
-
-                    elif status['status'] == JobStatus.DATA_ERROR:
-                        break
-
-                    elif status['status'] == JobStatus.ERROR:
-                        self.logger.error(f"Job {job.id} encountered an error: {status['description']}")
-                        raise Exception(f"Job {job.id} failed: {status['description']}")
-                    self.logger.info(f"Job {job.id} status: {status['status']}. Waiting {self.poll_interval} seconds before next poll...")
-
-                else:
-                    self.logger.warning(f"Invalid or missing status received for job {job.id}. Retrying...")
-
-                self.logger.info(f"INFO: before sleep")
-                await asyncio.sleep(self.poll_interval)
-                self.logger.info(f"INFO: after sleep")
-
-            else:
-                self.logger.warning(f"Polling timed out after {self.max_attempts} attempts for job {job.id}.")
-                if job.data.get('status') != JobStatus.ERROR:
-                    await self._update_job_status(job, JobStatus.ERROR, f"Polling timed out after {self.max_attempts} attempts.", error=f"Polling timed out after {self.max_attempts} attempts.")
-                raise TimeoutError(f"Polling timed out for job {job.id} after {self.max_attempts} attempts.")
-
-            self.logger.info(f"Polling loop finished for job {job.id}.")
-
-        except Exception as e:
-            raise e.with_traceback(e.__traceback__)
-
+            await self._update_job_status(job, JobStatus.ERROR, str(e), error=str(e))
+            raise e    
     def start_expertise(self, request, client):
         descriptions = JobDescription.VALS.value
 
@@ -989,10 +1079,11 @@ class ExpertiseCloudService(BaseExpertiseService):
 
             config = self._validate_request(client, deepcopy(request))
             config.mdate = int(time.time() * 1000)
+            config.cloud_id = f"{config.job_id}-{int(time.time() * 1000)}"
             self._save_config(config)
 
             config_log = self._get_log_from_config(config)
-            self.logger.info(f"Adding job {config.job_id} to queue")
+            self.logger.info(f"Adding job {config.job_id} to queue with cloud_id {config.cloud_id}")
 
             future = asyncio.run_coroutine_threadsafe(
                 self.queue.add(

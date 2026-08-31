@@ -56,7 +56,7 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
       - name: Setup Docker authentication
-        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker us-docker.pkg.dev --quiet
       - name: Set Environment Variables
         run: |
           # Simple: Use branch/tag name + commit SHA of the main repo
@@ -72,7 +72,7 @@ jobs:
           echo "IMAGE_TAG_VERSION=$IMAGE_TAG_VERSION" >> $GITHUB_ENV
           echo "KFP_PIPELINE_NAME=${{ env.PIPELINE_NAME }}" >> $GITHUB_ENV
           echo "IMAGE=${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
-          echo "IMAGE_TAG=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=us-docker.pkg.dev/${{ env.PROJECT }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
       - name: Check if image exists
         id: image_check
         run: |
@@ -136,7 +136,9 @@ jobs:
             fi
           done
 
+          IMAGE_URI="${IMAGE_TAG}:${IMAGE_TAG_VERSION}"
+          GCP_PIPELINE_TAG="${IMAGE_TAG_VERSION}"
           for i in ${!instance_names[@]}; do
             echo Deploying to ${instance_names[$i]}
-            gcloud compute ssh --zone ${zones[$i]} --tunnel-through-iap openreview@${instance_names[$i]} --command "bash /home/openreview/bin/deploy-expertise.sh $BRANCH" --quiet
+            gcloud compute ssh --zone ${zones[$i]} --tunnel-through-iap openreview@${instance_names[$i]} --command "export GCP_PIPELINE_TAG=${GCP_PIPELINE_TAG}; bash /home/openreview/bin/deploy-expertise.sh $BRANCH \"${IMAGE_URI}\" \"${GCP_PIPELINE_TAG}\"" --quiet
           done

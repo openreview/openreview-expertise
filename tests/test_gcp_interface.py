@@ -94,6 +94,7 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time):
 
     # Mock `upload_from_string` to simulate folder and file creation
     mock_blob.upload_from_string.return_value = None
+    mock_blob.exists.return_value = False
 
     # Setup mock PipelineJob
     mock_pipeline_instance = MagicMock()
@@ -177,8 +178,12 @@ def test_create_job(mock_storage_client, mock_pipeline_job, mock_time):
         ),
         job_id=result,
         pipeline_root="gs://test-bucket/pipeline-root",
-        parameter_values={"gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json"},
-        labels={"test": "label"}
+        parameter_values={
+            "gcs_request_path": f"gs://test-bucket/{expected_folder_path}/request.json",
+            "location": "us-central1",
+        },
+        labels={"test": "label"},
+        location="us-central1"
     )
     mock_pipeline_instance.submit.assert_called_once_with(service_account=None)
 
@@ -195,6 +200,7 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     mock_storage_client.return_value.bucket.return_value = mock_bucket
     mock_bucket.blob.return_value = mock_blob
     mock_blob.upload_from_string.return_value = None
+    mock_blob.exists.return_value = False
 
     # Setup mock PipelineJob
     mock_pipeline_instance = MagicMock()
@@ -236,13 +242,60 @@ def test_create_job_with_service_account(mock_storage_client, mock_pipeline_job,
     assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/test_project/")
     assert kwargs['job_id'] == expected_valid_vertex_id
     assert kwargs['pipeline_root'] == "gs://test-bucket/pipeline-root"
+    assert kwargs['location'] == 'us-central1'
     params = kwargs['parameter_values']
     assert params["gcs_request_path"] == f"gs://test-bucket/{expected_folder_path}/request.json"
-    
+    assert params["location"] == 'us-central1'
+
     # Verify submit() is called with the service account
     mock_pipeline_instance.submit.assert_called_once_with(
         service_account='sa-under-test@test-project.iam.gserviceaccount.com'
     )
+
+# create_job accepts an optional region override that is passed as PipelineJob location.
+@patch("expertise.service.utils.time.time")
+@patch("expertise.service.utils.aip.PipelineJob")
+@patch("expertise.service.utils.storage.Client")
+def test_create_job_region_override(mock_storage_client, mock_pipeline_job, mock_time):
+    mock_time.return_value = 1234567890.123
+    mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    mock_storage_client.return_value.bucket.return_value = mock_bucket
+    mock_bucket.blob.return_value = mock_blob
+    mock_blob.upload_from_string.return_value = None
+    mock_blob.exists.return_value = False
+    mock_pipeline_job.return_value = MagicMock()
+
+    gcp_interface = GCPInterface(
+        project_id="test_project",
+        project_number="123456",
+        region="us-central1",
+        pipeline_root="pipeline-root",
+        pipeline_name="test-pipeline",
+        pipeline_repo="test-repo",
+        bucket_name="test-bucket",
+        jobs_folder="jobs",
+        service_label={'test': 'label'},
+    )
+
+    json_request = {
+        "name": "test_run2",
+        "entityA": {'type': "Group", 'memberOf': "GCP.cc/Reviewers"},
+        "entityB": {'type': "Note", 'invitation': "GCP.cc/-/Submission"},
+        "model": {"name": "specter+mfr", 'useTitle': False, 'useAbstract': True, 'skipSpecter': False, 'scoreComputation': 'avg'}
+    }
+    gcp_interface.create_job(
+        deepcopy(json_request),
+        job_id=generate_job_id(),
+        user_id='openreview.net',
+        machine_type='small',
+        region='us-east4'
+    )
+
+    _, kwargs = mock_pipeline_job.call_args
+    assert kwargs['location'] == 'us-east4'
+    assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/test_project/")
+    assert kwargs['parameter_values']['location'] == 'us-east4'
 
 # machine_type must not appear in pipeline parameter_values — it is used only to
 # select the per-tier pipeline and must not be forwarded into the job definition,
@@ -257,6 +310,7 @@ def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock
     mock_storage_client.return_value.bucket.return_value = mock_bucket
     mock_bucket.blob.return_value = mock_blob
     mock_blob.upload_from_string.return_value = None
+    mock_blob.exists.return_value = False
     mock_pipeline_job.return_value = MagicMock()
 
     config = {
@@ -282,6 +336,9 @@ def test_machine_type_not_in_pipeline_parameter_values(mock_storage_client, mock
     gcp_interface.create_job(deepcopy(json_request), job_id=generate_job_id(), user_id='openreview.net', machine_type='small')
 
     _, kwargs = mock_pipeline_job.call_args
+    assert kwargs['template_path'].startswith("https://us-central1-kfp.pkg.dev/test_project/")
+    assert kwargs['location'] == 'us-central1'
+    assert kwargs['parameter_values']['location'] == 'us-central1'
     params = kwargs['parameter_values']
     assert 'machine_type' not in params, (
         "machine_type must not be passed as a pipeline parameter — it is used only "
@@ -301,6 +358,7 @@ def test_create_job_isolates_user_across_concurrent_calls(mock_storage_client, m
 
     def make_blob(*args, **kwargs):
         blob = MagicMock()
+        blob.exists.return_value = False
         def upload_from_string(*args, **kwargs):
             data = kwargs.get('data')
             if data is None and args:
@@ -1601,4 +1659,24 @@ def test_get_job_results_signed_url_forbidden(mock_storage_client, openreview_cl
 
     with pytest.raises(openreview.OpenReviewException, match="Forbidden: Insufficient permissions to access job"):
         gcp_interface.get_job_results_signed_url("test_user", "job-1")
+
+
+def test_api_request_accepts_regions_override():
+    """A request may supply an ordered region list to control fallback behavior."""
+    req = APIRequest({
+        'name': 'test_run',
+        'entityA': {'type': 'Group', 'memberOf': 'ABC.cc/Reviewers'},
+        'entityB': {'type': 'Note', 'invitation': 'ABC.cc/-/Submission'},
+        'model': {'name': 'bm25'},
+        'regions': ['us-fake-1', 'us-central1'],
+    })
+    assert req.regions == ['us-fake-1', 'us-central1']
+
+    config = JobConfig.from_request(
+        req,
+        server_config={'OPENREVIEW_BASEURL_V2': 'http://localhost:3001'},
+        working_dir='./tests/jobs'
+    )
+    assert config.regions == ['us-fake-1', 'us-central1']
+    assert 'regions' in config.to_json()
 

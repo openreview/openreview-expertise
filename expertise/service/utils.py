@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 from enum import Enum
 import google.cloud.aiplatform as aip
 from google.cloud import storage
-from google.cloud.aiplatform_v1.types import PipelineState
+from google.cloud.aiplatform_v1.types import PipelineState, PipelineTaskDetail
 from google.auth import default as google_auth_default
 from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 from copy import deepcopy
@@ -155,7 +155,15 @@ class APIRequest(object):
 
         # Optionally check for machine type
         self.machine_type = request.pop('machineType', None)
-
+        # Optionally override the ordered list of GCP regions to try
+        regions = request.pop('regions', None)
+        if regions is not None and (
+            not isinstance(regions, (list, tuple))
+            or not regions
+            or any(not isinstance(region, str) or not region for region in regions)
+        ):
+            raise openreview.OpenReviewException("Bad request: 'regions' must be a non-empty list of region strings")
+        self.regions = regions
         # Check for empty request
         if len(request.keys()) > 0:
             raise openreview.OpenReviewException(f"Bad request: unexpected fields in {root_key}: {list(request.keys())}")
@@ -411,7 +419,9 @@ class JobConfig(object):
         paper_id=None,
         provided_submissions=None,
         model_params=None,
-        machine_type=None):
+        machine_type=None,
+        cloud_region=None,
+        regions=None):
         
         self.name = name
         self.user_id = user_id
@@ -443,6 +453,8 @@ class JobConfig(object):
         self.provided_submissions = provided_submissions
         self.model_params = model_params
         self.machine_type = machine_type
+        self.cloud_region = cloud_region
+        self.regions = regions
 
         self.api_request = None
 
@@ -478,7 +490,9 @@ class JobConfig(object):
             'paper_content',
             'paper_id',
             'model_params',
-            'machine_type'
+            'machine_type',
+            'cloud_region',
+            'regions'
         ]
 
 
@@ -542,6 +556,7 @@ class JobConfig(object):
         # Permission check (machine_type only for superusers) lives in
         # APIRequest.validate(client) — from_request is pure transformation.
         config.machine_type = api_request.machine_type
+        config.regions = api_request.regions
 
         root_dir = os.path.join(working_dir, config.job_id)
         config.job_dir = root_dir
@@ -732,7 +747,9 @@ class JobConfig(object):
             paper_id = job_config.get('paper_id'),
             provided_submissions = job_config.get('provided_submissions'),
             model_params = job_config.get('model_params'),
-            machine_type=job_config.get('machine_type')
+            machine_type=job_config.get('machine_type'),
+            cloud_region=job_config.get('cloud_region'),
+            regions=job_config.get('regions')
         )
         return config
 
@@ -747,6 +764,7 @@ class GCPInterface(object):
         PipelineState.PIPELINE_STATE_RUNNING: JobStatus.RUN_EXPERTISE,
         PipelineState.PIPELINE_STATE_SUCCEEDED: JobStatus.COMPLETED,
         PipelineState.PIPELINE_STATE_FAILED: JobStatus.ERROR,
+        PipelineState.PIPELINE_STATE_CANCELLED: JobStatus.ERROR,
     }
 
     def __init__(
@@ -770,11 +788,12 @@ class GCPInterface(object):
         if config is not None:
             self.project_id = config['GCP_PROJECT_ID']
             self.project_number = config['GCP_PROJECT_NUMBER']
-            self.region = config['GCP_REGION']
+            self.region = config.get('GCP_REGION') or next(iter(config.get('GCP_REGIONS') or []), None)
             self.pipeline_root = config['GCP_PIPELINE_ROOT']
             self.pipeline_name = config['GCP_PIPELINE_NAME']
             self.pipeline_repo = config['GCP_PIPELINE_REPO']
             self.pipeline_tag = config['GCP_PIPELINE_TAG']
+            self.kfp_region = config.get('GCP_KFP_REGION', 'us-central1')
             self.bucket_name = config['GCP_BUCKET_NAME']
             self.jobs_folder = config['GCP_JOBS_FOLDER']
             self.service_label = config['GCP_SERVICE_LABEL']
@@ -794,12 +813,13 @@ class GCPInterface(object):
             self.pipeline_name = pipeline_name
             self.pipeline_repo = pipeline_repo
             self.pipeline_tag = pipeline_tag
+            self.kfp_region = 'us-central1'
             self.bucket_name = bucket_name
             self.jobs_folder = jobs_folder
             self.service_label = service_label
             self.service_account = service_account
             self.url_signer_service_account = None
-
+            self.pipeline_name_by_tier = {}
         required_fields = [
             self.project_id,
             self.project_number,
@@ -828,25 +848,40 @@ class GCPInterface(object):
             # Only init AIP if all fields are present to access the project
             self.logger.info(f"Init AIPlatform with project {self.project_id} and region {self.region}")
             aip.init(
-                project=project_id,
-                location=region
+                project=self.project_id,
+                location=self.region
             )
 
         self.logger.info(f"Init GCS client with project {self.project_id}")
         self.gcs_client = gcs_client or storage.Client(
-            project=project_id
+            project=self.project_id
         )
         self.logger.info(f"Get bucket {self.bucket_name}")
         self.bucket = self.gcs_client.bucket(self.bucket_name)
 
     def _resolve_job_status(self, job_id, job):
         descriptions = JobDescription.VALS.value
-        status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, '')
+        status = GCPInterface.GCS_STATE_TO_JOB_STATE.get(job.state, JobStatus.ERROR)
         description = descriptions[status]
 
         if status != JobStatus.ERROR:
-            return status, description
-
+            return status, description, None
+        top_error = getattr(job, 'error', None)
+        if top_error and top_error.message:
+            description = top_error.message
+        error_code = None
+        try:
+            for task in getattr(job, 'task_details', []) or []:
+                if task.state == PipelineTaskDetail.State.FAILED:
+                    task_error = getattr(task, 'error', None)
+                    if task_error and task_error.message:
+                        error_code = task_error.code
+                        if description == descriptions[status]:
+                            description = task_error.message
+                        else:
+                            description = f"{description} | {task_error.message}"
+        except Exception:
+            pass
         try:
             error_message = self.bucket.blob(f"{self.jobs_folder}/{job_id}/error.json").download_as_string()
             if error_message:
@@ -856,8 +891,7 @@ class GCPInterface(object):
                     status = JobStatus.DATA_ERROR
         except Exception:
             pass
-
-        return status, description
+        return status, description, error_code
 
     def _generate_vertex_prefix(api_request):
         group_entity = None
@@ -1001,7 +1035,7 @@ class GCPInterface(object):
         matches.sort(key=lambda item: item[0], reverse=True)
         return [cid for _, cid in matches[:limit]]
 
-    def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None):
+    def create_job(self, json_request: dict, job_id: str, user_id: str, machine_type = None, dataset_gcs_path: str = None, vertex_id: str = None, region: str = None):
         def create_folder(bucket_name, folder_path):
             client = storage.Client()
             bucket = client.get_bucket(bucket_name)
@@ -1028,6 +1062,10 @@ class GCPInterface(object):
 
             blob = bucket.blob(f"{folder_path}/{file_name}")
 
+            if blob.exists():
+                existing = json.loads(blob.download_as_string())
+                data['cdate'] = existing.get('cdate', data['cdate'])
+                self.logger.info(f"JSON file '{file_name}' already exists at '{folder_path}' in bucket '{bucket_name}'; updating while preserving cdate.")
             blob.upload_from_string(
                 data=json.dumps(data),
                 content_type="application/json"
@@ -1042,6 +1080,8 @@ class GCPInterface(object):
         })
         valid_vertex_id = vertex_id if vertex_id else job_id + '-' + str(int(time.time() * 1000))
 
+        # Use passed region or fall back to primary region
+        job_region = region or self.region
         folder_path = f"{self.jobs_folder}/{valid_vertex_id}"
         data = api_request.to_json()
 
@@ -1055,6 +1095,7 @@ class GCPInterface(object):
         data['machine_type'] = machine_type
         data['user_id'] = user_id
         data['cdate'] = int(time.time() * 1000)
+        data['cloud_region'] = job_region
 
         write_json_to_gcs(self.bucket_name, folder_path, self.request_fname, data)
 
@@ -1063,6 +1104,7 @@ class GCPInterface(object):
 
         parameter_values = {
             'gcs_request_path': gcs_request_path,
+            'location': job_region,
         }
         if dataset_gcs_path:
             parameter_values['dataset_gcs_path'] = dataset_gcs_path
@@ -1073,11 +1115,12 @@ class GCPInterface(object):
         # Build PipelineJob kwargs and parameters
         job = aip.PipelineJob(
             display_name = valid_vertex_id,
-            template_path = f"https://{self.region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{tier_pipeline_name}/{self.pipeline_tag}",
+            template_path = f"https://{self.kfp_region}-kfp.pkg.dev/{self.project_id}/{self.pipeline_repo}/{tier_pipeline_name}/{self.pipeline_tag}",
             job_id = valid_vertex_id,
             pipeline_root = f"gs://{self.bucket_name}/{self.pipeline_root}",
             parameter_values = parameter_values,
-            labels = self.service_label)
+            labels = self.service_label,
+            location = job_region)
 
         job.submit(
             service_account=self.service_account
@@ -1085,7 +1128,7 @@ class GCPInterface(object):
 
         return valid_vertex_id
 
-    def get_job_status_by_job_id(self, user_id, config):
+    def get_job_status_by_job_id(self, user_id, config, region=None):
         job_id = config.cloud_id
 
         if job_id is None:
@@ -1107,9 +1150,11 @@ class GCPInterface(object):
             raise openreview.OpenReviewException('Internal Error: Multiple requests found for job')
 
         request = authenticated_requests[0]
-        job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{job_id}")
+        # Use passed region, or the region stored on the job config, or fall back to primary
+        job_region = region or getattr(config, 'cloud_region', None) or self.region
+        job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{job_region}/pipelineJobs/{job_id}")
 
-        status, description = self._resolve_job_status(job_id, job)
+        status, description, error_code = self._resolve_job_status(job_id, job)
 
         return {
                 'name': job_id,
@@ -1117,6 +1162,7 @@ class GCPInterface(object):
                 'jobId': job_id,
                 'status': status,
                 'description': description,
+                'errorCode': error_code,
                 'cdate': request['cdate'],
                 'mdate': int(job.update_time.timestamp() * 1000),
                 'request': request
@@ -1264,7 +1310,9 @@ class GCPInterface(object):
         for request in shortlist:
             request_name = request['name']
             try:
-                job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{self.region}/pipelineJobs/{request_name}")
+                # Use cloud_region from request if available, else primary region
+                job_region = request.get('cloud_region') or self.region
+                job = aip.PipelineJob.get(f"projects/{self.project_number}/locations/{job_region}/pipelineJobs/{request_name}")
             except Exception as e:
                 if '404' in str(e):
                     self.logger.info(f"No pipeline for job {request_name}")
@@ -1272,7 +1320,7 @@ class GCPInterface(object):
                 else:
                     raise e
 
-            status, description = self._resolve_job_status(request_name, job)
+            status, description, error_code = self._resolve_job_status(request_name, job)
 
             if check_result(request, status):
                 result['results'].append(
@@ -1282,6 +1330,7 @@ class GCPInterface(object):
                         'jobId': request_name,
                         'status': status,
                         'description': description,
+                        'errorCode': error_code,
                         'cdate': request['cdate'],
                         'mdate': int(job.update_time.timestamp() * 1000),
                         'request': request
