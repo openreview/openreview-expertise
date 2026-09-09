@@ -3,6 +3,7 @@ import torch
 
 from .specter import Specter2Predictor
 from .scincl import SciNCLPredictor
+from ...utils.utils import round_score_matrix
 from tqdm import tqdm
 
 
@@ -93,8 +94,7 @@ class EnsembleModel:
             merged = torch.clamp(merged, 0.0, 1.0)
         else:
             merged = torch.clamp(merged, -1.0, 1.0)
-        # Round once, vectorized — matches the previous per-row round(..., 4).
-        merged = (merged * 10000).round() / 10000
+        merged = round_score_matrix(merged)
 
         self.scores_matrix = merged
         self.test_id_list = self.specter_predictor.test_id_list

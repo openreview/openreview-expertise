@@ -13,6 +13,7 @@ import numpy as np
 
 from transformers import AutoTokenizer, AutoModel
 from .predictor import Predictor
+from ...utils.utils import round_score_matrix
 
 import logging
 """
@@ -299,8 +300,7 @@ class SciNCLPredictor(Predictor):
             self.test_id_list = test_id_list
             self.reviewer_ids = reviewer_ids
 
-        # Round once, vectorized — matches the previous per-row round(..., 4).
-        self.scores_matrix = (self.scores_matrix * 10000).round() / 10000
+        self.scores_matrix = round_score_matrix(self.scores_matrix)
         print(f"Computed preliminary scores for SciNCL.", flush=True)
 
         if matrix_path:

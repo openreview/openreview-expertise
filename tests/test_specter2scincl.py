@@ -20,9 +20,9 @@ def _matrix_to_rows_and_csv(model, csv_path=None):
     legacy [(test_id, reviewer_id, score), ...] tuple list, and optionally
     write the equivalent CSV file. Used by tests that previously consumed
     the per-row CSV/preliminary_scores produced by all_scores().
-    Scores are rounded to 4 decimals at the row boundary — fp32 storage in
+    Scores are rounded to 6 decimals at the row boundary — fp32 storage in
     the matrix preserves at most ~7 significant digits, so the per-cell
-    Python round matches what the legacy code emitted in the CSV.
+    Python round matches what the production code emits in the CSV.
     """
     rows = []
     if model.scores_matrix is None:
@@ -30,7 +30,7 @@ def _matrix_to_rows_and_csv(model, csv_path=None):
     scores = model.scores_matrix.tolist()
     for i, test_id in enumerate(model.test_id_list):
         for j, reviewer_id in enumerate(model.reviewer_ids):
-            rows.append((test_id, reviewer_id, round(scores[i][j], 4)))
+            rows.append((test_id, reviewer_id, round(scores[i][j], 6)))
     if csv_path is not None:
         with open(csv_path, 'w') as f:
             for test_id, reviewer_id, score in rows:
@@ -70,9 +70,10 @@ def compute_score_statistics(scores, label=""):
     
     return stats
 
-def assert_scores_have_max_4_decimals(csv_path):
-    """Scores rounded to 4 decimals is a contract — CSVs exposed to the API
-    should never expose more precision than the model actually provides."""
+def assert_scores_have_max_6_decimals(csv_path):
+    """Scores rounded to 6 decimals is a contract — CSVs exposed to the API
+    should never expose more precision than the model actually provides
+    (fp32 embeddings carry ~7 significant digits)."""
     violations = []
     with open(csv_path) as f:
         for line_num, line in enumerate(f, 1):
@@ -89,9 +90,9 @@ def assert_scores_have_max_4_decimals(csv_path):
                 continue
             if '.' in score_str:
                 decimals = len(score_str.split('.')[1])
-                if decimals > 4:
+                if decimals > 6:
                     violations.append(f"{csv_path}:{line_num}: score={score_str} has {decimals} decimals")
-    assert not violations, "Scores with more than 4 decimal places found:\n" + "\n".join(violations)
+    assert not violations, "Scores with more than 6 decimal places found:\n" + "\n".join(violations)
 
 
 @pytest.fixture
@@ -167,7 +168,7 @@ def test_specncl_scores(tmp_path, create_specncl):
 
     csv_path = scores_path.joinpath(config['name'] + '.csv')
     _matrix_to_rows_and_csv(specnclModel, csv_path=csv_path)
-    assert_scores_have_max_4_decimals(csv_path)
+    assert_scores_have_max_6_decimals(csv_path)
 
 
 def test_sparse_scores(tmp_path, create_specncl):
@@ -232,8 +233,8 @@ def test_sparse_scores(tmp_path, create_specncl):
             sparse_csv,
         )
 
-    assert_scores_have_max_4_decimals(full_csv)
-    assert_scores_have_max_4_decimals(sparse_csv)
+    assert_scores_have_max_6_decimals(full_csv)
+    assert_scores_have_max_6_decimals(sparse_csv)
 
     # Read sparse CSV back into rows for assertions.
     sparse_rows = []

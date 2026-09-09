@@ -45,7 +45,7 @@ def _legacy_sparse_pairs(matrix, test_ids, reviewer_ids, sparse_value, scores_pa
     flat = []
     for i, t in enumerate(test_ids):
         for j, r in enumerate(reviewer_ids):
-            flat.append((t, r, round(scores[i][j], 4)))
+            flat.append((t, r, round(scores[i][j], 6)))
     generate_sparse_scores(flat, sparse_value, scores_path)
     return {(row[0], row[1]) for row in _read_csv_rows(scores_path)}
 
@@ -103,7 +103,7 @@ def test_output_is_deterministic(tmp_path):
 
 def test_score_values_correct(tmp_path):
     """Each emitted row carries the score from the matrix at that (test, reviewer)
-    cell (rounded to 4 decimals)."""
+    cell (rounded to 6 decimals)."""
     matrix = torch.tensor([
         [0.1234, 0.5678, 0.9876],
         [0.4321, 0.8765, 0.2109],
@@ -119,7 +119,7 @@ def test_score_values_correct(tmp_path):
     expected = {}
     for i, t in enumerate(test_ids):
         for j, r in enumerate(reviewer_ids):
-            expected[(t, r)] = round(matrix[i, j].item(), 4)
+            expected[(t, r)] = round(matrix[i, j].item(), 6)
 
     for test_id, reviewer_id, score in rows:
         assert (test_id, reviewer_id) in expected

@@ -2596,7 +2596,7 @@ class TestExpertiseService():
         assert result['entityB'] == "TestPaper01"
         score_str = str(result['score'])
         if '.' in score_str:
-            assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
+            assert len(score_str.split('.')[1]) <= 6, f"Score should have at most 6 decimal places, got {score_str}"
 
     def test_request_expertise_identical_submissions_score_one_normalized(self, openreview_context, openreview_client):
         """
@@ -2678,7 +2678,7 @@ class TestExpertiseService():
         assert result['entityB'] == "TestPaper01"
         score_str = str(result['score'])
         if '.' in score_str:
-            assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
+            assert len(score_str.split('.')[1]) <= 6, f"Score should have at most 6 decimal places, got {score_str}"
 
     def test_request_expertise_different_submissions_normalized_bounds(self, openreview_context, openreview_client):
         """
@@ -2765,7 +2765,7 @@ class TestExpertiseService():
             assert 0.0 <= score <= 1.0, f"Normalized score should be between 0 and 1, got {score} for {result['entityB']}"
             score_str = str(result['score'])
             if '.' in score_str:
-                assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
+                assert len(score_str.split('.')[1]) <= 6, f"Score should have at most 6 decimal places, got {score_str}"
 
     def test_request_expertise_different_submissions_unnormalized_bounds(self, openreview_context, openreview_client):
         """
@@ -2852,4 +2852,4 @@ class TestExpertiseService():
             assert -1.0 <= score <= 1.0, f"Unnormalized score should be between -1 and 1, got {score} for {result['entityB']}"
             score_str = str(result['score'])
             if '.' in score_str:
-                assert len(score_str.split('.')[1]) <= 4, f"Score should have at most 4 decimal places, got {score_str}"
+                assert len(score_str.split('.')[1]) <= 6, f"Score should have at most 6 decimal places, got {score_str}"

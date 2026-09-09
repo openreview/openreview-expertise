@@ -465,7 +465,19 @@ def extract_candidate_words(text, good_tags=set(['JJ','JJR','JJS','NN','NNP','NN
 
     return candidates
 
-def generate_sparse_scores(full_scores, sparse_value, scores_path=None):    
+# Affinity scores are emitted with this many decimal places. Embeddings are
+# float32 (~7 significant digits), so 6 decimals keeps essentially all real
+# ranking information; fewer decimals collapses near-equal reviewers into
+# artificial ties that the matcher then breaks arbitrarily.
+SCORE_DECIMALS = 6
+
+def round_score_matrix(scores_matrix):
+    """Round a score tensor to SCORE_DECIMALS decimal places, in a single
+    vectorized operation."""
+    factor = 10 ** SCORE_DECIMALS
+    return (scores_matrix * factor).round() / factor
+
+def generate_sparse_scores(full_scores, sparse_value, scores_path=None):
     def apply_sparse_value(sparse_scores, full_scores, id_index):
         counter = 0
         # Get the first note_id or profile_id
@@ -561,7 +573,7 @@ def generate_sparse_scores_from_matrix(scores_matrix, test_id_list, reviewer_ids
                 chunk_pairs = all_pairs[start:end].tolist()
                 chunk_scores = sel_scores[start:end].tolist()
                 for (i, j), score in zip(chunk_pairs, chunk_scores):
-                    f.write(f'{test_id_list[i]},{reviewer_ids[j]},{round(score, 4)}\n')
+                    f.write(f'{test_id_list[i]},{reviewer_ids[j]},{round(score, SCORE_DECIMALS)}\n')
         print(f'  wrote sparse CSV in {time.perf_counter() - _t0:.1f}s', flush=True)
 
     print(f'generate_sparse_scores_from_matrix total {time.perf_counter() - _t_total:.1f}s', flush=True)
