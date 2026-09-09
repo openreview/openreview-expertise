@@ -39,8 +39,9 @@ silent
 class SciNCLPredictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=False,
-                 normalize_scores=True, scincl_hf_dir=None):
+                 normalize_scores=True, scincl_hf_dir=None, embedding_dim=768):
         self.model_name = 'scincl'
+        self.embedding_dim = embedding_dim
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")

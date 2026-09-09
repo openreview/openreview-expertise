@@ -18,6 +18,7 @@ MODEL_ARTIFACTS = {
     'specter+mfr': ['hf_models/specter', 'multifacet_recommender'],
     'specter2': ['hf_models/specter2_base', 'hf_models/specter2_adapter'],
     'scincl': ['hf_models/scincl'],
+    'harrier': ['hf_models/harrier'],
     'specter2+scincl': [
         'hf_models/specter2_base',
         'hf_models/specter2_adapter',

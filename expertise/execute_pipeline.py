@@ -252,6 +252,7 @@ def run_pipeline(
                 'scincl': ['scincl'],
                 'specter': ['specter'],
                 'specter+mfr': ['specter'],
+                'harrier': ['harrier'],
             }
             targets = model_to_cache_key.get(config.model, [])
 
@@ -404,6 +405,8 @@ def _append_embeddings_to_global_cache(new_embeddings, blob_prefix, job_id, buck
     year_month = dt.strftime("%Y-%m")
 
     def _model_for_emb_file(emb_file):
+        if 'harrier' in emb_file:
+            return 'harrier'
         if 'scincl' in emb_file:
             return 'scincl'
         return 'specter'

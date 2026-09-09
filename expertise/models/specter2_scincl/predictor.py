@@ -5,6 +5,8 @@ import os
 import torch
 
 class Predictor:
+
+    embedding_dim = 768
     def _build_embedding_jsonl(self, paper, embedding):
         data = {
             'paper_id': paper['paper_id'],
@@ -82,7 +84,7 @@ class Predictor:
         return lookup, jsonl_lines
 
     def _load_emb_file(self, emb_file, paper_id_to_weight=None):
-        paper_emb_size_default = 768
+        paper_emb_size_default = self.embedding_dim
         id_list = []
         emb_list = []
         weight_list = []
@@ -107,7 +109,7 @@ class Predictor:
         return emb_tensor, id_list, bad_id_set, weight_tensor
 
     def _load_emb_dict(self, emb_dict, paper_id_to_weight=None):
-        paper_emb_size_default = 768
+        paper_emb_size_default = self.embedding_dim
         id_list = []
         emb_list = []
         weight_list = []

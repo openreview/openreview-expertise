@@ -698,7 +698,7 @@ class JobConfig(object):
             config.model_params[field] = root_dir
 
         # Infer compute_paper_paper from two Note entities
-        valid_paper_paper_models = ['specter', 'specter2', 'scincl', 'specter2+scincl']
+        valid_paper_paper_models = ['specter', 'specter2', 'scincl', 'specter2+scincl', 'harrier']
         config.model_params['compute_paper_paper'] = False
         if api_request.entityA['type'] == 'Note' and api_request.entityB['type'] == 'Note':
             if config.model not in valid_paper_paper_models:

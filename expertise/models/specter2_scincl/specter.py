@@ -40,8 +40,9 @@ silent
 class Specter2Predictor(Predictor):
     def __init__(self, specter_dir, work_dir, average_score=False, max_score=True, batch_size=16, use_cuda=True,
                  sparse_value=None, use_redis=False, dump_p2p=False, compute_paper_paper=False, percentile_select=None, venue_specific_weights=None,
-                 normalize_scores=True, specter2_hf_dir=None, specter2_adapter_dir=None):
+                 normalize_scores=True, specter2_hf_dir=None, specter2_adapter_dir=None, embedding_dim=768):
         self.model_name = 'specter2'
+        self.embedding_dim = embedding_dim
         self.specter_dir = specter_dir
         self.model_archive_file = os.path.join(specter_dir, "model.tar.gz")
         self.vocab_dir = os.path.join(specter_dir, "data/vocab/")
