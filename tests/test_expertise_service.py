@@ -309,6 +309,104 @@ class TestExpertiseService():
             result = service.get_expertise_status('user@test.com', 'queue-job')
         assert result['status'] == JobStatus.COMPLETED
 
+    def _single_paper_config(self, job_id, member_of, paper_id, cdate=1700000000000):
+        """A job in the shape request_single_paper_expertise submits: a group as
+        entityA and one note id as entityB."""
+        config = JobConfig(
+            job_id=job_id,
+            user_id='user@test.com',
+            name='queue',
+            cdate=cdate,
+            mdate=cdate
+        )
+        config.status = JobStatus.COMPLETED
+        config.description = JobDescription.VALS.value[JobStatus.COMPLETED]
+        config.api_request = APIRequest({
+            'name': 'queue',
+            'entityA': {'type': 'Group', 'memberOf': member_of},
+            'entityB': {'type': 'Note', 'id': paper_id}
+        })
+        return config
+
+    def _queued_single_paper_jobs(self):
+        """The job a group and paper query is looking for, a second job on the
+        same group with a different paper, and a job on another group with the
+        same paper."""
+        return [
+            self._queue_job(self._single_paper_config('job-target', 'TMLR/Action_Editors', 'MTg9pSFcko')),
+            self._queue_job(self._single_paper_config('job-other-paper', 'TMLR/Action_Editors', 'aB3dEfGhIj', cdate=1700000001000)),
+            self._queue_job(self._single_paper_config('job-other-group', 'ABC.cc/Reviewers', 'MTg9pSFcko', cdate=1700000002000)),
+        ]
+
+    def _all_status(self, service, query_params, user_id='user@test.com'):
+        jobs_future = MagicMock()
+        jobs_future.result.return_value = self._queued_single_paper_jobs()
+        with patch('expertise.service.expertise.asyncio.run_coroutine_threadsafe', return_value=jobs_future):
+            result = service.get_expertise_all_status(user_id, query_params)
+        return sorted(record['jobId'] for record in result['results']), result
+
+    def test_queue_status_query_by_group(self):
+        """client.get_expertise_status(group_id='TMLR/Action_Editors')"""
+        service = self._make_service_for_queue_tests()
+        job_ids, _ = self._all_status(service, {'entityA.memberOf': 'TMLR/Action_Editors'})
+        assert job_ids == ['job-other-paper', 'job-target']
+
+    def test_queue_status_query_by_paper(self):
+        """client.get_expertise_status(paper_id='MTg9pSFcko')"""
+        service = self._make_service_for_queue_tests()
+        job_ids, _ = self._all_status(service, {'entityB.id': 'MTg9pSFcko'})
+        assert job_ids == ['job-other-group', 'job-target']
+
+    def test_queue_status_query_by_group_and_paper(self):
+        """client.get_expertise_status(paper_id='MTg9pSFcko', group_id='TMLR/Action_Editors'),
+        the call TMLR's cronjob makes."""
+        service = self._make_service_for_queue_tests()
+        job_ids, result = self._all_status(
+            service,
+            {'entityA.memberOf': 'TMLR/Action_Editors', 'entityB.id': 'MTg9pSFcko'}
+        )
+        assert job_ids == ['job-target']
+        record = result['results'][0]
+        assert record['status'] == JobStatus.COMPLETED
+        assert record['request']['entityA']['memberOf'] == 'TMLR/Action_Editors'
+        assert record['request']['entityB']['id'] == 'MTg9pSFcko'
+
+    def test_queue_status_query_by_group_and_paper_matches_job_id_record(self):
+        """A group and paper query returns the same record the job's own id returns."""
+        service = self._make_service_for_queue_tests()
+        _, result = self._all_status(
+            service,
+            {'entityA.memberOf': 'TMLR/Action_Editors', 'entityB.id': 'MTg9pSFcko'}
+        )
+        target = self._queued_single_paper_jobs()[0]
+        with patch.object(service, '_load_job_from_queue', return_value=target):
+            by_job_id = service.get_expertise_status('user@test.com', 'job-target')
+        assert result['results'][0] == by_job_id
+
+    def test_queue_status_query_by_group_and_paper_with_no_common_job(self):
+        """Each half of the query matches a job, but no single job matches both."""
+        service = self._make_service_for_queue_tests()
+        job_ids, _ = self._all_status(
+            service,
+            {'entityA.memberOf': 'ABC.cc/Reviewers', 'entityB.id': 'aB3dEfGhIj'}
+        )
+        assert job_ids == []
+
+    def test_queue_status_query_by_unknown_group_or_paper(self):
+        service = self._make_service_for_queue_tests()
+        assert self._all_status(service, {'entityA.memberOf': 'CBA'})[0] == []
+        assert self._all_status(service, {'entityB.id': 'notAPaperId'})[0] == []
+
+    def test_queue_status_query_by_group_and_paper_for_another_user(self):
+        """The jobs belong to user@test.com, so another caller gets nothing."""
+        service = self._make_service_for_queue_tests()
+        job_ids, _ = self._all_status(
+            service,
+            {'entityA.memberOf': 'TMLR/Action_Editors', 'entityB.id': 'MTg9pSFcko'},
+            user_id='other@test.com'
+        )
+        assert job_ids == []
+
     def test_queue_status_results(self, tmp_path):
         service = self._make_service_for_queue_tests()
         config = self._sample_config(tmp_path)
@@ -1786,7 +1884,52 @@ class TestExpertiseService():
         assert req['entityB']['type'] == 'Note'
         assert req['entityB']['id'] == target_id
         openreview_context['job_id'] = job_id
-    
+        openreview_context['target_paper_id'] = target_id
+
+    def test_get_journal_status_by_group_and_paper(self, openreview_client, openreview_context):
+        # /expertise/status without a jobId goes to get_expertise_all_status, which matches
+        # on the stored request instead of fetching one job, and is how TMLR's cronjob asks
+        test_client = openreview_context['test_client']
+        job_id = openreview_context['job_id']
+        target_id = openreview_context['target_paper_id']
+
+        by_job_id = test_client.get(
+            '/expertise/status',
+            headers=openreview_client.headers,
+            query_string={'jobId': job_id}
+        ).json
+
+        for query_string in [
+            {'entityA.memberOf': 'ABC.cc/Reviewers'},
+            {'entityB.id': target_id},
+            {'entityA.memberOf': 'ABC.cc/Reviewers', 'entityB.id': target_id},
+        ]:
+            response = test_client.get(
+                '/expertise/status',
+                headers=openreview_client.headers,
+                query_string=query_string
+            )
+            assert response.status_code == 200, f'{query_string}: {response.json}'
+            results = response.json['results']
+            matched = [record for record in results if record['jobId'] == job_id]
+            assert len(matched) == 1, f'{query_string} returned {[r["jobId"] for r in results]}'
+            assert matched[0] == by_job_id, query_string
+
+        # A group and a paper that share no job, and values matching no job at all
+        for query_string in [
+            {'entityA.memberOf': 'TMLR/Action_Editors', 'entityB.id': target_id},
+            {'entityA.memberOf': 'CBA'},
+            {'entityB.id': 'notAPaperId'},
+        ]:
+            response = test_client.get(
+                '/expertise/status',
+                headers=openreview_client.headers,
+                query_string=query_string
+            )
+            assert response.status_code == 200, f'{query_string}: {response.json}'
+            assert response.json['results'] == [], query_string
+
+
     def test_get_journal_results(self, openreview_client, openreview_context):
         test_client = openreview_context['test_client']
         # Searches for journal results from the given job_id assuming the job has completed
