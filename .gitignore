@@ -6,3 +6,6 @@ __pycache__
 *.log*
 test_pipeline/
 tests/jobs/
+.DS_Store
+*.bak
+.env
