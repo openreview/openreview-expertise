@@ -335,8 +335,8 @@ class BaseExpertiseService:
             )
             jobs = future.result()
         except Exception as e:
-            self.logger.warning(f"Failed to list jobs from queue: {e}")
-            jobs = []
+            self.logger.error(f"Failed to list jobs from queue: {e}")
+            raise openreview.OpenReviewException(f'Failed to list jobs from queue: {e}')
 
         for job in jobs:
             job_user_id = job.data.get('user_id')
@@ -653,7 +653,8 @@ class ExpertiseService(BaseExpertiseService):
                 )
                 jobs = future.result()
             except Exception as e:
-                jobs = []
+                self.logger.error(f"Failed to list jobs from queue: {e}")
+                raise openreview.OpenReviewException(f'Failed to list jobs from queue: {e}')
 
             for job in jobs:
                 if job.data.get('status') == JobStatus.COMPLETED:
@@ -1069,7 +1070,8 @@ class ExpertiseCloudService(BaseExpertiseService):
                 )
                 jobs = future.result()
             except Exception as e:
-                jobs = []
+                self.logger.error(f"Failed to list jobs from queue: {e}")
+                raise openreview.OpenReviewException(f'Failed to list jobs from queue: {e}')
 
             for job in jobs:
                 if job.data.get('status') == JobStatus.COMPLETED:
