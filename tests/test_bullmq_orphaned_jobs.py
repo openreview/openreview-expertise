@@ -252,8 +252,10 @@ def test_worker_consumes_jobs_when_client_setname_is_rejected(worker_service):
 def test_worker_thread_stays_alive_when_client_setname_is_rejected(worker_service):
     service, _ = worker_service
 
-    assert _wait_for(lambda: service.worker is not None, timeout=10)
-    assert service.worker_thread is not None
+    assert _wait_for(lambda: service.worker is not None and service.worker.running), (
+        'the worker never reached its job loop: Worker.run() sets running only '
+        'after _ensure_client_names, so a rejected CLIENT SETNAME aborts startup'
+    )
     assert service.worker_thread.is_alive(), (
         'the worker thread exited: a failure in Worker.run() must not silently '
         'leave the process without a queue consumer'
