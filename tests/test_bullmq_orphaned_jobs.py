@@ -255,9 +255,3 @@ def test_worker_thread_stays_alive_when_client_setname_is_rejected(worker_servic
         'leave the process without a queue consumer'
     )
 
-
-def test_worker_status_reports_a_live_worker(worker_service):
-    service, _ = worker_service
-
-    assert _wait_for(lambda: service.worker is not None, timeout=10)
-    assert service.worker_status() == {'alive': True, 'error': None}

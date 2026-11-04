@@ -96,6 +96,8 @@ class BaseExpertiseService:
             self.worker_settings['lockDuration'] = worker_lock_duration
 
         self.worker = None
+        self.worker_thread = None
+        self.worker_loop = None
         self.start_worker_in_thread()
 
         # Define required/optional fields if they are reused
@@ -135,19 +137,27 @@ class BaseExpertiseService:
         def run_event_loop():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            self.worker_loop = loop
             self.worker = Worker(
                 'Expertise',
                 self.worker_process,
                 self.worker_settings
             )
-            loop.run_until_complete(self.worker.run())
+            self.worker._client_name_set = True
+            try:
+                loop.run_until_complete(self.worker.run())
+            except Exception:
+                self.logger.error(
+                    f'Expertise worker stopped consuming jobs, this instance is no longer processing the queue: {traceback.format_exc()}'
+                )
 
-        thread = threading.Thread(target=run_event_loop, daemon=True)
-        thread.start()
+        self.worker_thread = threading.Thread(target=run_event_loop, daemon=True)
+        self.worker_thread.start()
 
     async def close(self):
-        if self.worker is not None:
-            await self.worker.close()
+        if self.worker is not None and self.worker_loop is not None:
+            future = asyncio.run_coroutine_threadsafe(self.worker.close(), self.worker_loop)
+            await asyncio.wrap_future(future)
         await self.queue.close()
 
     def worker_process(self, job, token):
