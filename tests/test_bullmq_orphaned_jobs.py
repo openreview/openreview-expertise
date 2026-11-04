@@ -22,6 +22,8 @@ import logging
 import threading
 import time
 
+import itertools
+
 import openreview
 import pytest
 import redis
@@ -173,8 +175,8 @@ def test_status_all_raises_when_queue_read_fails(queue_env):
 
 
 WORKER_PREFIX = 'bullmq:expertise'
-WORKER_DB = 12
 WORKER_TIMEOUT = 45
+worker_dbs = itertools.count(12)
 
 CLIENT_SETNAME_REJECTIONS = [
     "unknown command 'CLIENT', with args beginning with: 'SETNAME' 'bullmq:expertise:Expertise'",
@@ -199,29 +201,29 @@ def worker_service(request, monkeypatch):
 
     monkeypatch.setattr(redis.asyncio.Redis, 'client_setname', rejecting_client_setname)
 
-    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=WORKER_DB)
+    db = next(worker_dbs)
+    assert db <= 15, 'redis has 16 databases, give each worker service its own'
+    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=db)
     redis_client.flushdb()
 
     service = RecordingService(
         {
             'REDIS_ADDR': REDIS_HOST,
             'REDIS_PORT': REDIS_PORT,
-            'REDIS_CONFIG_DB': WORKER_DB,
-            'REDIS_EMBEDDINGS_DB': WORKER_DB,
+            'REDIS_CONFIG_DB': db,
+            'REDIS_EMBEDDINGS_DB': db,
             'ACTIVE_JOBS': 1,
         },
         logging.getLogger('test-bullmq-worker'),
     )
 
-    yield service, redis_client
-
-    _wait_for(lambda: service.worker is not None, timeout=10)
-    worker_loop = getattr(service, 'worker_loop', None)
-    if service.worker is not None and worker_loop is not None:
-        asyncio.run_coroutine_threadsafe(service.worker.close(True), worker_loop).result(timeout=30)
-        _wait_for(lambda: not service.worker_thread.is_alive(), timeout=30)
-    redis_client.flushdb()
-    redis_client.close()
+    try:
+        yield service, redis_client
+    finally:
+        asyncio.run_coroutine_threadsafe(service.queue.close(), service.queue_loop).result(timeout=30)
+        service.queue_loop.call_soon_threadsafe(service.queue_loop.stop)
+        redis_client.flushdb()
+        redis_client.close()
 
 
 def _wait_for(predicate, timeout=WORKER_TIMEOUT):

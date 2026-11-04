@@ -143,7 +143,7 @@ class BaseExpertiseService:
                 self.worker_process,
                 self.worker_settings
             )
-            self.worker._client_name_set = True
+            pass
             try:
                 loop.run_until_complete(self.worker.run())
             except Exception:
@@ -155,9 +155,8 @@ class BaseExpertiseService:
         self.worker_thread.start()
 
     async def close(self):
-        if self.worker is not None and self.worker_loop is not None:
-            future = asyncio.run_coroutine_threadsafe(self.worker.close(), self.worker_loop)
-            await asyncio.wrap_future(future)
+        if self.worker is not None:
+            await self.worker.close()
         await self.queue.close()
 
     def worker_process(self, job, token):
