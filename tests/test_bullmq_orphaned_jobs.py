@@ -219,6 +219,9 @@ def worker_service(request, monkeypatch):
     try:
         yield service, redis_client
     finally:
+        if service.worker is not None and service.worker_loop is not None:
+            asyncio.run_coroutine_threadsafe(service.worker.close(True), service.worker_loop)
+            assert _wait_for(lambda: not service.worker_thread.is_alive(), timeout=30)
         asyncio.run_coroutine_threadsafe(service.queue.close(), service.queue_loop).result(timeout=30)
         service.queue_loop.call_soon_threadsafe(service.queue_loop.stop)
         redis_client.flushdb()
