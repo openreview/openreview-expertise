@@ -143,7 +143,7 @@ class BaseExpertiseService:
                 self.worker_process,
                 self.worker_settings
             )
-            pass
+            self.worker._client_name_set = True
             try:
                 loop.run_until_complete(self.worker.run())
             except Exception:

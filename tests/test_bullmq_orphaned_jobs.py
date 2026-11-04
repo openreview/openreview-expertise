@@ -18,11 +18,10 @@ These tests only need Redis on localhost:6379 (no OpenReview API stack):
     docker run -d --rm --name expertise-test-redis -p 6379:6379 redis:7-alpine
 """
 import asyncio
+import itertools
 import logging
 import threading
 import time
-
-import itertools
 
 import openreview
 import pytest
