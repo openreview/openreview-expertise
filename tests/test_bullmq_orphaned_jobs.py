@@ -1,5 +1,5 @@
 """
-Regression tests for jobs orphaned in Redis (bullmq >= 2.25.4 required).
+Regression tests for the bullmq queue and worker (bullmq >= 2.25.4 required).
 
 An "orphaned" job is a job id that is still present in one of BullMQ's state
 sets/lists (wait, completed, failed, ...) while its job hash has been removed
@@ -7,6 +7,12 @@ from Redis. With bullmq 2.11.0, Queue.getJobs raised
 "IndexError: list index out of range" when it encountered one, which
 get_expertise_all_status swallowed, so /expertise/status/all returned an empty
 result list for every query.
+
+GCP Memorystore does not implement the CLIENT command family. bullmq >= 2.19.x
+calls CLIENT SETNAME from Worker.run() and Worker.getNextJob() with no error
+handling, so the rejection propagates out of the thread running the worker's
+event loop: the thread exits, gunicorn keeps serving HTTP as if nothing
+happened, and the queue silently stops being consumed.
 
 These tests only need Redis on localhost:6379 (no OpenReview API stack):
     docker run -d --rm --name expertise-test-redis -p 6379:6379 redis:7-alpine
@@ -19,7 +25,9 @@ import time
 import openreview
 import pytest
 import redis
+import redis.asyncio
 from bullmq import Queue
+from redis.exceptions import ResponseError
 
 from expertise.service.expertise import BaseExpertiseService
 
@@ -162,3 +170,94 @@ def test_status_all_raises_when_queue_read_fails(queue_env):
     service.queue = BrokenQueue()
     with pytest.raises(openreview.OpenReviewException, match='Failed to list jobs from queue'):
         service.get_expertise_all_status('~Test_User1', {})
+
+
+WORKER_PREFIX = 'bullmq:expertise'
+WORKER_DB = 12
+WORKER_TIMEOUT = 45
+
+CLIENT_SETNAME_REJECTIONS = [
+    "unknown command 'CLIENT', with args beginning with: 'SETNAME' 'bullmq:expertise:Expertise'",
+    "NOPERM this user has no permissions to run the 'client|setname' command",
+]
+
+
+class RecordingService(BaseExpertiseService):
+    def __init__(self, config, logger):
+        self.processed = []
+        super().__init__(config, logger, worker_concurrency=1)
+
+    async def worker_process(self, job, token):
+        self.processed.append(job.id)
+        return {'processed': job.id}
+
+
+@pytest.fixture(params=CLIENT_SETNAME_REJECTIONS, ids=['unknown-command', 'noperm'])
+def worker_service(request, monkeypatch):
+    async def rejecting_client_setname(self, name, **kwargs):
+        raise ResponseError(request.param)
+
+    monkeypatch.setattr(redis.asyncio.Redis, 'client_setname', rejecting_client_setname)
+
+    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=WORKER_DB)
+    redis_client.flushdb()
+
+    service = RecordingService(
+        {
+            'REDIS_ADDR': REDIS_HOST,
+            'REDIS_PORT': REDIS_PORT,
+            'REDIS_CONFIG_DB': WORKER_DB,
+            'REDIS_EMBEDDINGS_DB': WORKER_DB,
+            'ACTIVE_JOBS': 1,
+        },
+        logging.getLogger('test-bullmq-worker'),
+    )
+
+    yield service, redis_client
+
+    _wait_for(lambda: service.worker is not None, timeout=10)
+    worker_loop = getattr(service, 'worker_loop', None)
+    if service.worker is not None and worker_loop is not None:
+        asyncio.run_coroutine_threadsafe(service.worker.close(True), worker_loop).result(timeout=30)
+        _wait_for(lambda: not service.worker_thread.is_alive(), timeout=30)
+    redis_client.flushdb()
+    redis_client.close()
+
+
+def _wait_for(predicate, timeout=WORKER_TIMEOUT):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.5)
+    return predicate()
+
+
+def test_worker_consumes_jobs_when_client_setname_is_rejected(worker_service):
+    service, redis_client = worker_service
+
+    _run(service.queue.add('test_run', {'user_id': '~Test_User1'}, {'jobId': 'client-name-job'}), service.queue_loop)
+
+    assert _wait_for(lambda: 'client-name-job' in service.processed), (
+        'the worker never consumed the job: a Redis that rejects CLIENT SETNAME '
+        'must not stop the queue from being drained'
+    )
+    assert redis_client.llen(f'{WORKER_PREFIX}:{QUEUE_NAME}:wait') == 0
+
+
+def test_worker_thread_stays_alive_when_client_setname_is_rejected(worker_service):
+    service, _ = worker_service
+
+    assert _wait_for(lambda: service.worker is not None, timeout=10)
+    assert service.worker_thread is not None
+    assert service.worker_thread.is_alive(), (
+        'the worker thread exited: a failure in Worker.run() must not silently '
+        'leave the process without a queue consumer'
+    )
+
+
+def test_worker_status_reports_a_live_worker(worker_service):
+    service, _ = worker_service
+
+    assert _wait_for(lambda: service.worker is not None, timeout=10)
+    assert service.worker_status() == {'alive': True, 'error': None}
